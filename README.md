@@ -4,9 +4,8 @@ reanalyzerGSE is a pipeline to help with and streamline the transcriptomic analy
 ## Installation
 We suggest two alternatives for installation. Please choose one of:
 
-1) The fastest option is to use the folder 'external_software/installation', which contain some of the required software, a script to install dependencies (mainly through miniconda, external_software/installation/install.sh), and a suggestion of the PATH to be set. To install and setup everything required to run reanalyzerGSE, please execute:
+1) The fastest option is to use the folder 'external_software', which contain some of the required software (i.e. miARma-seq), a script to install dependencies (mainly through miniconda, 'external_software/installation/install.sh'), and a suggestion of the PATH to be set ('source_path'). To perform a conda-based installation and setup everything required to run reanalyzerGSE, please execute:
 
-To perform a conda-based installition and setup everything required to run reanalyzer, please execute:
 ```
 git clone https://github.com/BioinfoIPBLN/reanalyzerGSE
 cd reanalyzerGSE/external_software/installation/
