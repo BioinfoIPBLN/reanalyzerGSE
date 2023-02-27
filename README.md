@@ -23,10 +23,10 @@ If you want to manually install the software, check out in the files '.yml' with
 ```
 source reanalyzerGSE/external_software/source_path # To set up the PATH if you have followed option 1 for installation above
 cd reanalyzerGSE/test_data
-wget -q ; unzip test_data.zip .; mv test_data/* .; rm -r test_data
-pigz -p $cores -dkc $PWD/test_data/GRCm39.primary_assembly.genome.fa.gz # To uncompress the reference genome and annotation
-pigz -p $cores -dkc $PWD/test_data/gencode.vM28.annotation.gtf.gz 
-pigz -p $cores -dkc $PWD/test_data/Mus_musculus.GRCm39.cdna.all.fa.gz
+wget -q https://bit.ly/case_examples; unzip test_data.zip .; mv test_data/* .; rm -r test_data
+pigz -p $cores -d GRCm39.primary_assembly.genome.fa.gz # To uncompress the reference genome and annotation
+pigz -p $cores -d gencode.vM28.annotation.gtf.gz 
+pigz -p $cores -d Mus_musculus.GRCm39.cdna.all.fa.gz
 cd ../
 ### Case examples of mouse transcriptomic datasets, analyzed in a machine with 30 cores and 200GB RAM available.
 cores=30
