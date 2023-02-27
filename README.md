@@ -42,51 +42,37 @@ Please go through the log files 'test_data_X.log' to get the details on the pipe
 ## reanalyzerGSE arguments
 Please refer to the help page for futher details:
 ```
-ILRA.sh -h
 
-usage: ILRA.sh [options]
+reanalyzerGSE.pk.sh -h
+
+usage: [options]
 		-h | -help # Type this to get help
-		-a | -assembly # Name of the long reads assembly to correct (FASTA format, can be gzipped)
-		-f | -filter_contig_size # Size threshold to filter the contigs (bp)
-		-F | -Do you have even Illumina reads coverage? If yes contigs in the long reads assembly not covered by Illumina short reads by a certain threshold will be filtered out ('no' /'yes' by default)
-		-I | -Illumina_reads # Root name of the paired-end Illumina reads (FASTQ format, must be gzipped and name root_1.fastq.gz and root_2.fastq.gz prior execution)
-		-C | -Correction_Illumina_reads # Whether illumina reads are provided and all steps of correction should be performed ('no' /'yes' by default)
-		-R | -Range_insert_size # Insert size range of the Illumina reads to use in mapping by SMALT (bp)
-		-i | -iterations_iCORN2 # Number of iterations to perform in iCORN2
-		-r | -reference # Reference file (full pathway, FASTA format)
-		-g | -gff_file # Reference annotation file (full pathway, GFF format)
-		-c | -corrected_reads # Corrected long reads for circulatization of the contigs containing the strings by -s and -S (FASTQ format, can be gzipped)
-		-s | -seq_circularize_1 # Regex pattern to find in the contig names and circularize
-		-S | -Seq_circularize_2 # Regex pattern to find in the contig names and circularize
-		-L | -Long_reads_technology # Technology of long reads sequencing (pb/ont)
-		-T | -Taxon_ID # NCBI taxon ID or a scientific name
-		-e | -ending_telomere_seq_1 # Telomere-associated sequence to search in the first strand
-		-E | -Ending_telomere_seq_2 # Telomere-associated sequence to search in the second strand
-		-o | -output # Output folder (absolute pathway)
-		-n | -name # Base name of the output file
-		-t | -threads # Number of cores to use in multithreaded steps
-		-d | -debug_step # For debug, step to remove the content of the corresponding folder and resume a failed run ('step1', 'step2a', 'step2b', 'step3', 'step4', 'step4i', 'step5', 'step6', or 'step7')
-		-D | -databases # Folder for storing the databases for the decontamination step (by default, 'databases' under ILRA main folder)
-		-K | -Kraken2_fast_mode # Kraken2 fast mode, consisting on copying the Kraken2 database to /dev/shm (RAM) so execution is faster ('yes' /'no' by default)
-		-k | -Kraken2_databases # Folder within the folder databases (-D) containing the database used by Kraken2 (by default, 'standard_eupathdb_48_kraken2_db')
-		-b | -block_size # Block size for parallel processing (by default, 10)
-		-p | -pilon # Whether to use pilon instead of iCORN2 ('yes'/'no' by default)
-		-P | -parts_icorn2_split # Number of parts to split the input sequences of iCORN2 before processing them (0 by default, which means no splitting)
-		-A | -abacas2_split # Number of parts to split and process in parallel in ABACAS2 (by default the argument -b, block_size, but may be necessary to decrease due to memory issues)
-		-B | -abacas2_blast # Whether to do blast within ABACAS2 to compare with the reference and display in ACT (1 by default, which means blasting, or 0)
-		-q | -quality_assesment # Whether to execute a final step for assessing the quality of the corrected assembly, gathering sequences, analyzing telomeres... etc ('no'/'yes' by default)
-		-M | -java_memory # Max Java memory (heap space) to be used ('XXg', by default 200g=200GB used)
-		-l | -low_memory # Activate low memory mode for iCORN2 ('yes'/'no' by default)
-		-m | -mode # Add 'taxon' to execute decontamination based on taxonomic classification by kraken2, add 'blast' to execute decontamination based on BLAST against databases as requested by the DDBJ/ENA/Genbank submission, add 'both' to execute both approaches, and add 'light' to execute ILRA in light mode and skip these steps (default)
+		-i | -GEO_ID # GEO_ID (GSEXXXXXX, separated by comma if more than one) or folder containing raw reads (please provide full absolute path, e.g. /path/folder_name/)
+		-n | -name # Name of the project/folder to create and store results
+		-o | -output_folder # Destination folder
+		-p | -cores # Number of cores
+		-P | -number_parallel # Number of files to be processed in parallel (10 by default)		
+		-r | -reference_genome # Reference genome to be used (.fasta file or .gz, absolute pathway)
+		-a | -annotation_file # Reference annotation to be used (.gtf file, absolute pathway)
+		-t | -transcripts # Referece transcripts to be used (.fasta cDNA file, absolute pathway, only used if '-s' argument not provided so salmon prediction of strandness is required)
+		-s | -strandness # Strandness of the library ('yes, 'no', 'reverse'). If not provided and '-t' used, this would be predicted by salmon. Please use this parameter if prediction not correct, see explanations in for example in bit.ly/strandness0 and bit.ly/strandness
+		-g | -genes # Genes to highlight their expression in plots (one or several, separated by comma and no space)
+		-G | -GSM_filter # GSM ids (one or several, separated by comma and no space) within the GSE entry to restrict the analysis to. An alternative to requesting a stop with -S to reorganize the downloaded files manually
+		-f | -filter # Threshold of gene counts to use (bin to capture the lower expressed genes, e.g. Cort, or standard, by default)
+		-b | -batch # Batch effect present? (no by default, yes if correction through Combat-seq and model is to be performed)
+		-d | -design # Manually specifying the experimental design (no by default, if yes the assignment to groups for each sample must be provided in the prompt when asked with a comma-separated list of the same length than the number of samples)
+		-S | -stop # Manual stop so the automatically downloaded files can be manually modified (yes or no, by default)
+		-M | -memory # Max RAM memory to be used by STAR ('XXXXXXXXXX bytes', by default 257698037760=240GB used)
+		-m | -miARma_seq_path # A default is used if not provided...
 ```
 
-Parameters are not positional. If you did not provide a required parameter, the pipeline may exit or use default values if possible (check the help page above, the log after execution, or the 'Arguments / Variables' section in the ILRA main script 'ILRA.sh'). For example, if the argument '-f' is not provided, contigs shorter than 5,000 bp by default will be filtered out. 
+Parameters are not positional. If you did not provide a required parameter, the pipeline may exit or use default values if possible (check the help page above, the log after execution, or the 'arguments and variables' first section in the main script 'reanalyzerGSE.pk.sh'). For example, if the argument '-s' is not provided, strandness will be predicted using Salmon and requiring transcript sequences, so the pipeline would eixt if not provided with the argument '-t'. 
 
-In general, from an assembly as input (argument '-a'), ILRA is going to provide a polished assembly as output with the argument '-n' as name (the file 'name.ILRA.fasta', in the folder provided by the argument '-o').
+In general, from a folder containing raw sequences (.fastq.gz) or a GEO entry (GSEXXXXX) as input (argument '-i'), reanalyzerGSE is going to provide a standard transcriptomic analysis named with the argument '-n', in the folder provided by the argument '-o'. The argument '-p' provides the number of cores to be used when multithreading is possible and '-P' the number of files to be processed simultaneously when possible, leveraging GNU's parallel.
 
-Please do provide or not the arguments '-C', '-c', '-R' and '-I' to indicate whether to use short reads to perform error correction (iCORN2 / Pilon iteratively, with argument '-i' as number of iterations), and to find and filter out overlapping contigs (if coverage by Illumina short reads is even, argument 'F'). Please do provide the long reads sequencing technology used with the argument '-L'.
+An improved version of miARma-seq has been included in reanalyzerGSE and used by default (subfolder 'external_software'). if not detected or available, the path to a working version of miARma-seq must be provided with the argument '-m' | -miARma_seq_path # A default is used if not provided...Please do provide or not the arguments '-C', '-c', '-R' and '-I' to indicate whether to use short reads to perform error correction (iCORN2 / Pilon iteratively, with argument '-i' as number of iterations), and to find and filter out overlapping contigs (if coverage by Illumina short reads is even, argument 'F'). Please do provide the long reads sequencing technology used with the argument '-L'.
 
-Depending on whether you provided a reference genome (argument '-r'), reordering and renaming of the contigs (ABACAS2 and the argument '-B' to perform blasting) is going to be skipped, and assessment by QUAST would be run without the reference. Similarly, the availability of a reference annotation (argument '-g') would determine the mode to run QUAST, or the presence of certain names in the contigs marking the sequences to circularize (arguments '-s' and '-S') would mean that Circlator is executed or not. The debug mode (argument '-d' makes possible to resumen the execution of ILRA from a particular step). The argument '-p' determine whether Pilon should be used for short reads correction instead of iCORN2 (default 'no'). The argument '-q' determines whether a final extra step for assessing the quality and completeness of the corrected assembly (i.e., QUAST, BUSCO, gathering sequences, looking in the telomeres for the sequenes provided by the arguments '-e' and '-E'...) is included (default 'yes'). The argument 'M' is required to control the maximum RAM memory used, and the argument '-l' activates a 'low memory' mode at the expense of more processing time. The arguments '-b', '-P' and '-A' provide the number of parts to split the sequences and to simultaneously process in ILRA, iCORN2/Pilon and ABACAS2, respectively. The argument '-t' provides the number of cores to be used when multithreading is possible.
+Depending on whether you provided a reference genome (argument '-r'), reordering and renaming of the contigs (ABACAS2 and the argument '-B' to perform blasting) is going to be skipped, and assessment by QUAST would be run without the reference. Similarly, the availability of a reference annotation (argument '-g') would determine the mode to run QUAST, or the presence of certain names in the contigs marking the sequences to circularize (arguments '-s' and '-S') would mean that Circlator is executed or not. The debug mode (argument '-d' makes possible to resumen the execution of ILRA from a particular step). The argument '-p' determine whether Pilon should be used for short reads correction instead of iCORN2 (default 'no'). The argument '-q' determines whether a final extra step for assessing the quality and completeness of the corrected assembly (i.e., QUAST, BUSCO, gathering sequences, looking in the telomeres for the sequenes provided by the arguments '-e' and '-E'...) is included (default 'yes'). The argument 'M' is required to control the maximum RAM memory used, and the argument '-l' activates a 'low memory' mode at the expense of more processing time. The arguments '-b', '-P' and '-A' provide the number of parts to split the sequences and to simultaneously process in ILRA, iCORN2/Pilon and ABACAS2, respectively. 
 
 Finally, ILRA can be run in alternative modes (argument '-m'): 
 * '-m taxon': To perform decontamination based on taxonomic classification, which would be more computationally expensive.
