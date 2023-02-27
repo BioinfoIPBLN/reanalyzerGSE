@@ -22,25 +22,21 @@ If you want to manually install the software, check out in the files '.yml' with
 ## Quick start / Minimal examples
 ```
 source reanalyzerGSE/external_software/source_path # To set up the PATH if you have followed option 1 for installation above
-pigz -dkc $PWD/test_data/GRCm39.primary_assembly.genome.fa.gz # To uncompress the reference genome and annotation
-pigz -dkc $PWD/test_data/gencode.vM28.annotation.gtf.gz 
-
 cd reanalyzerGSE/
 ### Case examples of mouse transcriptomic datasets, analyzed in a machine with 30 cores and 200GB RAM available.
-### A) Local raw data simultaneously processing 4 samples and highligthing the genes B4galt3 and Chd1
-reanalyzerGSE.pk.sh -i $PWD/test_data -r $PWD/test_data/GRCm39.primary_assembly.genome.fa -a $PWD/test_data/gencode.vM28.annotation.gtf -s reverse -o $PWD/test_data_out -p 30 -P 4 -g B4galt3,Chd1 -M 214748364800 2>&1 | tee -a $PWD/test_data_out/test_data_1.log
+cores=30
+pigz -p $cores -dkc $PWD/test_data/GRCm39.primary_assembly.genome.fa.gz # To uncompress the reference genome and annotation
+pigz -p $cores -dkc $PWD/test_data/gencode.vM28.annotation.gtf.gz 
+pigz -p $cores -dkc $PWD/test_data/Mus_musculus.GRCm39.cdna.all.fa.gz
+# A) Local raw data (subset, 500k reads) simultaneously processing 4 samples and highligthing the genes B4galt3 and Chd1
+reanalyzerGSE.pk.sh -i $PWD/test_data -r $PWD/test_data/GRCm39.primary_assembly.genome.fa -a $PWD/test_data/gencode.vM28.annotation.gtf -s reverse -o $PWD/test_data_out/test_data_1/ -p $cores -P 4 -g B4galt3,Chd1 -M 214748364800 2>&1 | tee -a $PWD/test_data_out/test_data_1.log
 
-### B) The GEO entry raw data simultaneously processing 4 samples and highligthing the genes B4galt3 and Chd1
-reanalyzerGSE.pk.sh -i $PWD/test_data -r $PWD/test_data/GRCm39.primary_assembly.genome.fa -a $PWD/test_data/gencode.vM28.annotation.gtf -s reverse -o $PWD/test_data_out -p 30 -P 4 -g B4galt3,Chd1 -M 214748364800 2>&1 | tee -a $PWD/test_data_out/test_data_1.log
-
-
-ILRA.sh -a assembly_Pf_test.fasta -o out_ILRA_test -c corrected_reads_Pf_test_subset.fastq.gz -n test -r $PWD/PlasmoDB-47_Pfalciparum3D7_Genome_core_PMID_29862326.fasta -I Illumina_short_reads_Pf_test_subset -t 4 -g PlasmoDB-50_Pfalciparum3D7.gff -L pb -q no 2>&1 | tee -a out_ILRA_test_log.txt
-# 'Both' mode with decontamination based on kraken2 and blast:
-ILRA.sh -a assembly_Pf_test.fasta -o out_ILRA_test_mode_both -c corrected_reads_Pf_test_subset.fastq.gz -n test -r $PWD/PlasmoDB-47_Pfalciparum3D7_Genome_core_PMID_29862326.fasta -I Illumina_short_reads_Pf_test_subset -t 4 -g PlasmoDB-50_Pfalciparum3D7.gff -L pb -q no -m both 2>&1 | tee -a out_ILRA_test_mode_both_log.txt
+# B) The GEO entry GSE118451, simultaneously processing 6 samples, highligthing the genes B4galt3 and Chd1, and predicting strandness from the transcript sequences
+reanalyzerGSE.pk.sh -i GSE118451 -r $PWD/test_data/GRCm39.primary_assembly.genome.fa -a $PWD/test_data/gencode.vM28.annotation.gtf -t $PWD/test_data/Mus_musculus.GRCm39.cdna.all.fa -o $PWD/test_data_out/test_data_2/ -p $cores -P 6 -g B4galt3,Chd1 -M 214748364800 2>&1 | tee -a $PWD/test_data_out/test_data_2.log
 ```
-The test run will take around 5 minutes in 'light' mode and around 10 minutes in 'both' mode using 4 cores.
+These test runs will take ~X minutes and ~X minutes, respectively. The generation of the required indexes (i.e. for Salmon and STAR) will be done automatically if required (if not present beforehand in the subfolder 'indexes'), and take around ~X minutes.
 
-Please go through the output file 'out_ILRA_test_log.txt' to get the details on the pipeline processing steps and final output. For the test run, the last step of quality control (using QUAST, BUSCO, gtools, telomere analyses...) is disconnected by using '-q no'.
+Please go through the log files 'test_data_X.log' to get the details on the pipeline processing steps and final output.
 
 
 ## reanalyzerGSE arguments
@@ -102,7 +98,7 @@ The location of the downloaded databases to be used in the decontamination step 
 
 ## Comments
 We used reanalyzerGSE to automatically reanalyze several transcriptomic datasets and interrogate the expression levels of genes of interest.  
-Please cite this reference when using reanalyzerGSE for your publications:
+Please cite this reference when using reanalyzerGSE for your publications: (PENDING TO UPDATE ONCE WE HAVE THE BIORXIV)
 
 > From contigs to chromosomes: automatic Improvement of Long Read Assemblies (ILRA)
 > 
