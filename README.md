@@ -25,7 +25,7 @@ source reanalyzerGSE/external_software/source_path # To set up the PATH if you h
 cores=30
 cd reanalyzerGSE/test_data
 wget -q https://bit.ly/case_examples; unzip case_examples; mv test_data/* .; rm -r test_data
-pigz -p $cores -d *.gz # To uncompress the reference genome and annotation
+pigz -p $cores -d *.fa.gz *.gtf.gz # To uncompress the reference genome and annotation
 cd ../
 ### Case examples of mouse transcriptomic datasets, analyzed in a machine with 30 cores and 200GB RAM available.
 # A) Local raw data (subset, 500k reads) simultaneously processing 4 samples and highligthing the genes B4galt3 and Chd1
