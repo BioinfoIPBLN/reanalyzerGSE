@@ -46,7 +46,7 @@ Please refer to the help page for futher details:
 reanalyzerGSE.pk.sh -h
 
 usage: [options]
--h | -help # Type this to get help
+		-h | -help # Type this to get help
 		-i | -input # GEO_ID (GSEXXXXXX, separated by comma if more than one) or folder containing raw reads (please provide full absolute path, e.g. /path/folder_name/)
 		-n | -name # Name of the project/folder to create and store results
 		-o | -output_folder # Destination folder
@@ -59,11 +59,11 @@ usage: [options]
 		-g | -genes # Genes to highlight their expression in plots (one or several, separated by comma and no space)
 		-G | -GSM_filter # GSM ids (one or several, separated by comma and no space) within the GSE entry to restrict the analysis to. An alternative to requesting a stop with -S to reorganize the downloaded files manually
 		-R | -reads_to_subsample # Number of reads to subsample the sequences before the analyses
-		-f | -filter # Threshold of gene counts to use (bin to capture the lower expressed genes, e.g. Cort, or standard, by default)
+		-f | -filter # Threshold of gene counts to use ('bin' to capture the lower expressed genes, or 'standard', by default)
 		-b | -batch # Batch effect present? (no by default, yes if correction through Combat-seq and model is to be performed)
-		-d | -design_custom # Manually specifying the experimental design (no by default, if yes the assignment to groups for each sample must be provided in the prompt when asked with a comma-separated list of the same length than the number of samples)
-		-S | -stop # Manual stop so the automatically downloaded files can be manually modified (yes or no, by default)
-		-M | -memory_max # Max RAM memory to be used by STAR ('XXXXXXXXXX bytes', by default 257698037760=240GB used)
+		-d | -design_custom # Manually specifying the experimental design ('no' by default and if 'yes', please expect an interactive prompt after data download from GEO, and please enter the assignment to groups when asked in the terminal, with a comma-separated list of the same length than the number of samples)
+		-S | -stop # Manual stop so the automatically downloaded files can be manually modified ('yes' or no, by default)
+		-M | -memory_max # Max RAM memory to be used by STAR in bytes (by default 257698037760, or 240GB, used)
 		-m | -miARma_seq_path # By default, the version within the main folder is used...
 ```
 
