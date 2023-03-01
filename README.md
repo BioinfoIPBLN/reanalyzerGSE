@@ -51,19 +51,20 @@ usage: [options]
 		-n | -name # Name of the project/folder to create and store results
 		-o | -output_folder # Destination folder
 		-p | -cores # Number of cores
-		-P | -number_parallel # Number of files to be processed in parallel (10 by default)		
+		-P | -number_parallel # Number of files to be processed in parallel (10 by default)
 		-r | -reference_genome # Reference genome to be used (.fasta file or .gz, absolute pathway)
-		-a | -annotation_file # Reference annotation to be used (.gtf file, absolute pathway)
+		-a | -annotation # Reference annotation to be used (.gtf file, absolute pathway)
 		-t | -transcripts # Referece transcripts to be used (.fasta cDNA file, absolute pathway, only used if '-s' argument not provided so salmon prediction of strandness is required)
 		-s | -strandness # Strandness of the library ('yes, 'no', 'reverse'). If not provided and '-t' used, this would be predicted by salmon. Please use this parameter if prediction not correct, see explanations in for example in bit.ly/strandness0 and bit.ly/strandness
 		-g | -genes # Genes to highlight their expression in plots (one or several, separated by comma and no space)
 		-G | -GSM_filter # GSM ids (one or several, separated by comma and no space) within the GSE entry to restrict the analysis to. An alternative to requesting a stop with -S to reorganize the downloaded files manually
+		-R | -reads_to_subsample # Number of reads to subsample the sequences before the analyses
 		-f | -filter # Threshold of gene counts to use (bin to capture the lower expressed genes, e.g. Cort, or standard, by default)
 		-b | -batch # Batch effect present? (no by default, yes if correction through Combat-seq and model is to be performed)
-		-d | -design # Manually specifying the experimental design (no by default, if yes the assignment to groups for each sample must be provided in the prompt when asked with a comma-separated list of the same length than the number of samples)
+		-d | -design_custom # Manually specifying the experimental design (no by default, if yes the assignment to groups for each sample must be provided in the prompt when asked with a comma-separated list of the same length than the number of samples)
 		-S | -stop # Manual stop so the automatically downloaded files can be manually modified (yes or no, by default)
-		-M | -memory # Max RAM memory to be used by STAR ('XXXXXXXXXX bytes', by default 257698037760=240GB used)
-		-m | -miARma_seq_path # A default is used if not provided...
+		-M | -memory_max # Max RAM memory to be used by STAR ('XXXXXXXXXX bytes', by default 257698037760=240GB used)
+		-m | -miARma_seq_path # By default, the version within the main folder is used...
 ```
 
 Parameters are not positional. If you did not provide a required parameter, the pipeline may exit or use default values if possible (check the help page above, the log after execution, or the 'arguments and variables' first section in the main script 'reanalyzerGSE.pk.sh'). For example, if the argument '-s' is not provided, strandness will be predicted using Salmon and requiring transcript sequences, so the pipeline would exit if not provided with the argument '-t'. Similarly, reference genome and annotation are likely going to be required for the alignment and quantifying steps (arguments '-r' and '-a').
