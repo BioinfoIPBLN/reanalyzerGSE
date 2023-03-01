@@ -46,12 +46,12 @@ Please refer to the help page for futher details:
 reanalyzerGSE.pk.sh -h
 
 usage: [options]
-		-h | -help # Type this to get help
-		-i | -GEO_ID # GEO_ID (GSEXXXXXX, separated by comma if more than one) or folder containing raw reads (please provide full absolute path, e.g. /path/folder_name/)
+-h | -help # Type this to get help
+		-i | -input # GEO_ID (GSEXXXXXX, separated by comma if more than one) or folder containing raw reads (please provide full absolute path, e.g. /path/folder_name/)
 		-n | -name # Name of the project/folder to create and store results
 		-o | -output_folder # Destination folder
 		-p | -cores # Number of cores
-		-P | -number_parallel # Number of files to be processed in parallel (10 by default)
+		-P | -parallel_number # Number of files to be processed in parallel (10 by default)
 		-r | -reference_genome # Reference genome to be used (.fasta file or .gz, absolute pathway)
 		-a | -annotation # Reference annotation to be used (.gtf file, absolute pathway)
 		-t | -transcripts # Referece transcripts to be used (.fasta cDNA file, absolute pathway, only used if '-s' argument not provided so salmon prediction of strandness is required)
