@@ -64,7 +64,7 @@ usage: [options]
 		-d | -design_custom # Manually specifying the experimental design ('no' by default and if 'yes', please expect an interactive prompt after data download from GEO, and please enter the assignment to groups when asked in the terminal, with a comma-separated list of the same length than the number of samples)
 		-S | -stop # Manual stop so the automatically downloaded files can be manually modified ('yes' or no, by default)
 		-M | -memory_max # Max RAM memory to be used by STAR in bytes (by default 257698037760, or 240GB, used)
-		-m | -miARma_seq_path # By default, the version within the main folder is used...
+		-m | -miARma_seq_path # By default, the updated version within the main folder is used and reanalyzerGSE may not work with other, but try and provide other path if required
 ```
 
 Parameters are not positional. If you did not provide a required parameter, the pipeline may exit or use default values if possible (check the help page above, the log after execution, or the 'arguments and variables' first section in the main script 'reanalyzerGSE.pk.sh'). For example, if the argument '-s' is not provided, strandness will be predicted using Salmon and requiring transcript sequences, so the pipeline would exit if not provided with the argument '-t'. Similarly, reference genome and annotation are likely going to be required for the alignment and quantifying steps (arguments '-r' and '-a').
