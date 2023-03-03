@@ -20,7 +20,8 @@ If you want to manually install the software, check out in the files '.yml' with
 
 ## Quick start / Minimal examples
 ```
-source reanalyzerGSE/external_software/source_path # To set up the PATH if you have followed option 1 for installation above
+bash reanalyzerGSE/external_software/source_path.sh # To get a suggestion of the PATH to export if you have followed option 1 for installation above
+# export the PATH following the printed instructions with the previous command
 cores=30
 cd reanalyzerGSE/test_data
 wget -q https://bit.ly/case_examples; unzip -qq case_examples; mv test_data/* .; rm -r test_data case_examples
