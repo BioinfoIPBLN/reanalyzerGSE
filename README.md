@@ -8,8 +8,7 @@ We suggest two alternatives for installation. Please choose one of:
 
 ```
 git clone https://github.com/BioinfoIPBLN/reanalyzerGSE
-cd reanalyzerGSE/external_software/installation/
-bash install.sh 2>&1 | tee install.sh.log # Check log to ensure successful installation of dependencies
+bash reanalyzerGSE/external_software/installation/install.sh 2>&1 | tee reanalyzerGSE/external_software/installation/install.sh.log # Check log to ensure successful installation of dependencies
 ```
 
 This should work if you already have miniconda3 installed, and also install miniconda3 if not available. Plese keep in mind that in the install.sh script most of the versions of the tools installed by conda are frozen (by means of multiple '.yml' files), so please open an issue or you may need to manually change installed versions if conda fails with new problems dependency-related.
