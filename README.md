@@ -62,6 +62,7 @@ usage: [options]
 		-f | -filter # Threshold of gene counts to use ('bin' to capture the lower expressed genes, or 'standard', by default)
 		-b | -batch # Batch effect present? (no by default, yes if correction through Combat-seq and model is to be performed, and info is going to be required in prompts)
 		-d | -design_custom # Manually specifying the experimental design ('no' by default and if 'yes', please expect an interactive prompt after data download from GEO, and please enter the assignment to groups when asked in the terminal, with a comma-separated list of the same length than the number of samples)
+		-D | -databases_function # Manually provide a comma separated list of databases to be used in automatic functional enrichment analyses (check out the R package autoGO::choose_database(), but the most popular GO terms are used by default)
 		-S | -stop # Manual stop so the automatically downloaded files can be manually modified ('yes' or no, by default)
 		-M | -memory_max # Max RAM memory to be used by STAR in bytes (by default 257698037760, or 240GB, used)
 		-m | -miARma_seq_path # By default, the updated version within the main folder is used and reanalyzerGSE may not work with other, but try and provide other path if required
