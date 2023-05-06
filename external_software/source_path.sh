@@ -16,4 +16,4 @@ conda_envs_path=$(echo $conda_dir | sed 's,/bin$,/envs,g')
 
 echo -e "\nPlease run manually next and before reanalyzerGSE execution:\nexport PATH=$conda_envs_path/reanalyzerGSE/bin:$conda_dir:$EXTERNAL_SOFTWARE_DIR/miARma-seq:$(dirname $EXTERNAL_SOFTWARE_DIR):$(dirname $EXTERNAL_SOFTWARE_DIR)/scripts:$HOME/bin:$PATH\n"
 
-echo -e "\n\nPlease behave and be mindful with any queueing system, the resources you are using, the versions of the software that are in the PATH and are being used... etc\n\n"
+echo -e "\n\nPlease behave and be mindful with any queueing system, the resources you are using, the versions of the software that are in the PATH and are being used, the other environmental variables that you may need to change, such as TMPDIR, PERL5LIB... etc\n\n"
