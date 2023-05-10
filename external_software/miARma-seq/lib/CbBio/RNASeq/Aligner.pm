@@ -2693,7 +2693,7 @@ sub hisat2{
 			}
 
 			#Check if the file is a paired-end file
-			my $memorylimit_in_mb = int($memorylimit / 1000);
+			my $memorylimit_in_mb = int($memorylimit / 1000000);
 			if($file =~ /.*_R?1.*/){
 				#it contains the _1 label
 				my $mate_file=$file;
@@ -2718,7 +2718,7 @@ sub hisat2{
 			}
 		}
 		else{
-			my $memorylimit_in_mb = int($memorylimit / 1000);
+			my $memorylimit_in_mb = int($memorylimit / 1000000);
 			if(lc($strand) eq "reverse"){
 				$hisatpardef.= " --rna-strandness R";
 			}
@@ -3053,7 +3053,7 @@ sub star{
 			$output_file_bw2=~s/_1(.+)/$1/g;
 		}
 		#Bowtie2 execution command
-		my $memorylimit_in_mb = int($memorylimit / 1000);
+		my $memorylimit_in_mb = int($memorylimit / 1000000);
 		my $command;
 		my $tmp_file;		
 		$tmp_file="/".$projectdir."/Pre_fastqc_results/list_of_files.txt";		
@@ -3095,7 +3095,7 @@ sub star{
 			}
 		}
 		else{
-			my $memorylimit_in_mb = int($memorylimit / 1000);
+			my $memorylimit_in_mb = int($memorylimit / 1000000);
 			print STDOUT "\tSTAR :: ".date()." Checking $file for star (single-end) analysis\n" if($verbose);
 			if($file =~ /\.gz$/){
 				$starpardef.= " --readFilesCommand gunzip -c ";
