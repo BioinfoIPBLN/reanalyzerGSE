@@ -1,17 +1,17 @@
 # reanalyzerGSE
-reanalyzerGSE is a pipeline to assist with and streamline transcriptomic analyses of various datasets (i.e. microarrays, RNA-seq, scRNA-seq) by automatically reanalyzing raw data submitted to public databases like Gene Expression Omnibus ([GEO](https://www.ncbi.nlm.nih.gov/geo/)), ENA or SRA. Local data can also be provided by the user. The pipeline is based on several steps (i.e. data download, quality control, alignment to reference genome, quantification, differential gene expression analyses, functional enrichment analyses...) implementing standard tools and novel scripts.
+reanalyzerGSE is a pipeline to assist with and streamline transcriptomic analyses of various datasets (i.e. microarrays, RNA-seq, scRNA-seq) by automatically reanalyzing raw data submitted to public databases like Gene Expression Omnibus ([GEO](https://www.ncbi.nlm.nih.gov/geo/)), ENA or SRA. Local data can also be provided by the user. The pipeline is based on several steps implementing standard tools and novel scripts. (i.e. data download, quality control, alignment to reference genome, quantification, differential gene expression analyses, functional enrichment analyses...)
 
 ## Installation
 We suggest two alternatives for installation. Please choose one of:
 
-1) The fastest option is to use the folder 'external_software', which contain some of the required software (i.e. miARma-seq), a script to install dependencies (mainly through miniconda, 'external_software/installation/install.sh'), and a suggestion of the PATH to be set ('source_path'). To perform a conda-based installation and setup everything required to run reanalyzerGSE, please execute:
+1) The fastest option is to use the folder 'external_software', which contain some of the required software (i.e. miARma-seq), a script to install dependencies (mainly through miniconda and pip, 'external_software/installation/install.sh'), and a suggestion of the PATH to be set ('source_path.sh'). To perform a conda-based installation and setup everything required to run reanalyzerGSE, please execute:
 
 ```
 git clone https://github.com/BioinfoIPBLN/reanalyzerGSE
-bash reanalyzerGSE/external_software/installation/install.sh 2>&1 | tee reanalyzerGSE/external_software/installation/install.sh.log # Check log to ensure successful installation of dependencies
+bash reanalyzerGSE/external_software/installation/install.sh 2>&1 | tee -a reanalyzerGSE/external_software/installation/install.sh.log # Check log to make sure that installation of all dependencies has been succesful
 ```
 
-This should work if you already have miniconda3 installed, and also install miniconda3 if not available. Plese keep in mind that in the install.sh script most of the versions of the tools installed by conda are frozen (by means of multiple '.yml' files), so please open an issue or you may need to manually change installed versions if conda fails with new problems dependency-related.
+This should work if you already have miniconda3 installed, and also install miniconda3 within the reanalyzerGSE folder if not available or if you have kept it out of the PATH. Plese keep in mind that in the install.sh script most of the versions of the tools installed by conda are frozen (by means of multiple '.yml' files corresponding to different environments), so please open an issue if conda fails with dependency-related problems or you may need to manually change installed versions.
 
 
 2) The less recommended option is to manually install the required software.
