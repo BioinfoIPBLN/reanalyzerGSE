@@ -46,44 +46,56 @@ Please refer to the help page for futher details:
 reanalyzerGSE.pk.sh -h
 
 usage: [options]
-		-h | -help # Type this to get help
+				-h | -help # Type this to get help
 		-i | -input # GEO_ID (GSEXXXXXX, separated by comma if more than one), or folder containing raw reads (please provide full absolute path, e.g. /path/folder_name/), or almost any accession from ENA/SRA to download .fastq from (any of the ids with the prefixes PRJEB,PRJNA,PRJDB,ERP,DRP,SRP,SAMD,SAME,SAMN,ERS,DRS,SRS,ERX,DRX,SRX,ERR,DRR,SRR, please separated by commas if more than one id as input)
 		-n | -name # Name of the project/folder to create and store results
 		-o | -output_folder # Destination folder
 		-p | -cores # Number of cores
 		-P | -parallel_number # Number of files to be processed in parallel (10 by default)
 		-r | -reference_genome # Reference genome to be used (.fasta file or .gz, absolute pathway)
-		-a | -annotation # Reference annotation to be used (.gtf file, absolute pathway)
+		-a | -annotation # Reference annotation to be used (.gtf file, absolute pathway). If hisat2 is used, a gff file (make sure format is '.gff' and not '.gff3') is accepted (some QC steps like Qualimap rnaseqqc may be skipped though)
+		-A | -aligner # Aligner software to use ('hisat2' or 'star', by default)
 		-t | -transcripts # Referece transcripts to be used (.fasta cDNA file, absolute pathway, only used if '-s' argument not provided so salmon prediction of strandness is required)
 		-s | -strandness # Strandness of the library ('yes, 'no', 'reverse'). If not provided and '-t' used, this would be predicted by salmon. Please use this parameter if prediction not correct, see explanations in for example in bit.ly/strandness0 and bit.ly/strandness
 		-g | -genes # Genes to highlight their expression in plots (one or several, separated by comma and no space)
 		-G | -GSM_filter # GSM ids (one or several, separated by comma and no space) within the GSE entry to restrict the analysis to. An alternative to requesting a stop with -S to reorganize the downloaded files manually
-		-R | -reads_to_subsample # Number of reads to subsample the sequences before the analyses
+		-R | -reads_to_subsample # Percentage of reads to subsample the sequences before the analyses
 		-f | -filter # Threshold of gene counts to use ('bin' to capture the lower expressed genes, or 'standard', by default)
 		-b | -batch # Batch effect present? (no by default, yes if correction through Combat-seq and model is to be performed, and info is going to be required in prompts)
 		-d | -design_custom # Manually specifying the experimental design ('no' by default and if 'yes', please expect an interactive prompt after data download from GEO, and please enter the assignment to groups when asked in the terminal, with a comma-separated list of the same length than the number of samples)
-		-D | -databases_function # Manually provide a comma separated list of databases to be used in automatic functional enrichment analyses (check out the R package autoGO::choose_database(), but the most popular GO terms are used by default)
-		-S | -stop # Manual stop so the automatically downloaded files can be manually modified ('yes' or no, by default)
-		-M | -memory_max # Max RAM memory to be used by STAR in bytes (by default 257698037760, or 240GB, used)
-		-m | -miARma_seq_path # By default, the updated version within the main folder is used and reanalyzerGSE may not work with other, but try and provide other path if required
+		-c | -clusterProfiler # Whether to perform additional functional enrichment analyses using ClusterProfiler (slow if many significant DEGs, 'yes' or 'no', by default)
+		-T | -target_file # Protopical target file for attempts to differential gene expression analyses (containing filenames and covariates, automatically built if not provided)
+		-S | -stop # Manual stop so the automatically downloaded files can be manually modified ('yes' or 'no', by default)
+		-K | -Kraken2_fast_mode # Kraken2 fast mode, consisting on copying the Kraken2 database to /dev/shm (RAM) so execution is faster ('yes' or 'no' by default)
+		-Dk | -kraken2_databases # Folder (absolute pathway) containing the database that should be used by Kraken2 (any input here, e.g. 'standard_eupathdb_48_kraken2_db', would activate the kraken2-based decontamination step)
+		-Ds | -sortmerna_databases # The database (absolute pathway) that should be used by SortMeRNA (any input here, e.g. 'rRNA_databases/smr_v4.3_sensitive_db.fasta', would activate the sortmerna-based rRNA removal step)
+		-De | -differential_expr_software # Software to be used in the differential expression analyses ('edgeR' by default, or 'DESeq2')
+		-Df | -databases_function # Manually provide a comma separated list of databases to be used in automatic functional enrichment analyses of DEGs (check out the R package autoGO::choose_database(), but the most popular GO terms are used by default)
+		-Of | -options_featureCounts_feature # The feature type to use to count in featureCounts (default 'exon')
+		-Os | -options_featureCounts_seq # The seqid type to use to count in featureCounts (default 'gene_name')
+		-iG | -input_GEO_reads # If you want to combine downloading metadata from GEO with reads from GEO or any database already downloaded, maybe from a previous attempt, please provide an absolute path
+		-cG | -compression_level # Specify the compression level to gzip the downloaded fastq files from GEO (numeric '0' to '9', default '9')
+		-Ti | -tidy_tmp_files # Space-efficient run, with a last step removing raw reads if downloaded, converting bam to cram, removing tmp files... etc ('yes' or 'no', by default)
+		-TMP | -TMPDIR # Directory to export the environmental variable TMPDIR (by default or if left empty an internal folder of the output directory is used, or please enter 'system' to use system's default, or an absolute pathway that will be created if it does not exist)
+		-M | -memory_max # Max RAM memory to be used by aligner or JAVA in bytes (by default 257698037760, or 240GB, used)
 ```
 
-Parameters are not positional. If you did not provide a required parameter, the pipeline may exit or use default values if possible (check the help page above, the log after execution, or the 'arguments and variables' first section in the main script 'reanalyzerGSE.pk.sh'). For example, if the argument '-s' is not provided, strandness will be predicted using Salmon and requiring transcript sequences, so the pipeline would exit if not provided with the argument '-t'. Similarly, reference genome and annotation are likely going to be required for the alignment and quantifying steps (arguments '-r' and '-a').
+Parameters are not positional. If you did not provide a required parameter, the pipeline may exit or use default values if possible (check the help page above, the log after execution, or the 'Arguments and variables' first section in the main script 'reanalyzerGSE.pk.sh'). For example, if the argument '-s' is not provided, strandness will be predicted using Salmon and how_are_we_stranded_here and transcript sequences would be required, so the pipeline would exit if not provided with the argument '-t'. Similarly, reference genome and annotation are likely going to be required for the alignment and quantifying steps (arguments '-r' and '-a').
 
 In general, from a folder containing raw sequences (.fastq.gz) or a GEO entry (GSEXXXXX) as input (argument '-i'), reanalyzerGSE is going to provide a standard transcriptomic analysis named with the argument '-n', in the folder provided by the argument '-o'. The argument '-p' provides the number of cores to be used when multithreading is possible, '-P' the number of files to be processed simultaneously when possible, leveraging GNU's parallel, and '-M' the maximum amount of RAM memory available (required mostly for the index generation and alignment step). If the reanalysis of a GEO entry is requested, all the samples in the database will be included by default. The parameter '-G' allows to restrict the analysis to some of them (providing GSMXXXXX ids), while '-S' interrupts the pipeline until the user has made manual changes to the downloaded files, and '-d' allows the user to input a custom experimental design, to be used instead of the automatically-detected one.
 
-An improved version of miARma-seq has been included in reanalyzerGSE and used by default (subfolder 'external_software'). if not detected or available, the path to a working version of miARma-seq must be provided with the argument '-m'. reanalyzer GSE also includes a module to perform batch correction (the design matrix must be provided in a prompt after using the flag '-b'), the possibility to use multiple thresholds when filtering out low expressed genes (argument '-f'), and a module to output plots from the differential gene expression analyses, highlighting the genes provided with the argument '-g'.
+An improved version of miARma-seq has been included in reanalyzerGSE and used by default (subfolder 'external_software'). Amognst others, reanalyzerGSE also includes a module to perform batch correction (the design matrix must be provided in a prompt after using the flag '-b'), the possibility to use multiple thresholds when filtering out low expressed genes (argument '-f'), and a module to output plots from the differential gene expression analyses, highlighting the genes provided with the argument '-g'.
 
+Please refer to the help page or open an issue for any further clarification.
 
 ## Comments
-We used reanalyzerGSE to automatically reanalyze several transcriptomic datasets and interrogate the expression levels of genes of interest.  
-Please cite this reference when using reanalyzerGSE for your publications: (PENDING TO UPDATE ONCE WE HAVE THE BIORXIV)
+Please cite this reference when using reanalyzerGSE for your publications:
 
-> From contigs to chromosomes: automatic Improvement of Long Read Assemblies (ILRA)
+> The reanalyzerGSE pipeline: tackling the everlasting lack of reproducibility and reanalyses in transcriptomics data
 > 
-> José L Ruiz, Susanne Reimering, Mandy Sanders, Juan David Escobar-Prieto, Nicolas M. B. Brancucci, Diego F. Echeverry, Abdirahman I. Abdi, Matthias Marti, Elena Gomez-Diaz, Thomas D. Otto
+> José L Ruiz, Laura C Terrón-Camero, Julia Castillo-González, Iván Fernández-Rengel, Mario Delgado, Elena Gonzalez-Rey, Eduardo Andrés-León
 > 
-> bioRxiv 2021.07.30.454413; doi: https://doi.org/10.1101/2021.07.30.454413
+> bioRxiv 2023.07.XX.XXXX; doi: https://doi.org/10.1101/2023.07.XX.XXXXXXX
 ```
 @article {Ruiz2021.07.30.454413,
 	author = {Ruiz, Jos{\'e} L and Reimering, Susanne and Sanders, Mandy and Escobar-Prieto, Juan David and Brancucci, Nicolas M. B. and Echeverry, Diego F. and Abdi, Abdirahman I. and Marti, Matthias and Gomez-Diaz, Elena and Otto, Thomas D.},
