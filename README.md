@@ -89,7 +89,7 @@ An improved version of miARma-seq has been included in reanalyzerGSE and used by
 Please refer to the help page or open an issue for any further clarification.
 
 ## Comments
-Please cite this reference when using reanalyzerGSE for your publications:
+Please cite this reference when using reanalyzerGSE for your publications: (PENDING IMMINENT RELEASE IN BIORXIV)
 
 > The reanalyzerGSE pipeline: tackling the everlasting lack of reproducibility and reanalyses in transcriptomics data
 > 
