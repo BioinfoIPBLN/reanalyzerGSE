@@ -1,5 +1,5 @@
 # reanalyzerGSE
-reanalyzerGSE is a pipeline to help with and streamline the transcriptomic analyses of various datasets (i.e. microarrays, RNA-seq, scRNA-seq) by automatically reanalyzing raw data submitted to Gene Expression Omnibus ([GEO](https://www.ncbi.nlm.nih.gov/geo/)) or provided locally by the user. The pipeline is based on several steps (i.e. quality control, alignment to reference genome, quantification and differential gene expression analyses) implementing standard tools and novel scripts.
+reanalyzerGSE is a pipeline to assist with and streamline transcriptomic analyses of various datasets (i.e. microarrays, RNA-seq, scRNA-seq) by automatically reanalyzing raw data submitted to public databases like Gene Expression Omnibus ([GEO](https://www.ncbi.nlm.nih.gov/geo/)), ENA or SRA. Local data can also be provided by the user. The pipeline is based on several steps (i.e. data download, quality control, alignment to reference genome, quantification, differential gene expression analyses, functional enrichment analyses...) implementing standard tools and novel scripts.
 
 ## Installation
 We suggest two alternatives for installation. Please choose one of:
