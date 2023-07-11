@@ -205,29 +205,48 @@ if (file.exists(paste0(path,"/",GEO_ID_path,"/final_results_reanalysis/sample_in
 	# And I replace the empty cells with "-"
 	info_filt_3 <- unique(info_filt_2)
 	info_filt_3 <- as.data.frame(info_filt_3[,!(colnames(info_filt_3) %in% c("run_accession","experiment_alias"))])
-	info_filt_3 <- as.data.frame(info_filt_3[,names(lapply(apply(info_filt_3,2,table),function(x){length(x)}))[unname(lapply(apply(info_filt_3,2,table),function(x){length(x)})>1)]])
-	info_filt_3[info_filt_3 == "" | is.na(info_filt_3)] <- "-"
-	info_filt_design_final <- as.data.frame(info_filt_3[,apply(info_filt_3,2,function(x){length(table(x))!=dim(info)[1]})])
-	# Get combinations between the columns if more than one and add to the possible designs:
-	if(dim(info_filt_design_final)[2] > 1){
-		info_filt_design_final <- cbind(info_filt_design_final,
-										as.data.frame(lapply(combn(info_filt_design_final, 2, simplify=FALSE),function(x){apply(x,1,function(y){paste(y,collapse="_")})})))
-	}
+	# Control if I lost all columns but one:
+	if(dim(info_filt_3)[2]>1){
+		info_filt_3 <- as.data.frame(info_filt_3[,names(lapply(apply(info_filt_3,2,table),function(x){length(x)}))[unname(lapply(apply(info_filt_3,2,table),function(x){length(x)})>1)]])
+		info_filt_3[info_filt_3 == "" | is.na(info_filt_3)] <- "-"
+		info_filt_design_final <- as.data.frame(info_filt_3[,apply(info_filt_3,2,function(x){length(table(x))!=dim(info)[1]})])
+		# Get combinations between the columns if more than one and add to the possible designs:
+		if(dim(info_filt_design_final)[2] > 1){
+			info_filt_design_final <- cbind(info_filt_design_final,
+											as.data.frame(lapply(combn(info_filt_design_final, 2, simplify=FALSE),function(x){apply(x,1,function(y){paste(y,collapse="_")})})))
+		}
 
-	# Write:
-	for (i in 1:dim(info_filt_design_final)[2]){
-		design_possible <- paste0("cond-",info_filt_design_final[,i])
-		if (length(table(design_possible))!=dim(info_filt_design_final)[1]){
-			write.table(unique(design_possible),
-					file=paste0(path,"/",GEO_ID_path,"/GEO_info/design_possible_",i,"_",GEO_ID,".txt"),quote = F,row.names = F, col.names = F,sep = "\n")
-			write.table(design_possible,
-						file=paste0(path,"/",GEO_ID_path,"/GEO_info/design_possible_full_",i,"_",GEO_ID,".txt"),quote = F,row.names = F, col.names = F,sep = "\n")
+		# Write:
+		for (i in 1:dim(info_filt_design_final)[2]){
+			design_possible <- paste0("cond-",info_filt_design_final[,i])
+			if (length(table(design_possible))!=dim(info_filt_design_final)[1]){
+				write.table(unique(design_possible),
+						file=paste0(path,"/",GEO_ID_path,"/GEO_info/design_possible_",i,"_",GEO_ID,".txt"),quote = F,row.names = F, col.names = F,sep = "\n")
+				write.table(design_possible,
+							file=paste0(path,"/",GEO_ID_path,"/GEO_info/design_possible_full_",i,"_",GEO_ID,".txt"),quote = F,row.names = F, col.names = F,sep = "\n")
 
-			cat(paste0("\nDetected: ",i," "))
-			print(table(design_possible)); cat("\n")
+				cat(paste0("\nDetected: ",i," "))
+				print(table(design_possible)); cat("\n")
+			}
+		}
+	} else {
+		info_filt_3[info_filt_3 == "" | is.na(info_filt_3)] <- "-"
+		info_filt_design_final <- as.data.frame(info_filt_3[,apply(info_filt_3,2,function(x){length(table(x))!=dim(info)[1]})])
+		# Get combinations between the columns if more than one and add to the possible designs:
+		# Write:
+		for (i in 1:dim(info_filt_design_final)[2]){
+			design_possible <- paste0("cond-",info_filt_design_final[,i])
+			if (length(table(design_possible))!=dim(info_filt_design_final)[1]){
+				write.table(unique(design_possible),
+						file=paste0(path,"/",GEO_ID_path,"/GEO_info/design_possible_",i,"_",GEO_ID,".txt"),quote = F,row.names = F, col.names = F,sep = "\n")
+				write.table(design_possible,
+							file=paste0(path,"/",GEO_ID_path,"/GEO_info/design_possible_full_",i,"_",GEO_ID,".txt"),quote = F,row.names = F, col.names = F,sep = "\n")
+
+				cat(paste0("\nDetected: ",i," "))
+				print(table(design_possible)); cat("\n")
+			}
 		}
 	}
-
 	# Copy info to final folder:
 	system(paste0("for i in $(ls -d ",path,"/",GEO_ID_path,"/GEO_info/* | grep 'design_possible_full'); do echo -e '\n'$(basename $i) >> ",path,"/",GEO_ID_path,"/final_results_reanalysis/possible_designs_all.txt && cat $i | sort | uniq >> ",path,"/",GEO_ID_path,"/final_results_reanalysis/possible_designs_all.txt; done && sed -i '1{/^$/d}' ",path,"/",GEO_ID_path,"/final_results_reanalysis/possible_designs_all.txt"))
 }
