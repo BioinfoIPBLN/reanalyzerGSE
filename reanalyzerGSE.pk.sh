@@ -463,6 +463,7 @@ elif [[ $input == /* ]]; then
 		random_shift=$((RANDOM % (2 * ten_percent + 1) - ten_percent))
 		number_reads_rand=$((number_reads + random_shift))
 		if [[ "$(cat $output_folder/$name/library_layout_info.txt)" == "PAIRED" ]]; then
+			ls | egrep .fastq.gz$ | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq | parallel --verbose -j $number_parallel --max-args 1 "seqtk sample -s 123 {}_1.fastq.gz $number_reads_rand | pigz -p $((cores / number_parallel)) -c --fast > {.}_subsamp_1.fastq.gz && rm {}_1.fastq.gz"			
 			ls | egrep .fastq.gz$ | grep -v subsamp | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq | parallel --verbose -j $number_parallel --max-args 1 "seqtk sample -s 123 {}_2.fastq.gz $number_reads_rand | pigz -p $((cores / number_parallel)) -c --fast > {.}_subsamp_2.fastq.gz && rm {}_2.fastq.gz"
 		else
   			ls | egrep .fastq.gz$ | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq | parallel --verbose -j $number_parallel --max-args 1 "seqtk sample -s 123 {}_1.fastq.gz $number_reads_rand | pigz -p $((cores / number_parallel)) -c --fast > {.}_subsamp_1.fastq.gz && rm {}_1.fastq.gz"
