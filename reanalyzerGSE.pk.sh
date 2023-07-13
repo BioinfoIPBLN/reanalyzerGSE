@@ -423,10 +423,15 @@ echo -e "\nSTEP 2 DONE. Current time: $(date)\n"
 		ten_percent=$((number_reads / 10))
 		random_shift=$((RANDOM % (2 * ten_percent + 1) - ten_percent))
 		number_reads_rand=$((number_reads + random_shift))
-		ls | egrep .fastq.gz$ | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq | parallel --verbose -j $number_parallel --max-args 1 "seqtk sample -s 123 {}_1.fastq.gz $number_reads_rand | pigz -p $((cores / number_parallel)) -c --fast > {.}_subsamp_1.fastq.gz && rm {}_1.fastq.gz"
+		seqs_location=$output_folder/$name/raw_reads; if [ ! -d "$seqs_location" ]; then mkdir -p $seqs_location; fi; cd $seqs_location
+		if [[ $input == /* ]]; then 
+    			for f in $(ls -d $input/*); do ln -sf $f $seqs_location/$(basename $f | sed 's,fq,fastq,g;s,_R1.fastq,_1.fastq,g;s,_R2.fastq,_2.fastq,g'); done
+		fi		
 		if [[ "$(cat $output_folder/$name/GEO_info/library_layout_info.txt)" == "PAIRED" ]]; then
 			ls | egrep .fastq.gz$ | grep -v subsamp | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq | parallel --verbose -j $number_parallel --max-args 1 "seqtk sample -s 123 {}_2.fastq.gz $number_reads_rand | pigz -p $((cores / number_parallel)) -c --fast > {.}_subsamp_2.fastq.gz && rm {}_2.fastq.gz"
-		fi		
+		else
+  			ls | egrep .fastq.gz$ | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq | parallel --verbose -j $number_parallel --max-args 1 "seqtk sample -s 123 {}_1.fastq.gz $number_reads_rand | pigz -p $((cores / number_parallel)) -c --fast > {.}_subsamp_1.fastq.gz && rm {}_1.fastq.gz"
+  		fi		
 		echo -e "\nAll raw data downloaded and info prepared, subsampled to $number_reads (+-10%) completed. Proceeding with reanalyses...\n"
 	fi
 
