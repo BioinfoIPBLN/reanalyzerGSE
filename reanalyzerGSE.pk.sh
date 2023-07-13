@@ -33,7 +33,7 @@ for argument in $options; do
 		-s | -strandness # Strandness of the library ('yes, 'no', 'reverse'). If not provided and '-t' used, this would be predicted by salmon. Please use this parameter if prediction not correct, see explanations in for example in bit.ly/strandness0 and bit.ly/strandness
 		-g | -genes # Genes to highlight their expression in plots (one or several, separated by comma and no space)
 		-G | -GSM_filter # GSM ids (one or several, separated by comma and no space) within the GSE entry to restrict the analysis to. An alternative to requesting a stop with -S to reorganize the downloaded files manually
-		-R | -reads_to_subsample # Percentage of reads to subsample the sequences before the analyses
+		-R | -reads_to_subsample # Percentage or number of reads to subsample the input sequences before the analyses
 		-f | -filter # Threshold of gene counts to use ('bin' to capture the lower expressed genes, or 'standard', by default)
 		-b | -batch # Batch effect present? (no by default, yes if correction through Combat-seq and model is to be performed, and info is going to be required in prompts)
 		-d | -design_custom # Manually specifying the experimental design ('no' by default and if 'yes', please expect an interactive prompt after data download from GEO, and please enter the assignment to groups when asked in the terminal, with a comma-separated list of the same length than the number of samples)
