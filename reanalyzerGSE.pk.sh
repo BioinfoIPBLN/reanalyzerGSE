@@ -423,10 +423,6 @@ echo -e "\nSTEP 2 DONE. Current time: $(date)\n"
 		ten_percent=$((number_reads / 10))
 		random_shift=$((RANDOM % (2 * ten_percent + 1) - ten_percent))
 		number_reads_rand=$((number_reads + random_shift))
-		seqs_location=$output_folder/$name/raw_reads; if [ ! -d "$seqs_location" ]; then mkdir -p $seqs_location; fi; cd $seqs_location
-		if [[ $input == /* ]]; then 
-    			for f in $(ls -d $input/*); do ln -sf $f $seqs_location/$(basename $f | sed 's,fq,fastq,g;s,_R1.fastq,_1.fastq,g;s,_R2.fastq,_2.fastq,g'); done
-		fi		
 		if [[ "$(cat $output_folder/$name/GEO_info/library_layout_info.txt)" == "PAIRED" ]]; then
 			ls | egrep .fastq.gz$ | grep -v subsamp | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq | parallel --verbose -j $number_parallel --max-args 1 "seqtk sample -s 123 {}_2.fastq.gz $number_reads_rand | pigz -p $((cores / number_parallel)) -c --fast > {.}_subsamp_2.fastq.gz && rm {}_2.fastq.gz"
 		else
@@ -437,7 +433,7 @@ echo -e "\nSTEP 2 DONE. Current time: $(date)\n"
 
 ### Process if not required to download from NCBI/GEO but raw reads provided
 elif [[ $input == /* ]]; then
-	seqs_location=$output_folder/$name/raw_reads
+	seqs_location=$output_folder/$name/raw_reads; cd $seqs_location
 	if [ ! -d "$seqs_location" ]; then
 		mkdir -p $seqs_location		
 		if [ $(ls -d $input/* | egrep -c "_R1.fastq.gz$|_R1.fq.gz$|_R2.fastq.gz$|_R2.fq.gz$|_1.fastq.gz$|_1.fq.gz$|_2.fastq.gz$|_2.fq.gz$") -eq 0 ]; then
@@ -457,7 +453,22 @@ elif [[ $input == /* ]]; then
 			echo "SINGLE" > $output_folder/$name/library_layout_info.txt
 		fi
 	fi
-	echo -e "This is the content of $seqs_location:\n$(ls -l $seqs_location | awk '{ print $9 }' | tail -n +2)\n"
+	if [ -z "$number_reads" ]; then
+		echo -e "\nAll raw data downloaded and info prepared, proceeding with reanalyses...\n"
+	else
+		echo -e "\nSubsampling...\n"
+		# From the input parameter by the user, obtain a random number allowing a +- 10% window:
+		ten_percent=$((number_reads / 10))
+		random_shift=$((RANDOM % (2 * ten_percent + 1) - ten_percent))
+		number_reads_rand=$((number_reads + random_shift))
+		if [[ "$(cat $output_folder/$name/GEO_info/library_layout_info.txt)" == "PAIRED" ]]; then
+			ls | egrep .fastq.gz$ | grep -v subsamp | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq | parallel --verbose -j $number_parallel --max-args 1 "seqtk sample -s 123 {}_2.fastq.gz $number_reads_rand | pigz -p $((cores / number_parallel)) -c --fast > {.}_subsamp_2.fastq.gz && rm {}_2.fastq.gz"
+		else
+  			ls | egrep .fastq.gz$ | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq | parallel --verbose -j $number_parallel --max-args 1 "seqtk sample -s 123 {}_1.fastq.gz $number_reads_rand | pigz -p $((cores / number_parallel)) -c --fast > {.}_subsamp_1.fastq.gz && rm {}_1.fastq.gz"
+  		fi		
+		echo -e "\nAll raw data downloaded and info prepared, subsampled to $number_reads (+-10%) completed. Proceeding with reanalyses...\n"
+	fi
+ 	echo -e "This is the content of $seqs_location:\n$(ls -l $seqs_location | awk '{ print $9 }' | tail -n +2)\n"
 	echo -n "From the ordered list above, please input a comma-separated list with the conditions for each sample (remember if these are paired-end, only once per pair of reads): "
 	read -r design_input
 	mkdir -p $output_folder/$name/GEO_info/
