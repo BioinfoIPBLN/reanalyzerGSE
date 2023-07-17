@@ -4,13 +4,13 @@ path <- args[1]
 genes <- args[2]
 filter_option <- args[3]
 organism <- args[4]
-enrichment_databases <- args[5]
-targets_file <- args[6]
-diff_soft <- args[7]
+targets_file <- args[5]
+diff_soft <- args[6]
 
 
 ###### Load read counts, format, filter, start differential expression analyses, get RPKM, save...:
   cat("\nProcessing counts and getting figures...\n")
+  print(paste0("Current date: ",date()))
   a <- lapply(paste0(path,"/miARma_out/str_readcount_results/",list.files(paste0(path,"/miARma_out/str_readcount_results"),pattern = ".tab$")),
               function(x){data.table::fread(x)[,c(1,7)]})
   b <- data.table::fread(paste0(path,"/miARma_out/Readcount_results/str-Size.tab"))
@@ -199,7 +199,7 @@ diff_soft <- args[7]
     write.table(gene_counts_rpkm_combat_log,
           file=paste0(path,"/final_results_reanalysis/RPKM_counts_ComBat_seq_genes_log2_0.1.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
   }
-
+  print(paste0("Counts written. Current date: ",date()))
 
 ###### Figure of the expr of certain genes of interest:
   ## Introduce in the violin plot statistics, loop through the different designs to get different coloring and grouping... etc
@@ -338,8 +338,9 @@ diff_soft <- args[7]
   }
   }
 
-  print("PDF barplot and violin plots done. Genes highlighted are:")
-  print(genes)
+  print(paste0("PDF barplot and violin plots done. Current date: ",date()))
+  print("Genes highlighted are:")
+  print(genes);
 
 
 ###### Attempt of Differential Gene Expression Analyses... modified from Bioinfo Unit to use here:
@@ -440,286 +441,10 @@ diff_soft <- args[7]
   }
   }
   print("Done")
-
-
-###### Attempt of automatic functional enrichment analyses...:
-  print("Attempting automatic gene ontology enrichment analyses of the DGE results...")
-  suppressMessages(library(autoGO,quiet = T,warn.conflicts = F))
-  # choose_database()
-  ### 03/2023:
-    # [1] "Achilles_fitness_decrease"                          "Achilles_fitness_increase"                         
-    # [3] "Aging_Perturbations_from_GEO_down"                  "Aging_Perturbations_from_GEO_up"                   
-    # [5] "Allen_Brain_Atlas_10x_scRNA_2021"                   "Allen_Brain_Atlas_down"                            
-    # [7] "Allen_Brain_Atlas_up"                               "ARCHS4_Cell-lines"                                 
-    # [9] "ARCHS4_IDG_Coexp"                                   "ARCHS4_Kinases_Coexp"                              
-    # [11] "ARCHS4_TFs_Coexp"                                   "ARCHS4_Tissues"                                    
-    # [13] "Azimuth_Cell_Types_2021"                            "BioCarta_2013"                                     
-    # [15] "BioCarta_2015"                                      "BioCarta_2016"                                     
-    # [17] "BioPlanet_2019"                                     "BioPlex_2017"                                      
-    # [19] "Cancer_Cell_Line_Encyclopedia"                      "CCLE_Proteomics_2020"                              
-    # [21] "CellMarker_Augmented_2021"                          "ChEA_2013"                                         
-    # [23] "ChEA_2015"                                          "ChEA_2016"                                         
-    # [25] "ChEA_2022"                                          "Chromosome_Location"                               
-    # [27] "Chromosome_Location_hg19"                           "ClinVar_2019"                                      
-    # [29] "CORUM"                                              "COVID-19_Related_Gene_Sets"                        
-    # [31] "COVID-19_Related_Gene_Sets_2021"                    "Data_Acquisition_Method_Most_Popular_Genes"        
-    # [33] "dbGaP"                                              "DepMap_WG_CRISPR_Screens_Broad_CellLines_2019"     
-    # [35] "DepMap_WG_CRISPR_Screens_Sanger_CellLines_2019"     "Descartes_Cell_Types_and_Tissue_2021"              
-    # [37] "Diabetes_Perturbations_GEO_2022"                    "Disease_Perturbations_from_GEO_down"               
-    # [39] "Disease_Perturbations_from_GEO_up"                  "Disease_Signatures_from_GEO_down_2014"             
-    # [41] "Disease_Signatures_from_GEO_up_2014"                "DisGeNET"                                          
-    # [43] "Drug_Perturbations_from_GEO_2014"                   "Drug_Perturbations_from_GEO_down"                  
-    # [45] "Drug_Perturbations_from_GEO_up"                     "DrugMatrix"                                        
-    # [47] "DSigDB"                                             "Elsevier_Pathway_Collection"                       
-    # [49] "ENCODE_and_ChEA_Consensus_TFs_from_ChIP-X"          "ENCODE_Histone_Modifications_2013"                 
-    # [51] "ENCODE_Histone_Modifications_2015"                  "ENCODE_TF_ChIP-seq_2014"                           
-    # [53] "ENCODE_TF_ChIP-seq_2015"                            "Enrichr_Libraries_Most_Popular_Genes"              
-    # [55] "Enrichr_Submissions_TF-Gene_Coocurrence"            "Enrichr_Users_Contributed_Lists_2020"              
-    # [57] "Epigenomics_Roadmap_HM_ChIP-seq"                    "ESCAPE"                                            
-    # [59] "FANTOM6_lncRNA_KD_DEGs"                             "Gene_Perturbations_from_GEO_down"                  
-    # [61] "Gene_Perturbations_from_GEO_up"                     "Genes_Associated_with_NIH_Grants"                  
-    # [63] "GeneSigDB"                                          "Genome_Browser_PWMs"                               
-    # [65] "GlyGen_Glycosylated_Proteins_2022"                  "GO_Biological_Process_2013"                        
-    # [67] "GO_Biological_Process_2015"                         "GO_Biological_Process_2017"                        
-    # [69] "GO_Biological_Process_2017b"                        "GO_Biological_Process_2018"                        
-    # [71] "GO_Biological_Process_2021"                         "GO_Cellular_Component_2013"                        
-    # [73] "GO_Cellular_Component_2015"                         "GO_Cellular_Component_2017"                        
-    # [75] "GO_Cellular_Component_2017b"                        "GO_Cellular_Component_2018"                        
-    # [77] "GO_Cellular_Component_2021"                         "GO_Molecular_Function_2013"                        
-    # [79] "GO_Molecular_Function_2015"                         "GO_Molecular_Function_2017"                        
-    # [81] "GO_Molecular_Function_2017b"                        "GO_Molecular_Function_2018"                        
-    # [83] "GO_Molecular_Function_2021"                         "GTEx_Aging_Signatures_2021"                        
-    # [85] "GTEx_Tissue_Expression_Down"                        "GTEx_Tissue_Expression_Up"                         
-    # [87] "GWAS_Catalog_2019"                                  "HDSigDB_Human_2021"                                
-    # [89] "HDSigDB_Mouse_2021"                                 "HMDB_Metabolites"                                  
-    # [91] "HMS_LINCS_KinomeScan"                               "HomoloGene"                                        
-    # [93] "HuBMAP_ASCT_plus_B_augmented_w_RNAseq_Coexpression" "HuBMAP_ASCTplusB_augmented_2022"                   
-    # [95] "Human_Gene_Atlas"                                   "Human_Phenotype_Ontology"                          
-    # [97] "HumanCyc_2015"                                      "HumanCyc_2016"                                     
-    # [99] "huMAP"                                              "IDG_Drug_Targets_2022"                             
-    # [101] "InterPro_Domains_2019"                              "Jensen_COMPARTMENTS"                               
-    # [103] "Jensen_DISEASES"                                    "Jensen_TISSUES"                                    
-    # [105] "KEA_2013"                                           "KEA_2015"                                          
-    # [107] "KEGG_2013"                                          "KEGG_2015"                                         
-    # [109] "KEGG_2016"                                          "KEGG_2019_Human"                                   
-    # [111] "KEGG_2019_Mouse"                                    "KEGG_2021_Human"                                   
-    # [113] "Kinase_Perturbations_from_GEO_down"                 "Kinase_Perturbations_from_GEO_up"                  
-    # [115] "KOMP2_Mouse_Phenotypes_2022"                        "L1000_Kinase_and_GPCR_Perturbations_down"          
-    # [117] "L1000_Kinase_and_GPCR_Perturbations_up"             "Ligand_Perturbations_from_GEO_down"                
-    # [119] "Ligand_Perturbations_from_GEO_up"                   "LINCS_L1000_Chem_Pert_Consensus_Sigs"              
-    # [121] "LINCS_L1000_Chem_Pert_down"                         "LINCS_L1000_Chem_Pert_up"                          
-    # [123] "LINCS_L1000_CRISPR_KO_Consensus_Sigs"               "LINCS_L1000_Ligand_Perturbations_down"             
-    # [125] "LINCS_L1000_Ligand_Perturbations_up"                "lncHUB_lncRNA_Co-Expression"                       
-    # [127] "MAGMA_Drugs_and_Diseases"                           "MCF7_Perturbations_from_GEO_down"                  
-    # [129] "MCF7_Perturbations_from_GEO_up"                     "Metabolomics_Workbench_Metabolites_2022"           
-    # [131] "MGI_Mammalian_Phenotype_2013"                       "MGI_Mammalian_Phenotype_2017"                      
-    # [133] "MGI_Mammalian_Phenotype_Level_3"                    "MGI_Mammalian_Phenotype_Level_4"                   
-    # [135] "MGI_Mammalian_Phenotype_Level_4_2019"               "MGI_Mammalian_Phenotype_Level_4_2021"              
-    # [137] "Microbe_Perturbations_from_GEO_down"                "Microbe_Perturbations_from_GEO_up"                 
-    # [139] "miRTarBase_2017"                                    "Mouse_Gene_Atlas"                                  
-    # [141] "MSigDB_Computational"                               "MSigDB_Hallmark_2020"                              
-    # [143] "MSigDB_Oncogenic_Signatures"                        "NCI-60_Cancer_Cell_Lines"                          
-    # [145] "NCI-Nature_2015"                                    "NCI-Nature_2016"                                   
-    # [147] "NIH_Funded_PIs_2017_AutoRIF_ARCHS4_Predictions"     "NIH_Funded_PIs_2017_GeneRIF_ARCHS4_Predictions"    
-    # [149] "NIH_Funded_PIs_2017_Human_AutoRIF"                  "NIH_Funded_PIs_2017_Human_GeneRIF"                 
-    # [151] "NURSA_Human_Endogenous_Complexome"                  "Old_CMAP_down"                                     
-    # [153] "Old_CMAP_up"                                        "OMIM_Disease"                                      
-    # [155] "OMIM_Expanded"                                      "Orphanet_Augmented_2021"                           
-    # [157] "PanglaoDB_Augmented_2021"                           "Panther_2015"                                      
-    # [159] "Panther_2016"                                       "Pfam_Domains_2019"                                 
-    # [161] "Pfam_InterPro_Domains"                              "PFOCR_Pathways"                                    
-    # [163] "PhenGenI_Association_2021"                          "PheWeb_2019"                                       
-    # [165] "Phosphatase_Substrates_from_DEPOD"                  "PPI_Hub_Proteins"                                  
-    # [167] "Proteomics_Drug_Atlas_2023"                         "ProteomicsDB_2020"                                 
-    # [169] "Rare_Diseases_AutoRIF_ARCHS4_Predictions"           "Rare_Diseases_AutoRIF_Gene_Lists"                  
-    # [171] "Rare_Diseases_GeneRIF_ARCHS4_Predictions"           "Rare_Diseases_GeneRIF_Gene_Lists"                  
-    # [173] "Reactome_2013"                                      "Reactome_2015"                                     
-    # [175] "Reactome_2016"                                      "Reactome_2022"                                     
-    # [177] "RNA-Seq_Disease_Gene_and_Drug_Signatures_from_GEO"  "RNAseq_Automatic_GEO_Signatures_Human_Down"        
-    # [179] "RNAseq_Automatic_GEO_Signatures_Human_Up"           "RNAseq_Automatic_GEO_Signatures_Mouse_Down"        
-    # [181] "RNAseq_Automatic_GEO_Signatures_Mouse_Up"           "Serine_Threonine_Kinome_Atlas_2023"                
-    # [183] "SILAC_Phosphoproteomics"                            "SubCell_BarCode"                                   
-    # [185] "SynGO_2022"                                         "SysMyo_Muscle_Gene_Sets"                           
-    # [187] "Table_Mining_of_CRISPR_Studies"                     "Tabula_Muris"                                      
-    # [189] "Tabula_Sapiens"                                     "TargetScan_microRNA"                               
-    # [191] "TargetScan_microRNA_2017"                           "TF_Perturbations_Followed_by_Expression"           
-    # [193] "TF-LOF_Expression_from_GEO"                         "TG_GATES_2020"                                     
-    # [195] "Tissue_Protein_Expression_from_Human_Proteome_Map"  "Tissue_Protein_Expression_from_ProteomicsDB"       
-    # [197] "Transcription_Factor_PPIs"                          "TRANSFAC_and_JASPAR_PWMs"                          
-    # [199] "TRRUST_Transcription_Factors_2019"                  "UK_Biobank_GWAS_v1"                                
-    # [201] "Virus_Perturbations_from_GEO_down"                  "Virus_Perturbations_from_GEO_up"                   
-    # [203] "Virus-Host_PPI_P-HIPSTer_2020"                      "VirusMINT"                                         
-    # [205] "WikiPathway_2021_Human"                             "WikiPathways_2013"                                 
-    # [207] "WikiPathways_2015"                                  "WikiPathways_2016"                                 
-    # [209] "WikiPathways_2019_Human"                            "WikiPathways_2019_Mouse"
-
-  if (!is.na(enrichment_databases)){
-      if (length(enrichment_databases) > 0){
-        enrichment_databases <- c("GO_Biological_Process_2021","GO_Molecular_Function_2021","GO_Cellular_Component_2021")}
-  }
-  enrichment_databases <- unlist(strsplit(enrichment_databases,","))
-  if (grepl("sapiens", organism, fixed=TRUE)){
-    databases_autoGO <- unique(c(enrichment_databases,"WikiPathway_2021_Human","RNAseq_Automatic_GEO_Signatures_Human_Down","RNAseq_Automatic_GEO_Signatures_Human_Up","Reactome_2022","KEGG_2021_Human","HDSigDB_Human_2021"))
-    databases_autoGO_print <- paste(databases_autoGO,collapse=",")
-    print(paste0("The databases selected for autoGO are ",databases_autoGO_print,". Please double check autoGO::choose_database(), which has > 200 databases, in case you want to add any extra by using the pipeline argument..."))
-  } else if (grepl("musculus", organism, fixed=TRUE)){
-    databases_autoGO <- unique(c(enrichment_databases,"WikiPathways_2019_Mouse","RNAseq_Automatic_GEO_Signatures_Mouse_Down","RNAseq_Automatic_GEO_Signatures_Mouse_Up","Reactome_2022","Mouse_Gene_Atlas","KEGG_2021_Mouse","HDSigDB_Mouse_2021"))
-    databases_autoGO_print <- paste(databases_autoGO,collapse=",")
-    print(paste0("The databases selected for autoGO are ",databases_autoGO_print,". Please double check autoGO::choose_database(), which has > 200 databases, in case you want to add any extra by using the pipeline argument..."))
-  } else {
-    print(paste0("Your organism is ",organism,", and unfortunately the pipeline for automatic functional enrichment currently fully supports only mouse and human. We'll include non-model organisms eventually, but in the meantime please don't give up and double check if you can provide any extra database containing your organism from autoGO::choose_database(), which has > 200 databases. For now trying to run with the default databases..."))
-    databases_autoGO <- enrichment_databases
-    databases_autoGO_print <- paste(databases_autoGO,collapse=",")
-    print(databases_autoGO_print)
-  }
-  sink(paste0(path,"/final_results_reanalysis/DGE/autoGO_funct_enrichment.log"))
-  setwd(paste0(path,"/final_results_reanalysis/DGE"))
-  for (f in list.files(pattern = "^DGE_analysis_comp.*.txt")){
-    a <- data.table::fread(f,head=T,fill=T)
-    b <- a[a$FDR < 0.05,1]
-    d <- a[a$FDR < 0.05 & a$logFC>0,1]
-    e <- a[a$FDR < 0.05 & a$logFC<0,1]
-    if (dim(b)[1]!=0){
-      write.table(b,file=paste0(gsub(".txt","",f),"_fdr_05.txt"),col.names = F,row.names = F,quote = F,sep="\t")  
-    }
-    if (dim(d)[1]!=0){
-      write.table(d,file=paste0(gsub(".txt","",f),"_fdr_05_logpos.txt"),col.names = F,row.names = F,quote = F,sep="\t")
-    }
-    if (dim(e)[1]!=0){
-      write.table(e,file=paste0(gsub(".txt","",f),"_fdr_05_logneg.txt"),col.names = F,row.names = F,quote = F,sep="\t")
-    }  
-  }
-
-  setwd(paste0(path,"/final_results_reanalysis/DGE/"))
-  if (length(list.files(pattern="*_fdr_05.txt"))!=0){
-    gene_lists_2 <- read_gene_lists(
-      gene_lists_path = getwd(),
-      which_list = c("everything"),
-      from_autoGO = F,
-      files_format = "_fdr_05.txt"
-    )
-    for (f in names(gene_lists_2)){
-      print(paste0("Performing functional enrichment analyses for: ",basename(f)))
-      setwd(paste0(path,"/final_results_reanalysis/DGE"))
-      autoGO(gene_lists_2[f],databases_autoGO)
-      file.rename(paste0(getwd(),"/enrichment_tables/"), paste0(getwd(),"/",basename(f),"_funct_enrichment/"))
-      setwd(paste0(getwd(),"/",basename(f),"_funct_enrichment/"))
-      enrich_tables <- read_enrich_tables(
-        enrich_table_path = getwd(),
-        which_list = "everything",
-        from_autoGO = F,
-        files_format = ".tsv")
-      try({
-        for (i in 1:length(names(enrich_tables))){
-          barplotGO(enrich_tables = enrich_tables[[i]],
-                    title = c(names(enrich_tables)[i],basename(f)),
-                    outfolder = getwd(),
-                    outfile = paste0(basename(f),"_",names(enrich_tables)[i],"_barplot.png"),
-                    from_autoGO = F)
-          lolliGO(enrich_tables = enrich_tables[[i]],
-                  title = c(names(enrich_tables)[i],basename(f)),
-                  outfolder = getwd(),
-                  outfile = paste0(basename(f),"_",names(enrich_tables)[i],"_lolliplot.png"),
-                  from_autoGO = F)
-          }
-              }, silent = TRUE)
-  }
-  } else {  
-    print("No significant DEGs (FDR < 0.05) found")
-  }
-  setwd(paste0(path,"/final_results_reanalysis/DGE/"))
-  if (length(list.files(pattern="*_fdr_05_logneg.txt"))!=0){
-    gene_lists_2 <- read_gene_lists(
-      gene_lists_path = getwd(),
-      which_list = c("everything"),
-      from_autoGO = F,
-      files_format = "_fdr_05_logneg.txt"
-    )
-    for (f in names(gene_lists_2)){
-      print(paste0("Performing functional enrichment analyses for: ",basename(f)))
-      setwd(paste0(path,"/final_results_reanalysis/DGE/"))
-      autoGO(gene_lists_2[f],databases_autoGO)
-      file.rename(paste0(getwd(),"/enrichment_tables/"), paste0(getwd(),"/",basename(f),"_funct_enrichment/"))
-      setwd(paste0(getwd(),"/",basename(f),"_funct_enrichment/"))
-      enrich_tables <- read_enrich_tables(
-        enrich_table_path = getwd(),
-        which_list = "everything",
-        from_autoGO = F,
-        files_format = ".tsv")
-      try({
-        for (i in 1:length(names(enrich_tables))){
-          barplotGO(enrich_tables = enrich_tables[[i]],
-                    title = c(names(enrich_tables)[i],basename(f)),
-                    outfolder = getwd(),
-                    outfile = paste0(basename(f),"_",names(enrich_tables)[i],"_barplot.png"),
-                    from_autoGO = F)
-          lolliGO(enrich_tables = enrich_tables[[i]],
-                  title = c(names(enrich_tables)[i],basename(f)),
-                  outfolder = getwd(),
-                  outfile = paste0(basename(f),"_",names(enrich_tables)[i],"_lolliplot.png"),
-                  from_autoGO = F)
-          }
-          }, silent = TRUE)
-  }
-  } else {
-    print("No significant DEGs (FDR < 0.05) with log2FC < 0 found")
-  }
-  setwd(paste0(path,"/final_results_reanalysis/DGE/"))
-  if (length(list.files(pattern="*_fdr_05_logpos.txt"))!=0){
-    setwd(paste0(path,"/final_results_reanalysis/DGE/"))
-    gene_lists_2 <- read_gene_lists(
-      gene_lists_path = getwd(),
-      which_list = c("everything"),
-      from_autoGO = F,
-      files_format = "_fdr_05_logpos.txt"
-    )
-    for (f in names(gene_lists_2)){
-      print(paste0("Performing functional enrichment analyses for: ",basename(f)))
-      setwd(paste0(path,"/final_results_reanalysis/DGE/"))
-      autoGO(gene_lists_2[f],databases_autoGO)
-      file.rename(paste0(getwd(),"/enrichment_tables/"), paste0(getwd(),"/",basename(f),"_funct_enrichment/"))
-      setwd(paste0(getwd(),"/",basename(f),"_funct_enrichment/"))
-      enrich_tables <- read_enrich_tables(
-        enrich_table_path = getwd(),
-        which_list = "everything",
-        from_autoGO = F,
-        files_format = ".tsv")
-      try({
-        for (i in 1:length(names(enrich_tables))){
-          barplotGO(enrich_tables = enrich_tables[[i]],
-                    title = c(names(enrich_tables)[i],basename(f)),
-                    outfolder = getwd(),
-                    outfile = paste0(basename(f),"_",names(enrich_tables)[i],"_barplot.png"),
-                    from_autoGO = F)
-          lolliGO(enrich_tables = enrich_tables[[i]],
-                  title = c(names(enrich_tables)[i],basename(f)),
-                  outfolder = getwd(),
-                  outfile = paste0(basename(f),"_",names(enrich_tables)[i],"_lolliplot.png"),
-                  from_autoGO = F)
-                }
-      }, silent = TRUE)
-  }
-  } else {
-    print("No significant DEGs (FDR < 0.05) with log2FC > 0 found")
-  }
-  sink()
-  removeEmptyDirs <- function(directory) {
-    # List all directories
-    dirs <- list.dirs(directory, recursive = TRUE)
-    
-    # Check each directory
-    for (dir in dirs) {
-      # If the directory is empty
-      if (length(dir(dir)) == 0) {
-        # Remove the directory
-        unlink(dir, recursive = TRUE)
-      }
-    }
-  }
-  removeEmptyDirs(paste0(path,"/final_results_reanalysis/DGE/"))
+  print(paste0("Differential gene expression analyses done. Current date: ",date()))
 
 ###### QC PDF from Bioinfo and Laura:
-  cat("\nPerforming QC_PDF...\n")
+  cat("\nPerforming QC_PDF...\n");print(paste0("Current date: ",date()))
   suppressMessages(library("edgeR",quiet = T,warn.conflicts = F))
   suppressMessages(library("RColorBrewer",quiet = T,warn.conflicts = F))
   suppressMessages(library("genefilter",quiet = T,warn.conflicts = F))
@@ -754,10 +479,10 @@ diff_soft <- args[7]
   } else {
       print("Reading targets in /GEO_info/samples_info.txt")
       targets <- read.table(file = paste0(path,"/GEO_info/samples_info.txt"),header = F,stringsAsFactors=F)
+      targets[match(rownames(x$samples),targets$V1),]
   }
   colnames(targets) <- c("Filename","Name","Type")
-  targets$Filename <- gsub("_t|m_Rep|_seq|_KO|_WT","",paste(unique(targets$Filename,targets$Name),sep="_"))
-  targets <- targets[gtools::mixedorder(targets$Filename,decreasing=T),]
+  targets$Filename <- gsub("_t|m_Rep|_seq|_KO|_WT","",paste(unique(targets$Filename,targets$Name),sep="_"))  
   # Again, reorder based on GSM/SRR, if any:
   if (length(grep("_GSM[0-9]",targets$Filename))!=0){
     idx <- targets$Filename[unlist(lapply(strsplit(targets$Filename,"_+"),function(x){any(startsWith(x,"GSM"))}))]
@@ -920,166 +645,169 @@ diff_soft <- args[7]
   dev.off()
 
 ###### Add the figures using the counts corrected by ComBat-seq:
-  if (exists("adjusted_counts")){
-    cat("\nQC_PDF ComBat-seq counts...PENDING TO MAKE IT EQUAL TO THE NON-COMBAT ONE\n")
+if (exists("adjusted_counts")){
+    cat("\nQC_PDF ComBat-seq counts\n")
+  label <- basename(path)
 
-    label <- basename(path)
+  x_prefilter <- edgeR_object_prefilter_combat
+  lcpm_prefilter <- cpm(x_prefilter, log=TRUE)  # This is log2 and normalized due to the argument normalized.lib.sizes=TRUE by default in cpm...
 
-    x_prefilter <- edgeR_object_prefilter_combat
-    lcpm_prefilter <- cpm(x_prefilter, log=TRUE)  # This is log2 and normalized due to the argument normalized.lib.sizes=TRUE by default in cpm...
+  x <- edgeR_object_combat
+  cpm <- cpm(x) # This is normalized, altough not through edgeR, but the argument normalized.lib.sizes=TRUE by default in cpm...
+  lcpm <- cpm(x, log=TRUE)  # This is log2 and normalized due to the argument normalized.lib.sizes=TRUE by default in cpm...
+  lcpm_no_log <- cpm(x, log=FALSE)
 
-    x <- edgeR_object_combat
-    cpm <- cpm(x) # This is normalized, altough not through edgeR, but the argument normalized.lib.sizes=TRUE by default in cpm...
-    lcpm <- cpm(x, log=TRUE)  # This is log2 and normalized due to the argument normalized.lib.sizes=TRUE by default in cpm...
-    lcpm_no_log <- cpm(x, log=FALSE)
+  nsamples <- ncol(x)
 
-    nsamples <- ncol(x)
-
-    if (!is.na(targets_file)) {
-      if (length(targets_file) > 0) {
-          targets <- read.table(file = targets_file,header = F,stringsAsFactors=F)
-      } else {
-          targets <- read.table(file = paste0(path,"/GEO_info/samples_info.txt"),header = F,stringsAsFactors=F)
-      }
-    } else {
-        targets <- read.table(file = paste0(path,"/GEO_info/samples_info.txt"),header = F,stringsAsFactors=F)
-    }
-    colnames(targets) <- c("Filename","Name","Type")
-    targets$Filename <- gsub("_t|m_Rep|_seq|_KO|_WT","",paste(unique(targets$Filename,targets$Name),sep="_"))
-    targets <- targets[gtools::mixedorder(targets$Filename,decreasing=T),]
-    cat("Please double check the following is in the same order than the lists above (counts and pheno/targets):\n")
-    print(targets)
-    L <- mean(x$samples$lib.size) * 1e-6
-    M <- median(x$samples$lib.size) * 1e-6
-    # c(L, M)
-    lcpm.cutoff <- log2(10/M + 2/L)
-
-    # Here the original x2 was normalized, so I used from above directly the edgeR object transformed the same way...
-    # x <- calcNormFactors(x)
-    # x$samples
-    # x <- estimateCommonDisp(x, robust=TRUE)
-    # x <- estimateTagwiseDisp(x)
-    # x2 <- x
-    x2 <- edgeR_object_norm_combat
-    #x2$samples$norm.factors <- 1
-
-    lcpm2 <- cpm(x2, log=TRUE)
-    lcpm2_no_log <- cpm(x2, log=FALSE)
-
-    group <- x$samples$group
-    col.group <- as.factor(group)
-    # levels(col.group) <- RColorBrewer::brewer.pal(nlevels(col.group), "Set1")
-    # not enough colors sometimes, so I get random colors:
-    color = gplots::col2hex(grDevices::colors()[grep('gr(a|e)y', grDevices::colors(), invert = T)])
-    levels(col.group) <- sample(color,nlevels(col.group))
-    col.group <- as.character(col.group)
-
-    # summary(lcpm)
-    # table(rowSums(x$counts==0)==6)
-
-
-    ### The actual pdf file:
-    pdf(paste0(path,"/final_results_reanalysis/QC_and_others/",label,"_QC_ComBat-seq.pdf"),paper="A4")
-
-    ### 1.1. Density rawcounts log2, cpm...:
-    col <- RColorBrewer::brewer.pal(nsamples, "Paired")
-    par(mfrow=c(1,2))
-    plot(density(lcpm_prefilter), col=col[1], lwd=2, las=2, main="", xlab="")
-    title(main="Raw data", xlab="Log-cpm")
-    abline(v=lcpm.cutoff, lty=3)
-    for (i in 2:nsamples){
-      den <- density(lcpm_prefilter[,i])
-      lines(den$x, den$y, col=col[i], lwd=2)
-    }
-    legend("topright",legend=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), text.col=col, bty = "n", cex = 0.5)
-    ### 1.2. Density rawcounts log2, cpm...:
-    # x is the raw counts with the bin or standard filter:
-    plot(density(lcpm[,1]), col=col[1], lwd=2, las=2, main="", xlab="")
-    title(main="Filtered data", xlab="Log-cpm")
-    abline(v=lcpm.cutoff, lty=3)
-    for (i in 2:nsamples){
-      den <- density(lcpm[,i])
-      lines(den$x, den$y, col=col[i], lwd=2)
-    }
-    legend("topright", legend=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), text.col=col, bty="n", cex = 0.5)
-    ### 2.1. Unnormalised:
-    par(mfrow=c(1,2))
-    boxplot(lcpm, las=2, col=col.group, main="", names=targets$Type, cex.axis=0.4)
-    title(main="Unnormalized data",ylab="Log-cpm",xlab="sample_type")
-    ### 2.2. Normalised:
-    boxplot(lcpm2, las=2, col=col.group, main="", names=targets$Type, cex.axis=0.4)
-    title(main="Normalized data",ylab="Log-cpm",xlab="sample_type")
-    ### 3. Library size:
-    par(mfrow=c(1,1))
-    barplot(x$samples$lib.size,names.arg = gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name),las=2, main="Library Size",col=col.group, ylim=range(pretty(c(0, x$samples$lib.size))))
-    ### 4. Corrplot no log
-    tmp <- lcpm_no_log; colnames(tmp) <- gsub("_t|m_Rep|_seq|_KO|_WT","",colnames(tmp))
-    corrplot(cor(tmp,method="spearman"), method='number',type = 'upper')
-    corrplot(cor(tmp,method="spearman"), order='AOE')
-    ### 5.1. MDS
-    #z <- plotMDS(lcpm_no_log, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise", plot=F)
-    #edge <- sd(z$x)
-    #plotMDS(lcpm_no_log, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise",xlim=c(min(z$x)-edge,max(z$x) + edge))
-    #title(main="MDS-PCoA Sample Names")
-    ### 5.2. MDS_log
-    #par(mfrow=c(1,1))
-    #z <- plotMDS(lcpm, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise", plot=F)
-    #edge <- sd(z$x)
-    #cat(edge)
-    #plotMDS(lcpm, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise",xlim=c(min(z$x)-edge,max(z$x) + edge))
-    #title(main="MDS-PCoA log2 Sample Names")
-    ### 5.3. MDS_norm
-    z <- plotMDS(lcpm2_no_log, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise", plot=F)
-    edge <- sd(z$x)
-    plotMDS(lcpm2_no_log, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise",xlim=c(min(z$x)-edge,max(z$x) + edge))
-    title(main="MDS-PCoA Sample Names Norm")
-    ### 5.4. MDS_log_norm
-    par(mfrow=c(1,1))
-    z <- plotMDS(lcpm2, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise", plot=F)
-    edge <- sd(z$x)
-    #cat(edge)
-    plotMDS(lcpm2, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise",xlim=c(min(z$x)-edge,max(z$x) + edge))
-    title(main="MDS-PCoA log2 Sample Names Norm")
-    ### 6. PCA por tipos
-    data_pca <- as.matrix(x)
-    data_pca <- as.data.frame(t(data_pca))
-    rownames(data_pca) <- targets$Filename
-    data_pca.PC = prcomp(data_pca)
-    data_pca$Type <- targets$Type
-    data_pca$Filename <- targets$Filename
-    data_pca$Name <- targets$Name
-    data_pca$Sex <- targets$Sex
-    data_pca$Age <- targets$Age
-    data_pca$VAS_Group <- targets$VAS_Group
-    data_pca$TypeII <- targets$TypeII
-    plot(autoplot(data_pca.PC,label=T,data=data_pca,colour='Type',xlim = c(-0.8,0.8),label.size=3,label.repel=T))
-    ### 7. Heatmap 250 mots differential entities
-    rsd <- rowSds(as.matrix(x))
-    sel <- order(rsd, decreasing=TRUE)[1:250]
-    samplenames <- gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name)
-    heatmap(na.omit(as.matrix(x[sel,])),margins=c(10,8),main="Heatmap 250 most diff entities raw counts",cexRow=0.01,cexCol=0.5,labCol=samplenames)
-    ### 8.1. Dendogram cluster raw
-    #par(mfrow=c(1,1), col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
-    #pr.hc.c <- hclust(na.omit(dist(t(cpm(x$counts,log=F)),method = "euclidean")))
-    #plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of raw counts from samples of ", label, sep=""), labels=targets$Filename, cex=0.5)
-    ### 8.2. Dendogram cluster raw_log
-    #par(mfrow=c(1,1), col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
-    #pr.hc.c <- hclust(na.omit(dist(t(cpm(x$counts,log=T)),method = "euclidean")))
-    #plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of log2 raw counts from samples of ", label, sep=""), labels=targets$Filename, cex=0.5)
-    ### 8.3. Dendogram cluster raw norm
-    par(mfrow=c(1,1), col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
-    pr.hc.c <- hclust(na.omit(dist(t(cpm(x2$counts,log=F)),method = "euclidean")))
-    plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of normalized counts from samples of ", label, sep=""), labels=targets$Filename, cex=0.5)
-    ### 8.3. Dendogram cluster raw norm
-    par(mfrow=c(1,1), col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
-    pr.hc.c <- hclust(na.omit(dist(t(cpm(x2$counts,log=T)),method = "euclidean")))
-    plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of log2 normalized counts from samples of ", label, sep=""), labels=targets$Filename, cex=0.5)
-
-    #tSNE
-    #a <- tsne(x$counts,seed=100,labels=as.factor(targets$Type), perplex=perplex, legendtitle="Types",text=targets$Type ,dotsize=3, legendtextsize = 8) + ggtitle("Tsne") + theme(plot.title = element_text(face = "bold", size = 12, hjust = 0.5))
-    #plot(a)
-    dev.off()
+  
+  if (exists("gsm_manual_filter")){
+      idxs_gsm_manual_3 <- which(unlist(lapply(strsplit(targets$Name,"_"),function(x){any(x %in% unlist(strsplit(gsm_manual_filter,",")))})))    
+      targets <- targets[idxs_gsm_manual_3,]
   }
+
+  L <- mean(x$samples$lib.size) * 1e-6
+  M <- median(x$samples$lib.size) * 1e-6
+  # c(L, M)
+  lcpm.cutoff <- log2(10/M + 2/L)
+
+  # Here the original x2 was normalized, so I used from above directly the edgeR object transformed the same way...
+  # x <- calcNormFactors(x)
+  # x$samples
+  # x <- estimateCommonDisp(x, robust=TRUE)
+  # x <- estimateTagwiseDisp(x)
+  # x2 <- x
+  x2 <- edgeR_object_norm_combat
+  #x2$samples$norm.factors <- 1
+
+  lcpm2 <- cpm(x2, log=TRUE)
+  lcpm2_no_log <- cpm(x2, log=FALSE)
+
+  group <- x$samples$group
+  col.group <- as.factor(group)
+  # levels(col.group) <- RColorBrewer::brewer.pal(nlevels(col.group), "Set1")
+  # not enough colors sometimes, so I get random colors:
+  color = gplots::col2hex(grDevices::colors()[grep('gr(a|e)y', grDevices::colors(), invert = T)])
+  levels(col.group) <- sample(color,nlevels(col.group))
+  col.group <- as.character(col.group)
+
+  # summary(lcpm)
+  # table(rowSums(x$counts==0)==6)
+
+
+  suppressMessages(library(ggpmisc,quiet = T,warn.conflicts = F))
+  ### The actual pdf file:
+  pdf(paste0(path,"/final_results_reanalysis/QC_and_others/",label,"_QC_ComBat-seq.pdf"),paper="A4")
+  ### 0 Reminder of the samples:
+  ggplot() + theme_void(base_size=1) + coord_flip() +
+    annotate(geom = "table",
+                   x = 0,
+                   y = 0,
+                   size = 1,
+                   label = list(as.data.frame(targets)))
+  ### 1.1. Density rawcounts log2, cpm...:
+  col <- RColorBrewer::brewer.pal(nsamples, "Paired")
+  par(mfrow=c(1,2))
+  plot(density(lcpm_prefilter), col=col[1], lwd=2, las=2, main="", xlab="")
+  title(main="Raw data", xlab="Log-cpm")
+  abline(v=lcpm.cutoff, lty=3)
+  for (i in 2:nsamples){
+    den <- density(lcpm_prefilter[,i])
+    lines(den$x, den$y, col=col[i], lwd=2)
+  }
+  legend("topright",legend=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), text.col=col, bty = "n", cex = 0.5)
+  ### 1.2. Density rawcounts log2, cpm...:
+  # x is the raw counts with the bin or standard filter:
+  plot(density(lcpm[,1]), col=col[1], lwd=2, las=2, main="", xlab="")
+  title(main="Filtered data", xlab="Log-cpm")
+  abline(v=lcpm.cutoff, lty=3)
+  for (i in 2:nsamples){
+    den <- density(lcpm[,i])
+    lines(den$x, den$y, col=col[i], lwd=2)
+  }
+  legend("topright", legend=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), text.col=col, bty="n", cex = 0.5)
+  ### 2.1. Unnormalised:
+  par(mfrow=c(1,2))
+  boxplot(lcpm, las=2, col=col.group, main="", names=targets$Name, cex.axis=0.4)
+  title(main="Unnormalized data",ylab="Log-cpm",xlab="sample_type")
+  ### 2.2. Normalised:
+  boxplot(lcpm2, las=2, col=col.group, main="", names=targets$Name, cex.axis=0.4)
+  title(main="Normalized data",ylab="Log-cpm",xlab="sample_type")
+  ### 3. Library size:
+  par(mfrow=c(1,1))
+  barplot(x$samples$lib.size,names.arg = gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name),las=2, main="Library Size",col=col.group, ylim=range(pretty(c(0, x$samples$lib.size))))
+  ### 4. Corrplot no log
+  tmp <- lcpm_no_log; colnames(tmp) <- gsub("_t|m_Rep|_seq|_KO|_WT","",colnames(tmp))
+  colnames(tmp) <- targets$Name[match(colnames(tmp),targets$Name)]
+  corrplot(cor(tmp,method="spearman"), method='number',type = 'upper')
+  corrplot(cor(tmp,method="spearman"), order='AOE')
+  ### 5.1. MDS # Commented out because I've checked it's identical to the norm one
+  #z <- plotMDS(lcpm_no_log, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise", plot=F)
+  #edge <- sd(z$x)
+  #plotMDS(lcpm_no_log, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise",xlim=c(min(z$x)-edge,max(z$x) + edge))
+  #title(main="MDS-PCoA Sample Names")
+  ### 5.2. MDS_log # Commented out because I've checked it's almost identical to the norm one
+  # par(mfrow=c(1,1))
+  # z <- plotMDS(lcpm, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise", plot=F)
+  # edge <- sd(z$x)
+  #cat(edge)
+  # plotMDS(lcpm, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise",xlim=c(min(z$x)-edge,max(z$x) + edge))
+  # title(main="MDS-PCoA log2 Sample Names")
+  ### 5.3. MDS_norm
+  z <- plotMDS(lcpm2_no_log, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise", plot=F)
+  edge <- sd(z$x)
+  plotMDS(lcpm2_no_log, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise",xlim=c(min(z$x)-edge,max(z$x) + edge))
+  title(main="MDS-PCoA Sample Names Norm")
+  ### 5.4. MDS_log_norm
+  par(mfrow=c(1,1))
+  z <- plotMDS(lcpm2, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise", plot=F)
+  edge <- sd(z$x)
+  #cat(edge)
+  plotMDS(lcpm2, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise",xlim=c(min(z$x)-edge,max(z$x) + edge))
+  title(main="MDS-PCoA log2 Sample Names Norm")
+  ### 6. PCA por tipos
+  data_pca <- as.matrix(x)
+  data_pca <- as.data.frame(t(data_pca))
+  rownames(data_pca) <- targets$Name
+  data_pca.PC = prcomp(data_pca)
+  data_pca$Type <- targets$Type
+  data_pca$Filename <- targets$Filename
+  data_pca$Name <- targets$Name
+  data_pca$Sex <- targets$Sex
+  data_pca$Age <- targets$Age
+  data_pca$VAS_Group <- targets$VAS_Group
+  data_pca$TypeII <- targets$TypeII
+  plot(autoplot(data_pca.PC,label=T,data=data_pca,colour='Type',xlim = c(-0.8,0.8),label.size=3,label.repel=T))
+  ### 7. Heatmap 250 mots differential entities
+  rsd <- rowSds(as.matrix(x))
+  sel <- order(rsd, decreasing=TRUE)[1:250]
+  samplenames <- gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name)
+  heatmap(na.omit(as.matrix(x[sel,])),margins=c(10,8),main="Heatmap 250 most diff entities raw counts",cexRow=0.01,cexCol=0.5,labCol=samplenames)
+  ### 8.1. Dendogram cluster raw  # Commented out because I've checked it's identical to the norm one
+  #par(mfrow=c(1,1), col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
+  #pr.hc.c <- hclust(na.omit(dist(t(data))))
+  #plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of ", label, sep=""), labels=targets$Filemane, cex=0.5)
+  #Normalized clustering analysis plot
+  #pr.hc.c <- hclust(na.omit(dist(t(edgeR_object_norm$counts))))
+  #pr.hc.c <- hclust(na.omit(dist(t(cpm(x$counts,log=F)),method = "euclidean")))
+  #plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of raw counts from samples of ", label, sep=""), labels=targets$Filename, cex=0.5)
+  ### 8.2. Dendogram cluster raw_log # Commented out because I've checked it's identical to the norm one
+  #par(mfrow=c(1,1), col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
+  #pr.hc.c <- hclust(na.omit(dist(t(cpm(x$counts,log=T)),method = "euclidean")))
+  #plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of log2 raw counts from samples of ", label, sep=""), labels=targets$Filename, cex=0.5)
+  ### 8.3. Dendogram cluster raw norm
+  par(mfrow=c(1,1), col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
+  pr.hc.c <- hclust(na.omit(dist(t(cpm(x2$counts,log=F)),method = "euclidean")))
+  plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of normalized counts from samples of ", label, sep=""), labels=targets$Filename, cex=0.5)
+  ### 8.3. Dendogram cluster raw norm
+  par(mfrow=c(1,1), col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
+  pr.hc.c <- hclust(na.omit(dist(t(cpm(x2$counts,log=T)),method = "euclidean")))
+  plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of log2 normalized counts from samples of ", label, sep=""), labels=targets$Filename, cex=0.5)
+
+  #tSNE
+  #a <- tsne(x$counts,seed=100,labels=as.factor(targets$Type), perplex=perplex, legendtitle="Types",text=targets$Type ,dotsize=3, legendtextsize = 8) + ggtitle("Tsne") + theme(plot.title = element_text(face = "bold", size = 12, hjust = 0.5))
+  #plot(a)
+  dev.off()
+}
 
 
 ###### WIP add DESeq2 as a full alternative to edgeR, for now, generate and provide/write independently the counts if the user ask for it:
@@ -1133,3 +861,4 @@ if (diff_soft=="DESeq2"){
   }
 }
 print("ALL DONE")
+print(paste0("Current date: ",date()))
