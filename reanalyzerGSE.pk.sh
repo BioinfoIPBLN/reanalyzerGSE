@@ -33,11 +33,10 @@ for argument in $options; do
 		-s | -strandness # Strandness of the library ('yes, 'no', 'reverse'). If not provided and '-t' used, this would be predicted by salmon. Please use this parameter if prediction not correct, see explanations in for example in bit.ly/strandness0 and bit.ly/strandness
 		-g | -genes # Genes to highlight their expression in plots (one or several, separated by comma and no space)
 		-G | -GSM_filter # GSM ids (one or several, separated by comma and no space) within the GSE entry to restrict the analysis to. An alternative to requesting a stop with -S to reorganize the downloaded files manually
-		-R | -reads_to_subsample # Percentage or number of reads to subsample the input sequences before the analyses
+		-R | -reads_to_subsample # Percentage of reads to subsample the sequences before the analyses
 		-f | -filter # Threshold of gene counts to use ('bin' to capture the lower expressed genes, or 'standard', by default)
 		-b | -batch # Batch effect present? (no by default, yes if correction through Combat-seq and model is to be performed, and info is going to be required in prompts)
-		-d | -design_custom # Manually specifying the experimental design ('no' by default and if 'yes', please expect an interactive prompt after data download from GEO, and please enter the assignment to groups when asked in the terminal, with a comma-separated list of the same length than the number of samples)
-		-c | -clusterProfiler # Whether to perform additional functional enrichment analyses using ClusterProfiler (slow if many significant DEGs, 'yes' or 'no', by default)
+		-d | -design_custom # Manually specifying the experimental design ('no' by default and if 'yes', please expect an interactive prompt after data download from GEO, and please enter the assignment to groups when asked in the terminal, with a comma-separated list of the same length than the number of samples)		
 		-T | -target_file # Protopical target file for attempts to differential gene expression analyses (containing filenames and covariates, automatically built if not provided)
 		-S | -stop # Manual stop so the automatically downloaded files can be manually modified ('yes' or 'no', by default)
 		-K | -Kraken2_fast_mode # Kraken2 fast mode, consisting on copying the Kraken2 database to /dev/shm (RAM) so execution is faster ('yes' or 'no' by default)
@@ -49,6 +48,8 @@ for argument in $options; do
 		-Os | -options_featureCounts_seq # The seqid type to use to count in featureCounts (default 'gene_name')
 		-iG | -input_GEO_reads # If you want to combine downloading metadata from GEO with reads from GEO or any database already downloaded, maybe from a previous attempt, please provide an absolute path
 		-cG | -compression_level # Specify the compression level to gzip the downloaded fastq files from GEO (numeric '0' to '9', default '9')
+		-cP | -clusterProfiler # Whether to perform additional functional enrichment analyses using ClusterProfiler (slow if many significant DEGs or multiple number of comparisons, 'no' or 'yes', by default)
+		-cPm | -clusterProfiler_method # Method for adjusting p.value in clusterprofiler iterations (one of 'holm','hochberg','hommel','bonferroni','BH','BY,'none', or 'fdr', by default)
 		-Ti | -tidy_tmp_files # Space-efficient run, with a last step removing raw reads if downloaded, converting bam to cram, removing tmp files... etc ('yes' or 'no', by default)
 		-TMP | -TMPDIR # Directory to export the environmental variable TMPDIR (by default or if left empty an internal folder of the output directory is used, or please enter 'system' to use system's default, or an absolute pathway that will be created if it does not exist)
 		-M | -memory_max # Max RAM memory to be used by aligner or JAVA in bytes (by default 257698037760, or 240GB, used)" && exit 1;;
@@ -76,13 +77,14 @@ for argument in $options; do
 		-Dk) kraken2_databases=${arguments[index]} ;;
 		-Ds) sortmerna_databases=${arguments[index]} ;;
 		-De) differential_expr_soft=${arguments[index]} ;;
-		-c) clusterProfiler=${arguments[index]} ;;
+		-cP) clusterProfiler=${arguments[index]} ;;
 		-Of) optionsFeatureCounts_feat=${arguments[index]} ;;
 		-Os) optionsFeatureCounts_seq=${arguments[index]} ;;
 		-iG) input_geo_reads=${arguments[index]} ;;
 		-cG) compression_level=${arguments[index]} ;;
 		-Ti) tidy_tmp_files=${arguments[index]} ;;
 		-TMP) TMPDIR_arg=${arguments[index]} ;;
+		-cPm) clusterProfiler_method=${arguments[index]} ;;
 	esac
 done
 
@@ -166,7 +168,10 @@ if [ -z "$aligner" ]; then
 	aligner="star"
 fi
 if [ -z "$clusterProfiler" ]; then
-	clusterProfiler="no"
+	clusterProfiler="yes"
+fi
+if [ -z "$clusterProfiler_method" ]; then
+	clusterProfiler_method="fdr"
 fi
 if [ -z "$differential_expr_soft" ]; then
 	differential_expr_soft="edgeR"
@@ -340,9 +345,6 @@ if [[ $input == G* ]]; then
 	fi
 
 ### Stop if SRR not obtained and not single-cell or microarrays
-	if ! test -f srr_ids.txt; then
-		echo -e "\nI haven't been able to find SRR accession ids to download the sequences and I'm exiting, please double check manually..."; exit 1
-	fi
 	if [ ! -s srr_ids.txt ]; then
 		echo -e "\nI haven't been able to find SRR accession ids to download the sequences and I'm exiting, please double check manually..."; exit 1
 	fi
@@ -716,21 +718,31 @@ echo -e "\nmiARma-seq and STEP 4 DONE. Current date/time: $(date)"; time1=`date 
 
 
 ###### 5. Process output of miARma, get figures, final counts, standard DGE, etc...
-R_process_reanalyzer_GSE.R $output_folder/$name $genes $filter $organism $databases_function $target $differential_expr_soft
-if [[ "$clusterProfiler" == "no" ]]; then
-	echo -e "\nSkipping final clusterProfiler execution\n"
-else
-	echo -e "\nPerforming final clusterProfiler execution. The rest of the results are ready, this may take long if many significant DEGs...\n"
-	cd $output_folder/$name/final_results_reanalysis/DGE/						
-	if [[ "$organism" == "Mus_musculus" || "$organism" == "Homo_sapiens" || "$organism" == "Mus musculus" || "$organism" == "Homo sapiens" ]]; then
-		echo "Proceeding with clusterProfiler analyses for $organism"
-		# parallel --verbose -j $(( number_parallel*2 )) R_clusterProfiler_analyses.R $output_folder/$name/final_results_reanalysis/DGE/ {} $organism ::: $(ls | egrep "^DGE_analysis_comp[0-9]+\.txt$")
-		R_clusterProfiler_analyses_parallel.R $output_folder/$name/final_results_reanalysis/DGE/ $organism $cores
+R_process_reanalyzer_GSE.R $output_folder/$name $genes $filter $organism $target $differential_expr_soft
+
+if [[ "$organism" == "Mus_musculus" || "$organism" == "Homo_sapiens" || "$organism" == "Mus musculus" || "$organism" == "Homo sapiens" ]]; then
+	if [[ "$clusterProfiler" == "no" ]]; then
+		echo -e "\nSkipping final clusterProfiler execution\n"
 	else
-		echo "Organism is $organism... Functional analyses by clusterProfiler currently not supported"
+		echo -e "\nPerforming clusterProfiler execution. The rest of the results are ready, this may take long if many significant DEGs or comparisons...\n"
+		cd $output_folder/$name/final_results_reanalysis/DGE/							
+		# parallel --verbose -j $(( number_parallel*2 )) R_clusterProfiler_analyses.R $output_folder/$name/final_results_reanalysis/DGE/ {} $organism ::: $(ls | egrep "^DGE_analysis_comp[0-9]+\.txt$")
+		R_clusterProfiler_analyses_parallel.R $output_folder/$name/final_results_reanalysis/DGE/ $organism $cores $clusterProfiler_method
 	fi
-	# Pending to extend to the rest of organism supported by clusterProfiler (i.e. any within Bioconductor's orgDB, but will eventually also allow for building custom .db annotation file via AnnotationForge function)
+	echo -e "\nPerforming autoGO execution. The rest of the results are ready, this may take long if many significant DEGs or comparisons...\n"
+	R_autoGO_analyses_parallel.R $output_folder/$name/final_results_reanalysis/DGE/ $organism $cores $databases_function
+else
+	echo "Organism is $organism... Functional analyses apart from human/mouse is not fully supported yet"
+	if [ $(egrep -c "GO:|,GO:|Ontology|tology_term|tology term" $annotation) -gt 0 ]; then
+		echo "However, an automatic approach based on clusterProfiler's enrichr function and automatically extracted GO terms from the annotation can be used..."
+		paste <(echo "source_id" && egrep "GO:|,GO:|Ontology|tology_term|tology term" $annotation | sed 's,.*ID=,,g;s,.*Parent=,,g;s,;.*,,g') <(echo "Computed GO Process IDs" && egrep "GO:|,GO:|Ontology|tology_term|tology term" scaffold.out.gff3 | sed 's,.*tology_term=,,g') | sort -t $'\t' -k1,1 -k2,2 | awk -F'\t' '!a[$1,$2]++' | awk -F'\t' '{ a[$1] = (a[$1] ? a[$1]","$2 : $2); } END { for (i in a) print i"\t"a[i]; }' | awk -F '\t' '{n=split($2,a,","); for (i=1; i<=n; i++) print $1,a[i]}' | sort -u > $output_folder/$name/final_results_reanalysis/DGE/$annotation.automatically_extracted_GO_terms.txt
+		annotation_go="$output_folder/$name/final_results_reanalysis/DGE/$annotation.automatically_extracted_GO_terms.txt"
+		if [ -s "$annotation_go" ]; then
+			R_clusterProfiler_enrichr.R $annotation $output_folder/$name/final_results_reanalysis/RPKM_counts_genes.txt $output_folder/$name/final_results_reanalysis/DGE $cores $databases_function
+		fi
+	fi
 fi
+# Pending to extend to the rest of organism supported by clusterProfiler (i.e. any within Bioconductor's orgDB, and will eventually also allow for building custom .db annotation file via AnnotationForge function)
 echo -e "\nSTEP 5 DONE. Current time: $(date)\n"
 
 
