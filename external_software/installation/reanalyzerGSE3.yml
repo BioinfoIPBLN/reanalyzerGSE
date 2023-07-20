@@ -492,6 +492,7 @@ dependencies:
   - r-pkgdown=2.0.7=r42hc72bb7e_0
   - r-pkgload=1.3.2=r42hc72bb7e_0
   - r-plogr=0.2.0=r42hc72bb7e_1004
+  - r-plotly=4.10.2=r42hc72bb7e_1
   - r-plyr=1.8.8=r42h7525677_0
   - r-png=0.1_8=r42h10cf519_0
   - r-polyclip=1.10_4=r42h7525677_0
