@@ -136,12 +136,12 @@ sub FastQC{
 		system("mkdir -p $projectdir.$output_dir/");
 		$tmp_file="/".$projectdir.$output_dir."list_of_files.txt";
 		$tmp_dir="/".$projectdir."/tmpdir/";
-		$parallelnumber *= 4;
+		my $multiplied_parallel = $parallelnumber * $threads;
 		open(LST,">".$tmp_file);
 		print LST join("\n", @good_files);
 		close LST;		
 		#Fastqc execution command with a defined number of threads and the output directory
-		$command="if [ \$(ls ".$projectdir.$output_dir." | wc -l) -eq 1 ]; then mkdir -p ".$tmp_dir." && parallel --verbose --joblog ".$projectdir."/fastqc_log_parallel.txt -j ".$parallelnumber." fastqc -q --noextract -t ".$threads." -o ".$projectdir.$output_dir." {} ::: \$(cat ".$tmp_file."); fi" ;
+		$command="if [ \$(ls ".$projectdir.$output_dir." | wc -l) -eq 1 ]; then mkdir -p ".$tmp_dir." && parallel --verbose --joblog ".$projectdir."/fastqc_log_parallel.txt -j ".$multiplied_parallel." fastqc -q --noextract -o ".$projectdir.$output_dir." {} ::: \$(cat ".$tmp_file."); fi";
 		#commandef is the command will be executed by system composed of the results directory creation
 		#and the fastqc execution. The error data will be redirected to the run.log file
 		$commanddef="mkdir -p ".$projectdir.$output_dir." ; ".$command." >> ".$logfile." 2>&1";
