@@ -19,7 +19,7 @@ for argument in $options; do
 
 ### Gather the parameters, default values, exit if essential not provided...
 	case $argument in
-		-h*) echo "usage: [options]
+		-h*) echo "reanalyzerGSE v2.0.0. usage: reanalyzerGSE.pk.sh [options]
 		-h | -help # Type this to get help
 		-i | -input # GEO_ID (GSEXXXXXX, separated by comma if more than one), or folder containing raw reads (please provide full absolute path, e.g. /path/folder_name/), or almost any accession from ENA/SRA to download .fastq from (any of the ids with the prefixes PRJEB,PRJNA,PRJDB,ERP,DRP,SRP,SAMD,SAME,SAMN,ERS,DRS,SRS,ERX,DRX,SRX,ERR,DRR,SRR, please separated by commas if more than one id as input)
 		-n | -name # Name of the project/folder to create and store results
@@ -27,21 +27,25 @@ for argument in $options; do
 		-p | -cores # Number of cores
 		-P | -parallel_number # Number of files to be processed in parallel (10 by default)
 		-r | -reference_genome # Reference genome to be used (.fasta file or .gz, absolute pathway)
-		-a | -annotation # Reference annotation to be used (.gtf file, absolute pathway). If hisat2 is used, a gff file (make sure format is '.gff' and not '.gff3') is accepted (some QC steps like Qualimap rnaseqqc may be skipped though)
+		-ri | -reference_genome_index # If the reference genome to be used already has an index that would like to reuse, please provide full pathwa here (by default the provided genome is indexed)
+		-a | -annotation # Reference annotation to be used (.gtf file, absolute pathway). If hisat2 is used, a gff file (make sure format is '.gff' and not '.gff3') is accepted (some QC steps like 'qualimap rnaseqqc' may be skipped though). You can provide a comma-separated list of the pathways to different annotation, and multiple/independent quantification/outputs from the same alignments will be generated.
 		-A | -aligner # Aligner software to use ('hisat2' or 'star', by default)
-		-t | -transcripts # Referece transcripts to be used (.fasta cDNA file, absolute pathway, only used if '-s' argument not provided so salmon prediction of strandness is required)
+		-Ac | -aligner_index_cache # Whether to try and keep the genome index on the cache/loaded RAM so concurrent jobs do not have to reload it and can use it more easily ('no', which will empty cache at the end, or 'yes', by default)
+		-t | -transcripts # Reference transcripts to be used (.fasta cDNA file, absolute pathway, only used if '-s' argument not provided so salmon prediction of strandness is required)
 		-s | -strandness # Strandness of the library ('yes, 'no', 'reverse'). If not provided and '-t' used, this would be predicted by salmon. Please use this parameter if prediction not correct, see explanations in for example in bit.ly/strandness0 and bit.ly/strandness
 		-g | -genes # Genes to highlight their expression in plots (one or several, separated by comma and no space)
 		-G | -GSM_filter # GSM ids (one or several, separated by comma and no space) within the GSE entry to restrict the analysis to. An alternative to requesting a stop with -S to reorganize the downloaded files manually
-		-R | -reads_to_subsample # Percentage of reads to subsample the sequences before the analyses
-		-f | -filter # Threshold of gene counts to use ('bin' to capture the lower expressed genes, or 'standard', by default)
+		-R | -reads_to_subsample # Percentage of reads or number of reads to subsample to the sequences before the analyses (none by default, if any number is provided +-10% will be computed)
+		-f | -filter # Threshold of gene counts to use ('bin' to capture the lower expressed genes, or 'standard', by default). Please provide a comma separated list with the filters to use at each quantification if multiple annotation are provided
 		-b | -batch # Batch effect present? (no by default, yes if correction through Combat-seq and model is to be performed, and info is going to be required in prompts)
-		-d | -design_custom # Manually specifying the experimental design ('no' by default and if 'yes', please expect an interactive prompt after data download from GEO, and please enter the assignment to groups when asked in the terminal, with a comma-separated list of the same length than the number of samples)		
+		-d | -design_custom # Manually specifying the experimental design for GEO download ('no' by default and if 'yes', please expect an interactive prompt after data download from GEO, and please enter the assignment to groups when asked in the terminal, with a comma-separated list of the same length than the number of samples)
+		-D | -design_custom_local # Specifying here the experimental design for the local dataset (by default an interactive prompt will ask for a comma-separated list of the same length than the number of samples, if you want to avoid that manual input please provide the list in this argument)
+		-O | -organism # Specifying here the scientific name of the organism for the local dataset (by default an interactive prompt will ask for it, if you want to avoid that manual input please provide the full organism name in this argument, please use underline instead of space)
 		-T | -target_file # Protopical target file for attempts to differential gene expression analyses (containing filenames and covariates, automatically built if not provided)
 		-S | -stop # Manual stop so the automatically downloaded files can be manually modified ('yes' or 'no', by default)
 		-K | -Kraken2_fast_mode # Kraken2 fast mode, consisting on copying the Kraken2 database to /dev/shm (RAM) so execution is faster ('yes' or 'no' by default)
 		-Dk | -kraken2_databases # Folder (absolute pathway) containing the database that should be used by Kraken2 (any input here, e.g. 'standard_eupathdb_48_kraken2_db', would activate the kraken2-based decontamination step)
-		-Ds | -sortmerna_databases # The database (absolute pathway) that should be used by SortMeRNA (any input here, e.g. 'rRNA_databases/smr_v4.3_sensitive_db.fasta', would activate the sortmerna-based rRNA removal step)
+		-Ds | -sortmerna_databases # The database (absolute pathway) that should be used by SortMeRNA (any input here, e.g. '/path/to/rRNA_databases/smr_v4.3_sensitive_db.fasta', would activate the sortmerna-based rRNA removal step)
 		-De | -differential_expr_software # Software to be used in the differential expression analyses ('edgeR' by default, or 'DESeq2')
 		-Df | -databases_function # Manually provide a comma separated list of databases to be used in automatic functional enrichment analyses of DEGs (check out the R package autoGO::choose_database(), but the most popular GO terms are used by default)
 		-Of | -options_featureCounts_feature # The feature type to use to count in featureCounts (default 'exon')
@@ -50,7 +54,13 @@ for argument in $options; do
 		-cG | -compression_level # Specify the compression level to gzip the downloaded fastq files from GEO (numeric '0' to '9', default '9')
 		-cP | -clusterProfiler # Whether to perform additional functional enrichment analyses using ClusterProfiler (slow if many significant DEGs or multiple number of comparisons, 'no' or 'yes', by default)
 		-cPm | -clusterProfiler_method # Method for adjusting p.value in clusterprofiler iterations (one of 'holm','hochberg','hommel','bonferroni','BH','BY,'none', or 'fdr', by default)
+		-Tc | -time_course_analyses # Whether to perform additional time-course analyses as a last step ('yes' or 'no', by default)
+		-Tcsd | -time_course_std # Standard deviation threshold to filter in time course analyses (numeric, 1 by default)
+		-Tcf | -time_course_fuzzi # Fuziness value for the soft clustering approach (by default an estimate is automatically computed but manual testing is encouraged)
 		-Ti | -tidy_tmp_files # Space-efficient run, with a last step removing raw reads if downloaded, converting bam to cram, removing tmp files... etc ('yes' or 'no', by default)
+		-Txls | -tables_in_xlsx # Convert all tables in results from .txt format, without limitation of size to Excel's .xlsx format, with a limitation of 32,767 characters ('yes' or 'no', by default)
+		-Tx | -taxon_id # NCBI's taxon id of the organism, automatically computed based on taxdump database by default
+		-Gt | -revigo_threshold_similarity # Similarity threshold for Revigo summaries of GO terms (0-1, suggested values are 0.9, 0.7, 0.5, 0.4 for large, medium, small, and tiny levels of similarity, respectively, being default 0.7
 		-TMP | -TMPDIR # Directory to export the environmental variable TMPDIR (by default or if left empty an internal folder of the output directory is used, or please enter 'system' to use system's default, or an absolute pathway that will be created if it does not exist)
 		-M | -memory_max # Max RAM memory to be used by aligner or JAVA in bytes (by default 257698037760, or 240GB, used)" && exit 1;;
 		-i) input=${arguments[index]} ;;
@@ -60,11 +70,14 @@ for argument in $options; do
 		-M) memory_max=${arguments[index]} ;;
 		-s) strand=${arguments[index]} ;;
 		-r) reference_genome=${arguments[index]} ;;
+		-ri) reference_genome_index=${arguments[index]} ;;
 		-g) genes=${arguments[index]} ;;
 		-G) GSM_filter=${arguments[index]} ;;
+		-Gt) rev_thr=${arguments[index]} ;;
 		-a) annotation=${arguments[index]} ;;
 		-f) filter=${arguments[index]} ;;
 		-d) design_custom=${arguments[index]} ;;
+		-D) design_custom_local=${arguments[index]} ;;
 		-Df) databases_function=${arguments[index]} ;;
 		-b) batch=${arguments[index]} ;;
 		-S) stop=${arguments[index]} ;;
@@ -73,16 +86,23 @@ for argument in $options; do
 		-t) transcripts=${arguments[index]} ;;
 		-T) target=${arguments[index]} ;;
 		-A) aligner=${arguments[index]} ;;
+		-A) aligner_index_cache=${arguments[index]} ;;
 		-K) kraken2_fast=${arguments[index]} ;;
 		-Dk) kraken2_databases=${arguments[index]} ;;
 		-Ds) sortmerna_databases=${arguments[index]} ;;
 		-De) differential_expr_soft=${arguments[index]} ;;
 		-cP) clusterProfiler=${arguments[index]} ;;
 		-Of) optionsFeatureCounts_feat=${arguments[index]} ;;
+		-O) organism_argument=${arguments[index]} ;;
 		-Os) optionsFeatureCounts_seq=${arguments[index]} ;;
 		-iG) input_geo_reads=${arguments[index]} ;;
 		-cG) compression_level=${arguments[index]} ;;
 		-Ti) tidy_tmp_files=${arguments[index]} ;;
+		-Txls) convert_tables_excel=${arguments[index]} ;;
+		-Tx) taxonid=${arguments[index]} ;;
+		-Tc) time_course=${arguments[index]} ;;
+		-Tcsd) minstd=${arguments[index]} ;;
+		-Tcf) mestimate=${arguments[index]} ;;
 		-TMP) TMPDIR_arg=${arguments[index]} ;;
 		-cPm) clusterProfiler_method=${arguments[index]} ;;
 	esac
@@ -167,8 +187,23 @@ fi
 if [ -z "$aligner" ]; then
 	aligner="star"
 fi
+if [ -z "$aligner" ]; then
+	aligner_index_cache="yes"
+fi
 if [ -z "$clusterProfiler" ]; then
 	clusterProfiler="yes"
+fi
+if [ -z "$time_course" ]; then
+	time_course="no"
+fi
+if [ -z "$convert_tables_excel" ]; then
+	convert_tables_excel="no"
+fi
+if [ -z "$mestimate" ]; then
+	mestimate=0
+fi
+if [ -z "$minstd" ]; then
+	minstd=1
 fi
 if [ -z "$clusterProfiler_method" ]; then
 	clusterProfiler_method="fdr"
@@ -187,7 +222,10 @@ if [ -z "$kraken2_fast" ]; then
 	kraken2_fast="no"
 fi
 if [ -z "$compression_level" ]; then
-	compression_level=9	
+	compression_level=9
+fi
+if [ -z "$rev_thr" ]; then
+	rev_thr=0.7
 fi
 echo -e "\nCompression_level raw reads=$compression_level\n"
 
@@ -247,7 +285,8 @@ if [ ! -z "$sortmerna_databases" ]; then
 		echo -e "\nGood, apparently the required database for decontamination based on rRNA removal have been found in "$sortmerna_databases"\n"
 	else
 		echo -e "\The databases for sortmerna have to be downloaded. The software will exit until the following steps are performed. Please note 'wget' may not complete the download and then uncompressing would give errors. You would need to remove any incomplete file and restart download"
-		echo -e "The databases have to be downloaded by the user executing: mkdir -p $(dirname $sortmerna_databases) && cd $(dirname $sortmerna_databases) && wget https://github.com/biocore/sortmerna/releases/download/v4.3.4/database.tar.gz && tar xzf database.tar.gz && rm database.tar.gz"		
+		echo -e "The databases have to be downloaded by the user executing: mkdir -p $(dirname $sortmerna_databases) && cd $(dirname $sortmerna_databases) && wget https://github.com/biocore/sortmerna/releases/download/v4.3.4/database.tar.gz && tar xzf database.tar.gz && rm database.tar.gz"
+		echo -e "Please note that multiple databases are downloaded. Please choose one (e.g. smr_v4.3_sensitive_db.fasta) and remove the rest"
 		exit 1
 	fi
 fi
@@ -257,7 +296,7 @@ fi
 ###### 2. Download info from GEO and organize, or start processing the raw fastq.gz:
 ### Handle TMPDIR, problematic in some systems or with some runs
 if [ -z "$TMPDIR_arg" ]; then
-	export TMPDIR=$output_folder/$name/miARma_out/tmpdir; mkdir -p $TMPDIR
+	export TMPDIR=$output_folder/$name/miARma_out0/tmpdir; mkdir -p $TMPDIR
 	echo -e "\nTMPDIR changed to $TMPDIR\n"
 elif [ "$TMPDIR_arg" == "system" ]; then
 	echo -e "\nTMPDIR used is $TMPDIR\n"
@@ -473,18 +512,26 @@ elif [[ $input == /* ]]; then
 		echo -e "\nAll raw data downloaded and info prepared, subsampled to $number_reads (+-10%) completed. Proceeding with reanalyses...\n"
 	fi
  	echo -e "This is the content of $seqs_location:\n$(ls -l $seqs_location | awk '{ print $9 }' | tail -n +2)\n"
-	echo -n "From the ordered list above, please input a comma-separated list with the conditions for each sample (remember if these are paired-end, only once per pair of reads): "
-	read -r design_input
+	if [ -z "$design_custom_local" ]; then
+		echo -n "From the ordered list above, please input a comma-separated list with the conditions for each sample. Remember to try and avoid complex names, use as few underlines as possible, avoid names starting with numbers or others that would not be sorted appropriately such as containing spaces, and if reads are paired-end, only one name of condition per pair of reads: "
+		read -r design_input
+	else
+		design_input=$design_custom_local
+		echo -e "The used conditions are:\n$(echo $design_input | sed 's_,_\n_g')"
+	fi
 	mkdir -p $output_folder/$name/GEO_info/
 	paste <(ls $seqs_location | egrep '.fq|.fastq' | sed "s/_1.fastq.gz//" | sed "s/_2.fastq.gz//" | uniq) <(paste -d'_' <(ls $seqs_location | egrep '.fq|.fastq' | egrep '.fq|.fastq' | sed "s/_1.fastq.gz//" | sed "s/_2.fastq.gz//" | uniq) <(echo $design_input | sed 's/,/\n/g')) <(echo $design_input | sed 's/,/\n/g') > $output_folder/$name/GEO_info/samples_info.txt
 	echo $design_input | sed 's/,/\n/g' > $output_folder/$name/GEO_info/design_possible_full_1.txt
 	cat $output_folder/$name/GEO_info/design_possible_full_1.txt | sort | uniq > $output_folder/$name/GEO_info/design_possible_1.txt
 	echo $name > $output_folder/$name/GEO_info/study_title.txt
-	if [ -z "$organism" ]; then
+	if [ -z "$organism_argument" ]; then
 		echo -n "Please input the scientific name of the organism: "
 		read -r organism
-		echo $organism > $output_folder/$name/GEO_info/organism.txt
+	else
+		organism=$(echo $organism_argument | sed 's,_, ,g')
+		echo "Organism used is $organism"
 	fi
+	echo $organism > $output_folder/$name/GEO_info/organism.txt
 
 ### Process if required to download from manually provided ids
 elif [[ $input == P*  || $input == E* || $input == D* || $input == S* ]]; then
@@ -516,6 +563,9 @@ if [ "$batch" == "yes" ]; then
 	fi
 fi
 
+# Give info of NCBI's current genome:
+Rscript -e "genomes <- rentrez::entrez_summary(db='genome', id=rentrez::entrez_search(db='genome', term='${organism}[orgn]')\$ids);cat(paste(paste0('\n\nNCBI current genome info: ', date()),genomes\$assembly_name,genomes\$assembly_accession,genomes\$create_date,'\n',sep='\n'))"
+
 organism=$(cat $output_folder/$name/GEO_info/organism.txt | sed 's/ \+/_/g;s/__*/_/g') # Get again the organism in case it has been manually modified... and without spaces...
 
 ### Decontamination if required. 
@@ -539,7 +589,9 @@ if [ ! -z "$kraken2_databases" ]; then
 	for f in $(ls | egrep "report.txt$"); do echo -e "\nLog of kraken2:"; echo -e "%_reads_covered\t#_reads_covered\t#_reads_directly_assigned\tRank_code\tTaxon_id\tScientific_name" >> $f.final.txt && cat $f >> $f.final.txt && echo -e "\n\nNumber of classified reads at the genus level: $(cat $f | awk '$4 == "G" {print $2"\t"$5}' | awk '{s+=$1}END{print s}')" >> $f.final.txt && echo -e "\nTaxonomy IDs at the genus level assigned to the reads:" >> $f.final.txt && echo -e "#read\tTaxID\n$(awk '$4 == "G" {print $2"\t"$5}' $f)\n" >> $f.final.txt; done
 	for f in $(ls | egrep "kraken2_output.txt$"); do rcf -n $kraken2_databases/taxdump -k $f -o $f.recentrifuge_contamination_report.html -e CSV &>> rcf_log_out.txt; done # Add --sequential if problems with multithreading
 	
-	taxonid=$(echo $organism | sed 's/_\+/ /g' | taxonkit name2taxid --data-dir $kraken2_databases/taxdump | head -1 | cut -f2)
+	if [ -z "$taxonid" ]; then
+		taxonid=$(echo $organism | sed 's/_\+/ /g' | taxonkit name2taxid --data-dir $kraken2_databases/taxdump | head -1 | cut -f2)
+	fi	
 	taxon_name=$(taxonkit list --ids $taxonid -n -r --data-dir $kraken2_databases/taxdump | grep $taxonid)
 	echo -e "\nOrganism provided: $organism"; echo -e "\nOrganism provided (taxonid): $taxonid"; echo $taxon_name
 	echo -e "\nIf not correct, please rerun and double check that you have provided it explicitely in the prompt... kraken2 output will be filtered to retain that taxa and below"
@@ -576,8 +628,8 @@ echo -e "\nSTEP 3 DONE. Current time: $(date)\n"
 
 
 ###### 4. Run miARma-seq:
-### Prepare the salmon index from the trancripts sequences if required and strandness prediction... (if the miarma.ini does not exist yet, pointing to a previous miarma run)
-if [[ ! -e "$output_folder/$name/miarma.ini" ]]; then
+### Prepare the salmon index from the trancripts sequences if required and strandness prediction... (if the miarma0.ini does not exist yet, pointing to a previous miarma run)
+if [[ ! -e "$output_folder/$name/miarma0.ini" ]]; then
 	if [ -z "$strand" ]; then
 		echo -e "\nLooking for indexes or indexing transcripts in $transcripts...\n"
 		mkdir -p $output_folder/$name/indexes
@@ -595,12 +647,12 @@ if [[ ! -e "$output_folder/$name/miarma.ini" ]]; then
 		mkdir -p $output_folder/$name/strand_prediction/salmon_out; mkdir -p $output_folder/$name/strand_prediction/how_are_we_stranded_here_out	
 		if [[ $(find $output_folder/$name -name library_layout_info.txt | xargs cat) == "SINGLE" ]]; then
 			salmon quant -i $salmon_idx -l A -r $seqs_location/$(ls $seqs_location | shuf | head -1) -p $cores -o $output_folder/$name/strand_prediction/salmon_out/ --skipQuant &> $output_folder/$name/strand_prediction/salmon_out/salmon_out.log
-			cd $output_folder/$name/strand_prediction/how_are_we_stranded_here_out; check_strandedness --gtf $annotation --transcripts $transcripts --reads_1 $seqs_location/$(ls $seqs_location | shuf | head -1) --kallisto_index $kall_idx --print_commands &> check_strandedness_out.log
+			cd $output_folder/$name/strand_prediction/how_are_we_stranded_here_out; check_strandedness --gtf $(echo $annotation | sed 'sa,.*aag') --transcripts $transcripts --reads_1 $seqs_location/$(ls $seqs_location | shuf | head -1) --kallisto_index $kall_idx --print_commands &> check_strandedness_out.log
 		elif [[ $(find $output_folder/$name -name library_layout_info.txt | xargs cat) == "PAIRED" ]]; then
 			rand_sample_root=$(ls $seqs_location | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq | shuf | head -1)
 			salmon quant -i $salmon_idx -l A -1 $seqs_location/${rand_sample_root}_1.fastq.gz -2 $seqs_location/${rand_sample_root}_2.fastq.gz -p $cores -o $output_folder/$name/strand_prediction/salmon_out/ --skipQuant &> $output_folder/$name/strand_prediction/salmon_out/salmon_out.log
 			rand_sample_root=$(ls $seqs_location | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq | shuf | head -1)
-			cd $output_folder/$name/strand_prediction/how_are_we_stranded_here_out; check_strandedness --gtf $annotation --transcripts $transcripts --reads_1 $seqs_location/${rand_sample_root}_1.fastq.gz --reads_2 $seqs_location/${rand_sample_root}_2.fastq.gz --kallisto_index $kall_idx --print_commands &> check_strandedness_out.log
+			cd $output_folder/$name/strand_prediction/how_are_we_stranded_here_out; check_strandedness --gtf $(echo $annotation | sed 'sa,.*aag') --transcripts $transcripts --reads_1 $seqs_location/${rand_sample_root}_1.fastq.gz --reads_2 $seqs_location/${rand_sample_root}_2.fastq.gz --kallisto_index $kall_idx --print_commands &> check_strandedness_out.log
 		fi
 		cd $output_folder/$name/strand_prediction/salmon_out/
 		salmon_strand=$(grep -r "Automatically detected most likely library type as " | sed 's,.*Automatically detected most likely library type as ,,g' | sort | uniq)
@@ -616,9 +668,9 @@ if [[ ! -e "$output_folder/$name/miarma.ini" ]]; then
 		cd $output_folder/$name	
 		echo "Salmon prediction 1: $salmon_strand" > $output_folder/$name/strand_info.txt
 		echo "Salmon prediction 2: $strand" >> $output_folder/$name/strand_info.txt
-		echo "how_are_we_stranded_here prediction: $strand_second_opinion" >> $output_folder/$name/strand_info.txt
+		echo -e "how_are_we_stranded_here prediction: $strand_second_opinion" >> $output_folder/$name/strand_info.txt
 		cat $output_folder/$name/strand_info.txt
-		echo "Please double check carefully, based on the kit used in the library preparation, the paper, the GEO entry... because this is crucial for quantification. Please rerun with the argument '-s' in the unlikely case that the prediction by salmon is not correct, or if the second opinion by how_are_we_stranded_here is different"
+		echo "Please double check carefully, based on the kit used in the library preparation, the paper, the GEO entry... because this is crucial for quantification. Please rerun with the argument '-s' in the unlikely case that the prediction by salmon is not correct, or if the second opinion by how_are_we_stranded_here is different (if transcripts from GENCODE or any particular format are used, the latter option may fail to identify the data type though)"
 	fi
 
 ### Prepare other info required by the updated version of miARma...
@@ -637,78 +689,82 @@ if [[ ! -e "$output_folder/$name/miarma.ini" ]]; then
 	read_length_for_miarma=$(zcat $seqs_location/$(ls $seqs_location | shuf | head -1) | head -2 | sed -n '2p' | awk '{print length -1}')
 
 ### Prepare the ini file:
-	cd $output_folder/$name
-	cp $CURRENT_DIR/external_software/miARma-seq/bakk_miARma1.7.ini miarma.ini
-	sed -i "s,read_length=,read_length=$read_length_for_miarma,g" miarma.ini
-	sed -i "s,read_dir=,read_dir=$seqs_location,g" miarma.ini
-	sed -i "s,^threads=,threads=$cores_parallel,g" miarma.ini
-	sed -i "s,label=,label=$name,g" miarma.ini
-	sed -i "s,miARmaPath=,miARmaPath=$miarma_path,g" miarma.ini
-	sed -i "s,output_dir=,output_dir=$output_folder/$name/miARma_out,g" miarma.ini
-	sed -i "s,stats_file=miARma_stat.log,stats_file=$output_folder/$name/miARma_out/miARma_stat.log,g" miarma.ini
-	sed -i "s,logfile=miARma_logfile.log,logfile=$output_folder/$name/miARma_out/miARma_logfile.log,g" miarma.ini
-	sed -i "s,strand=yes,strand=$strand,g" miarma.ini
-	sed -i "s,fasta=,fasta=$reference_genome,g" miarma.ini
-	sed -i "s,gtf=,gtf=$annotation,g" miarma.ini
-	sed -i "s,database=,database=$annotation,g" miarma.ini
-	sed -i "s,seqtype=Paired,seqtype=$library_layout,g" miarma.ini
-	sed -i "s,organism=mouse,organism=$organism,g" miarma.ini
-	sed -i "s,indexthreads=,indexthreads=$cores,g" miarma.ini
-	sed -i "s,parallelnumber=,parallelnumber=$number_parallel,g" miarma.ini
-	sed -i "s,memorylimit=,memorylimit=$memory_max,g" miarma.ini
-	if [[ "$aligner" == "star" ]]; then
-		if [ ! -d "$CURRENT_DIR/indexes/${organism}_star_idx/" ]; then
-			sed -i "s,indexname=,indexname=${organism}_star_idx,g" miarma.ini
-			sed -i "s,indexdir=,indexdir=$output_folder/$name/indexes/,g" miarma.ini
-		else
-			sed -i "s,starindex=,starindex=$CURRENT_DIR/indexes/${organism}_star_idx/,g" miarma.ini
-			sed -i "s,indexname=,indexname=${organism}_star_idx,g" miarma.ini
-			sed -i "s,indexdir=,indexdir=$output_folder/$name/indexes/,g" miarma.ini
+	IFS=', ' read -r -a array <<< "$annotation"
+	for index in "${!array[@]}"; do
+		cd $output_folder/$name
+		cp $CURRENT_DIR/external_software/miARma-seq/bakk_miARma1.7.ini miarma$index.ini
+		gff=${array[index]}
+		sed -i "s,read_length=,read_length=$read_length_for_miarma,g" miarma$index.ini
+		sed -i "s,read_dir=,read_dir=$seqs_location,g" miarma$index.ini
+		sed -i "s,^threads=,threads=$cores_parallel,g" miarma$index.ini
+		sed -i "s,label=,label=$name,g" miarma$index.ini
+		sed -i "s,miARmaPath=,miARmaPath=$miarma_path,g" miarma$index.ini
+		sed -i "s,output_dir=,output_dir=$output_folder/$name/miARma_out$index,g" miarma$index.ini
+		sed -i "s,stats_file=miARma_stat.log,stats_file=$output_folder/$name/miARma_out$index/miARma_stat$index.log,g" miarma$index.ini
+		sed -i "s,logfile=miARma_logfile.log,logfile=$output_folder/$name/miARma_out$index/miARma_logfile$index.log,g" miarma$index.ini
+		sed -i "s,strand=yes,strand=$strand,g" miarma$index.ini
+		sed -i "s,fasta=,fasta=$reference_genome,g" miarma$index.ini
+		sed -i "s,gtf=,gtf=$gff,g" miarma$index.ini
+		sed -i "s,database=,database=$gff,g" miarma$index.ini
+		sed -i "s,seqtype=Paired,seqtype=$library_layout,g" miarma$index.ini
+		sed -i "s,organism=mouse,organism=$organism,g" miarma$index.ini
+		sed -i "s,indexthreads=,indexthreads=$cores,g" miarma$index.ini
+		sed -i "s,parallelnumber=,parallelnumber=$number_parallel,g" miarma$index.ini
+		sed -i "s,memorylimit=,memorylimit=$memory_max,g" miarma$index.ini
+		if [[ "$aligner" == "star" ]]; then
+			if [ -z "$reference_genome_index" ]; then
+				sed -i "s,indexname=,indexname=${organism}_$(basename ${reference_genome%.*})_$(basename ${gff%.*})_star_idx,g" miarma$index.ini
+				sed -i "s,indexdir=,indexdir=$output_folder/$name/indexes/,g" miarma$index.ini
+			else
+				sed -i "s,starindex=,starindex=$reference_genome_index,g" miarma$index.ini
+				sed -i "s,indexname=,indexname=${organism}_star_idx,g" miarma$index.ini
+				sed -i "s,indexdir=,indexdir=$output_folder/$name/indexes/,g" miarma$index.ini
+			fi
+		elif [[ "$aligner" == "hisat2" ]]; then
+			sed -i "s,aligner=star,aligner=hisat2,g" miarma$index.ini
+			if [ -z "$reference_genome_index" ]; then
+				sed -i "s,indexname=,indexname=${organism}_$(basename ${reference_genome%.*})_$(basename ${gff%.*})_hisat2_idx,g" miarma$index.ini
+				sed -i "s,indexdir=,indexdir=$output_folder/$name/indexes/,g" miarma$index.ini
+			else
+				sed -i "s,hisat2index=,hisat2index=$reference_genome_index,g" miarma$index.ini
+				sed -i "s,indexname=,indexname=${organism}_hisat2_idx,g" miarma$index.ini
+				sed -i "s,indexdir=,indexdir=$output_folder/$name/indexes/,g" miarma$index.ini
+			fi
 		fi
-	elif [[ "$aligner" == "hisat2" ]]; then
-		sed -i "s,aligner=star,aligner=hisat2,g" miarma.ini
-		if [ ! -d "$CURRENT_DIR/indexes/${organism}_hisat2_idx/" ]; then
-			sed -i "s,indexname=,indexname=${organism}_hisat2_idx,g" miarma.ini
-			sed -i "s,indexdir=,indexdir=$output_folder/$name/indexes/,g" miarma.ini
-		else
-			sed -i "s,hisat2index=,hisat2index=$CURRENT_DIR/indexes/${organism}_hisat2_idx/${organism}_hisat2_idx,g" miarma.ini
-			sed -i "s,indexname=,indexname=${organism}_hisat2_idx,g" miarma.ini
-			sed -i "s,indexdir=,indexdir=$output_folder/$name/indexes/,g" miarma.ini
+		if [ ! -z "$optionsFeatureCounts_seq" ]; then
+			sed -i "s,seqid=gene_name,seqid=$optionsFeatureCounts_seq,g" miarma$index.ini
 		fi
-	fi
-	if [ ! -z "$optionsFeatureCounts_seq" ]; then
-		sed -i "s,seqid=gene_name,seqid=$optionsFeatureCounts_seq,g" miarma.ini
-	fi
-	if [ ! -z "$optionsFeatureCounts_feat" ]; then
-		sed -i "s,featuretype=exon,featuretype=$optionsFeatureCounts_feat,g" miarma.ini
-	fi
-	# Final renaming of fastq raw files if SRR present in the filename:
-	if [ $(ls $seqs_location | grep -c SRR) -gt 0 ]; then
-		for i in $(ls $seqs_location/*); do mv $i $(echo $i | sed 's,_SRR.*_,_,g'); done
-	fi
+		if [ ! -z "$optionsFeatureCounts_feat" ]; then
+			sed -i "s,featuretype=exon,featuretype=$optionsFeatureCounts_feat,g" miarma$index.ini
+		fi
+		# Final renaming of fastq raw files if SRR present in the filename:
+		if [ $(ls $seqs_location | grep -c SRR) -gt 0 ]; then
+			for i in $(ls $seqs_location/*); do mv $i $(echo $i | sed 's,_SRR.*_,_,g'); done
+		fi
+	done
 fi
 echo -e "\nDONE. Current date/time: $(date)"; time1=`date +%s`; echo -e "Elapsed time (secs): $((time1-start))"; echo -e "Elapsed time (hours): $(echo "scale=2; $((time1-start))/3600" | bc -l)\n"
 
 ### Run miARma-seq:
 # 2023: WIP, but I've already modified miARma RNA-seq mode to leverage GNU's parallel and increase speed, introduce limit RAM in aligners and multithreading index, replace the shebang with #!/usr/bin/env perl so it uses the PATH's/environment's one, etc...
 # Eventually, also improve and integrate the rest of modules of miARma, such as adapter cutting, stats, miRNAs...
-echo "Please double check all the parameters above, in particular the stranded or the reference genome files used. Proceeding with miARma execution in..."
+echo "Please double check all the parameters above, in particular the stranded or the reference genome files and annotation used. Proceeding with miARma execution in..."
 secs=$((1 * 30))
+dir=$output_folder/$name/miARma_out0
 while [ $secs -gt 0 ]; do
-   echo -ne "$secs\033[0K\r"
-   sleep 1
-   : $((secs--))
+	echo -ne "$secs\033[0K\r"
+	sleep 1
+	: $((secs--))
 done
-cd $output_folder/$name
-$miarma_path/miARma miarma.ini
-
-### Move the indexes to the reanalyzerGSE folder to be reused in future run...
-if [ -d "$output_folder/$name/indexes/" ] && [ -n "$(ls -A $output_folder/$name/indexes/)" ]; then
-	if [ -s "$output_folder/$name/Log.out" ]; then
-		mv $output_folder/$name/Log.out $CURRENT_DIR/indexes/$organism\_$aligner\_idx.log
+for index in "${!array[@]}"; do
+	if [ -d "$dir" ] && [ "$(ls -A $dir)" ] && [ "$index" -gt 0 ]; then
+		dir2=$(echo $dir | sed "s,out0,out$index,g")
+		mkdir -p $dir2; cd $dir2 
 	fi
-	mv $output_folder/$name/indexes/* $CURRENT_DIR/indexes/
-fi
+	cd $output_folder/$name
+	$miarma_path/miARma miarma$index.ini
+done
+
 
 ### Reformat the logs by parallel...
 for f in $(find $output_folder/$name -name "*_log_parallel.txt"); do awk -F"\t" 'NR==1; NR > 1{OFS="\t"; $3=strftime("%Y-%m-%d %H:%M:%S", $3); print $0}' $f > tmp && mv tmp $f; done
@@ -718,51 +774,125 @@ echo -e "\nmiARma-seq and STEP 4 DONE. Current date/time: $(date)"; time1=`date 
 
 
 ###### 5. Process output of miARma, get figures, final counts, standard DGE, etc...
-R_process_reanalyzer_GSE.R $output_folder/$name $genes $filter $organism $target $differential_expr_soft
-
-if [[ "$organism" == "Mus_musculus" || "$organism" == "Homo_sapiens" || "$organism" == "Mus musculus" || "$organism" == "Homo sapiens" ]]; then
-	if [[ "$clusterProfiler" == "no" ]]; then
-		echo -e "\nSkipping final clusterProfiler execution\n"
-	else
-		echo -e "\nPerforming clusterProfiler execution. The rest of the results are ready, this may take long if many significant DEGs or comparisons...\n"
-		cd $output_folder/$name/final_results_reanalysis/DGE/							
-		# parallel --verbose -j $(( number_parallel*2 )) R_clusterProfiler_analyses.R $output_folder/$name/final_results_reanalysis/DGE/ {} $organism ::: $(ls | egrep "^DGE_analysis_comp[0-9]+\.txt$")
-		R_clusterProfiler_analyses_parallel.R $output_folder/$name/final_results_reanalysis/DGE/ $organism $cores $clusterProfiler_method
+IFS=', ' read -r -a array2 <<< "$filter"
+for index in "${!array[@]}"; do
+	R_process_reanalyzer_GSE.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index $genes ${array2[index]} $organism $target $differential_expr_soft
+	cd $output_folder/$name/final_results_reanalysis$index/DGE/
+	tar -cf - $(ls | egrep ".RData$") | pigz -p $cores > allRData.tar.gz; rm -rf $(ls | egrep ".RData$")
+	
+### Time course analyses	
+	if [[ "$time_course" == "yes" ]]; then 
+		echo -e "\nPerforming time course analyses."
+		R_process_time_course.R $output_folder/$name/final_results_reanalysis$index/ DGE_analysis_comp1.RData edgeR_object_norm $minstd $mestimate
 	fi
-	echo -e "\nPerforming autoGO execution. The rest of the results are ready, this may take long if many significant DEGs or comparisons...\n"
-	R_autoGO_analyses_parallel.R $output_folder/$name/final_results_reanalysis/DGE/ $organism $cores $databases_function
-else
-	echo "Organism is $organism... Functional analyses apart from human/mouse is not fully supported yet"
-	if [ $(egrep -c "GO:|,GO:|Ontology|tology_term|tology term" $annotation) -gt 0 ]; then
-		echo "However, an automatic approach based on clusterProfiler's enrichr function and automatically extracted GO terms from the annotation can be used..."
-		paste <(echo "source_id" && egrep "GO:|,GO:|Ontology|tology_term|tology term" $annotation | sed 's,.*ID=,,g;s,.*Parent=,,g;s,;.*,,g') <(echo "Computed GO Process IDs" && egrep "GO:|,GO:|Ontology|tology_term|tology term" scaffold.out.gff3 | sed 's,.*tology_term=,,g') | sort -t $'\t' -k1,1 -k2,2 | awk -F'\t' '!a[$1,$2]++' | awk -F'\t' '{ a[$1] = (a[$1] ? a[$1]","$2 : $2); } END { for (i in a) print i"\t"a[i]; }' | awk -F '\t' '{n=split($2,a,","); for (i=1; i<=n; i++) print $1,a[i]}' | sort -u > $output_folder/$name/final_results_reanalysis/DGE/$annotation.automatically_extracted_GO_terms.txt
-		annotation_go="$output_folder/$name/final_results_reanalysis/DGE/$annotation.automatically_extracted_GO_terms.txt"
-		if [ -s "$annotation_go" ]; then
-			R_clusterProfiler_enrichr.R $annotation $output_folder/$name/final_results_reanalysis/RPKM_counts_genes.txt $output_folder/$name/final_results_reanalysis/DGE $cores $databases_function
+
+### Network analyses, autoGO and clusterProfiler
+	if [[ "$organism" == "Mus_musculus" || "$organism" == "Homo_sapiens" || "$organism" == "Mus musculus" || "$organism" == "Homo sapiens" ]]; then
+		if [ ! -z "$taxonid" ]; then			
+			R_network_analyses.R $output_folder/$name/final_results_reanalysis$index/DGE/ $output_folder/$name/final_results_reanalysis$index/RPKM_counts_genes.txt "^DGE_analysis_comp[0-9]+.txt$" $taxonid &> network_analyses_funct_enrichment.log
+		fi
+		if [[ "$clusterProfiler" == "no" ]]; then
+			echo -e "\nSkipping final clusterProfiler execution\n"
+		else
+			echo -e "\nPerforming clusterProfiler execution for DEGs. The rest of the results are ready, this may take long if many significant DEGs or comparisons...\n"
+			cd $output_folder/$name/final_results_reanalysis$index/DGE/
+			R_clusterProfiler_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index/DGE/ $organism $cores $clusterProfiler_method "^DGE_analysis_comp[0-9]+.txt$" &> clusterProfiler_funct_enrichment.log
+			if [[ "$time_course" == "yes" ]]; then 
+				cd $output_folder/$name/final_results_reanalysis$index/time_course_analyses
+				R_clusterProfiler_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index/time_course_analyses $organism $cores $clusterProfiler_method "^DGE_limma_timecourse.*.txt$" &> clusterProfiler_funct_enrichment.log
+			fi
+			cd $output_folder/$name/final_results_reanalysis$index
+			if [ $(find . -name clusterProfiler_funct_enrichment.log | xargs cat | grep -c "Ensembl site unresponsive") -gt 0 ] || [ $(find . -name funct_enrichment_analyses.tar.gz -exec tar -tzvf {} \; | grep -c _clusterProfiler/) -eq 0 ]; then
+				echo "Apparently parallel execution of clusterProfiler failed. Attempting serial execution. Please note it may be very slow"
+				cd $output_folder/$name/final_results_reanalysis$index/DGE; rm -rf $(ls | grep _clusterProfiler)
+				R_clusterProfiler_analyses.R $output_folder/$name/final_results_reanalysis$index/DGE $organism $clusterProfiler_method "^DGE_analysis_comp[0-9]+.txt$" &> clusterProfiler_funct_enrichment_serial.log
+				if [[ "$time_course" == "yes" ]]; then 
+					cd $output_folder/$name/final_results_reanalysis$index/time_course_analyses; rm -rf $(ls | grep _clusterProfiler)
+					R_clusterProfiler_analyses.R $output_folder/$name/final_results_reanalysis$index/time_course_analyses $organism $clusterProfiler_method "^DGE_limma_timecourse.*.txt$" &> clusterProfiler_funct_enrichment_serial.log
+				fi
+			fi
+		fi
+		echo -e "\nPerforming autoGO execution for the rest of relevant datasets. The rest of the results are ready, this may take long if many genes or comparisons...\n"		
+		R_autoGO_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism $cores $databases_function "^DGE_analysis_comp.*\\.txt$|^DGE_limma_timecourse.*.txt$" &> autoGO_funct_enrichment.log
+	else
+		echo "Organism is $organism... Functional analyses apart from human/mouse is not fully supported yet"
+		if [ $(egrep -c "GO:|,GO:|Ontology|tology_term|tology term" ${array[index]}) -gt 0 ]; then
+			cd $output_folder/$name/final_results_reanalysis$index/DGE/
+			echo "However, an automatic approach based on clusterProfiler's enrichr function and automatically extracted GO terms from the annotation can be attempted for DEGs..."
+			paste <(echo "source_id" && egrep "GO:|,GO:|Ontology|tology_term|tology term" ${array[index]} | sed 's,.*ID=,,g;s,.*Parent=,,g;s,;.*,,g') <(echo "Computed GO Process IDs" && egrep "GO:|,GO:|Ontology|tology_term|tology term" ${array[index]} | sed 's,.*tology_term=,,g') | sort -t $'\t' -k1,1 -k2,2 | awk -F'\t' '!a[$1,$2]++' | awk -F'\t' '{ a[$1] = (a[$1] ? a[$1]","$2 : $2); } END { for (i in a) print i"\t"a[i]; }' | awk -F '\t' '{n=split($2,a,","); for (i=1; i<=n; i++) print $1,a[i]}' | sort -u > $output_folder/$name/final_results_reanalysis$index/DGE/$(basename ${array[index]}).automatically_extracted_GO_terms.txt
+			annotation_go=$output_folder/$name/final_results_reanalysis$index/DGE/$(basename ${array[index]}).automatically_extracted_GO_terms.txt
+			if [ -s "$annotation_go" ]; then
+				R_clusterProfiler_enrichr.R $annotation_go $output_folder/$name/final_results_reanalysis$index/RPKM_counts_genes.txt $output_folder/$name/final_results_reanalysis$index/DGE "^DGE_analysis_comp[0-9]+.txt$" &> clusterProfiler_enrichr_funct_enrichment.log
+			fi
 		fi
 	fi
-fi
-# Pending to extend to the rest of organism supported by clusterProfiler (i.e. any within Bioconductor's orgDB, and will eventually also allow for building custom .db annotation file via AnnotationForge function)
+	
+	# Add to the tables of functional enrichment the nof genes up/down:
+	cd $output_folder/$name/final_results_reanalysis$index/
+	for f in $(find $PWD \( -name "*.txt" -o -name "*.tsv" -o -name "*.csv" \) | grep funct); do
+		R_enrich_format.R $f $(echo $f | sed 's,DGE/.*,DGE/,g')$(echo $f | sed 's,.*DGE_analysis_comp,DGE_analysis_comp,g;s,_pval.*,,g;s,_fdr.*,,g;s,_funct.*,,g;s,_cluster.*,,g' | sed 's,.txt,,g').txt $organism $rev_thr
+	done
+
+	# Compress the folders
+	cd $output_folder/$name/final_results_reanalysis$index/DGE/
+	folders_funct=$(find $PWD -type d \( -name "*_autoGO" -o -name "*_clusterProfiler" \))
+	if [ -n "$folders_funct" ]; then
+		tar -cf - $folders_funct | pigz --best -p $cores > funct_enrichment_analyses.tar.gz; rm -rf $folders_funct
+	fi
+	if [[ "$time_course" == "yes" ]]; then 
+		cd $output_folder/$name/final_results_reanalysis$index/time_course_analyses
+		folders_funct=$(find $PWD -type d \( -name "*_autoGO" -o -name "*_clusterProfiler" \))
+		if [ -n "$folders_funct" ]; then
+			tar -cf - $folders_funct | pigz --best -p $cores > funct_enrichment_analyses.tar.gz; rm -rf $folders_funct
+		fi
+	fi
+	
+	# All the tables that contain list of genes, annotate them:
+	R_annotate_genes.R $output_folder/$name/final_results_reanalysis$index/ "^DGE_analysis_comp\\d+\\.txt$|^DGE_limma_timecourse_T\\d+_vs_T\\d+\\.txt$|mfuzz_elements_clusters|counts|WGCNA_all_modules_|STRINGdb_all_modules_" $organism
+
+	# All the tables of DEGs, provide bed files for direct upload in genome browser
+	for file in $(find $output_folder/$name/final_results_reanalysis$index/ -name "DGE_analysis_comp*" | egrep "_fdr_05.txt$|_pval_05.txt$"); do
+		for gene in $(cut -f1 $file); do
+			foldchange=$(grep -i $gene $file | cut -f3 | awk '{printf "%.3f\n", $1}')
+			grep -i $gene ${array[index]} | head -1 | awk -v id="$gene" -v fc="$foldchange" '{ print $1"\t"$4"\t"$5"\t"id"_"fc"\t"".""\t"$7 }' >> $file.bed
+		done
+	done
+done
 echo -e "\nSTEP 5 DONE. Current time: $(date)\n"
 
 
 
-###### 6. Tidy up and prepare for storage if final results have been created and the number of aligned files is equal to the numbers of samples:
+###### 6. Tidy up, prepare for storage if final results have been created and the number of aligned files is equal to the numbers of samples, rename folders, convert tables to xlsx if required... etc
+for f in $(find $output_folder -type d -name "final_results_reanaly*"); do
+	mv $f $(echo $f"_"$(basename $output_folder))
+done
+for f in $(find $output_folder -name "*_QC.pdf"); do
+	mv $f $(echo $(dirname $f)"/"$(basename $output_folder)"_QC.pdf")
+done
 if [ "$tidy_tmp_files" == "yes" ]; then
-	num_raw_files=$(cat $output_folder/$name/miARma_out/Pre_fastqc_results/list_of_files.txt | grep -c "fastq.gz")
-	if [ -d "$output_folder/$name/final_results_reanalysis" ] && [[ $(ls $output_folder/$name/miARma_out/$aligner\_results | egrep -c ".bam$") -eq $num_raw_files || $(ls $output_folder/$name/miARma_out/$aligner\_results | egrep -c ".bam$") -eq $((num_raw_files / 2)) ]]; then
-		echo -e "\nTidying up...\n"
-		cd $seqs_location
-		echo "After execution, raw reads have been removed for the sake of efficient storage. These were... " > readme
-		ls -lh >> readme
-		rm $(ls | grep -v readme)	
+	num_raw_files=$(cat $output_folder/$name/miARma_out0/Pre_fastqc_results/list_of_files.txt | grep -c "fastq.gz")
+	for index in "${!array[@]}"; do
+		if [ -d "$output_folder/$name/final_results_reanalysis$index" ] && [[ $(ls $output_folder/$name/miARma_out$index/$aligner\_results | egrep -c ".bam$") -eq $num_raw_files || $(ls $output_folder/$name/miARma_out$index/$aligner\_results | egrep -c ".bam$") -eq $((num_raw_files / 2)) ]]; then
+			echo -e "\nTidying up...\n"
+			cd $seqs_location
+			echo "After execution, raw reads have been removed for the sake of efficient storage. These were... " > readme
+			ls -lh >> readme
+			rm $(ls | grep -v readme)
 
-		cd $output_folder/$name/miARma_out/$aligner\_results
-		echo "For the sake of efficiente storage: samtools view -@ cores -T ref_genome -C -o xxx.bam.cram xxx.bam && rm xx.bam" >> conversion_bam_to_cram.txt
-		find $PWD -type f -name "*.bam" | parallel --verbose -j $number_parallel --max-args 1 samtools view -T $reference_genome -C -@ $((cores / number_parallel)) -o {}.cram {}
-		rm -rf $(ls | egrep ".bam$") $TMPDIR
-	fi
+			cd $output_folder/$name/miARma_out$index/$aligner\_results
+			echo "For the sake of efficiente storage: samtools view -@ cores -T ref_genome -C -o xxx.bam.cram xxx.bam && rm xx.bam" >> conversion_bam_to_cram.txt
+			find $PWD -type f -name "*.bam" | parallel --verbose -j $number_parallel --max-args 1 samtools view -T $reference_genome -C -@ $((cores / number_parallel)) -o {}.cram {}
+			rm -rf $(ls | egrep ".bam$") $TMPDIR
+		fi
+	done
 fi
+if [ "$aligner" == "star" ] && [ "$aligner_index_cache" == "no" ]; then
+	STAR --runThreadN $cores --genomeDir $(find $output_folder/$name/ -name "star_log_parallel.txt" | xargs cat | grep "genomeDir" | sed 's,.*genomeDir ,,g;s, .*,,g' | sort | uniq) --genomeLoad Remove --outFileNamePrefix genomeloading.tmp && rm genomeloading.tmp
+fi
+if [ "$convert_tables_excel" == "yes" ]; then
+	R_convert_tables.R $output_folder/$name/ $cores > /dev/null 2>&1
+fi
+
 
 echo -e "\nSTEP 6 DONE. Current time: $(date)\n"
 echo -e "\nALL DONE! Best wishes\n"
