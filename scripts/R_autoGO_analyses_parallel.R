@@ -4,9 +4,9 @@ path <- args[1]
 organism <- args[2]
 cores <- args[3]
 enrichment_databases <- args[4]
+pattern_search <- args[5]
 
-
-print("Attempting automatic gene ontology enrichment analyses by autoGO of the DGE results...")
+print("Attempting automatic gene ontology enrichment analyses by autoGO of the results...")
 print(paste0("Current date: ",date()))
 suppressMessages(library(parallel,quiet = T,warn.conflicts = F))
 suppressMessages(library(autoGO,quiet = T,warn.conflicts = F))
@@ -134,78 +134,86 @@ if (grepl("sapiens", organism, fixed=TRUE)){
   print(paste0("Your organism is ",organism,", and unfortunately the pipeline for automatic functional enrichment currently fully supports only mouse and human. We'll include non-model organisms eventually, but in the meantime please don't give up and double check if you can use autoGO manually with any of the rest of databases that may contain your organism from autoGO::choose_database(), which has > 200 databases"))
   stop("Exiting")
 }
-sink(paste0(path,"/autoGO_funct_enrichment.log"));setwd(path)
 
-for (f in list.files(pattern = "^DGE_analysis_comp.*.txt")){
-  a <- data.table::fread(f,head=T,fill=T)
-  b <- a[a$FDR < 0.05,1]
-  d <- a[a$FDR < 0.05 & a$logFC>0,1]
-  e <- a[a$FDR < 0.05 & a$logFC<0,1]
-  if (dim(b)[1]!=0){
-    write.table(b,file=paste0(gsub(".txt","",f),"_fdr_05.txt"),col.names = F,row.names = F,quote = F,sep="\t")  
-    write.table(b$Gene_ID,file=paste0(gsub(".txt","",f),"_fdr_05_Gene_IDs.txt"),col.names = F,row.names = F,quote = F,sep="\n")
-  }
-  if (dim(d)[1]!=0){
-    write.table(d,file=paste0(gsub(".txt","",f),"_fdr_05_logpos.txt"),col.names = F,row.names = F,quote = F,sep="\t")
-    write.table(d$Gene_ID,file=paste0(gsub(".txt","",f),"_fdr_05_logpos_Gene_IDs.txt"),col.names = F,row.names = F,quote = F,sep="\n")
-  }
-  if (dim(e)[1]!=0){
-    write.table(e,file=paste0(gsub(".txt","",f),"_fdr_05_logneg.txt"),col.names = F,row.names = F,quote = F,sep="\t")
-    write.table(e$Gene_ID,file=paste0(gsub(".txt","",f),"_fdr_05_logneg_Gene_IDs.txt"),col.names = F,row.names = F,quote = F,sep="\n")
-  }
-  b <- a[a$PValue < 0.05,1]
-  d <- a[a$PValue < 0.05 & a$logFC>0,1]
-  e <- a[a$PValue < 0.05 & a$logFC<0,1]
-  if (dim(b)[1]!=0){
-    write.table(b,file=paste0(gsub(".txt","",f),"_pval_05.txt"),col.names = F,row.names = F,quote = F,sep="\t")  
-    write.table(b$Gene_ID,file=paste0(gsub(".txt","",f),"_pval_05.txt_Gene_IDs"),col.names = F,row.names = F,quote = F,sep="\n")  
-  }
-  if (dim(d)[1]!=0){
-    write.table(d,file=paste0(gsub(".txt","",f),"_pval_05_logpos.txt"),col.names = F,row.names = F,quote = F,sep="\t")
-    write.table(d$Gene_ID,file=paste0(gsub(".txt","",f),"_pval_05_logpos_Gene_IDs.txt"),col.names = F,row.names = F,quote = F,sep="\n")
-  }
-  if (dim(e)[1]!=0){
-    write.table(e,file=paste0(gsub(".txt","",f),"_pval_05_logneg.txt"),col.names = F,row.names = F,quote = F,sep="\t")
-    write.table(e$Gene_ID,file=paste0(gsub(".txt","",f),"_pval_05_logneg_Gene_IDs.txt"),col.names = F,row.names = F,quote = F,sep="\n")
-  }
+for (f in list.files(pattern = pattern_search,path=path,recursive=T)){
+  try({
+    a <- data.table::fread(f,head=T,fill=T)
+    b <- a[a$FDR < 0.05,1]
+    d <- a[a$FDR < 0.05 & a$logFC>0,1]
+    e <- a[a$FDR < 0.05 & a$logFC<0,1]
+    if (dim(b)[1]!=0){
+      write.table(b,file=paste0(gsub(".txt","",f),"_fdr_05.txt"),col.names = F,row.names = F,quote = F,sep="\t")  
+      write.table(b$Gene_ID,file=paste0(gsub(".txt","",f),"_fdr_05_Gene_IDs.txt"),col.names = F,row.names = F,quote = F,sep="\n")
+    }
+    if (dim(d)[1]!=0){
+      write.table(d,file=paste0(gsub(".txt","",f),"_fdr_05_logpos.txt"),col.names = F,row.names = F,quote = F,sep="\t")
+      write.table(d$Gene_ID,file=paste0(gsub(".txt","",f),"_fdr_05_logpos_Gene_IDs.txt"),col.names = F,row.names = F,quote = F,sep="\n")
+    }
+    if (dim(e)[1]!=0){
+      write.table(e,file=paste0(gsub(".txt","",f),"_fdr_05_logneg.txt"),col.names = F,row.names = F,quote = F,sep="\t")
+      write.table(e$Gene_ID,file=paste0(gsub(".txt","",f),"_fdr_05_logneg_Gene_IDs.txt"),col.names = F,row.names = F,quote = F,sep="\n")
+    }
+    b <- a[a$PValue < 0.05,1]
+    d <- a[a$PValue < 0.05 & a$logFC>0,1]
+    e <- a[a$PValue < 0.05 & a$logFC<0,1]
+    if (dim(b)[1]!=0){
+      write.table(b,file=paste0(gsub(".txt","",f),"_pval_05.txt"),col.names = F,row.names = F,quote = F,sep="\t")  
+      write.table(b$Gene_ID,file=paste0(gsub(".txt","",f),"_pval_05.txt_Gene_IDs.txt"),col.names = F,row.names = F,quote = F,sep="\n")  
+    }
+    if (dim(d)[1]!=0){
+      write.table(d,file=paste0(gsub(".txt","",f),"_pval_05_logpos.txt"),col.names = F,row.names = F,quote = F,sep="\t")
+      write.table(d$Gene_ID,file=paste0(gsub(".txt","",f),"_pval_05_logpos_Gene_IDs.txt"),col.names = F,row.names = F,quote = F,sep="\n")
+    }
+    if (dim(e)[1]!=0){
+      write.table(e,file=paste0(gsub(".txt","",f),"_pval_05_logneg.txt"),col.names = F,row.names = F,quote = F,sep="\t")
+      write.table(e$Gene_ID,file=paste0(gsub(".txt","",f),"_pval_05_logneg_Gene_IDs.txt"),col.names = F,row.names = F,quote = F,sep="\n")
+    }
+  }, silent = TRUE)
 }
 
 process_file <- function(file){
-  path2=paste0(path,"/",basename(file),"_funct_enrichment/")
-  autoGO(paste0(path,"/",file),databases_autoGO)
-  file.rename(paste0(path,"/enrichment_tables/"),path2)
-  if (dir.exists(path2) & length(list.files(path2)) > 0){
-    setwd(path2)
+  file2=sub("\\..+$", "", basename(file))
+  path2=paste0(dirname(file),"/",file2,"_funct_enrichment/")
+  dir.create(path2, showWarnings = FALSE);setwd(path2);file.copy(file,paste0(path2,basename(file)))
+  try({
+    autoGO(read_gene_lists(gene_lists_path=path2,which_list="everything",from_autoGO=F,files_format=basename(file)),
+           databases_autoGO)
+  }, silent = TRUE)
+  path3=paste0(path2,"/","enrichment_tables")
+  if (dir.exists(path3) & length(list.files(path3)) > 0){
+    setwd(path3)
     enrich_tables <- read_enrich_tables(
-        enrich_table_path = path2,
+        enrich_table_path = path3,
         which_list = "everything",
         from_autoGO = F,
         files_format = ".tsv")
       try({
         for (i in 1:length(names(enrich_tables))){
           barplotGO(enrich_tables = enrich_tables[[i]],
-                    title = c(names(enrich_tables)[i],basename(f)),
+                    title = c(names(enrich_tables)[i],file2),
                     outfolder = getwd(),
-                    outfile = paste0(basename(f),"_",names(enrich_tables)[i],"_barplot.png"),
+                    outfile = paste0(file2,"_",names(enrich_tables)[i],"_barplot.png"),
                     from_autoGO = F)
           lolliGO(enrich_tables = enrich_tables[[i]],
-                  title = c(names(enrich_tables)[i],basename(f)),
+                  title = c(names(enrich_tables)[i],file2),
                   outfolder = getwd(),
-                  outfile = paste0(basename(f),"_",names(enrich_tables)[i],"_lolliplot.png"),
+                  outfile = paste0(file2,"_",names(enrich_tables)[i],"_lolliplot.png"),
                   from_autoGO = F)
           }
-              }, silent = TRUE)
+          }, silent = TRUE)
   }
+  file.rename(path3,sub("//enrichment_tables","_autoGO",path3)); unlink(path2,recursive=T)
 }
-
 
 mclapply(
     mc.cores = cores,
-    X = list.files(path = path, pattern = "_Gene_IDs\\.txt$"),
+    X = list.files(path = path, pattern = paste0(pattern_search,"|_Gene_IDs\\.txt$"),recursive=T,full=T),
     FUN = process_file
 )
 
-setwd(path);sink()
+# Tidying...
+setwd(path)
+print("Tidying...")
 removeEmptyDirs <- function(directory) {
   # List all directories
   dirs <- list.dirs(directory, recursive = TRUE)
@@ -213,10 +221,13 @@ removeEmptyDirs <- function(directory) {
   # Check each directory
   for (dir in dirs) {
     # If the directory is empty
-    if (length(dir(dir)) == 0) {
+    if (length(dir(dir)) < 3) {
       # Remove the directory
-      unlink(dir, recursive = TRUE)
+      invisible(unlink(dir, recursive = TRUE))
     }
   }
 }
 removeEmptyDirs(path)
+
+#files=list.files(path=getwd(),pattern="Gene_IDs.txt$")
+#invisible(file.remove(files))
