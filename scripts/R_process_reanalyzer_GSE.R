@@ -8,7 +8,8 @@ filter_option <- args[5]
 organism <- args[6]
 targets_file <- args[7]
 diff_soft <- args[8]
-
+covariab <- args[9] # if not provided, "none"
+cdseq_exec <- args[10] # if not provided, "no"
 
 ###### Load read counts, format, filter, start differential expression analyses, get RPKM, save...:
   cat("\nProcessing counts and getting figures...\n")
@@ -40,6 +41,23 @@ diff_soft <- args[8]
   dir.create(paste0(output_dir,""),showWarnings=F)
   write.table(gene_counts[,c(grep("Gene_ID",colnames(gene_counts)),grep("Length",colnames(gene_counts)),grep("Gene_ID|Length",colnames(gene_counts),invert=T))],
               file=paste0(output_dir,"/Raw_counts_genes.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
+  # CDSeq preliminary deconvolution:
+  if (cdseq_exec!="no"){
+    suppressMessages(library(CDSeq,quiet = T,warn.conflicts = F))
+    read_length <- data.table::fread(list.files(dirname(input_dir),pattern="*.ini",full.names=T)[1],fill=T)
+    read_length <- as.numeric(gsub("read_length=","",grep("read_length",read_length$V1,val=T))) + 1 # in the miARma.ini the read_length is -1, so here +1 to restore
+    gene_length_arg <- as.vector(gene_counts[,c("Length")]-read_length+1); gene_length_arg[gene_length_arg <= 1] <- 2
+    result_cdseq <- CDSeq(bulk_data =  as.matrix(gene_counts[,grep("Gene_ID|Length",colnames(gene_counts),invert=T)]), 
+                          cell_type_number = 2:30,
+                          gene_length = gene_length_arg,
+                          dilution_factor = 10,
+                          mcmc_iterations = 1000,
+                          verbose = T)
+    save(result_cdseq,file=paste0(output_dir,"/result_cdseq.RData"))
+    print(paste0("Number of cell types estimated by CDSeq: ",result_cdseq$estT))
+    print("Estimated proportions for the number of cell types estimated by CDSeq: ")
+    result_cdseq$estProp; cat("\n\n")
+  }
 
 ###### Batch effect correction if requested:
   if (file.exists(paste0(path,"/GEO_info/batch_vector.txt")) && !file.exists(paste0(path,"/GEO_info/batch_biological_variables.txt"))){
@@ -118,16 +136,17 @@ diff_soft <- args[8]
   }
 
 ###### Get edgeR object and normalized counts:
+  suppressMessages(library(edgeR,quiet = T,warn.conflicts = F))
   cat("Please double check the following lists are in the same order (automatically extracted and ordered column names of the counts vs rows of the pheno/targets data):\n")  
   print(colnames(gene_counts)[grep("Gene_ID|Length",colnames(gene_counts),invert=T)]); print(pheno)
-  edgeR_object <- edgeR::DGEList(counts=gene_counts[,grep("Gene_ID|Length",colnames(gene_counts),invert=T)],
+  edgeR_object <- DGEList(counts=gene_counts[,grep("Gene_ID|Length",colnames(gene_counts),invert=T)],
                    group=pheno$condition,
                    genes=gene_counts[,c(grep("Gene_ID",colnames(gene_counts)),grep("Length",colnames(gene_counts)))])
 
 ###### Filter counts:
   filter <- function(filter="standard",data,min_group=3){
     if(filter == "standard"){
-      keep <- rowSums(edgeR::cpm(data)>1) >= min_group
+      keep <- rowSums(cpm(data)>1) >= min_group
       data <- data[keep,]
       data$samples$lib.size  <- colSums(data$counts)
     }
@@ -146,16 +165,24 @@ diff_soft <- args[8]
   edgeR_object_prefilter <- edgeR_object
   edgeR_object <- filter(filter=filter_option,edgeR_object) # Make sure of use bin to capture Cort and the lower expressed genes
   cat(paste0("Number of genes after filter: ", nrow(edgeR_object)),"\n")
-  edgeR_object_norm <- edgeR::calcNormFactors(edgeR_object)
-  edgeR_object_norm <- edgeR::estimateCommonDisp(edgeR_object_norm, robust=TRUE)
-  if (is.na(edgeR_object_norm$common.dispersion)){
-    edgeR_object_norm$common.dispersion <- 0.4 ^ 2
-    # https://www.bioconductor.org/packages/devel/bioc/vignettes/edgeR/inst/doc/edgeRUsersGuide.pdf
-    cat("\nEstimating Dispersion... Errors or warnings? Likely because no replicates, addressing providing a fixed value for dispersion, but do not trust comparative analyses because it's likely not accurate...\n")
+  edgeR_object_norm <- calcNormFactors(edgeR_object)
+
+  if(covariab == "none"){
+    edgeR_object_norm <- estimateCommonDisp(edgeR_object_norm, robust=TRUE)
+    if (is.na(edgeR_object_norm$common.dispersion)){
+      edgeR_object_norm$common.dispersion <- 0.4 ^ 2
+      cat("\nEstimating Dispersion... Errors or warnings? Likely because no replicates, addressing providing a fixed value for dispersion, but do not trust comparative analyses because it's likely not accurate. Please consult the vignette for further information...\n")
+    }
+    edgeR_object_norm <- estimateTagwiseDisp(edgeR_object_norm)
+  } else { 
+    Treat <- edgeR_object$samples$group
+    Time <- as.factor(unlist(strsplit(as.character(covariab),",")))
+    design <- model.matrix(~0+Treat+Time)
+    rownames(design) <- colnames(edgeR_object_norm)
+    edgeR_object_norm <- estimateDisp(edgeR_object_norm, design, robust=TRUE) # Preparing for one covariable following edgeR vignette new methods Nov2023
   }
 
-  edgeR_object_norm <- edgeR::estimateTagwiseDisp(edgeR_object_norm)
-  gene_counts_rpkm <- as.data.frame(edgeR::rpkm(edgeR_object_norm,normalized.lib.sizes=TRUE))
+  gene_counts_rpkm <- as.data.frame(rpkm(edgeR_object_norm,normalized.lib.sizes=TRUE))
   colnames(gene_counts_rpkm) <- rownames(edgeR_object_norm$samples)
   gene_counts_rpkm$Gene_ID <- stringr::str_to_title(rownames(gene_counts_rpkm))
 
@@ -195,22 +222,22 @@ diff_soft <- args[8]
 
 ###### Similar to above, obtain RPKM counts but from the ComBat-Seq-adjusted counts instead of the raw counts
   if (exists("adjusted_counts")){
-    edgeR_object_combat <- edgeR::DGEList(counts=adjusted_counts,
+    edgeR_object_combat <- DGEList(counts=adjusted_counts,
                      group=pheno$condition,
                genes=gene_counts[,c(grep("Gene_ID",colnames(gene_counts)),grep("Length",colnames(gene_counts)))])
     cat(paste0("Number of genes combat before filter: ", nrow(edgeR_object_combat)),"\n")
     edgeR_object_prefilter_combat <- edgeR_object_combat
     edgeR_object_combat <- filter(filter=filter_option,edgeR_object_combat) # Make sure of use bin to capture Cort and the lower expressed genes
     cat(paste0("Number of genes combat after filter: ", nrow(edgeR_object_combat)),"\n")
-    edgeR_object_norm_combat <- edgeR::calcNormFactors(edgeR_object_combat)
-    edgeR_object_norm_combat <- edgeR::estimateCommonDisp(edgeR_object_norm_combat, robust=TRUE)
+    edgeR_object_norm_combat <- calcNormFactors(edgeR_object_combat)
+    edgeR_object_norm_combat <- estimateCommonDisp(edgeR_object_norm_combat, robust=TRUE)
     if (is.na(edgeR_object_norm_combat$common.dispersion)){
       edgeR_object_norm_combat$common.dispersion <- 0.4 ^ 2
       # https://www.bioconductor.org/packages/devel/bioc/vignettes/edgeR/inst/doc/edgeRUsersGuide.pdf
       cat("Estimating Dispersion... Errors or warnings? Likely because no replicates, addressing providing a fixed value for dispersion, but do not trust comparative analyses because it's likely not accurate...")
     }
-    edgeR_object_norm_combat <- edgeR::estimateTagwiseDisp(edgeR_object_norm_combat)
-    gene_counts_rpkm_combat <- as.data.frame(edgeR::rpkm(edgeR_object_norm_combat,normalized.lib.sizes=TRUE))
+    edgeR_object_norm_combat <- estimateTagwiseDisp(edgeR_object_norm_combat)
+    gene_counts_rpkm_combat <- as.data.frame(rpkm(edgeR_object_norm_combat,normalized.lib.sizes=TRUE))
     colnames(gene_counts_rpkm_combat) <- rownames(edgeR_object_norm_combat$samples)
     gene_counts_rpkm_combat$Gene_ID <- stringr::str_to_title(rownames(gene_counts_rpkm_combat))
 
@@ -312,7 +339,7 @@ diff_soft <- args[8]
         ggsave(p, filename = paste0(output_dir,"/violin/",i,"_violin_",gsub(".txt","",basename(z)),".pdf"),width=30, height=30)
         suppressWarnings(htmlwidgets::saveWidget(widget = ggplotly(p),file = paste0(output_dir,"/violin/",i,"_violin_",gsub(".txt","",basename(z)),".html"),selfcontained = TRUE))
         write.table(paste0("Samples_numbering:\n",paste0("Number_",1:length(df2$sample),": ",df2$sample,collapse="\n")),
-                    file=paste0(output_dir,"/label_samples.txt"),quote = F,row.names = F, col.names = F,sep = "\n")
+                    file=paste0(output_dir,"/violin/label_samples.txt"),quote = F,row.names = F, col.names = F,sep = "\n")
 
         p <- ggplot(df2, aes(x=condition, y=value,color=condition,label = sample2)) +
         geom_violin(trim=T) +
@@ -374,9 +401,10 @@ diff_soft <- args[8]
   }
   }
 
-  print(paste0("PDF barplot and violin plots done. Current date: ",date()))
+  print(paste0("PDF barplot and violin plots done if required. Keep in mind you can also use the Expression Visualization App at https://bioinfoipbln.shinyapps.io/expressionvisualizationapp/."))
+  print(paste0("Current date: ",date()))
   print("Genes highlighted are:")
-  print(genes);
+  print(genes)
 
 
 ###### Attempt of Differential Gene Expression Analyses... modified from Bioinfo Unit to use here:
@@ -482,31 +510,45 @@ diff_soft <- args[8]
         idxs_gsm_manual_2 <- which(unlist(lapply(strsplit(colnames(gene_counts),"_"),function(x){any(x %in% unlist(strsplit(gsm_manual_filter,",")))})))
         idxs_gsm_manual_2_2 <- which(unlist(lapply(strsplit(pheno$sample,"_"),function(x){any(x %in% unlist(strsplit(gsm_manual_filter,",")))})))
 
-        edgeR_object <- edgeR::DGEList(counts=gene_counts[,idxs_gsm_manual_2],
+        edgeR_object <- DGEList(counts=gene_counts[,idxs_gsm_manual_2],
                          group=pheno[idxs_gsm_manual_2_2,"condition"]$condition,
                          genes=gene_counts[,c(grep("Gene_ID",colnames(gene_counts)),grep("Length",colnames(gene_counts)))])
         edgeR_object_prefilter <- edgeR_object
         edgeR_object <- filter(filter=filter_option,edgeR_object) # Make sure of use bin to capture Cort and the lower expressed genes
-        edgeR_object_norm <- edgeR::calcNormFactors(edgeR_object)
-        edgeR_object_norm <- edgeR::estimateCommonDisp(edgeR_object_norm, robust=TRUE)
+        edgeR_object_norm <- calcNormFactors(edgeR_object)
+        edgeR_object_norm <- estimateCommonDisp(edgeR_object_norm, robust=TRUE)
         if (is.na(edgeR_object_norm$common.dispersion)){
           edgeR_object_norm$common.dispersion <- 0.4 ^ 2
           # https://www.bioconductor.org/packages/devel/bioc/vignettes/edgeR/inst/doc/edgeRUsersGuide.pdf
           cat("Estimating Dispersion... Errors or warnings? Likely because no replicates, addressing providing a fixed value for dispersion, but do not trust comparative analyses because it's likely not accurate...")
         }
-        edgeR_object_norm <- edgeR::estimateTagwiseDisp(edgeR_object_norm)
-        gene_counts_rpkm <- as.data.frame(edgeR::rpkm(edgeR_object_norm,normalized.lib.sizes=TRUE))
+        edgeR_object_norm <- estimateTagwiseDisp(edgeR_object_norm)
+        gene_counts_rpkm <- as.data.frame(rpkm(edgeR_object_norm,normalized.lib.sizes=TRUE))
         colnames(gene_counts_rpkm) <- rownames(edgeR_object_norm$samples)
         gene_counts_rpkm$Gene_ID <- stringr::str_to_title(rownames(gene_counts_rpkm))
       } 
       if(sum(!startsWith(as.character(edgeR_object_norm$samples$group),"__")) == length(as.character(edgeR_object_norm$samples$group))){
         edgeR_object_norm$samples$group <- as.factor(paste0("__",edgeR_object_norm$samples$group))
-      }
-          
+      }          
       write.table(paste0("\nComparison number ",i+existing,": ",list_combinations[[i]]),
-              file=paste0(output_dir,"/DGE/list_comp.txt"),quote = F,row.names = F, col.names = F,sep = "\n", append=T)
-      edgeR_results <- DGE(comp=list_combinations[[i]])
-      colnames(edgeR_results$table)[3] <- paste0(colnames(edgeR_results$table)[3],list_combinations[[i]][1],"_VS_",list_combinations[[i]][2])
+              file=paste0(output_dir,"/DGE/list_comp.txt"),quote = F,row.names = F, col.names = F,sep = "\n", append=T)      
+      if(covariab == "none"){
+        edgeR_results <- DGE(comp=list_combinations[[i]])
+        colnames(edgeR_results$table)[3] <- paste0(colnames(edgeR_results$table)[3],list_combinations[[i]][1],"_VS_",list_combinations[[i]][2])
+      } else {
+        fit <- glmQLFit(edgeR_object_norm, design, robust=TRUE)
+        contrast <- rep(0,dim(design)[2])
+        contrast[grep(paste(gsub("__|_seq1|_seq2","",list_combinations[[i]]),collapse="|"),colnames(design))] <- c(-1,1)
+        qlf <- glmQLFTest(fit,contrast=contrast)
+        edgeR_results <- topTags(qlf,n=nrow(qlf),adjust.method="BH",sort.by="PValue")
+        print(summary(decideTests(qlf)))
+        print(nrow(edgeR_results$table[edgeR_results$table$FDR<=0.05 & abs(edgeR_results$table$logFC)>= 0,]))
+        print(list_combinations[[i]]); print("Top results:")
+        print(head(edgeR_results$table,10)[,c(-1,-2)])
+        myLabel1=paste(list_combinations[[i]], collapse = '_vs_')
+        myLabel1=gsub("^_","",gsub("_+","_",gsub("[^[:alnum:]_]+", "_", myLabel1)))
+        Volcano(edgeR_results,paste(output_dir,"/DGE/Volcano_plot_",myLabel1,".pdf", sep=""),myLabel1)
+      }
       save.image(file=paste0(output_dir,"/DGE/DGE_analysis_comp",i+existing,".RData"))
       write.table(edgeR_results$table,
               file=paste0(output_dir,"/DGE/DGE_analysis_comp",i+existing,".txt"),quote = F,row.names = F, col.names = T,sep = "\t")
@@ -525,15 +567,14 @@ diff_soft <- args[8]
       write.table(a,
                   file="temp_targets.txt",quote = F,row.names = T, col.names = T,sep = "\t")
 
+      sink("HK_genes.log")
       target <- readTargets("temp_targets.txt")
       matriz_obj<-new("qPCRBatch", exprs=as.matrix(RPKM))
       
       #1
       pData(matriz_obj)<-data.frame(Name=colnames(RPKM),Type=target$Type)
-      Class <- as.factor(pData(matriz_obj)[,"Type"])
-      sink("HK_normPCR_normfinder.txt")
-      HK_normPCR_normfinder <- selectHKs(matriz_obj,Symbols=featureNames(matriz_obj),method="NormFinder",group=Class,minNrHKs=10)
-      sink()
+      Class <- as.factor(pData(matriz_obj)[,"Type"])      
+      HK_normPCR_normfinder <- selectHKs(matriz_obj,Symbols=featureNames(matriz_obj),method="NormFinder",group=Class,minNrHKs=10)      
       ranking_NormFinder <- data.frame(
         rank=c(1:10),
         Name=as.character(HK_normPCR_normfinder$ranking)[1:10],
@@ -555,11 +596,14 @@ diff_soft <- args[8]
       print("Top 10 hallmark/house-keeping genes according to NormFinder and Rho methods, respectively:")
       print(ranking_NormFinder) # 10 genes
       print(ranking_Rho) # 10 genes
+      sink()      
       
       write.table(ranking_NormFinder,file=paste0("HK_genes_normfinder.txt"),row.names = F,sep="\t")
       write.table(ranking_Rho,file=paste0("HK_genes_rho.txt"),row.names = F,sep="\t")
 
+      print("Hallmark/house-keeping genes NormFinder and Rho methods combined:")
       hallmarks_comb <- intersect(ranking_NormFinder$Name,ranking_Rho$Name)
+      print(hallmarks_comb)
       write.table(hallmarks_comb,file=paste0("HK_genes_combined.txt"),row.names = F,sep="\t")
 
       #Make barplots:
@@ -657,6 +701,7 @@ if(length(list.files(path=paste0(output_dir,"/DGE"),full.names=T,pattern="^DGE_a
 }
 
 
+save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
 ###### QC PDF from Bioinfo and Laura:
   cat("\nPerforming QC_PDF...\n");print(paste0("Current date: ",date()))
   suppressMessages(library("edgeR",quiet = T,warn.conflicts = F))
@@ -674,6 +719,8 @@ if(length(list.files(path=paste0(output_dir,"/DGE"),full.names=T,pattern="^DGE_a
   suppressMessages(library("png",quiet = T,warn.conflicts = F))
   suppressMessages(library("curl",quiet = T,warn.conflicts = F))
   suppressMessages(library("corrplot",quiet = T,warn.conflicts = F))
+  suppressMessages(library("ggpubr",quiet = T,warn.conflicts = F))
+  suppressMessages(library("ggpmisc",quiet = T,warn.conflicts = F))
 
   label <- basename(path)
 
@@ -719,8 +766,7 @@ if(length(list.files(path=paste0(output_dir,"/DGE"),full.names=T,pattern="^DGE_a
   # summary(lcpm)
   # table(rowSums(x$counts==0)==6)
 
-
-  suppressMessages(library(ggpmisc,quiet = T,warn.conflicts = F))
+  
   ### The actual pdf file:
   pdf(paste0(output_dir,"/QC_and_others/",label,"_QC.pdf"),paper="A4")
   ### 0 Reminder of the samples:
@@ -732,6 +778,10 @@ if(length(list.files(path=paste0(output_dir,"/DGE"),full.names=T,pattern="^DGE_a
                    label = list(as.data.frame(targets)))
   ### 1.1. Density rawcounts log2, cpm...:
   col <- RColorBrewer::brewer.pal(nsamples, "Paired")
+  if(sum(duplicated(col))>0){
+    col <- grDevices::rainbow(nsamples)
+    print(paste0("Replacing the palette with ",nsamples," random colors..."))
+  }
   par(mfrow=c(1,2))
   plot(density(lcpm_prefilter), col=col[1], lwd=2, las=2, main="", xlab="")
   title(main="Raw data", xlab="Log-cpm")
@@ -760,7 +810,64 @@ if(length(list.files(path=paste0(output_dir,"/DGE"),full.names=T,pattern="^DGE_a
   title(main="Normalized data",ylab="Log-cpm",xlab="sample_type")
   ### 3. Library size:
   par(mfrow=c(1,1))
-  barplot(x$samples$lib.size,names.arg = gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name),las=2, main="Library Size",col=col.group, ylim=range(pretty(c(0, x$samples$lib.size))))
+  bar_mids <- barplot(x$samples$lib.size,names.arg = gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name),las=2, main="Library Size",col=col.group, ylim=range(pretty(c(0, x$samples$lib.size))))
+  # Loop over the bar midpoints and add the text on top of each bar
+  for(i in 1:length(bar_mids)) {
+    # The y position is slightly above the top of the bar
+    y_pos <- x$samples$lib.size[i] + 0.02 * max(x$samples$lib.size)    
+    # Add the text, centered on the bar midpoint
+    text(bar_mids[i], y_pos, labels = x$samples$lib.size[i], cex = 0.8, pos = 3)
+  }
+  ### Figures with the number of reads
+  reads <- c()
+  files <- grep("_stats.txt",list.files(path=input_dir,full.names=T,recursive=T),val=T)
+  for (f in files){reads <- c(reads,system(paste0("cat ",f," | grep '1st fragments' | sed 's,.*:\t,,g'"),intern=T))}
+  bam_reads <- data.frame(names=gsub("_nat.*","",basename(files)),reads=as.numeric(reads))
+
+  targets_to_merge <- as.data.frame(targets)
+  for (i in 1:dim(targets_to_merge)[1]){
+    targets_to_merge$Filename[i] <- gsub(paste0("_",targets_to_merge$Type[i]),"",targets_to_merge$Filename[i])
+  }
+  bam_reads_2 <- merge(bam_reads,targets_to_merge,by.x="names",by.y="Filename")
+  bam_reads_2$color <- col.group
+  bam_reads_2$Name <- as.character(bam_reads_2$Name)
+  bar_plot <- ggbarplot(
+    bam_reads_2, 
+    x = "Name", 
+    y = "reads", 
+    fill = "Type",
+    color = "color",
+    stat = "identity"
+  )
+  bar_plot + 
+    geom_text(aes(label = reads), vjust = -0.5, color = "black", size=3) + labs(title="raw_reads") + guides(color = "none")
+
+  reads <- c()
+  files <- grep("_1_fastqc.html",list.files(path=input_dir,full.names=T,recursive=T),val=T)
+  for (f in files){reads <- c(reads,system(paste0("cat ",f," | sed 's,<td>,\\n,g;s,</td>,\\n,g' | grep -A2 'Total Sequences' | tail -1"),intern=T))}
+  if(length(files)!=0){ # Control that sometimes if these are repeated runs, fastqc is not going to be executed    
+    fastq_reads <- data.frame(names=gsub("_1_fastqc.*","",basename(files)),reads=as.numeric(reads))
+
+    targets_to_merge <- as.data.frame(targets)
+    for (i in 1:dim(targets_to_merge)[1]){
+      targets_to_merge$Filename[i] <- gsub(paste0("_",targets_to_merge$Type[i]),"",targets_to_merge$Filename[i])
+    }
+    fastq_reads_2 <- merge(fastq_reads,targets_to_merge,by.x="names",by.y="Filename")
+    fastq_reads_2$color <- col.group
+    fastq_reads_2$Name <- as.character(fastq_reads_2$Name)
+    bar_plot <- ggbarplot(
+      fastq_reads_2, 
+      x = "Name", 
+      y = "reads", 
+      fill = "Type",
+      color = "color",
+      stat = "identity"
+    )
+    perc <- c()
+    for (i in 1:length(reads)){perc<-c(perc,round(bam_reads_2$reads[i]*100/fastq_reads_2$reads[i],2))}
+    bar_plot + 
+       geom_text(aes(label = paste0(reads," (bam/fastq: ",perc, " %)"), angle=45), vjust = -0.5, color = "black", size=2) + labs(title="bam_reads") + guides(color = "none")
+  }
   ### 4. Corrplot no log
   tmp <- lcpm_no_log; colnames(tmp) <- gsub("_t|m_Rep|_seq|_KO|_WT","",colnames(tmp))
   colnames(tmp) <- targets$Name[match(colnames(tmp),targets$Name)]
@@ -836,7 +943,8 @@ if(length(list.files(path=paste0(output_dir,"/DGE"),full.names=T,pattern="^DGE_a
 
 ###### Add the figures using the counts corrected by ComBat-seq:
 if (exists("adjusted_counts")){
-    cat("\nQC_PDF ComBat-seq counts\n")
+  cat("\n\nRemember that batch effect correction/covariables have been only provided to Combat-Seq for visualization purposes, if you need to include covariables in the DGE model after checking the visualization, please rerun the main program using the argument -C\n\n")
+  cat("\nQC_PDF ComBat-seq counts\n")
   label <- basename(path)
 
   x_prefilter <- edgeR_object_prefilter_combat
@@ -886,7 +994,7 @@ if (exists("adjusted_counts")){
 
   suppressMessages(library(ggpmisc,quiet = T,warn.conflicts = F))
   ### The actual pdf file:
-  pdf(paste0(output_dir,"/QC_and_others/",label,"_ComBat-seq_QC.pdf"),paper="A4")
+  pdf(paste0(output_dir,"/QC_and_others/",label,"QC_ComBat-seq.pdf"),paper="A4")
   ### 0 Reminder of the samples:
   ggplot() + theme_void(base_size=1) + coord_flip() +
     annotate(geom = "table",
@@ -894,54 +1002,7 @@ if (exists("adjusted_counts")){
                    y = 0,
                    size = 1,
                    label = list(as.data.frame(targets)))
-  ### 1.1. Density rawcounts log2, cpm...:
-  col <- RColorBrewer::brewer.pal(nsamples, "Paired")
-  par(mfrow=c(1,2))
-  plot(density(lcpm_prefilter), col=col[1], lwd=2, las=2, main="", xlab="")
-  title(main="Raw data", xlab="Log-cpm")
-  abline(v=lcpm.cutoff, lty=3)
-  for (i in 2:nsamples){
-    den <- density(lcpm_prefilter[,i])
-    lines(den$x, den$y, col=col[i], lwd=2)
-  }
-  legend("topright",legend=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), text.col=col, bty = "n", cex = 0.5)
-  ### 1.2. Density rawcounts log2, cpm...:
-  # x is the raw counts with the bin or standard filter:
-  plot(density(lcpm[,1]), col=col[1], lwd=2, las=2, main="", xlab="")
-  title(main="Filtered data", xlab="Log-cpm")
-  abline(v=lcpm.cutoff, lty=3)
-  for (i in 2:nsamples){
-    den <- density(lcpm[,i])
-    lines(den$x, den$y, col=col[i], lwd=2)
-  }
-  legend("topright", legend=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), text.col=col, bty="n", cex = 0.5)
-  ### 2.1. Unnormalised:
-  par(mfrow=c(1,2))
-  boxplot(lcpm, las=2, col=col.group, main="", names=targets$Name, cex.axis=0.4)
-  title(main="Unnormalized data",ylab="Log-cpm",xlab="sample_type")
-  ### 2.2. Normalised:
-  boxplot(lcpm2, las=2, col=col.group, main="", names=targets$Name, cex.axis=0.4)
-  title(main="Normalized data",ylab="Log-cpm",xlab="sample_type")
-  ### 3. Library size:
-  par(mfrow=c(1,1))
-  barplot(x$samples$lib.size,names.arg = gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name),las=2, main="Library Size",col=col.group, ylim=range(pretty(c(0, x$samples$lib.size))))
-  ### 4. Corrplot no log
-  tmp <- lcpm_no_log; colnames(tmp) <- gsub("_t|m_Rep|_seq|_KO|_WT","",colnames(tmp))
-  colnames(tmp) <- targets$Name[match(colnames(tmp),targets$Name)]
-  corrplot(cor(tmp,method="spearman"), method='number',type = 'upper')
-  corrplot(cor(tmp,method="spearman"), order='AOE')
-  ### 5.1. MDS # Commented out because I've checked it's identical to the norm one
-  #z <- plotMDS(lcpm_no_log, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise", plot=F)
-  #edge <- sd(z$x)
-  #plotMDS(lcpm_no_log, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise",xlim=c(min(z$x)-edge,max(z$x) + edge))
-  #title(main="MDS-PCoA Sample Names")
-  ### 5.2. MDS_log # Commented out because I've checked it's almost identical to the norm one
-  # par(mfrow=c(1,1))
-  # z <- plotMDS(lcpm, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise", plot=F)
-  # edge <- sd(z$x)
-  #cat(edge)
-  # plotMDS(lcpm, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise",xlim=c(min(z$x)-edge,max(z$x) + edge))
-  # title(main="MDS-PCoA log2 Sample Names")
+  
   ### 5.3. MDS_norm
   z <- plotMDS(lcpm2_no_log, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise", plot=F)
   edge <- sd(z$x)
@@ -967,23 +1028,6 @@ if (exists("adjusted_counts")){
   data_pca$VAS_Group <- targets$VAS_Group
   data_pca$TypeII <- targets$TypeII
   plot(autoplot(data_pca.PC,label=T,data=data_pca,colour='Type',xlim = c(-0.8,0.8),label.size=3,label.repel=T))
-  ### 7. Heatmap 250 mots differential entities
-  rsd <- rowSds(as.matrix(x))
-  sel <- order(rsd, decreasing=TRUE)[1:250]
-  samplenames <- gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name)
-  heatmap(na.omit(as.matrix(x[sel,])),margins=c(10,8),main="Heatmap 250 most diff entities raw counts",cexRow=0.01,cexCol=0.5,labCol=samplenames)
-  ### 8.1. Dendogram cluster raw  # Commented out because I've checked it's identical to the norm one
-  #par(mfrow=c(1,1), col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
-  #pr.hc.c <- hclust(na.omit(dist(t(data))))
-  #plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of ", label, sep=""), labels=targets$Filemane, cex=0.5)
-  #Normalized clustering analysis plot
-  #pr.hc.c <- hclust(na.omit(dist(t(edgeR_object_norm$counts))))
-  #pr.hc.c <- hclust(na.omit(dist(t(cpm(x$counts,log=F)),method = "euclidean")))
-  #plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of raw counts from samples of ", label, sep=""), labels=targets$Filename, cex=0.5)
-  ### 8.2. Dendogram cluster raw_log # Commented out because I've checked it's identical to the norm one
-  #par(mfrow=c(1,1), col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
-  #pr.hc.c <- hclust(na.omit(dist(t(cpm(x$counts,log=T)),method = "euclidean")))
-  #plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of log2 raw counts from samples of ", label, sep=""), labels=targets$Filename, cex=0.5)
   ### 8.3. Dendogram cluster raw norm
   par(mfrow=c(1,1), col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
   pr.hc.c <- hclust(na.omit(dist(t(cpm(x2$counts,log=F)),method = "euclidean")))
@@ -998,7 +1042,6 @@ if (exists("adjusted_counts")){
   #plot(a)
   dev.off()
 }
-
 
 ###### WIP add DESeq2 as a full alternative to edgeR, for now, generate and provide/write independently the counts if the user ask for it:
 if (diff_soft=="DESeq2"){  
@@ -1051,4 +1094,5 @@ if (diff_soft=="DESeq2"){
   }
 }
 print("ALL DONE")
+
 print(paste0("Current date: ",date()))

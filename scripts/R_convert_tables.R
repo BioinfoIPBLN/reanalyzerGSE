@@ -2,6 +2,7 @@
 args = commandArgs(trailingOnly=TRUE)
 path <- args[1]
 cores <- args[2]
+pattern_to_avoid <- as.character(args[3])
 
 
 split_large_cells <- function(df, max_chars = 32767) {
@@ -39,7 +40,7 @@ suppressMessages(library(parallel,quiet = T,warn.conflicts = F))
 print("Writing xlsx files...")
 
 
-files=grep("log_parallel|jquery|bamqc|rnaseqqc|samtools|strand",list.files(path=path,pattern = "\\.txt$", full.names = TRUE,recursive=T),val=T,invert=T)
+files=grep(pattern_to_avoid,list.files(path=path,pattern = "\\.txt$", full.names = TRUE,recursive=T),val=T,invert=T)
 
 process_file <- function(file){
   data <- data.table::fread(file,sep="\t")

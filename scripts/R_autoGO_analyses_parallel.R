@@ -119,9 +119,8 @@ suppressMessages(library(autoGO,quiet = T,warn.conflicts = F))
   # [209] "WikiPathways_2019_Human"                            "WikiPathways_2019_Mouse"
 if (!is.na(enrichment_databases)){
     if (length(enrichment_databases) > 0){
-      enrichment_databases <- c("GO_Biological_Process_2021","GO_Molecular_Function_2021","GO_Cellular_Component_2021")}
-}
-enrichment_databases <- unlist(strsplit(enrichment_databases,","))
+      enrichment_databases <- c(enrichment_databases,"GO_Biological_Process_2021","GO_Molecular_Function_2021","GO_Cellular_Component_2021")}}
+enrichment_databases <- unique(unlist(strsplit(enrichment_databases,",")))
 if (grepl("sapiens", organism, fixed=TRUE)){
   databases_autoGO <- unique(c(enrichment_databases,"WikiPathway_2021_Human","RNAseq_Automatic_GEO_Signatures_Human_Down","RNAseq_Automatic_GEO_Signatures_Human_Up","Reactome_2022","KEGG_2021_Human","HDSigDB_Human_2021"))
   databases_autoGO_print <- paste(databases_autoGO,collapse=",")
@@ -135,7 +134,7 @@ if (grepl("sapiens", organism, fixed=TRUE)){
   stop("Exiting")
 }
 
-for (f in list.files(pattern = pattern_search,path=path,recursive=T)){
+for (f in list.files(pattern = pattern_search,path=path,recursive=T, full.names=T)){
   try({
     a <- data.table::fread(f,head=T,fill=T)
     b <- a[a$FDR < 0.05,1]
@@ -158,7 +157,7 @@ for (f in list.files(pattern = pattern_search,path=path,recursive=T)){
     e <- a[a$PValue < 0.05 & a$logFC<0,1]
     if (dim(b)[1]!=0){
       write.table(b,file=paste0(gsub(".txt","",f),"_pval_05.txt"),col.names = F,row.names = F,quote = F,sep="\t")  
-      write.table(b$Gene_ID,file=paste0(gsub(".txt","",f),"_pval_05.txt_Gene_IDs.txt"),col.names = F,row.names = F,quote = F,sep="\n")  
+      write.table(b$Gene_ID,file=paste0(gsub(".txt","",f),"_pval_05_Gene_IDs.txt"),col.names = F,row.names = F,quote = F,sep="\n")  
     }
     if (dim(d)[1]!=0){
       write.table(d,file=paste0(gsub(".txt","",f),"_pval_05_logpos.txt"),col.names = F,row.names = F,quote = F,sep="\t")
@@ -207,7 +206,7 @@ process_file <- function(file){
 
 mclapply(
     mc.cores = cores,
-    X = list.files(path = path, pattern = paste0(pattern_search,"|_Gene_IDs\\.txt$"),recursive=T,full=T),
+    X = list.files(path = path, pattern = "_Gene_IDs\\.txt$",recursive=T,full=T),
     FUN = process_file
 )
 
