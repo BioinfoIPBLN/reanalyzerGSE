@@ -84,7 +84,7 @@ rm check_strandedness.py; wget -q https://github.com/signalbash/how_are_we_stran
 
 echo -e "\n\nInstalling the CRAN's package 'autoGO' and some other dependencies, not available through conda as of yet... This manual installation implies that the version of the installed R packages are not frozen. So, not likely, but please do keep in mind that this may be a source of errors in the mid-term if newer versions of the R packages are installed. As of the moment of the writing of this wrapper script, for example the version of autoGO being installed was 0.9.1...\n\n"
 export PATH=$conda_envs_path/reanalyzerGSE_3/bin:$PATH
-$conda_envs_path/reanalyzerGSE_3/bin/Rscript -e 'suppressMessages({BiocManager::install(c("ComplexHeatmap","DESeq2","GSVA"),update=F,ask=F)});suppressMessages({install.packages(c("autoGO","rentrez"),repos="https://cloud.r-project.org",quiet=T)})' &> /dev/null # Avoid the very extensive logs being printed out, please remove suppressMessages and "&> /dev/null" to double check if installation fails...
+$conda_envs_path/reanalyzerGSE_3/bin/Rscript -e 'suppressMessages({BiocManager::install(c("ComplexHeatmap","DESeq2","GSVA"),update=F,ask=F)});suppressMessages({install.packages(c("autoGO","rentrez","aPEAR"),repos="https://cloud.r-project.org",quiet=T)})' &> /dev/null # Avoid the very extensive logs being printed out, please remove suppressMessages and "&> /dev/null" to double check if installation fails...
 
 # https://github.com/DerrickWood/kraken2/issues/518, you just have to manually replace 'ftp' by 'https' in the line 46 of the file 'rsync_from_ncbi.pl'
 # Fix and improve kraken2 2.1.2 within conda (i.e. fix download for database building and improve masking with parallel):
