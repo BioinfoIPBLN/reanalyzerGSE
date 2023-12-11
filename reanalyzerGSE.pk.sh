@@ -2,7 +2,7 @@
 start=`date +%s`
 echo -e "\nCurrent time: $(date)\n"
 base64 -d <<<"CiAgX19fICBfX19fICBfX19fICAgICAgX19fXyAgX19fXyAgIF9fICAgX18gXyAgIF9fICAgX18gICAgXyAgXyAgX19fXyAgX19fXyAgX19fXyAKIC8gX18pLyBfX18pKCAgX18pICAgICggIF8gXCggIF9fKSAvIF9cICggICggXCAvIF9cICggICkgICggXC8gKShfXyAgKSggIF9fKSggIF8gXAooIChfIFxcX19fIFwgKSBfKSAgICAgICkgICAvICkgXykgLyAgICBcLyAgICAvLyAgICBcLyAoXy9cICkgIC8gIC8gXy8gICkgXykgICkgICAvCiBcX19fLyhfX19fLyhfX19fKSAgICAoX19cXykoX19fXylcXy9cXy9cXylfXylcXy9cXy9cX19fXy8oX18vICAoX19fXykoX19fXykoX19cXykKCmJ5IEJpb2luZm9ybWF0aWNzIFVuaXQJCQkJSVBCTE4tQ1NJQy4gMjAyMwoKYmlvaW5mb3JtYXRpY2FAaXBiLmNzaWMuZXMJCSAgICAgICAgaHR0cHM6Ly9naXRodWIuY29tL0Jpb2luZm9JUEJMTi9yZWFuYWx5emVyR1NFCgo="
-echo -e "doi:xxxxxxxxxxxxx\n\n"
+echo -e "doi.org/10.1101/2023.07.12.548663\n\n"
 
 
 ###### 1. Define arguments and variables:
@@ -25,9 +25,11 @@ for argument in $options; do
 		-n | -name # Name of the project/folder to create and store results
 		-o | -output_folder # Destination folder
 		-p | -cores # Number of cores
+		-pi | -cores_index # Number of cores for genome indexing in aligning step (by default, same than -p)
 		-P | -parallel_number # Number of files to be processed in parallel (10 by default)
 		-r | -reference_genome # Reference genome to be used (.fasta file or .gz, absolute pathway)
-		-ri | -reference_genome_index # If the reference genome to be used already has an index that would like to reuse, please provide full pathwa here (by default the provided genome is indexed)
+		-ri | -reference_genome_index # If the reference genome to be used already has an index that would like to reuse, please provide full pathway here (by default the provided genome is indexed)
+		-q  | -qc_raw_reads # Whether to perform quality control on the raw reads ('yes' by default, or 'no')
 		-a | -annotation # Reference annotation to be used (.gtf file, absolute pathway). If hisat2 is used, a gff file (make sure format is '.gff' and not '.gff3') is accepted (some QC steps like 'qualimap rnaseqqc' may be skipped though). You can provide a comma-separated list of the pathways to different annotation, and multiple/independent quantification/outputs from the same alignments will be generated.
 		-A | -aligner # Aligner software to use ('hisat2' or 'star', by default)
 		-Ac | -aligner_index_cache # Whether to try and keep the genome index on the cache/loaded RAM so concurrent jobs do not have to reload it and can use it more easily ('no', which will empty cache at the end, or 'yes', by default)
@@ -35,12 +37,15 @@ for argument in $options; do
 		-s | -strandness # Strandness of the library ('yes, 'no', 'reverse'). If not provided and '-t' used, this would be predicted by salmon. Please use this parameter if prediction not correct, see explanations in for example in bit.ly/strandness0 and bit.ly/strandness
 		-g | -genes # Genes to highlight their expression in plots (one or several, separated by comma and no space)
 		-G | -GSM_filter # GSM ids (one or several, separated by comma and no space) within the GSE entry to restrict the analysis to. An alternative to requesting a stop with -S to reorganize the downloaded files manually
-		-R | -reads_to_subsample # Percentage of reads or number of reads to subsample to the sequences before the analyses (none by default, if any number is provided +-10% will be computed)
+		-R | -reads_to_subsample # Number of reads to subsample to the sequences before the analyses (none by default, a comma-separated list with one number per fastq file/pair of files if paired-end must be provided)
 		-f | -filter # Threshold of gene counts to use ('bin' to capture the lower expressed genes, or 'standard', by default). Please provide a comma separated list with the filters to use at each quantification if multiple annotation are provided
-		-b | -batch # Batch effect present? (no by default, yes if correction through Combat-seq and model is to be performed, and info is going to be required in prompts)
+		-b | -batch # Batch effect present? (no by default, yes if correction through Combat-seq and model is to be performed, and info is going to be required in other arguments or prompts)
+		-bv | -batch_vector # Comma-separated list of numbers for use as batch vector with Combat-seq
+		-bc | -batch_biological_covariable # Comma-separated list of numbers for use as batch vector of covariables of biological interest with Combat-seq
 		-d | -design_custom # Manually specifying the experimental design for GEO download ('no' by default and if 'yes', please expect an interactive prompt after data download from GEO, and please enter the assignment to groups when asked in the terminal, with a comma-separated list of the same length than the number of samples)
 		-D | -design_custom_local # Specifying here the experimental design for the local dataset (by default an interactive prompt will ask for a comma-separated list of the same length than the number of samples, if you want to avoid that manual input please provide the list in this argument)
 		-O | -organism # Specifying here the scientific name of the organism for the local dataset (by default an interactive prompt will ask for it, if you want to avoid that manual input please provide the full organism name in this argument, please use underline instead of space)
+		-C | -covariables # Please input a comma-separated list for the covariable that should be included in the edgeR model for DGE (for now only one covariable allowed, for example a proven batch effect) 
 		-T | -target_file # Protopical target file for attempts to differential gene expression analyses (containing filenames and covariates, automatically built if not provided)
 		-S | -stop # Manual stop so the automatically downloaded files can be manually modified ('yes' or 'no', by default)
 		-K | -Kraken2_fast_mode # Kraken2 fast mode, consisting on copying the Kraken2 database to /dev/shm (RAM) so execution is faster ('yes' or 'no' by default)
@@ -48,6 +53,7 @@ for argument in $options; do
 		-Ds | -sortmerna_databases # The database (absolute pathway) that should be used by SortMeRNA (any input here, e.g. '/path/to/rRNA_databases/smr_v4.3_sensitive_db.fasta', would activate the sortmerna-based rRNA removal step)
 		-De | -differential_expr_software # Software to be used in the differential expression analyses ('edgeR' by default, or 'DESeq2')
 		-Df | -databases_function # Manually provide a comma separated list of databases to be used in automatic functional enrichment analyses of DEGs (check out the R package autoGO::choose_database(), but the most popular GO terms are used by default)
+		-Dc | -deconvolution # Whether to perform deconvolution of the bulk RNA-seq data by CDSeq ('yes', which may require few hours to complete, or 'no', by default)
 		-Of | -options_featureCounts_feature # The feature type to use to count in featureCounts (default 'exon')
 		-Os | -options_featureCounts_seq # The seqid type to use to count in featureCounts (default 'gene_name')
 		-iG | -input_GEO_reads # If you want to combine downloading metadata from GEO with reads from GEO or any database already downloaded, maybe from a previous attempt, please provide an absolute path
@@ -67,6 +73,7 @@ for argument in $options; do
 		-n) name=${arguments[index]} ;;
 		-o) output_folder=${arguments[index]} ;;
 		-p) cores=${arguments[index]} ;;
+		-pi) indexthreads=${arguments[index]} ;;
 		-M) memory_max=${arguments[index]} ;;
 		-s) strand=${arguments[index]} ;;
 		-r) reference_genome=${arguments[index]} ;;
@@ -80,6 +87,9 @@ for argument in $options; do
 		-D) design_custom_local=${arguments[index]} ;;
 		-Df) databases_function=${arguments[index]} ;;
 		-b) batch=${arguments[index]} ;;
+		-bv) batch_vector=${arguments[index]} ;;
+		-bc) batch_biological_covariates=${arguments[index]} ;;
+		-C) covariables=${arguments[index]} ;;
 		-S) stop=${arguments[index]} ;;
 		-P) number_parallel=${arguments[index]} ;;
 		-R) number_reads=${arguments[index]} ;;
@@ -91,6 +101,7 @@ for argument in $options; do
 		-Dk) kraken2_databases=${arguments[index]} ;;
 		-Ds) sortmerna_databases=${arguments[index]} ;;
 		-De) differential_expr_soft=${arguments[index]} ;;
+		-Dc) deconvolution=${arguments[index]} ;;
 		-cP) clusterProfiler=${arguments[index]} ;;
 		-Of) optionsFeatureCounts_feat=${arguments[index]} ;;
 		-O) organism_argument=${arguments[index]} ;;
@@ -104,6 +115,7 @@ for argument in $options; do
 		-Tcsd) minstd=${arguments[index]} ;;
 		-Tcf) mestimate=${arguments[index]} ;;
 		-TMP) TMPDIR_arg=${arguments[index]} ;;
+		-q) qc_raw_reads=${arguments[index]} ;;
 		-cPm) clusterProfiler_method=${arguments[index]} ;;
 	esac
 done
@@ -163,6 +175,13 @@ if [ -z "$batch" ]; then
 	batch=no
 fi
 echo -e "\nbatch=$batch\n"
+if [ -z "$covariables" ]; then
+	covariables="none"
+fi
+echo -e "\ncovariables=$covariables\n"
+if [ -z "$deconvolution" ]; then
+	deconvolution=no
+fi
 if [ -z "$design_custom" ]; then
 	design_custom=no
 fi
@@ -187,8 +206,11 @@ fi
 if [ -z "$aligner" ]; then
 	aligner="star"
 fi
-if [ -z "$aligner" ]; then
+if [ -z "$aligner_index_cache" ]; then
 	aligner_index_cache="yes"
+fi
+if [ -z "$indexthreads" ]; then
+	indexthreads=$cores
 fi
 if [ -z "$clusterProfiler" ]; then
 	clusterProfiler="yes"
@@ -455,21 +477,28 @@ echo -e "\nSTEP 2 DONE. Current time: $(date)\n"
 	 		echo "Download still failed. Please double check manually, exiting..."; exit 1
 	 	fi	 																		   	
 	fi		
-	
+		
 	if [ -z "$number_reads" ]; then
 		echo -e "\nAll raw data downloaded and info prepared, proceeding with reanalyses...\n"
 	else
 		echo -e "\nSubsampling...\n"
 		# From the input parameter by the user, obtain a random number allowing a +- 10% window:
-		ten_percent=$((number_reads / 10))
-		random_shift=$((RANDOM % (2 * ten_percent + 1) - ten_percent))
-		number_reads_rand=$((number_reads + random_shift))
-		if [[ "$(cat $output_folder/$name/GEO_info/library_layout_info.txt)" == "PAIRED" ]]; then
-			ls | egrep .fastq.gz$ | grep -v subsamp | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq | parallel --verbose -j $number_parallel --max-args 1 "seqtk sample -s 123 {}_2.fastq.gz $number_reads_rand | pigz -p $((cores / number_parallel)) -c --fast > {.}_subsamp_2.fastq.gz && rm {}_2.fastq.gz"
-		else
-  			ls | egrep .fastq.gz$ | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq | parallel --verbose -j $number_parallel --max-args 1 "seqtk sample -s 123 {}_1.fastq.gz $number_reads_rand | pigz -p $((cores / number_parallel)) -c --fast > {.}_subsamp_1.fastq.gz && rm {}_1.fastq.gz"
-  		fi		
-		echo -e "\nAll raw data downloaded and info prepared, subsampled to $number_reads (+-10%) completed. Proceeding with reanalyses...\n"
+		IFS=', ' read -r -a arr <<< "$number_reads"
+		IFS=', ' read -r -a arr2 <<< "$(ls | egrep .fastq.gz$ | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq | tr '\n' ',')"
+		export -f subsample_reads
+		subsample_reads() {
+							file=$1
+							number=$2							
+							ten_percent=$(( number * 10 / 100 ))
+							random_shift=$((RANDOM % (2 * ten_percent + 1) - ten_percent))
+							number_reads_rand=$((number + random_shift))
+							echo "Hola$file to $number +- 10%... to $number_reads_rand"
+							seqtk sample -s 123 "$file" "$number_reads_rand" | pigz -p $((cores / 4)) -c --best > "${file}_subsamp"
+						  }
+		echo "hola"
+		parallel --verbose -j $cores subsample_reads {} ::: "${arr2[@]}" ::: "${arr[@]}"		
+		rm $(ls | grep -v subsamp); for file in $(ls); do mv $file $(echo $file | sed 's,_subsamp,,g'); done
+		echo -e "\nAll raw data downloaded and info prepared, subsampling (+-10%) completed. Proceeding with reanalyses...\n"
 	fi
 
 ### Process if not required to download from NCBI/GEO but raw reads provided
@@ -500,16 +529,23 @@ elif [[ $input == /* ]]; then
 	else
 		echo -e "\nSubsampling...\n"
 		# From the input parameter by the user, obtain a random number allowing a +- 10% window:
-		ten_percent=$((number_reads / 10))
-		random_shift=$((RANDOM % (2 * ten_percent + 1) - ten_percent))
-		number_reads_rand=$((number_reads + random_shift))
-		if [[ "$(cat $output_folder/$name/library_layout_info.txt)" == "PAIRED" ]]; then
-			ls | egrep .fastq.gz$ | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq | parallel --verbose -j $number_parallel --max-args 1 "seqtk sample -s 123 {}_1.fastq.gz $number_reads_rand | pigz -p $((cores / number_parallel)) -c --fast > {.}_subsamp_1.fastq.gz && rm {}_1.fastq.gz"			
-			ls | egrep .fastq.gz$ | grep -v subsamp | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq | parallel --verbose -j $number_parallel --max-args 1 "seqtk sample -s 123 {}_2.fastq.gz $number_reads_rand | pigz -p $((cores / number_parallel)) -c --fast > {.}_subsamp_2.fastq.gz && rm {}_2.fastq.gz"
-		else
-  			ls | egrep .fastq.gz$ | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq | parallel --verbose -j $number_parallel --max-args 1 "seqtk sample -s 123 {}_1.fastq.gz $number_reads_rand | pigz -p $((cores / number_parallel)) -c --fast > {.}_subsamp_1.fastq.gz && rm {}_1.fastq.gz"
-  		fi		
-		echo -e "\nAll raw data downloaded and info prepared, subsampled to $number_reads (+-10%) completed. Proceeding with reanalyses...\n"
+		IFS=', ' read -r -a arr <<< "$number_reads"
+		IFS=', ' read -r -a arr2 <<< "$(ls | egrep .fastq.gz$ | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq | tr '\n' ',')"
+		for index in "${!arr[@]}"; do		
+			number=${arr[index]}
+			echo "To $number +- 10%..."
+			ten_percent=$(( number * 10 / 100 ))
+			random_shift=$((RANDOM % (2 * ten_percent + 1) - ten_percent))
+			number_reads_rand=$((number + random_shift))
+			echo "... to $number_reads_rand"
+			if [[ "$(cat $output_folder/$name/library_layout_info.txt)" == "PAIRED" ]]; then
+				export SEQKIT_THREADS=$((cores / 2)); ls | egrep .fastq.gz$ | grep ${arr2[index]} | parallel --verbose -j 2 "seqtk sample -s 123 {} $number_reads_rand | pigz -p $((cores / 2)) -c --fast > {}_subsamp"
+			else
+  				export SEQKIT_THREADS=$cores; seqtk sample -s 123 $(ls | egrep .fastq.gz$ | grep ${arr2[index]}) $number_reads_rand | pigz -p $cores -c --fast > $(ls | egrep .fastq.gz$ | grep ${arr2[index]})_subsamp
+  			fi
+		done
+		rm $(ls | grep -v subsamp); for file in $(ls); do mv $file $(echo $file | sed 's,_subsamp,,g'); done
+		echo -e "\nAll raw data downloaded and info prepared, subsampling (+-10%) completed. Proceeding with reanalyses...\n"
 	fi
  	echo -e "This is the content of $seqs_location:\n$(ls -l $seqs_location | awk '{ print $9 }' | tail -n +2)\n"
 	if [ -z "$design_custom_local" ]; then
@@ -552,15 +588,19 @@ fi
 
 ### Deal with batch correction... the user has to manually provide a list
 if [ "$batch" == "yes" ]; then
-	echo -e "This is the content of $seqs_location:\n$(ls -l $seqs_location | awk '{ print $9 }' | tail -n +2)\n"
-	echo -n "Based on the list above, please input a comma-separated list for the vector for batch separation (remember if these are paired-end, only once per pair of reads):"
-	read -r batch_vector
-	echo $batch_vector > $output_folder/$name/GEO_info/batch_vector.txt
-	echo -n "Please input a comma-separated list for the biological covariate, and separate by space if multiple biological variables are to be included: "
-	read -r biological_covariates
-	if [ ! -z "$biological_covariates" ]; then
-		echo $biological_covariates > $output_folder/$name/GEO_info/batch_biological_variables.txt
+	if [ -z "$batch_vector" ]; then
+		echo -e "This is the content of $seqs_location:\n$(ls -l $seqs_location | awk '{ print $9 }' | tail -n +2)\n"
+		echo -n "Based on the list above, please input a comma-separated list for the vector for batch separation (use only numbers, and if these are paired-end, only once per pair of reads):"
+		read -r batch_vector
 	fi
+	echo $batch_vector > $output_folder/$name/GEO_info/batch_vector.txt
+	echo -e "\nThe comma-separated list for the vector for batch separation is $batch_vector\n"
+	if [ -z "$batch_biological_covariates" ]; then
+		echo -n "Please input a comma-separated list for the biological covariate, and separate by space if multiple biological variables are to be included (use only numbers): "
+		read -r batch_biological_covariates		
+	fi
+	echo $batch_biological_covariates > $output_folder/$name/GEO_info/batch_biological_variables.txt
+	echo -e "\nThe comma-separated list for the vector of biological covariable for batch separation is $batch_biological_covariates\n"
 fi
 
 # Give info of NCBI's current genome:
@@ -690,6 +730,8 @@ if [[ ! -e "$output_folder/$name/miarma0.ini" ]]; then
 
 ### Prepare the ini file:
 	IFS=', ' read -r -a array <<< "$annotation"
+	IFS=', ' read -r -a array2 <<< "$optionsFeatureCounts_seq"
+	IFS=', ' read -r -a array3 <<< "$optionsFeatureCounts_feat"
 	for index in "${!array[@]}"; do
 		cd $output_folder/$name
 		cp $CURRENT_DIR/external_software/miARma-seq/bakk_miARma1.7.ini miarma$index.ini
@@ -708,7 +750,7 @@ if [[ ! -e "$output_folder/$name/miarma0.ini" ]]; then
 		sed -i "s,database=,database=$gff,g" miarma$index.ini
 		sed -i "s,seqtype=Paired,seqtype=$library_layout,g" miarma$index.ini
 		sed -i "s,organism=mouse,organism=$organism,g" miarma$index.ini
-		sed -i "s,indexthreads=,indexthreads=$cores,g" miarma$index.ini
+		sed -i "s,indexthreads=,indexthreads=$indexthreads,g" miarma$index.ini
 		sed -i "s,parallelnumber=,parallelnumber=$number_parallel,g" miarma$index.ini
 		sed -i "s,memorylimit=,memorylimit=$memory_max,g" miarma$index.ini
 		if [[ "$aligner" == "star" ]]; then
@@ -732,10 +774,10 @@ if [[ ! -e "$output_folder/$name/miarma0.ini" ]]; then
 			fi
 		fi
 		if [ ! -z "$optionsFeatureCounts_seq" ]; then
-			sed -i "s,seqid=gene_name,seqid=$optionsFeatureCounts_seq,g" miarma$index.ini
+			sed -i "s,seqid=gene_name,seqid=${array2[index]},g" miarma$index.ini
 		fi
 		if [ ! -z "$optionsFeatureCounts_feat" ]; then
-			sed -i "s,featuretype=exon,featuretype=$optionsFeatureCounts_feat,g" miarma$index.ini
+			sed -i "s,featuretype=exon,featuretype=${array3[index]},g" miarma$index.ini
 		fi
 		# Final renaming of fastq raw files if SRR present in the filename:
 		if [ $(ls $seqs_location | grep -c SRR) -gt 0 ]; then
@@ -746,8 +788,8 @@ fi
 echo -e "\nDONE. Current date/time: $(date)"; time1=`date +%s`; echo -e "Elapsed time (secs): $((time1-start))"; echo -e "Elapsed time (hours): $(echo "scale=2; $((time1-start))/3600" | bc -l)\n"
 
 ### Run miARma-seq:
-# 2023: WIP, but I've already modified miARma RNA-seq mode to leverage GNU's parallel and increase speed, introduce limit RAM in aligners and multithreading index, replace the shebang with #!/usr/bin/env perl so it uses the PATH's/environment's one, etc...
-# Eventually, also improve and integrate the rest of modules of miARma, such as adapter cutting, stats, miRNAs...
+# 2024: I've modified miARma RNA-seq mode to leverage GNU's parallel and increase speed, introduce limit RAM in aligners and multithreading index, replace the shebang with #!/usr/bin/env perl so it uses the PATH's/environment's one, etc...
+# Eventually, WIP to also improve and integrate the rest of modules of miARma, such as adapter cutting, stats, miRNAs...
 echo "Please double check all the parameters above, in particular the stranded or the reference genome files and annotation used. Proceeding with miARma execution in..."
 secs=$((1 * 30))
 dir=$output_folder/$name/miARma_out0
@@ -762,6 +804,9 @@ for index in "${!array[@]}"; do
 		mkdir -p $dir2; cd $dir2 
 	fi
 	cd $output_folder/$name
+	if [ "$qc_raw_reads" == "no" ]; then
+		mkdir -p $output_folder/$name/miARma_out$index/Pre_fastqc_results/_skip_
+	fi
 	$miarma_path/miARma miarma$index.ini
 done
 
@@ -776,7 +821,8 @@ echo -e "\nmiARma-seq and STEP 4 DONE. Current date/time: $(date)"; time1=`date 
 ###### 5. Process output of miARma, get figures, final counts, standard DGE, etc...
 IFS=', ' read -r -a array2 <<< "$filter"
 for index in "${!array[@]}"; do
-	R_process_reanalyzer_GSE.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index $genes ${array2[index]} $organism $target $differential_expr_soft
+	annotation_file=${array[index]}
+	R_process_reanalyzer_GSE.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index $genes ${array2[index]} $organism $target $differential_expr_soft $covariables $deconvolution
 	cd $output_folder/$name/final_results_reanalysis$index/DGE/
 	tar -cf - $(ls | egrep ".RData$") | pigz -p $cores > allRData.tar.gz; rm -rf $(ls | egrep ".RData$")
 	
@@ -805,10 +851,10 @@ for index in "${!array[@]}"; do
 			if [ $(find . -name clusterProfiler_funct_enrichment.log | xargs cat | grep -c "Ensembl site unresponsive") -gt 0 ] || [ $(find . -name funct_enrichment_analyses.tar.gz -exec tar -tzvf {} \; | grep -c _clusterProfiler/) -eq 0 ]; then
 				echo "Apparently parallel execution of clusterProfiler failed. Attempting serial execution. Please note it may be very slow"
 				cd $output_folder/$name/final_results_reanalysis$index/DGE; rm -rf $(ls | grep _clusterProfiler)
-				R_clusterProfiler_analyses.R $output_folder/$name/final_results_reanalysis$index/DGE $organism $clusterProfiler_method "^DGE_analysis_comp[0-9]+.txt$" &> clusterProfiler_funct_enrichment_serial.log
+				R_clusterProfiler_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index/DGE/ $organism "1" $clusterProfiler_method "^DGE_analysis_comp[0-9]+.txt$" &> clusterProfiler_funct_enrichment_serial.log
 				if [[ "$time_course" == "yes" ]]; then 
 					cd $output_folder/$name/final_results_reanalysis$index/time_course_analyses; rm -rf $(ls | grep _clusterProfiler)
-					R_clusterProfiler_analyses.R $output_folder/$name/final_results_reanalysis$index/time_course_analyses $organism $clusterProfiler_method "^DGE_limma_timecourse.*.txt$" &> clusterProfiler_funct_enrichment_serial.log
+					R_clusterProfiler_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index/time_course_analyses $organism "1" $clusterProfiler_method "^DGE_limma_timecourse.*.txt$" &> clusterProfiler_funct_enrichment_serial.log
 				fi
 			fi
 		fi
@@ -816,32 +862,34 @@ for index in "${!array[@]}"; do
 		R_autoGO_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism $cores $databases_function "^DGE_analysis_comp.*\\.txt$|^DGE_limma_timecourse.*.txt$" &> autoGO_funct_enrichment.log
 	else
 		echo "Organism is $organism... Functional analyses apart from human/mouse is not fully supported yet"
-		if [ $(egrep -c "GO:|,GO:|Ontology|tology_term|tology term" ${array[index]}) -gt 0 ]; then
+		if [ $(egrep -c "GO:|Ontology|tology_term|tology term" $annotation_file) -gt 0 ]; then
 			cd $output_folder/$name/final_results_reanalysis$index/DGE/
 			echo "However, an automatic approach based on clusterProfiler's enrichr function and automatically extracted GO terms from the annotation can be attempted for DEGs..."
-			paste <(echo "source_id" && egrep "GO:|,GO:|Ontology|tology_term|tology term" ${array[index]} | sed 's,.*ID=,,g;s,.*Parent=,,g;s,;.*,,g') <(echo "Computed GO Process IDs" && egrep "GO:|,GO:|Ontology|tology_term|tology term" ${array[index]} | sed 's,.*tology_term=,,g') | sort -t $'\t' -k1,1 -k2,2 | awk -F'\t' '!a[$1,$2]++' | awk -F'\t' '{ a[$1] = (a[$1] ? a[$1]","$2 : $2); } END { for (i in a) print i"\t"a[i]; }' | awk -F '\t' '{n=split($2,a,","); for (i=1; i<=n; i++) print $1,a[i]}' | sort -u > $output_folder/$name/final_results_reanalysis$index/DGE/$(basename ${array[index]}).automatically_extracted_GO_terms.txt
-			annotation_go=$output_folder/$name/final_results_reanalysis$index/DGE/$(basename ${array[index]}).automatically_extracted_GO_terms.txt
+			paste <(egrep "GO:|,GO:|Ontology|tology_term|tology term" $annotation_file | sed 's,.*ID=,,g;s,.*Parent=,,g;s,;.*,,g') <(egrep "GO:|,GO:|Ontology|tology_term|tology term" $annotation_file | sed 's,.*tology_term=,,g') | sort -t $'\t' -k1,1 -k2,2 | awk -F'\t' '!a[$1,$2]++' | awk -F'\t' '{ a[$1] = (a[$1] ? a[$1]","$2 : $2); } END { for (i in a) print i"\t"a[i]; }' | awk -F '\t' '{n=split($2,a,","); for (i=1; i<=n; i++) print $1,a[i]}' | uniq > $output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annotation_file).automatically_extracted_GO_terms.txt
+			annotation_go=$output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annotation_file).automatically_extracted_GO_terms.txt
+			sed -i '1s/^/source_id Computed_GO_Process_IDs\n/' $annotation_go
 			if [ -s "$annotation_go" ]; then
 				R_clusterProfiler_enrichr.R $annotation_go $output_folder/$name/final_results_reanalysis$index/RPKM_counts_genes.txt $output_folder/$name/final_results_reanalysis$index/DGE "^DGE_analysis_comp[0-9]+.txt$" &> clusterProfiler_enrichr_funct_enrichment.log
 			fi
+		else
+			echo "For $organism and the annotation $annotation_file, it does not seem there's GO or functional information available..."
 		fi
 	fi
 	
-	# Add to the tables of functional enrichment the nof genes up/down:
+	# Add to the tables of functional enrichment the number of genes up/down:
 	cd $output_folder/$name/final_results_reanalysis$index/
-	for f in $(find $PWD \( -name "*.txt" -o -name "*.tsv" -o -name "*.csv" \) | grep funct); do
-		R_enrich_format.R $f $(echo $f | sed 's,DGE/.*,DGE/,g')$(echo $f | sed 's,.*DGE_analysis_comp,DGE_analysis_comp,g;s,_pval.*,,g;s,_fdr.*,,g;s,_funct.*,,g;s,_cluster.*,,g' | sed 's,.txt,,g').txt $organism $rev_thr
-	done
+	echo "Processing results of functional enrichment analyses..."
+	find . \( -name "*.txt" -o -name "*.tsv" -o -name "*.csv" \) | grep funct | parallel -j $cores "file={}; R_enrich_format.R \"\$file\" \$(echo \"\$file\" | sed 's,DGE/.*,DGE/,g')\$(echo \"\$file\" | sed 's,.*DGE_analysis_comp,DGE_analysis_comp,g;s,_pval.*,,g;s,_fdr.*,,g;s,_funct.*,,g;s,_cluster.*,,g' | sed 's,.txt,,g').txt $organism $rev_thr" &> $PWD/QC_and_others/enrichment_format.log
 
 	# Compress the folders
 	cd $output_folder/$name/final_results_reanalysis$index/DGE/
-	folders_funct=$(find $PWD -type d \( -name "*_autoGO" -o -name "*_clusterProfiler" \))
+	folders_funct=$(find . -type d \( -name "*_autoGO" -o -name "*_clusterProfiler" \))
 	if [ -n "$folders_funct" ]; then
 		tar -cf - $folders_funct | pigz --best -p $cores > funct_enrichment_analyses.tar.gz; rm -rf $folders_funct
 	fi
 	if [[ "$time_course" == "yes" ]]; then 
 		cd $output_folder/$name/final_results_reanalysis$index/time_course_analyses
-		folders_funct=$(find $PWD -type d \( -name "*_autoGO" -o -name "*_clusterProfiler" \))
+		folders_funct=$(find . -type d \( -name "*_autoGO" -o -name "*_clusterProfiler" \))
 		if [ -n "$folders_funct" ]; then
 			tar -cf - $folders_funct | pigz --best -p $cores > funct_enrichment_analyses.tar.gz; rm -rf $folders_funct
 		fi
@@ -851,11 +899,10 @@ for index in "${!array[@]}"; do
 	R_annotate_genes.R $output_folder/$name/final_results_reanalysis$index/ "^DGE_analysis_comp\\d+\\.txt$|^DGE_limma_timecourse_T\\d+_vs_T\\d+\\.txt$|mfuzz_elements_clusters|counts|WGCNA_all_modules_|STRINGdb_all_modules_" $organism
 
 	# All the tables of DEGs, provide bed files for direct upload in genome browser
-	for file in $(find $output_folder/$name/final_results_reanalysis$index/ -name "DGE_analysis_comp*" | egrep "_fdr_05.txt$|_pval_05.txt$"); do
-		for gene in $(cut -f1 $file); do
-			foldchange=$(grep -i $gene $file | cut -f3 | awk '{printf "%.3f\n", $1}')
-			grep -i $gene ${array[index]} | head -1 | awk -v id="$gene" -v fc="$foldchange" '{ print $1"\t"$4"\t"$5"\t"id"_"fc"\t"".""\t"$7 }' >> $file.bed
-		done
+	cd $output_folder/$name/final_results_reanalysis$index/
+	for file in $(find . -name "DGE_analysis_comp*" | egrep "_fdr_05.txt$|_pval_05.txt$"); do
+		cut -f1 "$file" | parallel -j $((cores*2)) "gene={}; foldchange=\$(grep -i \"\$gene\" \"$file\" | cut -f3 | sed -n 's/\(.*[.,][0-9]\{2\}\).*/\1/p'); \
+															   grep -i \"\$gene\" \"$annotation_file\" | head -1 | awk -v id=\"\$gene\" -v fc=\"\$foldchange\" '{ print \$1\"\\t\"\$4\"\\t\"\$5\"\\t\"id\"_\"fc\"\\t.\t\"\$7 }' >> \"$file.bed\""
 	done
 done
 echo -e "\nSTEP 5 DONE. Current time: $(date)\n"
@@ -866,8 +913,8 @@ echo -e "\nSTEP 5 DONE. Current time: $(date)\n"
 for f in $(find $output_folder -type d -name "final_results_reanaly*"); do
 	mv $f $(echo $f"_"$(basename $output_folder))
 done
-for f in $(find $output_folder -name "*_QC.pdf"); do
-	mv $f $(echo $(dirname $f)"/"$(basename $output_folder)"_QC.pdf")
+for f in $(find $output_folder -name "*_QC*"); do
+	mv $f $(echo $(dirname $f)"/"$(basename $output_folder)$(echo $f | sed 's,.*_QC,_QC,g'))
 done
 if [ "$tidy_tmp_files" == "yes" ]; then
 	num_raw_files=$(cat $output_folder/$name/miARma_out0/Pre_fastqc_results/list_of_files.txt | grep -c "fastq.gz")
@@ -881,7 +928,7 @@ if [ "$tidy_tmp_files" == "yes" ]; then
 
 			cd $output_folder/$name/miARma_out$index/$aligner\_results
 			echo "For the sake of efficiente storage: samtools view -@ cores -T ref_genome -C -o xxx.bam.cram xxx.bam && rm xx.bam" >> conversion_bam_to_cram.txt
-			find $PWD -type f -name "*.bam" | parallel --verbose -j $number_parallel --max-args 1 samtools view -T $reference_genome -C -@ $((cores / number_parallel)) -o {}.cram {}
+			find . -type f -name "*.bam" | parallel --verbose -j $number_parallel --max-args 1 samtools view -T $reference_genome -C -@ $((cores / number_parallel)) -o {}.cram {}
 			rm -rf $(ls | egrep ".bam$") $TMPDIR
 		fi
 	done
@@ -890,7 +937,7 @@ if [ "$aligner" == "star" ] && [ "$aligner_index_cache" == "no" ]; then
 	STAR --runThreadN $cores --genomeDir $(find $output_folder/$name/ -name "star_log_parallel.txt" | xargs cat | grep "genomeDir" | sed 's,.*genomeDir ,,g;s, .*,,g' | sort | uniq) --genomeLoad Remove --outFileNamePrefix genomeloading.tmp && rm genomeloading.tmp
 fi
 if [ "$convert_tables_excel" == "yes" ]; then
-	R_convert_tables.R $output_folder/$name/ $cores > /dev/null 2>&1
+	R_convert_tables.R $output_folder/$name/ $cores "log_parallel|jquery|bamqc|rnaseqqc|samtools|strand" > /dev/null 2>&1
 fi
 
 
