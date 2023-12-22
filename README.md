@@ -44,15 +44,17 @@ Please refer to the help page for futher details:
 ```
 reanalyzerGSE.pk.sh -h
 
-reanalyzerGSE v2.0.0. usage: reanalyzerGSE.pk.sh [options]
+reanalyzerGSE v2.1.1. usage: reanalyzerGSE.pk.sh [options]
 		-h | -help # Type this to get help
 		-i | -input # GEO_ID (GSEXXXXXX, separated by comma if more than one), or folder containing raw reads (please provide full absolute path, e.g. /path/folder_name/), or almost any accession from ENA/SRA to download .fastq from (any of the ids with the prefixes PRJEB,PRJNA,PRJDB,ERP,DRP,SRP,SAMD,SAME,SAMN,ERS,DRS,SRS,ERX,DRX,SRX,ERR,DRR,SRR, please separated by commas if more than one id as input)
 		-n | -name # Name of the project/folder to create and store results
 		-o | -output_folder # Destination folder
 		-p | -cores # Number of cores
+		-pi | -cores_index # Number of cores for genome indexing in aligning step (by default, same than -p)
 		-P | -parallel_number # Number of files to be processed in parallel (10 by default)
 		-r | -reference_genome # Reference genome to be used (.fasta file or .gz, absolute pathway)
-		-ri | -reference_genome_index # If the reference genome to be used already has an index that would like to reuse, please provide full pathwa here (by default the provided genome is indexed)
+		-ri | -reference_genome_index # If the reference genome to be used already has an index that would like to reuse, please provide full pathway here (by default the provided genome is indexed)
+		-q  | -qc_raw_reads # Whether to perform quality control on the raw reads ('yes' by default, or 'no')
 		-a | -annotation # Reference annotation to be used (.gtf file, absolute pathway). If hisat2 is used, a gff file (make sure format is '.gff' and not '.gff3') is accepted (some QC steps like 'qualimap rnaseqqc' may be skipped though). You can provide a comma-separated list of the pathways to different annotation, and multiple/independent quantification/outputs from the same alignments will be generated.
 		-A | -aligner # Aligner software to use ('hisat2' or 'star', by default)
 		-Ac | -aligner_index_cache # Whether to try and keep the genome index on the cache/loaded RAM so concurrent jobs do not have to reload it and can use it more easily ('no', which will empty cache at the end, or 'yes', by default)
@@ -60,12 +62,15 @@ reanalyzerGSE v2.0.0. usage: reanalyzerGSE.pk.sh [options]
 		-s | -strandness # Strandness of the library ('yes, 'no', 'reverse'). If not provided and '-t' used, this would be predicted by salmon. Please use this parameter if prediction not correct, see explanations in for example in bit.ly/strandness0 and bit.ly/strandness
 		-g | -genes # Genes to highlight their expression in plots (one or several, separated by comma and no space)
 		-G | -GSM_filter # GSM ids (one or several, separated by comma and no space) within the GSE entry to restrict the analysis to. An alternative to requesting a stop with -S to reorganize the downloaded files manually
-		-R | -reads_to_subsample # Percentage of reads or number of reads to subsample to the sequences before the analyses (none by default, if any number is provided +-10% will be computed)
+		-R | -reads_to_subsample # Number of reads to subsample to the sequences before the analyses (none by default, a comma-separated list with one number per fastq file/pair of files if paired-end must be provided)
 		-f | -filter # Threshold of gene counts to use ('bin' to capture the lower expressed genes, or 'standard', by default). Please provide a comma separated list with the filters to use at each quantification if multiple annotation are provided
-		-b | -batch # Batch effect present? (no by default, yes if correction through Combat-seq and model is to be performed, and info is going to be required in prompts)
+		-b | -batch # Batch effect present? (no by default, yes if correction through Combat-seq and model is to be performed, and info is going to be required in other arguments or prompts)
+		-bv | -batch_vector # Comma-separated list of numbers for use as batch vector with Combat-seq
+		-bc | -batch_biological_covariable # Comma-separated list of numbers for use as batch vector of covariables of biological interest with Combat-seq
 		-d | -design_custom # Manually specifying the experimental design for GEO download ('no' by default and if 'yes', please expect an interactive prompt after data download from GEO, and please enter the assignment to groups when asked in the terminal, with a comma-separated list of the same length than the number of samples)
 		-D | -design_custom_local # Specifying here the experimental design for the local dataset (by default an interactive prompt will ask for a comma-separated list of the same length than the number of samples, if you want to avoid that manual input please provide the list in this argument)
 		-O | -organism # Specifying here the scientific name of the organism for the local dataset (by default an interactive prompt will ask for it, if you want to avoid that manual input please provide the full organism name in this argument, please use underline instead of space)
+		-C | -covariables # Please input a comma-separated list for the covariable that should be included in the edgeR model for DGE (for now only one covariable allowed, for example a proven batch effect) 
 		-T | -target_file # Protopical target file for attempts to differential gene expression analyses (containing filenames and covariates, automatically built if not provided)
 		-S | -stop # Manual stop so the automatically downloaded files can be manually modified ('yes' or 'no', by default)
 		-K | -Kraken2_fast_mode # Kraken2 fast mode, consisting on copying the Kraken2 database to /dev/shm (RAM) so execution is faster ('yes' or 'no' by default)
@@ -73,6 +78,7 @@ reanalyzerGSE v2.0.0. usage: reanalyzerGSE.pk.sh [options]
 		-Ds | -sortmerna_databases # The database (absolute pathway) that should be used by SortMeRNA (any input here, e.g. '/path/to/rRNA_databases/smr_v4.3_sensitive_db.fasta', would activate the sortmerna-based rRNA removal step)
 		-De | -differential_expr_software # Software to be used in the differential expression analyses ('edgeR' by default, or 'DESeq2')
 		-Df | -databases_function # Manually provide a comma separated list of databases to be used in automatic functional enrichment analyses of DEGs (check out the R package autoGO::choose_database(), but the most popular GO terms are used by default)
+		-Dc | -deconvolution # Whether to perform deconvolution of the bulk RNA-seq data by CDSeq ('yes', which may require few hours to complete, or 'no', by default)
 		-Of | -options_featureCounts_feature # The feature type to use to count in featureCounts (default 'exon')
 		-Os | -options_featureCounts_seq # The seqid type to use to count in featureCounts (default 'gene_name')
 		-iG | -input_GEO_reads # If you want to combine downloading metadata from GEO with reads from GEO or any database already downloaded, maybe from a previous attempt, please provide an absolute path
@@ -84,7 +90,7 @@ reanalyzerGSE v2.0.0. usage: reanalyzerGSE.pk.sh [options]
 		-Tcf | -time_course_fuzzi # Fuziness value for the soft clustering approach (by default an estimate is automatically computed but manual testing is encouraged)
 		-Ti | -tidy_tmp_files # Space-efficient run, with a last step removing raw reads if downloaded, converting bam to cram, removing tmp files... etc ('yes' or 'no', by default)
 		-Txls | -tables_in_xlsx # Convert all tables in results from .txt format, without limitation of size to Excel's .xlsx format, with a limitation of 32,767 characters ('yes' or 'no', by default)
-		-Tx | -taxon_id # NCBI's taxon id of the organism, automatically computed based on taxdump database by default
+		-Tx | -taxon_id # NCBI's taxon id of the organism, please not it is required for network analyses
 		-Gt | -revigo_threshold_similarity # Similarity threshold for Revigo summaries of GO terms (0-1, suggested values are 0.9, 0.7, 0.5, 0.4 for large, medium, small, and tiny levels of similarity, respectively, being default 0.7
 		-TMP | -TMPDIR # Directory to export the environmental variable TMPDIR (by default or if left empty an internal folder of the output directory is used, or please enter 'system' to use system's default, or an absolute pathway that will be created if it does not exist)
 		-M | -memory_max # Max RAM memory to be used by aligner or JAVA in bytes (by default 257698037760, or 240GB, used)
