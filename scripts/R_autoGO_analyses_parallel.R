@@ -220,7 +220,7 @@ removeEmptyDirs <- function(directory) {
   # Check each directory
   for (dir in dirs) {
     # If the directory is empty
-    if (length(dir(dir)) < 3) {
+    if (length(dir(dir)) < 3 && dir!=path) {
       # Remove the directory
       invisible(unlink(dir, recursive = TRUE))
     }
