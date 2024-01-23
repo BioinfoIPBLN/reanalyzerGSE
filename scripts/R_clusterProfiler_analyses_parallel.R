@@ -78,7 +78,7 @@ for (f in files){
                             #pval_05_fc_neg=a$Gene_ID[a$PValue<0.05 & a$logFC<0],
                             #pval_01_fc_neg=a$Gene_ID[a$PValue<0.01 & a$logFC<0],
                             readlist_fc_fdr_05=readlist_fc_fdr_05,
-                            readlist_fc_fdr_01=readlist_fc_fdr_01
+                            readlist_fc_fdr_01=readlist_fc_fdr_01,
                             #readlist_fc_pval_05=readlist_fc_pval_05,
                             #readlist_fc_pval_01=readlist_fc_pval_01,
                             readlist_fc_backg=readlist_fc_backg,
