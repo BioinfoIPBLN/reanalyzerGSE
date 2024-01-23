@@ -62,6 +62,9 @@ for (f in files){
   #names(readlist_fc_pval_05) <- a$Gene_ID[a$PValue<0.05]
   #readlist_fc_pval_01 <- a$logFC[a$PValue<0.01]
   #names(readlist_fc_pval_01) <- a$Gene_ID[a$PValue<0.01]
+  readlist_fc_backg <- a$logFC
+  names(readlist_fc_backg) <- a$Gene_ID
+
   genes_of_interest <- list(fdr_05=a$Gene_ID[a$FDR<0.05],
                             fdr_01=a$Gene_ID[a$FDR<0.01],
                             #pval_05=a$Gene_ID[a$PValue<0.05],
@@ -77,7 +80,9 @@ for (f in files){
                             readlist_fc_fdr_05=readlist_fc_fdr_05,
                             readlist_fc_fdr_01=readlist_fc_fdr_01
                             #readlist_fc_pval_05=readlist_fc_pval_05,
-                            #readlist_fc_pval_01=readlist_fc_pval_01
+                            #readlist_fc_pval_01=readlist_fc_pval_01,
+                            readlist_fc_backg=readlist_fc_backg,
+                            genes_backg=a$Gene_ID
                             )
   genes_of_interest <- genes_of_interest[unname(unlist(lapply(genes_of_interest,length)))!=0]
   assign(paste0(f,"_","genes_of_interest"), genes_of_interest,envir = .GlobalEnv) 
@@ -109,6 +114,7 @@ process_file <- function(file){
     geneset <- name_internal
     i <- padjustmethod
     entrez_ids <- entrez_ids_keys$ENTREZID[entrez_ids_keys$SYMBOL %in% genes_of_interest[[geneset]]]
+    entrez_ids_backg <- entrez_ids_keys$ENTREZID[entrez_ids_keys$SYMBOL %in% genes_of_interest[["genes_backg"]]]
     dir.create(paste0(path2,"/kegg_paths_snapshots"),recursive=T,showWarnings=F); dir.create(paste0(getwd(),"/reactome_paths_snapshots"),recursive=T,showWarnings=F);dir.create(paste0(path2,"/go_figs/"),recursive=T,showWarnings=F)
     setwd(path2)
     suppressMessages(library(orgDB, character.only = TRUE,quiet = T,warn.conflicts = F)) # Crucial apparently, so the functions using the orgDB object can be done in parallel
@@ -180,6 +186,7 @@ process_file <- function(file){
       try({
                   ego <- enrichGO(gene          = genes_of_interest[[geneset]],
                                 # universe      = unname(as.character(eval(parse(text=paste0(gsub(".db","",orgDB),"SYMBOL"))))), # It's the same than default
+                                universe = genes_of_interest[["genes_backg"]],
                                 OrgDb         = orgDB,
                                 keyType  = "SYMBOL",
                                 ont           = "ALL",
@@ -204,6 +211,7 @@ process_file <- function(file){
       try({
                   ego <- enrichGO(gene          = genes_of_interest[[geneset]],
                                 # universe      = unname(as.character(eval(parse(text=paste0(gsub(".db","",orgDB),"SYMBOL"))))),
+                                universe = genes_of_interest[["genes_backg"]],
                                 OrgDb         = orgDB,
                                 keyType  = "SYMBOL",
                                 ont           = "BP",
@@ -236,6 +244,7 @@ process_file <- function(file){
       try({
                   ego <- enrichGO(gene          = genes_of_interest[[geneset]],
                                 # universe      = unname(as.character(eval(parse(text=paste0(gsub(".db","",orgDB),"SYMBOL"))))),
+                                universe = genes_of_interest[["genes_backg"]],
                                 OrgDb         = orgDB,
                                 keyType  = "SYMBOL",
                                 ont           = "MF",
@@ -269,6 +278,7 @@ process_file <- function(file){
       try({  
                   ego <- enrichGO(gene          = genes_of_interest[[geneset]],
                               #universe      = unname(as.character(eval(parse(text=paste0(gsub(".db","",orgDB),"SYMBOL"))))),
+                              universe = genes_of_interest[["genes_backg"]],
                               OrgDb         = orgDB,
                               keyType  = "SYMBOL",
                               ont           = "CC",
@@ -543,6 +553,7 @@ process_file <- function(file){
       try({
           kk <- suppressMessages(enrichKEGG(gene= entrez_ids,
                            organism     = org,
+                           universe = entrez_ids_backg,
                            pAdjustMethod = i,
                            pvalueCutoff = 1,
                            qvalueCutoff = 1))
@@ -642,6 +653,7 @@ process_file <- function(file){
     ### 7. KEGG Module over-representation:
       try({
             gse_enrich <- suppressMessages(enrichMKEGG(gene= entrez_ids,
+                                                       universe = entrez_ids_backg,
                                                        organism = org,
                                                        pvalueCutoff = 1,
                                                        qvalueCutoff = 1,
@@ -718,6 +730,7 @@ process_file <- function(file){
       try({
         gse_enrich <- suppressMessages(enrichWP(gene= entrez_ids,
                                                    organism = organism_cp,
+                                                   universe = entrez_ids_backg,
                                                    pvalueCutoff = 1,
                                                    qvalueCutoff = 1,
                                                    pAdjustMethod = i))
@@ -793,6 +806,7 @@ process_file <- function(file){
       try({
         gse_enrich <- suppressMessages(enrichPathway(gene= entrez_ids,
                                                 organism = organism_cp_react,
+                                                universe = entrez_ids_backg,
                                                 pvalueCutoff = 1,
                                                 qvalueCutoff = 1,
                                                 pAdjustMethod = i))
@@ -876,6 +890,7 @@ process_file <- function(file){
               try({
                 ego <- enrichDO(gene          = entrez_ids,
                                 ont           = "DO",
+                                universe = entrez_ids_backg,
                                 pAdjustMethod = i,
                                 pvalueCutoff  = 1,
                                 qvalueCutoff  = 1,
@@ -886,6 +901,7 @@ process_file <- function(file){
               try({
                 ego <- enrichDO(gene          = entrez_ids,
                                 ont           = "DOLite",
+                                universe = entrez_ids_backg,
                                 pAdjustMethod = i,
                                 pvalueCutoff  = 1,
                                 qvalueCutoff  = 1,
@@ -895,16 +911,18 @@ process_file <- function(file){
               },silent=T)
               try({
                   ego <- enrichNCG(gene          = entrez_ids,
-                                  pAdjustMethod = i,
-                                  pvalueCutoff  = 1,
-                                  qvalueCutoff  = 1,
-                                  readable      = TRUE)
+                                   pAdjustMethod = i,
+                                   universe = entrez_ids_backg,
+                                   pvalueCutoff  = 1,
+                                   qvalueCutoff  = 1,
+                                   readable      = TRUE)
                   # head(ego)
                   write.table(ego,file=paste0("NGC_overrepresentation_test_",i,"_",geneset,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
               },silent=T)
               try({
                   ego <- enrichDGN(gene          = entrez_ids,
                                    pAdjustMethod = i,
+                                   universe = entrez_ids_backg,
                                    pvalueCutoff  = 1,
                                    qvalueCutoff  = 1,
                                    readable      = TRUE)
@@ -1009,15 +1027,17 @@ removeEmptyDirs <- function(directory) {
   dirs <- list.dirs(directory, recursive = TRUE)
   
   # Check each directory
-  for (dir in dirs) {
+  for (fold in dirs) {
     # If the directory is empty
-    if (length(dir(dir)) < 3) {
+    if (length(dir(fold)) < 3 && fold!=path) {
       # Remove the directory
-      invisible(unlink(dir, recursive = TRUE))
+      invisible(unlink(fold, recursive = TRUE))
+      print(paste0("Removing ",fold))
     }
   }
 }
 removeEmptyDirs(path)
+
 save.image(file.path(path2, "globalenvir.RData"))
 print("ALL DONE clusterProfiler")
 print(paste0("Current date: ",date()))
