@@ -218,11 +218,12 @@ removeEmptyDirs <- function(directory) {
   dirs <- list.dirs(directory, recursive = TRUE)
   
   # Check each directory
-  for (dir in dirs) {
+  for (fold in dirs) {
     # If the directory is empty
-    if (length(dir(dir)) < 3 && dir!=path) {
+    if (length(dir(fold)) < 3 && fold!=path) {
       # Remove the directory
-      invisible(unlink(dir, recursive = TRUE))
+      invisible(unlink(fold, recursive = TRUE))
+      print(paste0("Removing ",fold))
     }
   }
 }
