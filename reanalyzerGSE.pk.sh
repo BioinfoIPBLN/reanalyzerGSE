@@ -19,7 +19,7 @@ for argument in $options; do
 
 ### Gather the parameters, default values, exit if essential not provided...
 	case $argument in
-		-h*) echo "reanalyzerGSE v2.1.1. usage: reanalyzerGSE.pk.sh [options]
+		-h*) echo "reanalyzerGSE v2.0.0. usage: reanalyzerGSE.pk.sh [options]
 		-h | -help # Type this to get help
 		-i | -input # GEO_ID (GSEXXXXXX, separated by comma if more than one), or folder containing raw reads (please provide full absolute path, e.g. /path/folder_name/), or almost any accession from ENA/SRA to download .fastq from (any of the ids with the prefixes PRJEB,PRJNA,PRJDB,ERP,DRP,SRP,SAMD,SAME,SAMN,ERS,DRS,SRS,ERX,DRX,SRX,ERR,DRR,SRR, please separated by commas if more than one id as input)
 		-n | -name # Name of the project/folder to create and store results
@@ -201,7 +201,7 @@ if [ -d "$output_folder/$name" ]; then
 	echo -e "Please note that $output_folder/$name already exists... reanalyzerGSE is going to attempt a new run or resume running, but you may want to remove the folder, change the destination folder with '-o' or '-n', use downloaded raw data from an external software... etc. Sleeping for a while to give you time to exit if you want, and then continuing..."; sleep 60
 fi
 if [ -z "$databases_function" ]; then
-	databases_function="GO_Biological_Process_2021,GO_Molecular_Function_2021,GO_Cellular_Component_2021"
+	databases_function="GO_Biological_Process_2023,GO_Molecular_Function_2023,GO_Cellular_Component_2023"
 fi
 if [ -z "$aligner" ]; then
 	aligner="star"
@@ -836,9 +836,7 @@ for index in "${!array[@]}"; do
 	if [[ "$organism" == "Mus_musculus" || "$organism" == "Homo_sapiens" || "$organism" == "Mus musculus" || "$organism" == "Homo sapiens" ]]; then
 		if [ ! -z "$taxonid" ]; then			
 			R_network_analyses.R $output_folder/$name/final_results_reanalysis$index/DGE/ $output_folder/$name/final_results_reanalysis$index/RPKM_counts_genes.txt "^DGE_analysis_comp[0-9]+.txt$" $taxonid &> network_analyses_funct_enrichment.log
-		else
-			echo -e "\nSkipping network analyses because taxon ids have not been provided\n"
-  		fi
+		fi
 		if [[ "$clusterProfiler" == "no" ]]; then
 			echo -e "\nSkipping final clusterProfiler execution\n"
 		else
