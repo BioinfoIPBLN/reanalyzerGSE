@@ -119,10 +119,10 @@ suppressMessages(library(autoGO,quiet = T,warn.conflicts = F))
   # [209] "WikiPathways_2019_Human"                            "WikiPathways_2019_Mouse"
 if (!is.na(enrichment_databases)){
     if (length(enrichment_databases) > 0){
-      enrichment_databases <- c(enrichment_databases,"GO_Biological_Process_2021","GO_Molecular_Function_2021","GO_Cellular_Component_2021")}}
+      enrichment_databases <- c(enrichment_databases,"GO_Biological_Process_2023","GO_Molecular_Function_2023","GO_Cellular_Component_2023")}}
 enrichment_databases <- unique(unlist(strsplit(enrichment_databases,",")))
 if (grepl("sapiens", organism, fixed=TRUE)){
-  databases_autoGO <- unique(c(enrichment_databases,"WikiPathway_2021_Human","RNAseq_Automatic_GEO_Signatures_Human_Down","RNAseq_Automatic_GEO_Signatures_Human_Up","Reactome_2022","KEGG_2021_Human","HDSigDB_Human_2021"))
+  databases_autoGO <- unique(c(enrichment_databases,"WikiPathway_2023_Human","RNAseq_Automatic_GEO_Signatures_Human_Down","RNAseq_Automatic_GEO_Signatures_Human_Up","Reactome_2022","KEGG_2021_Human","HDSigDB_Human_2021"))
   databases_autoGO_print <- paste(databases_autoGO,collapse=",")
   print(paste0("The databases selected for autoGO are ",databases_autoGO_print,". Please double check autoGO::choose_database(), which has > 200 databases, in case you want to add any extra by using the pipeline argument..."))
 } else if (grepl("musculus", organism, fixed=TRUE)){
