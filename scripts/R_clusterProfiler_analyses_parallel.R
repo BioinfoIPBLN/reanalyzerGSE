@@ -115,7 +115,7 @@ process_file <- function(file){
     i <- padjustmethod
     entrez_ids <- entrez_ids_keys$ENTREZID[entrez_ids_keys$SYMBOL %in% genes_of_interest[[geneset]]]
     entrez_ids_backg <- entrez_ids_keys$ENTREZID[entrez_ids_keys$SYMBOL %in% genes_of_interest[["genes_backg"]]]
-    dir.create(paste0(path2,"/kegg_paths_snapshots"),recursive=T,showWarnings=F); dir.create(paste0(getwd(),"/reactome_paths_snapshots"),recursive=T,showWarnings=F);dir.create(paste0(path2,"/go_figs/"),recursive=T,showWarnings=F)
+    dir.create(paste0(path2,"/kegg_paths_snapshots"),recursive=T,showWarnings=F); dir.create(paste0(path2,"/reactome_paths_snapshots"),recursive=T,showWarnings=F);dir.create(paste0(path2,"/go_figs/"),recursive=T,showWarnings=F)
     setwd(path2)
     suppressMessages(library(orgDB, character.only = TRUE,quiet = T,warn.conflicts = F)) # Crucial apparently, so the functions using the orgDB object can be done in parallel
 
