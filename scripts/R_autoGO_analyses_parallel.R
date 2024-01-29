@@ -216,6 +216,7 @@ print("Tidying...")
 removeEmptyDirs <- function(directory) {
   # List all directories
   dirs <- list.dirs(directory, recursive = TRUE)
+  dirs <- dirs[grep("funct",dirs)]
   
   # Check each directory
   for (fold in dirs) {
