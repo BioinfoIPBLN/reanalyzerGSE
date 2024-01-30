@@ -492,10 +492,9 @@ echo -e "\nSTEP 2 DONE. Current time: $(date)\n"
 							ten_percent=$(( number * 10 / 100 ))
 							random_shift=$((RANDOM % (2 * ten_percent + 1) - ten_percent))
 							number_reads_rand=$((number + random_shift))
-							echo "Hola$file to $number +- 10%... to $number_reads_rand"
+							echo "$file to $number +- 10%... to $number_reads_rand"
 							seqtk sample -s 123 "$file" "$number_reads_rand" | pigz -p $((cores / 4)) -c --best > "${file}_subsamp"
-						  }
-		echo "hola"
+						  }		
 		parallel --verbose -j $cores subsample_reads {} ::: "${arr2[@]}" ::: "${arr[@]}"		
 		rm $(ls | grep -v subsamp); for file in $(ls); do mv $file $(echo $file | sed 's,_subsamp,,g'); done
 		echo -e "\nAll raw data downloaded and info prepared, subsampling (+-10%) completed. Proceeding with reanalyses...\n"
