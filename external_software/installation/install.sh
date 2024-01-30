@@ -1,5 +1,30 @@
 #!/bin/bash
 echo -e "\nThis is a wrapper script to install all reanalyzerGSE dependencies available through conda (multiple environments due to dependency conflicts), and others that are external, such as check_strandedness with pip.\n"
+echo -e "\nBy default, the script first checks if there's a conda executable in the PATH. If there is, it tries to install mamba in the active environment (it shouldn't change anything if already installed) and then reads four yml files to create new environments. If there is no conda installed, it tries to install latest conda version in the external_software folder and performs the same steps in the sentence before\n"
+echo -e "\nIf you want to use just conda instead of mamba, please use '-m conda'\n"
+
+### Define arguments and variables
+### A string with command options and an array with arguments
+options=$@
+arguments=($options)
+### Get arguments by looping through an index
+index=0
+for argument in $options; do
+### Incrementing index
+	index=`expr $index + 1`
+### Gather the parameters
+	case $argument in
+		-h*) echo "install.sh usage: install.sh [options]
+		-h | -help # Type this to get help
+		-m | -manager # manager to use (mamba, by default, or conda)" && exit 1;;
+		-m) manager=${arguments[index]}
+	esac
+done
+
+if [ -z "$manager" ]; then
+	manager="mamba"
+fi
+
 
 #### Get the directory of the script:
 CURRENT_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
@@ -39,22 +64,39 @@ fi
 conda_exec=$(which conda)
 conda_dir=$(dirname $conda_exec | sed 's,/bin$,,g')
 conda_envs_path=$(dirname $conda_exec | sed 's,/bin$,/envs,g')
-echo -e "\n\n\nI'm downloading and installing several packages in four environments through conda in $conda_dir...\n\n\n"
-echo -e "First installing 'mamba' in the base environment replacing 'conda' to reduce time, and then populating the environments based on the yml files (keep in mind, this is frozen versions of the software)...\n\n\n"
+echo -e "\n\n\nI'm downloading and installing several packages in four environments in $conda_dir...\nThe conda executable used is located in the conda located in $conda_exec\n\n"
 echo -e "\n\n\nThe pathway to conda environments is $conda_envs_path...\n\n\n"
 
-conda install -y -q -c conda-forge mamba
-mamba env create -q --file $CURRENT_DIR/reanalyzerGSE1.yml
-mamba env create -q --file $CURRENT_DIR/reanalyzerGSE2.yml
-mamba env create -q --file $CURRENT_DIR/reanalyzerGSE3.yml
-mamba env create -q --file $CURRENT_DIR/reanalyzerGSE4.yml
+if [[ $manager == "mamba" ]]; then
+	echo -e "The manager chosen is 'mamba', first trying to install mamba in the base environment replacing 'conda' to reduce time, if it's not already installed, and then populating the environments based on the yml files (keep in mind, this is frozen versions of the software)...\n\n\n"
+	conda install -y -q -c conda-forge mamba
+ 	echo -e "\n\nInstalling reanalyzerGSE1...\n\n"
+	mamba env create -q --file $CURRENT_DIR/reanalyzerGSE1.yml
+ 	echo -e "\n\nInstalling reanalyzerGSE2...\n\n"
+	mamba env create -q --file $CURRENT_DIR/reanalyzerGSE2.yml
+ 	echo -e "\n\nInstalling reanalyzerGSE3...\n\n"
+	mamba env create -q --file $CURRENT_DIR/reanalyzerGSE3.yml
+ 	echo -e "\n\nInstalling reanalyzerGSE4...\n\n"
+	mamba env create -q --file $CURRENT_DIR/reanalyzerGSE4.yml
+else
+	echo -e "The manager chosen is 'conda', populating the environments based on the yml files (keep in mind, this is frozen versions of the software)...\n\n\n"
+ 	echo -e "\n\nInstalling reanalyzerGSE1...\n\n"
+	conda env create -q --file $CURRENT_DIR/reanalyzerGSE1.yml
+ 	echo -e "\n\nInstalling reanalyzerGSE2...\n\n"
+	conda env create -q --file $CURRENT_DIR/reanalyzerGSE2.yml
+ 	echo -e "\n\nInstalling reanalyzerGSE3...\n\n"
+	conda env create -q --file $CURRENT_DIR/reanalyzerGSE3.yml
+ 	echo -e "\n\nInstalling reanalyzerGSE4...\n\n"
+	conda env create -q --file $CURRENT_DIR/reanalyzerGSE4.yml
+fi
 
+echo -e "\nRemoving tmp files in pkgs directory\n"
 rm -rf $(find $(which conda | sed 's,/bin/conda,,g') -type d -name pkgs) # Remove temp files
 
 $conda_envs_path/reanalyzerGSE_4/bin/pip -q install statistics
 $conda_envs_path/reanalyzerGSE/bin/pip -q install deeptools
 
-echo -e "\n\nSoft linking so only one environment/path has to be used...\n\n"
+echo -e "\n\nSoft linking some software so only one environment/path has to be used...\n\n"
 cd $conda_envs_path/reanalyzerGSE/bin
 ln -sf $conda_envs_path/reanalyzerGSE_2/bin/featureCounts .
 ln -sf $conda_envs_path/reanalyzerGSE_2/bin/salmon .
