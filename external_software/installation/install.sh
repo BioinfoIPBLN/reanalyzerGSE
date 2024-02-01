@@ -62,8 +62,8 @@ fi
 
 #### Install packages via conda:   
 conda_exec=$(which conda)
-conda_dir=$(dirname $conda_exec | sed 's,/bin$,,g')
-conda_envs_path=$(dirname $conda_exec | sed 's,/bin$,/envs,g')
+conda_dir=$(dirname $conda_exec | sed 's,/bin$,,g' | sed 's,/condabin$,,g')
+conda_envs_path=$(dirname $conda_exec | sed 's,/bin$,/envs,g' | sed 's,/condabin$,/envs,g')
 echo -e "\n\n\nI'm downloading and installing several packages in four environments in $conda_dir...\nThe conda executable used is located in the conda located in $conda_exec\n\n"
 echo -e "\n\n\nThe pathway to conda environments is $conda_envs_path...\n\n\n"
 
