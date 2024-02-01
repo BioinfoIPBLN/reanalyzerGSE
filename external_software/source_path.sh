@@ -10,10 +10,12 @@ else
 	conda_dir=$(dirname $(which conda))
 fi
 
-conda_envs_path=$(echo $conda_dir | sed 's,/bin$,/envs,g')
+conda_envs_path=$(echo $conda_dir | sed 's,/bin$,/envs,g' | sed 's,/condabin$,/envs,g')
+
+echo -e "\nDetected conda environments path: $conda_envs_path\n"
 
 #### Set PATH:
 
-echo -e "\nPlease run manually next and before reanalyzerGSE execution:\nexport PATH=$conda_envs_path/reanalyzerGSE/bin:$conda_dir:$EXTERNAL_SOFTWARE_DIR/miARma-seq:$(dirname $EXTERNAL_SOFTWARE_DIR):$(dirname $EXTERNAL_SOFTWARE_DIR)/scripts:$HOME/bin:$PATH\n"
+echo -e "\nPlease run and export manually the following suggested PATH and before reanalyzerGSE execution:\nexport PATH=$conda_envs_path/reanalyzerGSE/bin:$conda_dir:$EXTERNAL_SOFTWARE_DIR/miARma-seq:$(dirname $EXTERNAL_SOFTWARE_DIR):$(dirname $EXTERNAL_SOFTWARE_DIR)/scripts:$HOME/bin:$PATH\n"
 
 echo -e "\n\nPlease behave and be mindful with any queueing system, the resources you are using, the versions of the software that are in the PATH and are being used... etc\n\n"
