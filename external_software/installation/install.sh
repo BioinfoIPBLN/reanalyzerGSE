@@ -154,7 +154,7 @@ rm extract_kraken_reads.py; wget -q https://github.com/jenniferlu717/KrakenTools
 sed -i "s,/usr/bin/env python,$conda_envs_path/reanalyzerGSE_2/bin/python,g" extract_kraken_reads.py
 
 
-echo -e "\n\n\nALL DONE. Please remember that reanalyzerGSE needs the conda environment 'reanalyzerGSE' to be activated, or the path '$conda_envs_path/reanalyzerGSE/bin' added to the exported PATH variable\n\n\n"
+echo -e "\n\n\nALL DONE. Please remember that reanalyzerGSE needs the conda environment 'reanalyzerGSE' to be activated, or the path '$conda_envs_path/reanalyzerGSE/bin' added to the exported PATH variable. The script located in 'external_software/source_path.sh' will also suggest the proper PATH to be exported\n\n\n"
 
 
 
