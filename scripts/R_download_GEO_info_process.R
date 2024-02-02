@@ -177,8 +177,7 @@ if (file.exists(paste0(path,"/",GEO_ID_path,"/final_results_reanalysis/sample_in
 	  split_df <- apply(split_df,2,function(x){gsub("^\\s+","",x)})
 	  # Convert to data frame, set column names
 	  df <- as.data.frame(split_df, stringsAsFactors = FALSE)
-	  colnames(df) <- new_col_names
-	  
+	  colnames(df) <- paste(colname, 1:dim(split_df)[2], sep="_")	  
 	  return(df)
 	}
 	cols_to_split <- sapply(info, function(x) any(grepl(":|;|,", x)))
