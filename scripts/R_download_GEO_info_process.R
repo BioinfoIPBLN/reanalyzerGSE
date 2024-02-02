@@ -170,6 +170,30 @@ if (file.exists(paste0(path,"/",GEO_ID_path,"/final_results_reanalysis/sample_in
 	write.table(unique(info$run_accession),
 		    file=paste(path,GEO_ID_path,"GEO_info","srr_ids.txt",sep="/"),quote = F,row.names = F, col.names = F,sep = "\n")
 	# Get sample_names:
+	# Separate some columns that contain info separated by commas or similar:
+	separate_columns <- function(column, colname) {
+	  # Split the column by the symbol, then rbind to the matrix
+	  split_df <- do.call(rbind, strsplit(as.character(column), ":|;|,", perl=TRUE))
+	  split_df <- apply(split_df,2,function(x){gsub("^\\s+","",x)})
+	  # Convert to data frame, set column names
+	  df <- as.data.frame(split_df, stringsAsFactors = FALSE)
+	  colnames(df) <- new_col_names
+	  
+	  return(df)
+	}
+	cols_to_split <- sapply(info, function(x) any(grepl(":|;|,", x)))
+	for (colname in names(info)[cols_to_split]) {
+	  new_cols <- separate_columns(info[[colname]], colname)	  
+	  info <- cbind(info, new_cols)
+	  # Remove the original column
+	  # info[[colname]] <- NULL
+	}
+	# Create copies of some columns that may contain info on the replicates, ending in _1 o a number for example:
+	cols_to_process <- sapply(info, function(x) any(grepl("\\d$", x)))
+	df <- as.data.frame(apply(info[,cols_to_process],2,function(x){gsub("(_\\d+)$|\\d+$|(_R\\d+)$|(_r\\d+)$|(_REP\\d+)$|(_rep\\d+)$","",x)}))
+	colnames(df) <- paste0(colnames(df),"_processed")
+	info <- cbind(info,df)
+	# Remove some columns that can be typically ignored:
 	cols_to_ignore <- unique(c("column_label",
                     grep("AWS",colnames(info),val=T),
                     grep("run_accession",grep("access",colnames(info),val=T),invert=T,val=T),
@@ -207,9 +231,12 @@ if (file.exists(paste0(path,"/",GEO_ID_path,"/final_results_reanalysis/sample_in
 	info_filt_3 <- as.data.frame(info_filt_3[,!(colnames(info_filt_3) %in% c("run_accession","experiment_alias"))])
 	# Control if I lost all columns but one:
 	if(dim(info_filt_3)[2]>1){
-		info_filt_3 <- as.data.frame(info_filt_3[,names(lapply(apply(info_filt_3,2,table),function(x){length(x)}))[unname(lapply(apply(info_filt_3,2,table),function(x){length(x)})>1)]])
+		info_filt_3 <- info_filt_3[,apply(info_filt_3,2,function(x){length(unique(x))})!=1] # Remove columns with unique values
 		info_filt_3[info_filt_3 == "" | is.na(info_filt_3)] <- "-"
-		info_filt_design_final <- as.data.frame(info_filt_3[,apply(info_filt_3,2,function(x){length(table(x))!=dim(info)[1]})])
+		info_filt_design_final <- as.data.frame(info_filt_3[,apply(info_filt_3,2,function(x){length(unique(x))})!=dim(info_filt_3)[1]]) # Remove columns that all the values are different
+		if(dim(info_filt_design_final)[2]==0){
+			stop("The samples information and design could not be automatically detected from the database... Manually providing the downloaded reads to a new run would be required...")
+		}
 		# Get combinations between the columns if more than one and add to the possible designs:
 		if(dim(info_filt_design_final)[2] > 1){
 			info_filt_design_final <- cbind(info_filt_design_final,
@@ -232,6 +259,9 @@ if (file.exists(paste0(path,"/",GEO_ID_path,"/final_results_reanalysis/sample_in
 	} else {
 		info_filt_3[info_filt_3 == "" | is.na(info_filt_3)] <- "-"
 		info_filt_design_final <- as.data.frame(info_filt_3[,apply(info_filt_3,2,function(x){length(table(x))!=dim(info)[1]})])
+		if(dim(info_filt_design_final)[2]==0){
+			stop("The samples information and design could not be automatically detected from the database... Manually providing the downloaded reads to a new run would be required...")
+		}
 		# Get combinations between the columns if more than one and add to the possible designs:
 		# Write:
 		for (i in 1:dim(info_filt_design_final)[2]){
