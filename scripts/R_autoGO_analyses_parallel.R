@@ -152,21 +152,21 @@ for (f in list.files(pattern = pattern_search,path=path,recursive=T, full.names=
       write.table(e,file=paste0(gsub(".txt","",f),"_fdr_05_logneg.txt"),col.names = F,row.names = F,quote = F,sep="\t")
       write.table(e$Gene_ID,file=paste0(gsub(".txt","",f),"_fdr_05_logneg_Gene_IDs.txt"),col.names = F,row.names = F,quote = F,sep="\n")
     }
-    b <- a[a$PValue < 0.05,1]
-    d <- a[a$PValue < 0.05 & a$logFC>0,1]
-    e <- a[a$PValue < 0.05 & a$logFC<0,1]
-    if (dim(b)[1]!=0){
-      write.table(b,file=paste0(gsub(".txt","",f),"_pval_05.txt"),col.names = F,row.names = F,quote = F,sep="\t")  
-      write.table(b$Gene_ID,file=paste0(gsub(".txt","",f),"_pval_05_Gene_IDs.txt"),col.names = F,row.names = F,quote = F,sep="\n")  
-    }
-    if (dim(d)[1]!=0){
-      write.table(d,file=paste0(gsub(".txt","",f),"_pval_05_logpos.txt"),col.names = F,row.names = F,quote = F,sep="\t")
-      write.table(d$Gene_ID,file=paste0(gsub(".txt","",f),"_pval_05_logpos_Gene_IDs.txt"),col.names = F,row.names = F,quote = F,sep="\n")
-    }
-    if (dim(e)[1]!=0){
-      write.table(e,file=paste0(gsub(".txt","",f),"_pval_05_logneg.txt"),col.names = F,row.names = F,quote = F,sep="\t")
-      write.table(e$Gene_ID,file=paste0(gsub(".txt","",f),"_pval_05_logneg_Gene_IDs.txt"),col.names = F,row.names = F,quote = F,sep="\n")
-    }
+    #b <- a[a$PValue < 0.05,1]
+    #d <- a[a$PValue < 0.05 & a$logFC>0,1]
+    #e <- a[a$PValue < 0.05 & a$logFC<0,1]
+    #if (dim(b)[1]!=0){
+      #write.table(b,file=paste0(gsub(".txt","",f),"_pval_05.txt"),col.names = F,row.names = F,quote = F,sep="\t")  
+      #write.table(b$Gene_ID,file=paste0(gsub(".txt","",f),"_pval_05_Gene_IDs.txt"),col.names = F,row.names = F,quote = F,sep="\n")  
+    #}
+    #if (dim(d)[1]!=0){
+      #write.table(d,file=paste0(gsub(".txt","",f),"_pval_05_logpos.txt"),col.names = F,row.names = F,quote = F,sep="\t")
+      #write.table(d$Gene_ID,file=paste0(gsub(".txt","",f),"_pval_05_logpos_Gene_IDs.txt"),col.names = F,row.names = F,quote = F,sep="\n")
+    #}
+    #if (dim(e)[1]!=0){
+      #write.table(e,file=paste0(gsub(".txt","",f),"_pval_05_logneg.txt"),col.names = F,row.names = F,quote = F,sep="\t")
+      #write.table(e$Gene_ID,file=paste0(gsub(".txt","",f),"_pval_05_logneg_Gene_IDs.txt"),col.names = F,row.names = F,quote = F,sep="\n")
+    #}
   }, silent = TRUE)
 }
 
