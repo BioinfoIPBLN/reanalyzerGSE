@@ -562,51 +562,52 @@ cdseq_exec <- args[10] # if not provided, "no"
     suppressMessages(library(NormqPCR,quiet = T,warn.conflicts = F))
     suppressMessages(library(limma,quiet = T,warn.conflicts = F))
     setwd(paste0(output_dir,"/DGE"))    
-      RPKM <- gene_counts_rpkm_to_write[,-grep("Gene_ID",colnames(gene_counts_rpkm_to_write))]
-      a <- data.frame(Type=gsub("_Rep.*","",colnames(RPKM)))
-      rownames(a) <- colnames(RPKM)
-      write.table(a,
-                  file="temp_targets.txt",quote = F,row.names = T, col.names = T,sep = "\t")
-
-      sink("HK_genes.log")
-      target <- readTargets("temp_targets.txt")
-      matriz_obj<-new("qPCRBatch", exprs=as.matrix(RPKM))
-      
-      #1
-      pData(matriz_obj)<-data.frame(Name=colnames(RPKM),Type=target$Type)
-      Class <- as.factor(pData(matriz_obj)[,"Type"])      
-      HK_normPCR_normfinder <- selectHKs(matriz_obj,Symbols=featureNames(matriz_obj),method="NormFinder",group=Class,minNrHKs=10)      
-      ranking_NormFinder <- data.frame(
-        rank=c(1:10),
-        Name=as.character(HK_normPCR_normfinder$ranking)[1:10],
-        Rho=as.numeric(HK_normPCR_normfinder$rho)[1:10],
-        AveExp=as.numeric(rowMeans(RPKM[as.character(HK_normPCR_normfinder$ranking)[1:10],])),
-        MedianExp=as.numeric(rowMedians(as.matrix(RPKM[as.character(HK_normPCR_normfinder$ranking)[1:10],])))
-      )
-      #2
-      matriz_rho <- stabMeasureRho(matriz_obj, group = Class)
-      matriz_rho <- sort(matriz_rho)
-      ranking_Rho <- data.frame(
-        rank=c(1:10),
-        Name=names(matriz_rho)[1:10],
-        Rho=as.numeric(matriz_rho)[1:10],
-        AveExp=as.numeric(rowMeans(RPKM[names(matriz_rho)[1:10],])),
-        MedianExp=as.numeric(rowMedians(as.matrix(RPKM[names(matriz_rho)[1:10],])))
-      )
-      #3
-      print("Top 10 hallmark/house-keeping genes according to NormFinder and Rho methods, respectively:")
-      print(ranking_NormFinder) # 10 genes
-      print(ranking_Rho) # 10 genes
-      sink()      
-      
-      write.table(ranking_NormFinder,file=paste0("HK_genes_normfinder.txt"),row.names = F,sep="\t")
-      write.table(ranking_Rho,file=paste0("HK_genes_rho.txt"),row.names = F,sep="\t")
-
-      print("Hallmark/house-keeping genes NormFinder and Rho methods combined:")
-      hallmarks_comb <- intersect(ranking_NormFinder$Name,ranking_Rho$Name)
-      print(hallmarks_comb)
-      write.table(hallmarks_comb,file=paste0("HK_genes_combined.txt"),row.names = F,sep="\t")
-
+      tryCatch({
+        RPKM <- gene_counts_rpkm_to_write[,-grep("Gene_ID",colnames(gene_counts_rpkm_to_write))]
+        a <- data.frame(Type=gsub("_Rep.*","",colnames(RPKM)))
+        rownames(a) <- colnames(RPKM)
+        write.table(a,
+                    file="temp_targets.txt",quote = F,row.names = T, col.names = T,sep = "\t")
+  
+        sink("HK_genes.log")
+        target <- readTargets("temp_targets.txt")
+        matriz_obj<-new("qPCRBatch", exprs=as.matrix(RPKM))
+        
+        #1
+        pData(matriz_obj)<-data.frame(Name=colnames(RPKM),Type=target$Type)
+        Class <- as.factor(pData(matriz_obj)[,"Type"])      
+        HK_normPCR_normfinder <- selectHKs(matriz_obj,Symbols=featureNames(matriz_obj),method="NormFinder",group=Class,minNrHKs=10)      
+        ranking_NormFinder <- data.frame(
+          rank=c(1:10),
+          Name=as.character(HK_normPCR_normfinder$ranking)[1:10],
+          Rho=as.numeric(HK_normPCR_normfinder$rho)[1:10],
+          AveExp=as.numeric(rowMeans(RPKM[as.character(HK_normPCR_normfinder$ranking)[1:10],])),
+          MedianExp=as.numeric(rowMedians(as.matrix(RPKM[as.character(HK_normPCR_normfinder$ranking)[1:10],])))
+        )
+        #2
+        matriz_rho <- stabMeasureRho(matriz_obj, group = Class)
+        matriz_rho <- sort(matriz_rho)
+        ranking_Rho <- data.frame(
+          rank=c(1:10),
+          Name=names(matriz_rho)[1:10],
+          Rho=as.numeric(matriz_rho)[1:10],
+          AveExp=as.numeric(rowMeans(RPKM[names(matriz_rho)[1:10],])),
+          MedianExp=as.numeric(rowMedians(as.matrix(RPKM[names(matriz_rho)[1:10],])))
+        )
+        #3
+        print("Top 10 hallmark/house-keeping genes according to NormFinder and Rho methods, respectively:")
+        print(ranking_NormFinder) # 10 genes
+        print(ranking_Rho) # 10 genes
+        sink()      
+        
+        write.table(ranking_NormFinder,file=paste0("HK_genes_normfinder.txt"),row.names = F,sep="\t")
+        write.table(ranking_Rho,file=paste0("HK_genes_rho.txt"),row.names = F,sep="\t")
+  
+        print("Hallmark/house-keeping genes NormFinder and Rho methods combined:")
+        hallmarks_comb <- intersect(ranking_NormFinder$Name,ranking_Rho$Name)
+        print(hallmarks_comb)
+        write.table(hallmarks_comb,file=paste0("HK_genes_combined.txt"),row.names = F,sep="\t")
+        
       #Make barplots:
       #for (i in hallmarks_comb){
       #a <- RPKM[rownames(RPKM)==i,]
@@ -623,6 +624,7 @@ cdseq_exec <- args[10] # if not provided, "no"
       # qpdf::pdf_combine(input = list.files(pattern="KOvsWT12m_hallmark_bars_"),output="KOvsWT12m_hallmark_bars.pdf")
       # file.remove(list.files(pattern="KOvsWT12m_hallmark_bars_"))
       file.remove(list.files(pattern="temp_targets.txt"))
+    })
     
 
 
