@@ -994,7 +994,7 @@ process_file <- function(file){
     if(cores==1){cores_2=1} else {cores_2=6}
     mclapply(
       mc.cores = cores_2,
-      X = grep("readlist_",names(genes_of_interest),invert=T,val=T),
+      X = grep("_backg",grep("readlist_",names(genes_of_interest),invert=T,val=T),invert=T,val=T),
       FUN = process_file_within
     )     
 
