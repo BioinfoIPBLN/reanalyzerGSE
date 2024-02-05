@@ -560,6 +560,7 @@ cdseq_exec <- args[10] # if not provided, "no"
   ## Computing house-keeping/hallmark genes:
     print("Obtaining house-keeping genes...")
     suppressMessages(library(NormqPCR,quiet = T,warn.conflicts = F))
+    suppressMessages(library(limma,quiet = T,warn.conflicts = F))
     setwd(paste0(output_dir,"/DGE"))    
       RPKM <- gene_counts_rpkm_to_write[,-grep("Gene_ID",colnames(gene_counts_rpkm_to_write))]
       a <- data.frame(Type=gsub("_Rep.*","",colnames(RPKM)))
