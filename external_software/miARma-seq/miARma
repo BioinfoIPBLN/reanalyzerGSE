@@ -85,6 +85,7 @@ BEGIN {
 #loading miARma libraries
 use lib "$miARmaPath/lib/";
 use lib "$miARmaPath/lib/Perl";
+# JLR: the modules required by miARma are now automatically installed by the wrapper script in reanalyzerGSE, via cpan
 use CbBio::RNASeq::miARma;
 run_miARma(
 	config=>$configuration_file,
