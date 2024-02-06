@@ -883,7 +883,7 @@ for index in "${!array[@]}"; do
 	# Add to the tables of functional enrichment the number of genes up/down:
 	cd $output_folder/$name/final_results_reanalysis$index/
 	echo "Processing results of functional enrichment analyses..."
-	find . \( -name "*.txt" -o -name "*.tsv" -o -name "*.csv" \) | grep funct | parallel -j $cores "file={}; R_enrich_format.R \"\$file\" \$(echo \"\$file\" | sed 's,DGE/.*,DGE/,g')\$(echo \"\$file\" | sed 's,.*DGE_analysis_comp,DGE_analysis_comp,g;s,_pval.*,,g;s,_fdr.*,,g;s,_funct.*,,g;s,_cluster.*,,g' | sed 's,.txt,,g').txt $organism $rev_thr" &> $PWD/QC_and_others/enrichment_format.log
+	find . \( -name "*.txt" -o -name "*.tsv" -o -name "*.csv" \) | grep funct | parallel -j $cores "file={}; R_enrich_format.R \"\$file\" \$(echo \"\$file\" | sed 's,DGE/.*,DGE/,g')\$(echo \"\$file\" | sed 's,.*DGE_analysis_comp,DGE_analysis_comp,g;s,_pval.*,,g;s,_fdr.*,,g;s,_funct.*,,g;s,_cluster.*,,g' | sed 's,.txt,,g').txt $organism $rev_thr" &> $PWD/enrichment_format.log
 
 	# Compress the folders
 	cd $output_folder/$name/final_results_reanalysis$index/DGE/
