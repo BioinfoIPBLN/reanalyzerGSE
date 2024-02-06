@@ -206,8 +206,8 @@ dependencies:
   - libgcc-devel_linux-64=12.2.0=h3b97bd3_19
   - libgcc-ng=12.2.0=h65d4601_19
   - libgfortran=3.0.0=1
-  - libgfortran-ng=12.2.0=h69a702a_19
-  - libgfortran5=12.2.0=h337968e_19
+  - libgfortran-ng=13.2.0=h69a702a_0
+  - libgfortran5=13.2.0=ha4646dd_0
   - libgit2=1.5.1=h1f77430_0
   - libglib=2.74.1=h606061b_1
   - libglu=9.0.0=he1b5a44_1001
@@ -378,6 +378,7 @@ dependencies:
   - r-estimability=1.4.1=r42hc72bb7e_1
   - r-europepmc=0.4.1=r42hc72bb7e_1
   - r-evaluate=0.20=r42hc72bb7e_0
+  - r-expm=0.999_9=r42hd9ac46e_0
   - r-factoextra=1.0.7=r42hc72bb7e_2
   - r-factominer=2.7=r42h133d619_0
   - r-fansi=1.0.4=r42h133d619_0
