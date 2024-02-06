@@ -10,6 +10,7 @@ targets_file <- args[7]
 diff_soft <- args[8]
 covariab <- args[9] # if not provided, "none"
 cdseq_exec <- args[10] # if not provided, "no"
+restrict_comparisons <- args[11] # if not provided, "no"
 
 ###### Load read counts, format, filter, start differential expression analyses, get RPKM, save...:
   cat("\nProcessing counts and getting figures...\n")
@@ -503,6 +504,15 @@ cdseq_exec <- args[10] # if not provided, "no"
       list_combinations <- strsplit(unique(unlist(lapply(strsplit(apply(expand.grid(unique(condition), unique(condition)),1,function(x){paste(x,collapse="*****")}),"*****",fixed=T),function(x){if (x[1] != x[2]){paste(sort(x),collapse="*****")}}))),"*****",fixed=T)
       list_combinations <- lapply(list_combinations,function(x){if (sum(!startsWith(x,"__"))==2){paste0("__",x)} else {x}})
       print(list_combinations)
+      print("These are the combinations that will be analyzed in differential gene expression analyses, if you want to restrict these, please use the argument -Dec")
+      if (restrict_comparisons!="no"){
+        cat("Restriction requested. Please enter in a comma-separated list the indexes of the combinations that you want to keep (e.g., 1,3,5):\n")
+        user_input <- readline(prompt="Enter indexes: ")
+        indexes_restrict_combinations <- as.numeric(unlist(strsplit(user_input, ",")))
+        list_combinations <- list_combinations[indexes_restrict_combinations]
+        cat("Restricted to:\n")
+        print(list_combinations)
+      }     
       existing <- length(list.files(path=paste0(output_dir,"/DGE/"),pattern=".RData$"))
     for (i in 1:length(list_combinations)){
       # print(i)    
