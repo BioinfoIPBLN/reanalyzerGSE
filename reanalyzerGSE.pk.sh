@@ -54,6 +54,7 @@ for argument in $options; do
 		-De | -differential_expr_software # Software to be used in the differential expression analyses ('edgeR' by default, or 'DESeq2')
 		-Df | -databases_function # Manually provide a comma separated list of databases to be used in automatic functional enrichment analyses of DEGs (check out the R package autoGO::choose_database(), but the most popular GO terms are used by default)
 		-Dc | -deconvolution # Whether to perform deconvolution of the bulk RNA-seq data by CDSeq ('yes', which may require few hours to complete, or 'no', by default)
+		-Dec | -differential_expr_comparisons # Whether to restrict the differential expression analyses to only some of the possible comparisons ('yes', which will ask interactively for the comparisons to keep at the corresponding point of the analyses, or 'no', by default)
 		-Of | -options_featureCounts_feature # The feature type to use to count in featureCounts (default 'exon')
 		-Os | -options_featureCounts_seq # The seqid type to use to count in featureCounts (default 'gene_name')
 		-iG | -input_GEO_reads # If you want to combine downloading metadata from GEO with reads from GEO or any database already downloaded, maybe from a previous attempt, please provide an absolute path
@@ -101,6 +102,7 @@ for argument in $options; do
 		-Dk) kraken2_databases=${arguments[index]} ;;
 		-Ds) sortmerna_databases=${arguments[index]} ;;
 		-De) differential_expr_soft=${arguments[index]} ;;
+		-Dec) differential_expr_comparisons=${arguments[index]} ;;
 		-Dc) deconvolution=${arguments[index]} ;;
 		-cP) clusterProfiler=${arguments[index]} ;;
 		-Of) optionsFeatureCounts_feat=${arguments[index]} ;;
@@ -232,6 +234,9 @@ if [ -z "$clusterProfiler_method" ]; then
 fi
 if [ -z "$differential_expr_soft" ]; then
 	differential_expr_soft="edgeR"
+fi
+if [ -z "$differential_expr_comparisons" ]; then
+	differential_expr_comparisons="no"
 fi
 if [ -z "$target" ]; then
 	target="no"
@@ -821,7 +826,7 @@ echo -e "\nmiARma-seq and STEP 4 DONE. Current date/time: $(date)"; time1=`date 
 IFS=', ' read -r -a array2 <<< "$filter"
 for index in "${!array[@]}"; do
 	annotation_file=${array[index]}
-	R_process_reanalyzer_GSE.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index $genes ${array2[index]} $organism $target $differential_expr_soft $covariables $deconvolution
+	R_process_reanalyzer_GSE.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index $genes ${array2[index]} $organism $target $differential_expr_soft $covariables $deconvolution $differential_expr_comparisons
 	cd $output_folder/$name/final_results_reanalysis$index/DGE/
 	tar -cf - $(ls | egrep ".RData$") | pigz -p $cores > allRData.tar.gz; rm -rf $(ls | egrep ".RData$")
 	
