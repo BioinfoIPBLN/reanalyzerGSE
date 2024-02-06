@@ -54,7 +54,7 @@ for argument in $options; do
 		-De | -differential_expr_software # Software to be used in the differential expression analyses ('edgeR' by default, or 'DESeq2')
 		-Df | -databases_function # Manually provide a comma separated list of databases to be used in automatic functional enrichment analyses of DEGs (check out the R package autoGO::choose_database(), but the most popular GO terms are used by default)
 		-Dc | -deconvolution # Whether to perform deconvolution of the bulk RNA-seq data by CDSeq ('yes', which may require few hours to complete, or 'no', by default)
-		-Dec | -differential_expr_comparisons # Whether to restrict the differential expression analyses to only some of the possible comparisons ('yes', which will ask interactively for the comparisons to keep at the corresponding point of the analyses, or 'no', by default)
+		-Dec | -differential_expr_comparisons # Whether to restrict the differential expression analyses to only some of the possible comparisons (a comma-separated list of indexes pointing to the comparisons to keep, which you could get from a preliminar previous run, or 'no', by default)
 		-Of | -options_featureCounts_feature # The feature type to use to count in featureCounts (default 'exon')
 		-Os | -options_featureCounts_seq # The seqid type to use to count in featureCounts (default 'gene_name')
 		-iG | -input_GEO_reads # If you want to combine downloading metadata from GEO with reads from GEO or any database already downloaded, maybe from a previous attempt, please provide an absolute path
