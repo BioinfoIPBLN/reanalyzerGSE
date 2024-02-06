@@ -132,7 +132,7 @@ $conda_envs_path/reanalyzerGSE/bin/cpanm -q -f Config::IniFiles DateTime Strict:
 echo -e "\n\nInstalling the CRAN's package 'autoGO' and some other dependencies, not available through conda as of yet... This manual installation implies that the version of the installed R packages are not frozen. So, not likely, but please do keep in mind that this may be a source of errors in the mid-term if newer versions of the R packages are installed...\n\n"
 export PATH=$conda_envs_path/reanalyzerGSE_3/bin:$PATH
 $conda_envs_path/reanalyzerGSE_3/bin/Rscript -e 'suppressMessages({install.packages(c("autoGO","GOxploreR","aPEAR"),repos="https://cloud.r-project.org",quiet=T)})' &> /dev/null # Avoid the very extensive logs being printed out, please remove suppressMessages and "&> /dev/null" to double check if installation fails...
-$conda_envs_path/reanalyzerGSE_3/bin/Rscript -e 'packages <- c("autoGO", "GOxploreR", "aPEAR"); sapply(packages, function(pkg) { if(requireNamespace(pkg, quietly=TRUE)) cat(pkg, "is installed.\n"); else cat(pkg, "is NOT installed.\n"); })'
+$conda_envs_path/reanalyzerGSE_3/bin/Rscript -e 'packages <- c("autoGO", "GOxploreR", "aPEAR"); for (pkg in packages) { if(requireNamespace(pkg, quietly=TRUE)){cat("\n",pkg, "is installed.\n")} else {cat("\n",pkg, "is NOT installed.\n")}}'
 
 # https://github.com/DerrickWood/kraken2/issues/518, you just have to manually replace 'ftp' by 'https' in the line 46 of the file 'rsync_from_ncbi.pl'
 # Fix and improve kraken2 2.1.2 within conda (i.e. fix download for database building and improve masking with parallel):
