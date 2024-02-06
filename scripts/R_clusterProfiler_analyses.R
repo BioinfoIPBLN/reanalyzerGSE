@@ -855,6 +855,6 @@ removeEmptyDirs <- function(directory) {
   }
 }
 removeEmptyDirs(path)
-save.image(file.path(path2, "globalenvir.RData"))
+save.image(file.path(path, "clusterprofiler_globalenvir.RData"))
 print("ALL DONE clusterProfiler")
 print(paste0("Current date: ",date()))
