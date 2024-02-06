@@ -506,13 +506,13 @@ restrict_comparisons <- args[11] # if not provided, "no"
       print(list_combinations)
       print("These are the combinations that will be analyzed in differential gene expression analyses, if you want to restrict these, please use the argument -Dec")
       if (restrict_comparisons!="no"){
-        cat("Restriction requested. Please enter in a comma-separated list the indexes of the combinations that you want to keep (e.g., 1,3,5):\n")
-        user_input <- readline(prompt="Enter indexes: ")
-        indexes_restrict_combinations <- as.numeric(unlist(strsplit(user_input, ",")))
+        cat("Restriction requested. Reading the comma-separated list with the indexes of the combinations that you want to keep...\n")
+        indexes_restrict_combinations <- as.numeric(unlist(strsplit(restrict_comparisons, ",")))
         list_combinations <- list_combinations[indexes_restrict_combinations]
         cat("Restricted to:\n")
+        print(indexes_restrict_combinations)
         print(list_combinations)
-      }     
+      }
       existing <- length(list.files(path=paste0(output_dir,"/DGE/"),pattern=".RData$"))
     for (i in 1:length(list_combinations)){
       # print(i)    
