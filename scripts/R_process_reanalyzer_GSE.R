@@ -29,17 +29,17 @@ restrict_comparisons <- args[11] # if not provided, "no"
   colnames(gene_counts) <- basename(colnames(gene_counts))
   # Reorder so gene_counts columns follow the order of GSMXXXXXXX, or alfanumeric if GSM not present in the colnames:
   if (length(grep("_GSM[0-9]",colnames(gene_counts)))==0){
-    gene_counts <- gene_counts[,c(order(grep("Length|Gene_ID",colnames(gene_counts),invert=T)),grep("Length|Gene_ID",colnames(gene_counts)))]
+    gene_counts <- gene_counts[,c(gtools::mixedorder(grep("Length|Gene_ID",colnames(gene_counts),invert=T)),grep("Length|Gene_ID",colnames(gene_counts)))]
   } else {
     idx <- colnames(gene_counts)[unlist(lapply(strsplit(colnames(gene_counts),"_|__"),function(x){any(startsWith(x,"GSM"))}))]
-    gene_counts <- gene_counts[,c(idx[gtools::mixedorder(unlist(lapply(strsplit(idx[unlist(lapply(strsplit(idx,"_|__"),function(x){any(startsWith(x,"GSM"))}))],"_+"),function(x){grep("^GSM",x,val=T)})),decreasing=T)],"Gene_ID","Length")]
+    gene_counts <- gene_counts[,c(idx[gtools::mixedorder(unlist(lapply(strsplit(idx[unlist(lapply(strsplit(idx,"_|__"),function(x){any(startsWith(x,"GSM"))}))],"_+"),function(x){grep("^GSM",x,val=T)})))],"Gene_ID","Length")]
   }
   # This is crucial, also double checking reordering based on SRR* if present in the names:
   if (length(grep("_SRR[0-9]",colnames(gene_counts)))!=0){
     idx <- colnames(gene_counts)[unlist(lapply(strsplit(colnames(gene_counts),"_|__"),function(x){any(startsWith(x,"SRR"))}))]
-    gene_counts <- gene_counts[,c(idx[gtools::mixedorder(unlist(lapply(strsplit(idx[unlist(lapply(strsplit(idx,"_|__"),function(x){any(startsWith(x,"SRR"))}))],"_+"),function(x){grep("^SRR",x,val=T)})),decreasing=T)],"Gene_ID","Length")]
+    gene_counts <- gene_counts[,c(idx[gtools::mixedorder(unlist(lapply(strsplit(idx[unlist(lapply(strsplit(idx,"_|__"),function(x){any(startsWith(x,"SRR"))}))],"_+"),function(x){grep("^SRR",x,val=T)})))],"Gene_ID","Length")]
   }
-  dir.create(paste0(output_dir,""),showWarnings=F)
+  dir.create(output_dir,showWarnings=F)
   write.table(gene_counts[,c(grep("Gene_ID",colnames(gene_counts)),grep("Length",colnames(gene_counts)),grep("Gene_ID|Length",colnames(gene_counts),invert=T))],
               file=paste0(output_dir,"/Raw_counts_genes.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
   # CDSeq preliminary deconvolution:
@@ -101,15 +101,15 @@ restrict_comparisons <- args[11] # if not provided, "no"
     pheno <- pheno[,2:3]
   }
   colnames(pheno) <- c("sample","condition")
-  pheno <- pheno[gtools::mixedorder(pheno$sample,decreasing=T),]
+  pheno <- pheno[gtools::mixedorder(pheno$sample),]
   # Ensure reordering based on GSM* or SRR* if present in the names of pheno:
-  if (length(grep("_GSM[0-9]",pheno$sample))!=0){
+  if (length(grep("GSM[0-9]",pheno$sample))!=0){
     idx <- pheno$sample[unlist(lapply(strsplit(pheno$sample,"_+"),function(x){any(startsWith(x,"GSM"))}))]
-    pheno <- pheno[match(idx[gtools::mixedorder(unlist(lapply(strsplit(idx[unlist(lapply(strsplit(idx,"_|__"),function(x){any(startsWith(x,"GSM"))}))],"_+"),function(x){grep("^GSM",x,val=T)})),decreasing=T)],pheno$sample),]
+    pheno <- pheno[match(idx[gtools::mixedorder(unlist(lapply(strsplit(idx[unlist(lapply(strsplit(idx,"_|__"),function(x){any(startsWith(x,"GSM"))}))],"_+"),function(x){grep("^GSM",x,val=T)})))],pheno$sample),]
   }
-  if (length(grep("_SRR[0-9]",pheno$sample))!=0){
+  if (length(grep("SRR[0-9]",pheno$sample))!=0){
     idx <- pheno$sample[unlist(lapply(strsplit(pheno$sample,"_+"),function(x){any(startsWith(x,"SRR"))}))]
-    pheno <- pheno[match(idx[gtools::mixedorder(unlist(lapply(strsplit(idx[unlist(lapply(strsplit(idx,"_|__"),function(x){any(startsWith(x,"SRR"))}))],"_+"),function(x){grep("^SRR",x,val=T)})),decreasing=T)],pheno$sample),]
+    pheno <- pheno[match(idx[gtools::mixedorder(unlist(lapply(strsplit(idx[unlist(lapply(strsplit(idx,"_|__"),function(x){any(startsWith(x,"SRR"))}))],"_+"),function(x){grep("^SRR",x,val=T)})))],pheno$sample),]
   } else {
     # If there are not SRR nor GSM in the names (and then likely this has not been a download from database but local analyses with raw_data), ordering is also required... (not required mixed order and so, so the printed lists are in the same order)
     pheno <- pheno[order(pheno$sample),]
@@ -138,11 +138,12 @@ restrict_comparisons <- args[11] # if not provided, "no"
 
 ###### Get edgeR object and normalized counts:
   suppressMessages(library(edgeR,quiet = T,warn.conflicts = F))
-  cat("Please double check the following lists are in the same order (automatically extracted and ordered column names of the counts vs rows of the pheno/targets data):\n")  
-  print(colnames(gene_counts)[grep("Gene_ID|Length",colnames(gene_counts),invert=T)]); print(pheno)
+  cat("\n\n\nPLEASE double check the following lists are in the same order (automatically extracted and ordered column names of the counts vs rows of the pheno/targets data). If not, ask for support...\n")  
+  print(colnames(gene_counts)[grep("Gene_ID|Length",colnames(gene_counts),invert=T)]); print(pheno,row.names=F)
   edgeR_object <- DGEList(counts=gene_counts[,grep("Gene_ID|Length",colnames(gene_counts),invert=T)],
                    group=pheno$condition,
                    genes=gene_counts[,c(grep("Gene_ID",colnames(gene_counts)),grep("Length",colnames(gene_counts)))])
+  cat("\n\n\n")
 
 ###### Filter counts:
   filter <- function(filter="standard",data,min_group=3){
@@ -269,19 +270,19 @@ restrict_comparisons <- args[11] # if not provided, "no"
     gene_counts_rpkm_to_plot <- gene_counts_rpkm_combat
   }
 
-  ### If the user has requested to analyze only some of the samples/column based on the GSMXXXXX, filter and restrict here.
   for (i in unlist(strsplit(genes,","))){
     for (z in list.files(pattern = "design_possible_full", recursive = TRUE, full.names=T, path=paste0(path,"/GEO_info"))){
       if (length(unique(read.table(z,head=F,blank.lines.skip=T)$V1)) == 1){
         next
       }
-      system(paste0("sed 's/^$/-/g' -i ",z)); print(i); print(z)
+      system(paste0("sed -i -e 's/[^a-zA-Z0-9]/_/g' -e '/^$/s//_/' ",z)); print(i); print(z); print("Design:"); print(read.table(z)$V1) # Deal with the designs, also dealing with special characters
       if (i %in% gene_counts_rpkm_to_plot$Gene_ID){
         a <- gene_counts_rpkm_to_plot[gene_counts_rpkm_to_plot$Gene_ID==i,-grep("Gene_ID",colnames(gene_counts_rpkm_to_plot))]
         a <- a[,gtools::mixedsort(colnames(a))]
         df <- data.frame(sample=names(a),
                          expr_RPKM=as.numeric(unname(a)),
                          condition=gtools::mixedsort(read.table(z,head=F,blank.lines.skip=FALSE)$V1))
+      ### If the user has requested to analyze only some of the samples/column based on the GSMXXXXX, filter and restrict here.
       if (file.exists(paste0(path,"/GEO_info/gsm_manual_filter.txt"))){
           gsm_manual_filter <- data.table::fread(paste0(path,"/GEO_info/gsm_manual_filter.txt"),head=F,sep="*")$V1
           idxs_gsm_manual <- which(unlist(lapply(strsplit(gtools:mixedsort(colnames(gene_counts_rpkm)),"_"),function(x){any(x %in% unlist(strsplit(gsm_manual_filter,",")))})))
@@ -402,7 +403,7 @@ restrict_comparisons <- args[11] # if not provided, "no"
   }
   }
 
-  print(paste0("PDF barplot and violin plots done if required. Keep in mind you can also use the Expression Visualization App at https://bioinfoipbln.shinyapps.io/expressionvisualizationapp/."))
+  print(paste0("PDF barplots and violin plots done if required. Keep in mind you can also use the Expression Visualization App at https://bioinfoipbln.shinyapps.io/expressionvisualizationapp/."))
   print(paste0("Current date: ",date()))
   print("Genes highlighted are:")
   print(genes)
@@ -462,22 +463,22 @@ restrict_comparisons <- args[11] # if not provided, "no"
     } else {
         print("Reading targets in /GEO_info/samples_info.txt")
         targets <- read.table(file = paste0(path,"/GEO_info/samples_info.txt"),header = F,stringsAsFactors=F)
-        targets[match(rownames(x$samples),targets$V1),]
+        targets <- targets[sapply(rownames(x$samples),function(y){unname(unlist(lapply(as.list(targets),function(x){grep(y,x)})))}),] # Making sure ordering...
     }
     colnames(targets) <- c("Filename","Name","Type")
-    targets$Filename <- gsub("_t|m_Rep|_seq|_KO|_WT","",paste(unique(targets$Filename,targets$Name),sep="_"))
+    targets$Filename <- gsub("_t|m_Rep|_seq|_KO|_WT","",paste(unique(targets$Filename,targets$Name),sep="_"))    
     # Again, reorder based on GSM/SRR, if any:
     if (length(grep("_GSM[0-9]",targets$Filename))!=0){
       idx <- targets$Filename[unlist(lapply(strsplit(targets$Filename,"_+"),function(x){any(startsWith(x,"GSM"))}))]
-      targets <- targets[match(idx[gtools::mixedorder(unlist(lapply(strsplit(idx[unlist(lapply(strsplit(idx,"_|__"),function(x){any(startsWith(x,"GSM"))}))],"_+"),function(x){grep("^GSM",x,val=T)})),decreasing=T)],targets$Filename),]
+      targets <- targets[match(idx[gtools::mixedorder(unlist(lapply(strsplit(idx[unlist(lapply(strsplit(idx,"_|__"),function(x){any(startsWith(x,"GSM"))}))],"_+"),function(x){grep("^GSM",x,val=T)})))],targets$Filename),]
     }
-    if (length(grep("_SRR[0-9]",targets$Filename))!=0){
+    if (length(grep("SRR[0-9]",targets$Filename))!=0){
       idx <- targets$Filename[unlist(lapply(strsplit(targets$Filename,"_+"),function(x){any(startsWith(x,"SRR"))}))]
-      targets <- targets[match(idx[gtools::mixedorder(unlist(lapply(strsplit(idx[unlist(lapply(strsplit(idx,"_|__"),function(x){any(startsWith(x,"SRR"))}))],"_+"),function(x){grep("^SRR",x,val=T)})),decreasing=T)],targets$Filename),]
+      targets <- targets[match(idx[gtools::mixedorder(unlist(lapply(strsplit(idx[unlist(lapply(strsplit(idx,"_|__"),function(x){any(startsWith(x,"SRR"))}))],"_+"),function(x){grep("^SRR",x,val=T)})))],targets$Filename),]
     }
     targets$Name <- gsub("_SRR.*","",targets$Name); targets$Filename <- targets$Name; targets <- unique(targets); targets$Name <- 1:length(targets$Name)
     cat("Please double check the following is in the same order or showing the same and correct categories than the lists above (counts and pheno/targets), and use this to interpret the plots:\n")
-    print(targets)
+    print(targets,row.names=T)
 
     if (exists("gsm_manual_filter")){
         idxs_gsm_manual_3 <- which(unlist(lapply(strsplit(targets$Name,"_"),function(x){any(x %in% unlist(strsplit(gsm_manual_filter,",")))})))    
@@ -541,7 +542,7 @@ restrict_comparisons <- args[11] # if not provided, "no"
         edgeR_object_norm$samples$group <- as.factor(paste0("__",edgeR_object_norm$samples$group))
       }          
       write.table(paste0("\nComparison number ",i+existing,": ",list_combinations[[i]]),
-              file=paste0(output_dir,"/DGE/list_comp.txt"),quote = F,row.names = F, col.names = F,sep = "\n", append=T)      
+              file=paste0(output_dir,"/DGE/list_comp.txt"),quote = F,row.names = F, col.names = F,sep = "\n", append=T)
       if(covariab == "none"){
         edgeR_results <- DGE(comp=list_combinations[[i]])
         colnames(edgeR_results$table)[3] <- paste0(colnames(edgeR_results$table)[3],list_combinations[[i]][1],"_VS_",list_combinations[[i]][2])
