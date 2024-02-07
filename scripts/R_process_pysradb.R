@@ -26,9 +26,8 @@ if (length(unique(b)) == 1){
 	columns_to_discard <- unique(c("column_label",grep("AWS|ena_fastq|http|url",colnames(e),val=T),names(e)[dup_cols]))
 	f <- e[,!(colnames(e) %in% columns_to_discard)]
 	
-	dir.create(paste0(path,"/",GEO_ID,"/final_results_reanalysis"),showWarnings = FALSE)
 	write.table(f,
-	    file=paste0(path,"/",GEO_ID,"/final_results_reanalysis/sample_info.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
+	    file=paste0(path,"/",GEO_ID,"/sample_info.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
 } else {
 	cat("\nWe are dealing with multiple pysradb files and GSEXXX ids here... the merging of the metadata has not worked. Please proceed with caution, and double check all the files, naming, ordering, etc. You probably MUST look manually into this\n\n")
 }
