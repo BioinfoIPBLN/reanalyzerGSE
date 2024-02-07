@@ -124,8 +124,8 @@ echo -e "\nSmall fix on check_strandedness...\n"
 cd $(dirname $(find $conda_envs_path/reanalyzerGSE_4 -name check_strandedness.py))
 rm check_strandedness.py; wget -q https://github.com/signalbash/how_are_we_stranded_here/raw/master/how_are_we_stranded_here/check_strandedness.py; chmod 775 check_strandedness.py
 
-
 echo -e "\n\nInstalling the perl modules required for miARma-Seq via cpanm...\n\n"
+cd $conda_envs_path/reanalyzerGSE/bin
 curl -L https://cpanmin.us | $conda_envs_path/reanalyzerGSE/bin/perl - App::cpanminus
 $conda_envs_path/reanalyzerGSE/bin/cpanm -q -f Config::IniFiles DateTime Strict::Perl LWP Cwd less Statistics::R
 
