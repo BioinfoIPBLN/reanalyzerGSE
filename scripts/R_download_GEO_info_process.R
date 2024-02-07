@@ -3,7 +3,7 @@ args = commandArgs(trailingOnly=TRUE)
 GEO_ID <- args[1]
 path <- args[2]
 
-setwd(paste(path,GEO_ID,"GEO_info",sep="/")); dir.create(paste0(path,"/",GEO_ID,"/final_results_reanalysis"),showWarnings = FALSE)
+setwd(paste(path,GEO_ID,"GEO_info",sep="/"))
 
 GEO_ID_path <- GEO_ID
 
@@ -157,16 +157,16 @@ for (z in unlist(strsplit(GEO_ID_path,"_"))){
 			print(table(phenodata)); cat("\n")
 		}
 	# Copy info to final folder:
-	system(paste0("for i in $(ls -d ",path,"/",GEO_ID_path,"/GEO_info/* | grep 'design_possible_full'); do echo -e '\n'$(basename $i) >> ",path,"/",GEO_ID_path,"/final_results_reanalysis/possible_designs_all.txt && cat $i | sort | uniq >> ",path,"/",GEO_ID_path,"/final_results_reanalysis/possible_designs_all.txt; done && sed -i '1{/^$/d}' ",path,"/",GEO_ID_path,"/final_results_reanalysis/possible_designs_all.txt"))
-	system(paste0("paste ",path,"/",GEO_ID_path,"/GEO_info/sample_names.txt ",path,"/",GEO_ID_path,"/GEO_info/phenodata_extracted.txt | sed 's/ /_/g' > ",path,"/",GEO_ID_path,"/final_results_reanalysis/phenotypic_data_samples.txt"))
+	system(paste0("for i in $(ls -d ",path,"/",GEO_ID_path,"/GEO_info/* | grep 'design_possible_full'); do echo -e '\n'$(basename $i) >> ",path,"/",GEO_ID_path,"/possible_designs_all.txt && cat $i | sort | uniq >> ",path,"/",GEO_ID_path,"/possible_designs_all.txt; done && sed -i '1{/^$/d}' ",path,"/",GEO_ID_path,"/possible_designs_all.txt"))
+	system(paste0("paste ",path,"/",GEO_ID_path,"/GEO_info/sample_names.txt ",path,"/",GEO_ID_path,"/GEO_info/phenodata_extracted.txt | sed 's/ /_/g' > ",path,"/",GEO_ID_path,"/phenotypic_data_samples.txt"))
 	}
 }
 
 # The code above is to deal iteratively with samples in case pysradb has not worked (non-RNA-seq studies for example). But ideally, I should be able to extract all that is required from the file from pysradb (in the final_results folder, I processed in previous scripts the pysradb files and created samples_info)
-if (file.exists(paste0(path,"/",GEO_ID_path,"/final_results_reanalysis/sample_info.txt"))){
+if (file.exists(paste0(path,"/",GEO_ID_path,"/sample_info.txt"))){
 	cat("\nAttempting to deal with pysradb output...\n")
 	# Get SRR ids
-	info <- as.data.frame(data.table::fread(paste0(path,"/",GEO_ID_path,"/final_results_reanalysis/sample_info.txt")))
+	info <- as.data.frame(data.table::fread(paste0(path,"/",GEO_ID_path,"/sample_info.txt")))
 	write.table(unique(info$run_accession),
 		    file=paste(path,GEO_ID_path,"GEO_info","srr_ids.txt",sep="/"),quote = F,row.names = F, col.names = F,sep = "\n")
 	# Get sample_names:
@@ -277,6 +277,6 @@ if (file.exists(paste0(path,"/",GEO_ID_path,"/final_results_reanalysis/sample_in
 		}
 	}
 	# Copy info to final folder:
-	system(paste0("for i in $(ls -d ",path,"/",GEO_ID_path,"/GEO_info/* | grep 'design_possible_full'); do echo -e '\n'$(basename $i) >> ",path,"/",GEO_ID_path,"/final_results_reanalysis/possible_designs_all.txt && cat $i | sort | uniq >> ",path,"/",GEO_ID_path,"/final_results_reanalysis/possible_designs_all.txt; done && sed -i '1{/^$/d}' ",path,"/",GEO_ID_path,"/final_results_reanalysis/possible_designs_all.txt"))
+	system(paste0("for i in $(ls -d ",path,"/",GEO_ID_path,"/GEO_info/* | grep 'design_possible_full'); do echo -e '\n'$(basename $i) >> ",path,"/",GEO_ID_path,"/possible_designs_all.txt && cat $i | sort | uniq >> ",path,"/",GEO_ID_path,"/possible_designs_all.txt; done && sed -i '1{/^$/d}' ",path,"/",GEO_ID_path,"/possible_designs_all.txt"))
 }
 cat("\nExtracting info from GEO download done\n")
