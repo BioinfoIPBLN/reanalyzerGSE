@@ -433,9 +433,9 @@ echo -e "\nSTEP 2 DONE. Current time: $(date)\n"
 	if [ "$stop" == "yes" ]; then
 		echo "You have requested a stop to manually provide the SRR ids, or potentially modify other files that may have not been detected properly from GEO, and were not correct, or you just want to adapt some of them. Please double check or manually modify the files GEO_info/srr_ids.txt, samples_info.txt, sample_names.txt, phenodata_extracted.txt, library_layout_info.txt, organism.txt, design_files, etc. The pipeline is stopped. Please press space to continue or Ctrl + C to exit..."
 		read -n1 -s -r -p $'Press space to continue...\n' key
-		rm $output_folder/$name/final_results_reanalysis/possible_designs_all.txt
-		for i in $(ls $output_folder/$name/GEO_info| grep "full"); do echo $i >> $output_folder/$name/final_results_reanalysis/possible_designs_all.txt && cat $output_folder/$name/GEO_info/$i >> $output_folder/$name/final_results_reanalysis/possible_designs_all.txt && echo -e "\n" >> $output_folder/$name/final_results_reanalysis/possible_designs_all.txt; done
-		cat $output_folder/$name/GEO_info/phenodata_extracted.txt > $output_folder/$name/final_results_reanalysis/phenotypic_data_samples.txt
+		rm $output_folder/$name/possible_designs_all.txt
+		for i in $(ls $output_folder/$name/GEO_info| grep "full"); do echo $i >> $output_folder/$name/possible_designs_all.txt && cat $output_folder/$name/GEO_info/$i >> $output_folder/$name/possible_designs_all.txt && echo -e "\n" >> $output_folder/$name/possible_designs_all.txt; done
+		cat $output_folder/$name/GEO_info/phenodata_extracted.txt > $output_folder/$name/phenotypic_data_samples.txt
 	fi
 	if [ ! -d "$seqs_location" ]; then
 		mkdir -p $seqs_location
