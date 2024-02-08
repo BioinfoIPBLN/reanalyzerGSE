@@ -844,7 +844,7 @@ for index in "${!array[@]}"; do
 		if [[ "$clusterProfiler" == "no" ]]; then
 			echo -e "\nSkipping final clusterProfiler execution\n"
 		else
-			echo -e "\nPerforming clusterProfiler execution for DEGs. The rest of the results are ready, this may take long if many significant DEGs or comparisons...\n"
+			echo -e "\nPerforming clusterProfiler execution for DEGs. The results up to this point are ready to use (including DEGs and expression, even if not annotated), this and the may take long if many significant DEGs or comparisons, but check out the final steps of annotating and tyding and you may not need to wait...\n"
 			cd $output_folder/$name/final_results_reanalysis$index/DGE/
 			R_clusterProfiler_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index/DGE/ $organism $cores $clusterProfiler_method "^DGE_analysis_comp[0-9]+.txt$" &> clusterProfiler_funct_enrichment.log
 			if [[ "$time_course" == "yes" ]]; then 
@@ -852,8 +852,8 @@ for index in "${!array[@]}"; do
 				R_clusterProfiler_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index/time_course_analyses $organism $cores $clusterProfiler_method "^DGE_limma_timecourse.*.txt$" &> clusterProfiler_funct_enrichment.log
 			fi
 			cd $output_folder/$name/final_results_reanalysis$index
-			if [ $(find . -name clusterProfiler_funct_enrichment.log | xargs cat | grep -c "Ensembl site unresponsive") -gt 0 ] || [ $(find . -name funct_enrichment_analyses.tar.gz -exec tar -tzvf {} \; | grep -c _clusterProfiler/) -eq 0 ]; then
-				echo "Apparently parallel execution of clusterProfiler failed. Attempting serial execution. Please note it may be very slow"
+			if [ $(find . -name clusterProfiler_funct_enrichment.log | xargs cat | grep -c "Ensembl site unresponsive") -gt 0 ] || [ $(find . -name clusterProfiler_funct_enrichment.log | xargs cat | grep -c "Error in curl") -gt 0 ] || [ $(find . -name funct_enrichment_analyses.tar.gz -exec tar -tzvf {} \; | grep -c _clusterProfiler/) -eq 0 ]; then
+				echo "Apparently at least part of the parallel execution of clusterProfiler failed. Restarting and attempting serial execution. Please note it may be very slow..."
 				cd $output_folder/$name/final_results_reanalysis$index/DGE; rm -rf $(ls | grep _clusterProfiler)
 				R_clusterProfiler_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index/DGE/ $organism "1" $clusterProfiler_method "^DGE_analysis_comp[0-9]+.txt$" &> clusterProfiler_funct_enrichment_serial.log
 				if [[ "$time_course" == "yes" ]]; then 
