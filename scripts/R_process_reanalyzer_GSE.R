@@ -573,7 +573,7 @@ restrict_comparisons <- args[11] # if not provided, "no"
     suppressMessages(library(NormqPCR,quiet = T,warn.conflicts = F))
     suppressMessages(library(limma,quiet = T,warn.conflicts = F))
     setwd(paste0(output_dir,"/DGE"))    
-      tryCatch({
+      try({
         RPKM <- gene_counts_rpkm_to_write[,-grep("Gene_ID",colnames(gene_counts_rpkm_to_write))]
         a <- data.frame(Type=gsub("_Rep.*","",colnames(RPKM)))
         rownames(a) <- colnames(RPKM)
