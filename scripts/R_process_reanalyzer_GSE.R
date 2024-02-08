@@ -708,6 +708,8 @@ Venn_funct <- function(files){
     sink(); unlink(tmp_file)
   }
 }
+tar("venn_diagrams.tar", files = Sys.glob("Venn_diagram_combn_*.png"))
+invisible(file.remove(Sys.glob("Venn_diagram_combn_*.png")))
 
 if(length(list.files(path=paste0(output_dir,"/DGE"),full.names=T,pattern="^DGE_analysis_comp\\d+\\.txt$"))>1){
   print("Attempting to perform Venn diagrams for DGE analyses...")
