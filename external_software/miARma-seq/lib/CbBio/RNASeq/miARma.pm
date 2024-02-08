@@ -1567,7 +1567,7 @@ Mandatory parameters:
 	}
 	
 sub print_header{
-	system("clear");
+	#system("clear");
 	print "#########################################################################	
 #   miARma, miRNA and RNASeq Multiprocess Analysis			#
 #                miARma v 1.7.5 (May-2018)                              #
