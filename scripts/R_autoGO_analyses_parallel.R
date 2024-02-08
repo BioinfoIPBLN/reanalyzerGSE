@@ -212,6 +212,7 @@ mclapply(
 
 # Tidying...
 setwd(path)
+save.image("clusterprofiler_globalenvir.RData")
 print("Tidying...")
 removeEmptyDirs <- function(directory) {
   # List all directories
@@ -229,6 +230,9 @@ removeEmptyDirs <- function(directory) {
   }
 }
 removeEmptyDirs(path)
+print("ALL DONE clusterProfiler")
+print(paste0("Current date: ",date()))
+
 
 #files=list.files(path=getwd(),pattern="Gene_IDs.txt$")
 #invisible(file.remove(files))
