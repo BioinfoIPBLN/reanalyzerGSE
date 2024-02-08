@@ -608,19 +608,21 @@ restrict_comparisons <- args[11] # if not provided, "no"
           AveExp=as.numeric(rowMeans(RPKM[names(matriz_rho)[1:10],])),
           MedianExp=as.numeric(rowMedians(as.matrix(RPKM[names(matriz_rho)[1:10],])))
         )
-        #3
-        print("Top 10 hallmark/house-keeping genes according to NormFinder and Rho methods, respectively:")
-        print(ranking_NormFinder) # 10 genes
-        print(ranking_Rho) # 10 genes
-        sink()      
         
         write.table(ranking_NormFinder,file=paste0("HK_genes_normfinder.txt"),row.names = F,sep="\t")
         write.table(ranking_Rho,file=paste0("HK_genes_rho.txt"),row.names = F,sep="\t")
-  
-        print("Hallmark/house-keeping genes NormFinder and Rho methods combined:")
         hallmarks_comb <- intersect(ranking_NormFinder$Name,ranking_Rho$Name)
-        print(hallmarks_comb)
         write.table(hallmarks_comb,file=paste0("HK_genes_combined.txt"),row.names = F,sep="\t")
+        
+        
+      }, silent = TRUE)
+      sink()
+      print("Top 10 hallmark/house-keeping genes according to NormFinder and Rho methods, respectively:")
+      print(ranking_NormFinder) # 10 genes
+      print(ranking_Rho) # 10 genes      
+  
+      print("Hallmark/house-keeping genes NormFinder and Rho methods combined:")      
+      print(hallmarks_comb)      
         
       #Make barplots:
       #for (i in hallmarks_comb){
@@ -637,8 +639,7 @@ restrict_comparisons <- args[11] # if not provided, "no"
       #}
       # qpdf::pdf_combine(input = list.files(pattern="KOvsWT12m_hallmark_bars_"),output="KOvsWT12m_hallmark_bars.pdf")
       # file.remove(list.files(pattern="KOvsWT12m_hallmark_bars_"))
-      file.remove(list.files(pattern="temp_targets.txt"))
-    }, silent = TRUE)
+      file.remove(list.files(pattern="temp_targets.txt"))    
     
 
 
