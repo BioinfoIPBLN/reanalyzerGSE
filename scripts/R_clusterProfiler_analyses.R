@@ -845,13 +845,15 @@ print("Tidying...")
 removeEmptyDirs <- function(directory) {
   # List all directories
   dirs <- list.dirs(directory, recursive = TRUE)
+  dirs <- dirs[grep("funct",dirs)]
   
   # Check each directory
-  for (dir in dirs) {
+  for (fold in dirs) {
     # If the directory is empty
-    if (length(dir(dir)) < 3) {
+    if (length(dir(fold)) < 3 && fold!=path) {
       # Remove the directory
-      invisible(unlink(dir, recursive = TRUE))
+      invisible(unlink(fold, recursive = TRUE))
+      print(paste0("Removing ",fold))
     }
   }
 }
