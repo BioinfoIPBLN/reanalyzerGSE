@@ -581,11 +581,14 @@ restrict_comparisons <- args[11] # if not provided, "no"
                     file="temp_targets.txt",quote = F,row.names = T, col.names = T,sep = "\t")
   
         sink("HK_genes.log")
-        target <- readTargets("temp_targets.txt")
+        tmptarget <- readTargets("temp_targets.txt")
+        if (any(startsWith(target$Type,"GSM"))){
+          target$Type <- pheno$condition
+        }        
         matriz_obj<-new("qPCRBatch", exprs=as.matrix(RPKM))
         
         #1
-        pData(matriz_obj)<-data.frame(Name=colnames(RPKM),Type=target$Type)
+        pData(matriz_obj)<-data.frame(Name=colnames(RPKM),Type=tmptarget$Type)
         Class <- as.factor(pData(matriz_obj)[,"Type"])      
         HK_normPCR_normfinder <- selectHKs(matriz_obj,Symbols=featureNames(matriz_obj),method="NormFinder",group=Class,minNrHKs=10)      
         ranking_NormFinder <- data.frame(
@@ -635,7 +638,7 @@ restrict_comparisons <- args[11] # if not provided, "no"
       # qpdf::pdf_combine(input = list.files(pattern="KOvsWT12m_hallmark_bars_"),output="KOvsWT12m_hallmark_bars.pdf")
       # file.remove(list.files(pattern="KOvsWT12m_hallmark_bars_"))
       file.remove(list.files(pattern="temp_targets.txt"))
-    })
+    }, silent = TRUE)
     
 
 
