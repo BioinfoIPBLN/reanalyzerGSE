@@ -840,6 +840,7 @@ print(paste0("Processing... Here all the pathways that may be of interest in Rea
 
 # Tidying...
 setwd(path)
+save.image("clusterprofiler_globalenvir.RData")
 print("Tidying...")
 removeEmptyDirs <- function(directory) {
   # List all directories
@@ -855,6 +856,5 @@ removeEmptyDirs <- function(directory) {
   }
 }
 removeEmptyDirs(path)
-save.image(file.path(path, "clusterprofiler_globalenvir.RData"))
 print("ALL DONE clusterProfiler")
 print(paste0("Current date: ",date()))
