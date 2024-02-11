@@ -137,13 +137,10 @@ restrict_comparisons <- args[11] # if not provided, "no"
   }
 
 ###### Get edgeR object and normalized counts:
-  suppressMessages(library(edgeR,quiet = T,warn.conflicts = F))
-  cat("\n\n\nPLEASE double check the following lists are in the same order (automatically extracted and ordered column names of the counts vs rows of the pheno/targets data). If not, ask for support...\n")  
-  print(colnames(gene_counts)[grep("Gene_ID|Length",colnames(gene_counts),invert=T)]); cat("\n\n"); print(pheno,row.names=F)
+  suppressMessages(library(edgeR,quiet = T,warn.conflicts = F))  
   edgeR_object <- DGEList(counts=gene_counts[,grep("Gene_ID|Length",colnames(gene_counts),invert=T)],
                    group=pheno$condition,
                    genes=gene_counts[,c(grep("Gene_ID",colnames(gene_counts)),grep("Length",colnames(gene_counts)))])
-  cat("\n\n\n")
 
 ###### Filter counts:
   filter <- function(filter="standard",data,min_group=3){
@@ -462,8 +459,7 @@ restrict_comparisons <- args[11] # if not provided, "no"
         targets <- read.table(file = targets_file,header = F,stringsAsFactors=F)      
     } else {
         print("Reading targets in /GEO_info/samples_info.txt")
-        targets <- read.table(file = paste0(path,"/GEO_info/samples_info.txt"),header = F,stringsAsFactors=F)
-        targets <- targets[sapply(rownames(x$samples),function(y){unname(unlist(lapply(as.list(targets),function(x){grep(y,x)})))}),] # Making sure ordering...
+        targets <- read.table(file = paste0(path,"/GEO_info/samples_info.txt"),header = F,stringsAsFactors=F)        
     }
     colnames(targets) <- c("Filename","Name","Type")
     targets$Filename <- gsub("_t|m_Rep|_seq|_KO|_WT","",paste(unique(targets$Filename,targets$Name),sep="_"))    
@@ -475,10 +471,18 @@ restrict_comparisons <- args[11] # if not provided, "no"
     if (length(grep("SRR[0-9]",targets$Filename))!=0){
       idx <- targets$Filename[unlist(lapply(strsplit(targets$Filename,"_+"),function(x){any(startsWith(x,"SRR"))}))]
       targets <- targets[match(idx[gtools::mixedorder(unlist(lapply(strsplit(idx[unlist(lapply(strsplit(idx,"_|__"),function(x){any(startsWith(x,"SRR"))}))],"_+"),function(x){grep("^SRR",x,val=T)})))],targets$Filename),]
-    }
+    }    
+    bakktarget <- targets
     targets$Name <- gsub("_SRR.*","",targets$Name); targets$Filename <- targets$Name; targets <- unique(targets); targets$Name <- 1:length(targets$Name)
-    cat("Please double check the following is in the same order or showing the same and correct categories than the lists above (counts and pheno/targets), and use this to interpret the plots:\n")
-    print(targets,row.names=T)
+
+    ### Checking that the automatic ordering, which may be quite messy, has worked...
+    cat("\n\n\nPLEASE double check that all the following is showing the correct order after automatically extracting and ordering data from the counts, pheno/targets data... This is CRUCIAL and an incorrect automatic ordering could INVALIDATE ALL RESULTS. If anything does not look like it should, please ask for support...\n")
+    cat("The names containing numbers can be used to interpret the plots...\n")
+    print(colnames(gene_counts)[grep("Gene_ID|Length",colnames(gene_counts),invert=T)])
+    cat("\n\n"); print(pheno, row.names=F)
+    cat("\n\n"); print(bakktarget, row.names=F)
+    cat("\n\n"); print(targets, row.names=F)
+    cat("\n\n\n")
 
     if (exists("gsm_manual_filter")){
         idxs_gsm_manual_3 <- which(unlist(lapply(strsplit(targets$Name,"_"),function(x){any(x %in% unlist(strsplit(gsm_manual_filter,",")))})))    
