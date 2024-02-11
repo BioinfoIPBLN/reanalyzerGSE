@@ -139,7 +139,7 @@ restrict_comparisons <- args[11] # if not provided, "no"
 ###### Get edgeR object and normalized counts:
   suppressMessages(library(edgeR,quiet = T,warn.conflicts = F))
   cat("\n\n\nPLEASE double check the following lists are in the same order (automatically extracted and ordered column names of the counts vs rows of the pheno/targets data). If not, ask for support...\n")  
-  print(colnames(gene_counts)[grep("Gene_ID|Length",colnames(gene_counts),invert=T)]); print(pheno,row.names=F)
+  print(colnames(gene_counts)[grep("Gene_ID|Length",colnames(gene_counts),invert=T)]); cat("\n\n"); print(pheno,row.names=F)
   edgeR_object <- DGEList(counts=gene_counts[,grep("Gene_ID|Length",colnames(gene_counts),invert=T)],
                    group=pheno$condition,
                    genes=gene_counts[,c(grep("Gene_ID",colnames(gene_counts)),grep("Length",colnames(gene_counts)))])
