@@ -6,8 +6,8 @@ output_dir <- args[3]
 genes <- args[4]
 filter_option <- args[5]
 organism <- args[6]
-targets_file <- args[7]
-diff_soft <- args[8]
+targets_file <- args[7] # if not provided, "no"
+diff_soft <- args[8] # if not provided, "edgeR"
 covariab <- args[9] # if not provided, "none"
 cdseq_exec <- args[10] # if not provided, "no"
 restrict_comparisons <- args[11] # if not provided, "no"
