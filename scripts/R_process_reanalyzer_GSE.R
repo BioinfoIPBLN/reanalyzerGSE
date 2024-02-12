@@ -853,18 +853,16 @@ save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
   reads <- c()
   files <- grep("_stats.txt",list.files(path=input_dir,full.names=T,recursive=T),val=T)
   for (f in files){reads <- c(reads,system(paste0("cat ",f," | grep '1st fragments' | sed 's,.*:\t,,g'"),intern=T))}
-  bam_reads <- data.frame(names=gsub("_nat.*","",basename(files)),reads=as.numeric(reads))
+  bam_reads_2 <- data.frame(names=gsub("_GSM","",gsub("_nat.*","",basename(files))),reads=as.numeric(reads))
+  substr <- unlist(strsplit(bam_reads_2$names, "[\\W_]+"))  
+  bam_reads_2$color <- substr[substr %in% names(table(substr)[table(substr)>1])]
+  bam_reads_2$names <- as.character(bam_reads_2$names)
+  
+  cat("Please check ordering and number of bam reads...\n"); print(bam_reads_2)  
 
-  targets_to_merge <- as.data.frame(targets)
-  for (i in 1:dim(targets_to_merge)[1]){
-    targets_to_merge$Filename[i] <- gsub(paste0("_",targets_to_merge$Type[i]),"",targets_to_merge$Filename[i])
-  }
-  bam_reads_2 <- merge(bam_reads,targets_to_merge,by.x="names",by.y="Filename")
-  bam_reads_2$color <- col.group
-  bam_reads_2$Name <- as.character(bam_reads_2$Name)
   bar_plot <- ggbarplot(
     bam_reads_2, 
-    x = "Name", 
+    x = "names", 
     y = "reads", 
     fill = "Type",
     color = "color",
@@ -877,18 +875,16 @@ save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
   files <- grep("_1_fastqc.html",list.files(path=input_dir,full.names=T,recursive=T),val=T)
   for (f in files){reads <- c(reads,system(paste0("cat ",f," | sed 's,<td>,\\n,g;s,</td>,\\n,g' | grep -A2 'Total Sequences' | tail -1"),intern=T))}
   if(length(files)!=0){ # Control that sometimes if these are repeated runs, fastqc is not going to be executed    
-    fastq_reads <- data.frame(names=gsub("_1_fastqc.*","",basename(files)),reads=as.numeric(reads))
-
-    targets_to_merge <- as.data.frame(targets)
-    for (i in 1:dim(targets_to_merge)[1]){
-      targets_to_merge$Filename[i] <- gsub(paste0("_",targets_to_merge$Type[i]),"",targets_to_merge$Filename[i])
-    }
-    fastq_reads_2 <- merge(fastq_reads,targets_to_merge,by.x="names",by.y="Filename")
-    fastq_reads_2$color <- col.group
-    fastq_reads_2$Name <- as.character(fastq_reads_2$Name)
+    fastq_reads_2 <- data.frame(names=gsub("_GSM","",gsub("_1_fastqc.*","",basename(files))),reads=as.numeric(reads))    
+    substr <- unlist(strsplit(fastq_reads_2$names, "[\\W_]+"))    
+    fastq_reads_2$color <- substr[substr %in% names(table(substr)[table(substr)>1])]
+    fastq_reads_2$names <- as.character(fastq_reads_2$names)
+    
+    cat("Please check ordering and number of fastq reads...\n"); print(fastq_reads_2)
+    
     bar_plot <- ggbarplot(
       fastq_reads_2, 
-      x = "Name", 
+      x = "names", 
       y = "reads", 
       fill = "Type",
       color = "color",
