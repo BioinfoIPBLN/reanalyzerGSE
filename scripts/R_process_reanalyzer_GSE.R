@@ -621,12 +621,19 @@ restrict_comparisons <- args[11] # if not provided, "no"
         
       }, silent = TRUE)
       sink()
-      print("Top 10 hallmark/house-keeping genes according to NormFinder and Rho methods, respectively:")
-      print(ranking_NormFinder) # 10 genes
-      print(ranking_Rho) # 10 genes      
-  
-      print("Hallmark/house-keeping genes NormFinder and Rho methods combined:")      
-      print(hallmarks_comb)      
+
+      if(exists(ranking_NormFinder)){
+        print("Top 10 hallmark/house-keeping genes according to NormFinder method:")
+        print(ranking_NormFinder)      
+      }
+      if(exists(ranking_Rho)){
+        print("Top 10 hallmark/house-keeping genes according to Rho method:")
+        print(ranking_Rho)
+      }
+      if(exists(hallmarks_comb)){
+        print("Hallmark/house-keeping genes NormFinder and Rho methods combined:")      
+        print(hallmarks_comb)      
+      }
         
       #Make barplots:
       #for (i in hallmarks_comb){
