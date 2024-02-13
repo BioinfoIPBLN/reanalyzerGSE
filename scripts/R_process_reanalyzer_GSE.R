@@ -864,7 +864,7 @@ save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
     bam_reads_2, 
     x = "names", 
     y = "reads", 
-    fill = "Type",
+    fill = "color",
     color = "color",
     stat = "identity"
   )
@@ -886,7 +886,7 @@ save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
       fastq_reads_2, 
       x = "names", 
       y = "reads", 
-      fill = "Type",
+      fill = "color",
       color = "color",
       stat = "identity"
     )
