@@ -4,7 +4,7 @@ path <- args[1]
 input_dir <- args[2]
 output_dir <- args[3]
 genes <- args[4]
-filter_option <- args[5]
+filter_option <- args[5] # For now, bin or standard
 organism <- args[6]
 targets_file <- args[7] # if not provided, "no"
 diff_soft <- args[8] # if not provided, "edgeR"
