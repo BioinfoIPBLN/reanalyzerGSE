@@ -592,10 +592,8 @@ restrict_comparisons <- args[11] # if not provided, "no"
         
         ### Get a number of HK genes: 10 by default
         hk_genes_number_input <- 10
-        #max_number_degs <- max(unname(sapply(list.files(path=output_dir,pattern="DGE_analysis_comp*",recursive=T,full=T),function(x){length(unique(read.delim(x)$Gene_ID[read.delim(x)$FDR<0.05]))})))
-        max_number_degs <- 10
-
-        for (hk_genes_number in c(hk_genes_number_input,max_number_degs)){
+        max_number_degs <- max(unname(sapply(list.files(path=output_dir,pattern="DGE_analysis_comp*",recursive=T,full=T),function(x){length(unique(read.delim(x)$Gene_ID[read.delim(x)$FDR<0.05]))})))
+        for (hk_genes_number in c(hk_genes_number_input,100,max_number_degs)){
           #1
           pData(matriz_obj)<-data.frame(Name=colnames(RPKM),Type=target$Type)
           Class <- as.factor(pData(matriz_obj)[,"Type"])
