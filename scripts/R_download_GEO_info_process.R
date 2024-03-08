@@ -162,7 +162,78 @@ for (z in unlist(strsplit(GEO_ID_path,"_"))){
 	}
 }
 
-# The code above is to deal iteratively with samples in case pysradb has not worked (non-RNA-seq studies for example). But ideally, I should be able to extract all that is required from the file from pysradb (in the final_results folder, I processed in previous scripts the pysradb files and created samples_info)
+# function required for filtering columns later...
+get_common_elements <- function(lst) {
+  n <- length(lst)
+  slot_names <- names(lst)
+  
+  # Store results in a list
+  identical_pairs <- list()
+  
+  # Compare each slot with every other slot
+  for (i in 1:(n-1)) {
+    for (j in (i+1):n) {
+      if (identical(lst[[i]], lst[[j]])) {
+        # Record the names of slots that are identical
+        identical_pairs[[length(identical_pairs) + 1]] <- c(slot_names[i], slot_names[j])
+      }
+    }
+  }
+  
+  # Filter out duplicates and return unique combination... 
+  unique(identical_pairs)
+  
+  # Initialize an empty list to store the groups
+  groups <- list()
+
+  # Iterate over each pair of identical slots
+  for (pair in identical_pairs) {
+    # Find if the current pair matches an existing group
+    matched <- FALSE
+    for (i in seq_along(groups)) {
+      if (length(intersect(groups[[i]], pair)) > 0) {
+        groups[[i]] <- union(groups[[i]], pair)
+        matched <- TRUE
+        break
+      }
+    }
+    # If no existing group is matched, add as a new group
+    if (!matched) {
+      groups[[length(groups) + 1]] <- pair
+    }
+  }
+
+  # Function to merge overlapping groups
+  merge_overlaps <- function(groups) {
+    # Keep merging until no change
+    repeat {
+      change <- FALSE
+      new_groups <- list()
+      while (length(groups) > 0) {
+        current <- groups[[1]]
+        groups <- groups[-1]
+        overlaps <- sapply(groups, function(g) length(intersect(g, current)) > 0)
+        if (any(overlaps)) {
+          # Merge overlapping groups
+          current <- unique(unlist(c(current, groups[overlaps])))
+          groups <- groups[!overlaps]
+          change <- TRUE
+        }
+        new_groups <- c(new_groups, list(current))
+      }
+      groups <- new_groups
+      if (!change) break
+    }
+    return(groups)
+  }
+
+  # Merge any overlapping groups
+  groups <- merge_overlaps(groups)
+
+  return(groups)
+}
+
+# The code above (before the function) is to deal iteratively with samples in case pysradb has not worked (non-RNA-seq studies for example). But ideally, I should be able to extract all that is required from the file from pysradb (in the final_results folder, I processed in previous scripts the pysradb files and created samples_info)
 if (file.exists(paste0(path,"/",GEO_ID_path,"/sample_info.txt"))){
 	cat("\nAttempting to deal with pysradb output...\n")
 	# Get SRR ids
@@ -203,6 +274,7 @@ if (file.exists(paste0(path,"/",GEO_ID_path,"/sample_info.txt"))){
                     grep("organism",colnames(info),val=T),
                     grep("NCBI",colnames(info),val=T),
 					grep("run_total",colnames(info),val=T),
+                    gsub(":.*| ","",gsub("$","",grep(": int|: num",capture.output(str(info)),val=T),fixed=T)), # columns that contains only numbers		    
                     "experiment_desc","experiment_title","study_title","total_size","total_spots","run_alias"
                     ))
 	info_filt <- info[,!(colnames(info) %in% cols_to_ignore)]
@@ -212,7 +284,8 @@ if (file.exists(paste0(path,"/",GEO_ID_path,"/sample_info.txt"))){
 	info_filt_2 <- as.data.frame(apply(info_filt_2,2,function(x){gsub("--","",x)}))
 	info_filt_2 <- as.data.frame(apply(info_filt_2,2,function(x){gsub("^gsm","GSM",x)}))
 	info_filt_2 <- as.data.frame(apply(info_filt_2,2,function(x){gsub("^srr","SRR",x)}))
-	info_filt_2 <- as.data.frame(apply(info_filt_2,2,function(x){gsub(")$","",x)}))
+	info_filt_2 <- as.data.frame(apply(info_filt_2,2,function(x){gsub("[^a-zA-Z0-9_]","_",x)}))
+				  
 	sample_names <- apply(info_filt_2,1,function(x){paste(x,collapse="_")})
 	sample_names <- unlist(lapply(strsplit(sample_names,"-|_"),function(x){paste(unique(x),collapse="_")}))
 	sample_names <- substr(sample_names,1,150)
@@ -232,14 +305,22 @@ if (file.exists(paste0(path,"/",GEO_ID_path,"/sample_info.txt"))){
 	if(dim(info_filt_3)[2]>1){
 		info_filt_3 <- info_filt_3[,apply(info_filt_3,2,function(x){length(unique(x))})!=1] # Remove columns with unique values
 		info_filt_3[info_filt_3 == "" | is.na(info_filt_3)] <- "-"
-		info_filt_design_final <- as.data.frame(info_filt_3[,apply(info_filt_3,2,function(x){length(unique(x))})!=dim(info_filt_3)[1]]) # Remove columns that all the values are different
+		info_filt_design_final <- as.data.frame(info_filt_3[,apply(info_filt_3,2,function(x){length(unique(x))})!=dim(info_filt_3)[1]]) # Remove columns where all the values are different
 		if(dim(info_filt_design_final)[2]==0){
 			stop("The samples information and design could not be automatically detected from the database... Manually providing the downloaded reads to a new run would be required...")
 		}
-		# Get combinations between the columns if more than one and add to the possible designs:
 		if(dim(info_filt_design_final)[2] > 1){
+			# Get combinations between the columns if more than one and add to the possible designs:
 			info_filt_design_final <- cbind(info_filt_design_final,
-											as.data.frame(lapply(combn(info_filt_design_final, 2, simplify=FALSE),function(x){apply(x,1,function(y){paste(y,collapse="_")})})))
+							as.data.frame(lapply(combn(info_filt_design_final, 2, simplify=FALSE),function(x){apply(x,1,function(y){paste(y,collapse="_")})})))
+			# Remove columns if any of the categories that they are containing are repeated only one (which would give errors in the DGE analyses due to lack of replicates)
+			info_filt_design_final <- info_filt_design_final[,!(colnames(info_filt_design_final) %in% names(info_filt_design_final)[unlist(lapply(info_filt_design_final,function(x){any(table(x)==1)}))])]
+			# If different columns are containing the same groups, get only one of them (the first):
+			a <- lapply(info_filt_design_final, function(x){unname(sapply(seq_along(names(table(x))),function(y){paste(gsub("[a-zA-Z_]","",gsub(names(table(x)[match(unique(x),names(table(x)))])[y],y,x)),collapse="_")}))})
+			columns_with_same_groups <- get_common_elements(a) # funcion defined above in the script
+			columns_to_keep <- c(unlist(lapply(get_common_elements(a),function(x){x[1]})),
+					     colnames(info_filt_design_final)[!(colnames(info_filt_design_final) %in% unlist(columns_with_same_groups))])
+			info_filt_design_final <- as.data.frame(info_filt_design_final[,colnames(info_filt_design_final) %in% columns_to_keep])
 		}
 
 		# Write:
