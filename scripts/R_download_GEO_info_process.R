@@ -321,6 +321,7 @@ if (file.exists(paste0(path,"/",GEO_ID_path,"/sample_info.txt"))){
 			columns_to_keep <- c(unlist(lapply(get_common_elements(a),function(x){x[1]})),
 					     colnames(info_filt_design_final)[!(colnames(info_filt_design_final) %in% unlist(columns_with_same_groups))])
 			info_filt_design_final <- as.data.frame(info_filt_design_final[,colnames(info_filt_design_final) %in% columns_to_keep])
+			info_filt_design_final <- as.data.frame(apply(info_filt_design_final,2,function(x){gsub("^_","",gsub("_+","_",x))}))
 		}
 
 		# Write:
@@ -339,6 +340,7 @@ if (file.exists(paste0(path,"/",GEO_ID_path,"/sample_info.txt"))){
 	} else {
 		info_filt_3[info_filt_3 == "" | is.na(info_filt_3)] <- "-"
 		info_filt_design_final <- as.data.frame(info_filt_3[,apply(info_filt_3,2,function(x){length(table(x))!=dim(info)[1]})])
+		info_filt_design_final <- as.data.frame(apply(info_filt_design_final,2,function(x){gsub("^_","",gsub("_+","_",x))}))
 		if(dim(info_filt_design_final)[2]==0){
 			stop("The samples information and design could not be automatically detected from the database... Manually providing the downloaded reads to a new run would be required...")
 		}
