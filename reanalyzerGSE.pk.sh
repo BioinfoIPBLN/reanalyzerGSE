@@ -61,6 +61,7 @@ for argument in $options; do
 		-cG | -compression_level # Specify the compression level to gzip the downloaded fastq files from GEO (numeric '0' to '9', default '9')
 		-cP | -clusterProfiler # Whether to perform additional functional enrichment analyses using ClusterProfiler (slow if many significant DEGs or multiple number of comparisons, 'no' or 'yes', by default)
 		-cPm | -clusterProfiler_method # Method for adjusting p.value in clusterprofiler iterations (one of 'holm','hochberg','hommel','bonferroni','BH','BY,'none', or 'fdr', by default)
+		-Pm | -panther_method # Method for adjusting p.value in panther analyses via rbioapi (one of 'NONE','BONFERRONI', or 'FDR', by default)
 		-Tc | -time_course_analyses # Whether to perform additional time-course analyses as a last step ('yes' or 'no', by default)
 		-Tcsd | -time_course_std # Standard deviation threshold to filter in time course analyses (numeric, 1 by default)
 		-Tcf | -time_course_fuzzi # Fuziness value for the soft clustering approach (by default an estimate is automatically computed but manual testing is encouraged)
@@ -119,6 +120,7 @@ for argument in $options; do
 		-TMP) TMPDIR_arg=${arguments[index]} ;;
 		-q) qc_raw_reads=${arguments[index]} ;;
 		-cPm) clusterProfiler_method=${arguments[index]} ;;
+  		-Pm) panther_method=${arguments[index]} ;;
 	esac
 done
 
@@ -231,6 +233,9 @@ if [ -z "$minstd" ]; then
 fi
 if [ -z "$clusterProfiler_method" ]; then
 	clusterProfiler_method="fdr"
+fi
+if [ -z "$panther_method" ]; then
+	panther_method="FDR"
 fi
 if [ -z "$differential_expr_soft" ]; then
 	differential_expr_soft="edgeR"
@@ -862,8 +867,8 @@ for index in "${!array[@]}"; do
 				fi
 			fi
 		fi
-		echo -e "\nPerforming autoGO execution for the rest of relevant datasets. The rest of the results are ready, this may take long if many genes or comparisons...\n"		
-		R_autoGO_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism $cores $databases_function "^DGE_analysis_comp.*\\.txt$|^DGE_limma_timecourse.*.txt$" &> autoGO_funct_enrichment.log
+		echo -e "\nPerforming autoGO and Panther execution for the rest of relevant datasets. The rest of the results are ready, this may take long if many genes or comparisons...\n"		
+		R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism $cores $databases_function "^DGE_analysis_comp.*\\.txt$|^DGE_limma_timecourse.*.txt$" $panther_method &> autoGO_panther_funct_enrichment.log
 	else
 		echo "Organism is $organism... Functional analyses apart from human/mouse is not fully supported yet"
 		if [ $(egrep -c "GO:|Ontology|tology_term|tology term" $annotation_file) -gt 0 ]; then
@@ -887,13 +892,13 @@ for index in "${!array[@]}"; do
 
 	# Compress the folders
 	cd $output_folder/$name/final_results_reanalysis$index/DGE/
-	folders_funct=$(find . -type d \( -name "*_autoGO" -o -name "*_clusterProfiler" \))
+	folders_funct=$(find . -type d \( -name "*_autoGO" -o -name "*_clusterProfiler" -o -name "*_panther" \))
 	if [ -n "$folders_funct" ]; then
 		tar -cf - $folders_funct | pigz --best -p $cores > funct_enrichment_analyses.tar.gz; rm -rf $folders_funct
 	fi
 	if [[ "$time_course" == "yes" ]]; then 
 		cd $output_folder/$name/final_results_reanalysis$index/time_course_analyses
-		folders_funct=$(find . -type d \( -name "*_autoGO" -o -name "*_clusterProfiler" \))
+		folders_funct=$(find . -type d \( -name "*_autoGO" -o -name "*_clusterProfiler" -o -name "*_panther" \))
 		if [ -n "$folders_funct" ]; then
 			tar -cf - $folders_funct | pigz --best -p $cores > funct_enrichment_analyses.tar.gz; rm -rf $folders_funct
 		fi
