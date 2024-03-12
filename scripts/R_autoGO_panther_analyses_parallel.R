@@ -5,12 +5,19 @@ organism <- args[2]
 cores <- args[3]
 enrichment_databases <- args[4]
 pattern_search <- args[5]
+padjustmethod <- args[6]
 
 print("Attempting automatic gene ontology enrichment analyses by autoGO of the results...")
 print(paste0("Current date: ",date()))
 suppressMessages(library(parallel,quiet = T,warn.conflicts = F))
 suppressMessages(library(autoGO,quiet = T,warn.conflicts = F))
-# choose_database()
+suppressMessages(library(rbioapi,quiet = T,warn.conflicts = F))
+
+a <- rba_panther_info(what="organisms")
+org_panther <- as.numeric(a$taxon_id[grep(gsub(" ","_",organism),gsub(" ","_",a$long_name))])
+methods <- rba_panther_info(what = "datasets")$id
+
+# choose_database() # Check out enrichr webpage to get updated list
 ### 03/2023:
   # [1] "Achilles_fitness_decrease"                          "Achilles_fitness_increase"                         
   # [3] "Aging_Perturbations_from_GEO_down"                  "Aging_Perturbations_from_GEO_up"                   
@@ -117,6 +124,8 @@ suppressMessages(library(autoGO,quiet = T,warn.conflicts = F))
   # [205] "WikiPathway_2021_Human"                             "WikiPathways_2013"                                 
   # [207] "WikiPathways_2015"                                  "WikiPathways_2016"                                 
   # [209] "WikiPathways_2019_Human"                            "WikiPathways_2019_Mouse"
+
+# Decide autoGO/enrichr databases:
 if (!is.na(enrichment_databases)){
     if (length(enrichment_databases) > 0){
       enrichment_databases <- c(enrichment_databases,"GO_Biological_Process_2023","GO_Molecular_Function_2023","GO_Cellular_Component_2023")}}
@@ -134,6 +143,8 @@ if (grepl("sapiens", organism, fixed=TRUE)){
   stop("Exiting")
 }
 
+# Write sets of genes of interest
+key_files <- data.frame()
 for (f in list.files(pattern = pattern_search,path=path,recursive=T, full.names=T)){
   try({
     a <- data.table::fread(f,head=T,fill=T)
@@ -152,6 +163,8 @@ for (f in list.files(pattern = pattern_search,path=path,recursive=T, full.names=
       write.table(e,file=paste0(gsub(".txt","",f),"_fdr_05_logneg.txt"),col.names = F,row.names = F,quote = F,sep="\t")
       write.table(e$Gene_ID,file=paste0(gsub(".txt","",f),"_fdr_05_logneg_Gene_IDs.txt"),col.names = F,row.names = F,quote = F,sep="\n")
     }
+    key_files <- rbind(key_files,data.frame(new_files=c(paste0(gsub(".txt","",f),"_fdr_05_Gene_IDs.txt"),paste0(gsub(".txt","",f),"_fdr_05_logpos_Gene_IDs.txt"),paste0(gsub(".txt","",f),"_fdr_05_logneg_Gene_IDs.txt")),
+                                            old_file=rep(f,3)))
     #b <- a[a$PValue < 0.05,1]
     #d <- a[a$PValue < 0.05 & a$logFC>0,1]
     #e <- a[a$PValue < 0.05 & a$logFC<0,1]
@@ -170,10 +183,14 @@ for (f in list.files(pattern = pattern_search,path=path,recursive=T, full.names=
   }, silent = TRUE)
 }
 
+# Main function to apply in parallel
 process_file <- function(file){
+  # Copy file to a subfolder:
   file2=sub("\\..+$", "", basename(file))
   path2=paste0(dirname(file),"/",file2,"_funct_enrichment/")
   dir.create(path2, showWarnings = FALSE);setwd(path2);file.copy(file,paste0(path2,basename(file)))
+  
+  # autoGO:
   try({
     autoGO(read_gene_lists(gene_lists_path=path2,which_list="everything",from_autoGO=F,files_format=basename(file)),
            databases_autoGO)
@@ -201,7 +218,59 @@ process_file <- function(file){
           }
           }, silent = TRUE)
   }
-  file.rename(path3,sub("//enrichment_tables","_autoGO",path3)); unlink(path2,recursive=T)
+  file.rename(path3,sub("//enrichment_tables","_autoGO",path3))
+
+  # Panther:
+  setwd(path2)
+  dataset <- read.table(paste0(file2,".txt"),head=F)$V1  
+  expr_back <- read.table(key_files$old_file[grep(file2,key_files$new_files)])$V1
+  if (length(dataset) < 10000){
+    for(annot_panther in methods){
+      annot_panther2 <- annot_panther
+      annot_panther2 <- gsub("ANNOT_TYPE_ID_PANTHER_","",gsub("GO:0003674","GO_MF",gsub("GO:0008150","GO_BP",gsub("GO:0005575","GO_CC",annot_panther2))))
+      enriched_fisher_whole_back <- rba_panther_enrich(genes = dataset,
+                                     organism = org_panther,
+                                     annot_dataset = annot_panther,
+                                     test_type = "FISHER",
+                                     correction = padjustmethod,
+                                     cutoff = 0.05)
+      if (dim(enriched_fisher_whole_back$result)[1]!=0){
+        write.table(enriched_fisher_whole_back$result,file=paste0("enriched_fisher_whole_back_",annot_panther2,"_",padjustmethod,"_panther.txt"),col.names = T,row.names = F,quote = F,sep="\t")      
+      }
+      enriched_binom_whole_back <- rba_panther_enrich(genes = dataset,
+                                     organism = org_panther,
+                                     annot_dataset = annot_panther,
+                                     test_type = "BINOMIAL",
+                                     correction = padjustmethod,
+                                     cutoff = 0.05)
+      if (dim(enriched_binom_whole_back$result)[1]!=0){
+        write.table(enriched_binom_whole_back$result,file=paste0("enriched_binom_whole_back_",annot_panther2,"_",padjustmethod,"_panther.txt"),col.names = T,row.names = F,quote = F,sep="\t")      
+      }
+      enriched_fisher_expr_back <- rba_panther_enrich(genes = dataset,
+                                     organism = org_panther,
+                                     annot_dataset = annot_panther,
+                                     test_type = "FISHER",
+                                     correction = padjustmethod,
+                                     cutoff = 0.05,
+                                     ref_genes = expr_back)
+      if (dim(enriched_fisher_expr_back$result)[1]!=0){
+        write.table(enriched_fisher_expr_back$result,file=paste0("enriched_fisher_expr_back_",annot_panther2,"_",padjustmethod,"_panther.txt"),col.names = T,row.names = F,quote = F,sep="\t")      
+      }
+      enriched_binom_expr_back <- rba_panther_enrich(genes = dataset,
+                                     organism = org_panther,
+                                     annot_dataset = annot_panther,
+                                     test_type = "BINOMIAL",
+                                     correction = padjustmethod,
+                                     cutoff = 0.05,
+                                     ref_genes = expr_back)
+      if (dim(enriched_binom_expr_back$result)[1]!=0){
+        write.table(enriched_binom_expr_back$result,file=paste0("enriched_binom_expr_back_",annot_panther2,"_",padjustmethod,"_panther.txt"),col.names = T,row.names = F,quote = F,sep="\t")      
+      }
+    }
+  } else {
+    cat(file2, "... too many genes to apply PANTHER\n")
+  }  
+  setwd(path)
 }
 
 mclapply(
