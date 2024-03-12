@@ -4,8 +4,80 @@ GEO_ID <- args[1]
 path <- args[2]
 
 setwd(paste(path,GEO_ID,"GEO_info",sep="/"))
-
 GEO_ID_path <- GEO_ID
+
+# functions required for filtering columns later...
+get_common_elements <- function(lst) {
+  n <- length(lst)
+  slot_names <- names(lst)
+  
+  # Store results in a list
+  identical_pairs <- list()
+  
+  # Compare each slot with every other slot
+  for (i in 1:(n-1)) {
+    for (j in (i+1):n) {
+      if (identical(lst[[i]], lst[[j]])) {
+        # Record the names of slots that are identical
+        identical_pairs[[length(identical_pairs) + 1]] <- c(slot_names[i], slot_names[j])
+      }
+    }
+  }
+  
+  # Filter out duplicates and return unique combination... 
+  unique(identical_pairs)
+  
+  # Initialize an empty list to store the groups
+  groups <- list()
+
+  # Iterate over each pair of identical slots
+  for (pair in identical_pairs) {
+    # Find if the current pair matches an existing group
+    matched <- FALSE
+    for (i in seq_along(groups)) {
+      if (length(intersect(groups[[i]], pair)) > 0) {
+        groups[[i]] <- union(groups[[i]], pair)
+        matched <- TRUE
+        break
+      }
+    }
+    # If no existing group is matched, add as a new group
+    if (!matched) {
+      groups[[length(groups) + 1]] <- pair
+    }
+  }
+
+  # Function to merge overlapping groups
+  merge_overlaps <- function(groups) {
+    # Keep merging until no change
+    repeat {
+      change <- FALSE
+      new_groups <- list()
+      while (length(groups) > 0) {
+        current <- groups[[1]]
+        groups <- groups[-1]
+        overlaps <- sapply(groups, function(g) length(intersect(g, current)) > 0)
+        if (any(overlaps)) {
+          # Merge overlapping groups
+          current <- unique(unlist(c(current, groups[overlaps])))
+          groups <- groups[!overlaps]
+          change <- TRUE
+        }
+        new_groups <- c(new_groups, list(current))
+      }
+      groups <- new_groups
+      if (!change) break
+    }
+    return(groups)
+  }
+
+  # Merge any overlapping groups
+  groups <- merge_overlaps(groups)
+
+  return(groups)
+}
+
+
 
 for (z in unlist(strsplit(GEO_ID_path,"_"))){
 	if (length(list.files(pattern="pysradb"))==0){
@@ -22,7 +94,13 @@ for (z in unlist(strsplit(GEO_ID_path,"_"))){
 		}
 		phenodata <- phenodata[,apply(phenodata,2,function(x){length(unique(x)) != 1})]
 
-		srx_ids <- gsub(".*term=","",as.character(unlist(phenodata[grep("relation",names(phenodata))])))
+		if (length(grep("sra?term",as.character(unlist(phenodata[grep("relation",names(phenodata))])),fixed=T))==dim(phenodata)[1]){
+			srx_ids <- gsub(".*term=","",as.character(unlist(phenodata[grep("relation",names(phenodata))])))
+		} else {
+			srx_ids <- c()
+			for (id in rownames(phenodata)){srx_ids <- c(srx_ids,noquote(as.character(system(paste0("esearch -db sra -query '",id,"' | efetch -format docsum | grep SRX | sed 's,.*acc=,,g;s, .*,,g'"),intern=T))))}
+			srx_ids <- noquote(as.character(srx_ids))
+		}		
 		write.table(rev(srx_ids),
 		            file=paste(path,GEO_ID_path,"GEO_info","srx_ids.txt",sep="/"),quote = F,row.names = F, col.names = F,sep = "\n", append=TRUE)
 
@@ -109,7 +187,6 @@ for (z in unlist(strsplit(GEO_ID_path,"_"))){
 		write.table(phenodata,
 			    file=paste(path,GEO_ID_path,"GEO_info","phenodata_extracted.txt",sep="/"),quote = F,row.names = F, col.names = F,sep = "\t", append=TRUE)
 		# Write possible designs:
-
 		if (!is.null(dim(phenodata))){
 			#phenodata_possible_designs <- phenodata[,names(which(sort(unlist(lapply(apply(phenodata,2,table),function(x){length(x)}))) <= 10))]
 			phenodata_possible_designs <- phenodata[,names(which(apply(phenodata,2,function(x){length(table(x))}) <= 10 & apply(phenodata,2,function(x){length(table(x))}) > 1 & apply(phenodata,2,function(x){length(table(x))}) <= dim(phenodata)[1]))] # Keep in mind if over 10 conditions in large studies...
@@ -124,12 +201,30 @@ for (z in unlist(strsplit(GEO_ID_path,"_"))){
 			for (i in combinations){
 				lapply(strsplit(i,".",fixed=T),function(x){
 					phenodata_possible_designs <<- cbind(phenodata_possible_designs,apply(phenodata_possible_designs[,as.numeric(x)],1,function(y){
-					gsub(" ","_",paste(gsub(".*: ","",y),collapse="."))
+					gsub(".","_",gsub(" ","_",paste(gsub(".*: ","",y),collapse=".")),fixed=T)
 					}))
 				})
 			}
-
+			phenodata_possible_designs <- phenodata_possible_designs[,order(colnames(phenodata_possible_designs))]
 			num_des=length(grep("design_possible_full",list.files(),val=T))
+			# Remove special characters, columns that are pointing to the same groups, etc...:
+			phenodata_possible_designs <- as.data.frame(apply(phenodata_possible_designs,2,function(x){tolower(sub("([+-])|RNA-Seq|Homo sapiens|Mus musculus","\\1",x))}))
+			phenodata_possible_designs <- as.data.frame(apply(phenodata_possible_designs,2,function(x){gsub(" ","-",x)}))
+			phenodata_possible_designs <- as.data.frame(apply(phenodata_possible_designs,2,function(x){gsub("--","",x)}))
+			phenodata_possible_designs <- as.data.frame(apply(phenodata_possible_designs,2,function(x){gsub("[^a-zA-Z0-9_]","_",x)}))
+			phenodata_possible_designs <- as.data.frame(apply(phenodata_possible_designs,2,function(x){gsub("[0-9]+","",x)}))
+			phenodata_possible_designs <- as.data.frame(apply(phenodata_possible_designs,2,function(x){gsub("_+","_",x)}))
+			phenodata_possible_designs <- as.data.frame(apply(phenodata_possible_designs,2,function(x){gsub("_$","",x)}))
+			
+			# Remove columns if any of the categories that they are containing are repeated only one (which would give errors in the DGE analyses due to lack of replicates)
+			phenodata_possible_designs <- phenodata_possible_designs[,!(colnames(phenodata_possible_designs) %in% names(phenodata_possible_designs)[unlist(lapply(phenodata_possible_designs,function(x){any(table(x)==1)}))])]
+			# If different columns are containing the same groups, get only one of them (the first):
+			a <- lapply(phenodata_possible_designs, function(x){unname(sapply(seq_along(names(table(x))),function(y){paste(gsub("[a-zA-Z_]","",gsub(names(table(x)[match(unique(x),names(table(x)))])[y],y,x)),collapse="_")}))})
+			columns_with_same_groups <- get_common_elements(a) # funcion defined above in the script
+			columns_to_keep <- c(unlist(lapply(get_common_elements(a),function(x){x[1]})),
+					     colnames(phenodata_possible_designs)[!(colnames(phenodata_possible_designs) %in% unlist(columns_with_same_groups))])
+			phenodata_possible_designs <- as.data.frame(phenodata_possible_designs[,colnames(phenodata_possible_designs) %in% columns_to_keep])			
+			
 			for (i in (num_des+1):(dim(phenodata_possible_designs)[2]+num_des)){
 				idx=i
 				if(length(grep("design_possible_full",list.files(),val=T))!=0){
@@ -162,76 +257,6 @@ for (z in unlist(strsplit(GEO_ID_path,"_"))){
 	}
 }
 
-# function required for filtering columns later...
-get_common_elements <- function(lst) {
-  n <- length(lst)
-  slot_names <- names(lst)
-  
-  # Store results in a list
-  identical_pairs <- list()
-  
-  # Compare each slot with every other slot
-  for (i in 1:(n-1)) {
-    for (j in (i+1):n) {
-      if (identical(lst[[i]], lst[[j]])) {
-        # Record the names of slots that are identical
-        identical_pairs[[length(identical_pairs) + 1]] <- c(slot_names[i], slot_names[j])
-      }
-    }
-  }
-  
-  # Filter out duplicates and return unique combination... 
-  unique(identical_pairs)
-  
-  # Initialize an empty list to store the groups
-  groups <- list()
-
-  # Iterate over each pair of identical slots
-  for (pair in identical_pairs) {
-    # Find if the current pair matches an existing group
-    matched <- FALSE
-    for (i in seq_along(groups)) {
-      if (length(intersect(groups[[i]], pair)) > 0) {
-        groups[[i]] <- union(groups[[i]], pair)
-        matched <- TRUE
-        break
-      }
-    }
-    # If no existing group is matched, add as a new group
-    if (!matched) {
-      groups[[length(groups) + 1]] <- pair
-    }
-  }
-
-  # Function to merge overlapping groups
-  merge_overlaps <- function(groups) {
-    # Keep merging until no change
-    repeat {
-      change <- FALSE
-      new_groups <- list()
-      while (length(groups) > 0) {
-        current <- groups[[1]]
-        groups <- groups[-1]
-        overlaps <- sapply(groups, function(g) length(intersect(g, current)) > 0)
-        if (any(overlaps)) {
-          # Merge overlapping groups
-          current <- unique(unlist(c(current, groups[overlaps])))
-          groups <- groups[!overlaps]
-          change <- TRUE
-        }
-        new_groups <- c(new_groups, list(current))
-      }
-      groups <- new_groups
-      if (!change) break
-    }
-    return(groups)
-  }
-
-  # Merge any overlapping groups
-  groups <- merge_overlaps(groups)
-
-  return(groups)
-}
 
 # The code above (before the function) is to deal iteratively with samples in case pysradb has not worked (non-RNA-seq studies for example). But ideally, I should be able to extract all that is required from the file from pysradb (in the final_results folder, I processed in previous scripts the pysradb files and created samples_info)
 if (file.exists(paste0(path,"/",GEO_ID_path,"/sample_info.txt"))){
@@ -281,10 +306,12 @@ if (file.exists(paste0(path,"/",GEO_ID_path,"/sample_info.txt"))){
 	info_filt_2 <- info_filt[,apply(info_filt,2,function(x){length(table(x))!=1})]
 	info_filt_2 <- as.data.frame(apply(info_filt_2,2,function(x){tolower(sub("([+-])|[[:punct:]]|RNA-Seq|Homo sapiens|Mus musculus","\\1",x))}))
 	info_filt_2 <- as.data.frame(apply(info_filt_2,2,function(x){gsub(" ","-",x)}))
-	info_filt_2 <- as.data.frame(apply(info_filt_2,2,function(x){gsub("--","",x)}))
+	info_filt_2 <- as.data.frame(apply(info_filt_2,2,function(x){gsub("-+","_",x)}))
 	info_filt_2 <- as.data.frame(apply(info_filt_2,2,function(x){gsub("^gsm","GSM",x)}))
 	info_filt_2 <- as.data.frame(apply(info_filt_2,2,function(x){gsub("^srr","SRR",x)}))
 	info_filt_2 <- as.data.frame(apply(info_filt_2,2,function(x){gsub("[^a-zA-Z0-9_]","_",x)}))
+	info_filt_2 <- as.data.frame(apply(info_filt_2,2,function(x){gsub("[0-9]+","",x)}))
+	info_filt_2 <- as.data.frame(apply(info_filt_2,2,function(x){gsub("_+","_",x)}))
 				  
 	sample_names <- apply(info_filt_2,1,function(x){paste(x,collapse="_")})
 	sample_names <- unlist(lapply(strsplit(sample_names,"-|_"),function(x){paste(unique(x),collapse="_")}))
