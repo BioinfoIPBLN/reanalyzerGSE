@@ -934,7 +934,20 @@ save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
   data_pca$Age <- targets$Age
   data_pca$VAS_Group <- targets$VAS_Group
   data_pca$TypeII <- targets$TypeII
-  plot(autoplot(data_pca.PC,label=T,data=data_pca,colour='Type',xlim = c(-0.8,0.8),label.size=3,label.repel=T))
+  plot(autoplot(data_pca.PC,title="PCA_over_edgeR",label=T,data=data_pca,colour='Type',xlim = c(-0.8,0.8),label.size=3,label.repel=T))
+  ### 6. PCA por tipos normalizada (no log2 si no en edgeR)
+  data_pca <- as.matrix(x2)
+  data_pca <- as.data.frame(t(data_pca))
+  rownames(data_pca) <- targets$Name
+  data_pca.PC = prcomp(data_pca)
+  data_pca$Type <- targets$Type
+  data_pca$Filename <- targets$Filename
+  data_pca$Name <- targets$Name
+  data_pca$Sex <- targets$Sex
+  data_pca$Age <- targets$Age
+  data_pca$VAS_Group <- targets$VAS_Group
+  data_pca$TypeII <- targets$TypeII
+  plot(autoplot(data_pca.PC,title="PCA_over_edgeR_norm",label=T,data=data_pca,colour='Type',xlim = c(-0.8,0.8),label.size=3,label.repel=T))
   ### 7. Heatmap 250 mots differential entities
   rsd <- rowSds(as.matrix(x))
   sel <- order(rsd, decreasing=TRUE)[1:250]
