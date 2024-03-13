@@ -43,8 +43,6 @@ Please go through the log files 'test_data_X.log' to get the details on the pipe
 Please refer to the help page for futher details:
 ```
 reanalyzerGSE.pk.sh -h
-
-reanalyzerGSE v2.1.1. usage: reanalyzerGSE.pk.sh [options]
 		-h | -help # Type this to get help
 		-i | -input # GEO_ID (GSEXXXXXX, separated by comma if more than one), or folder containing raw reads (please provide full absolute path, e.g. /path/folder_name/), or almost any accession from ENA/SRA to download .fastq from (any of the ids with the prefixes PRJEB,PRJNA,PRJDB,ERP,DRP,SRP,SAMD,SAME,SAMN,ERS,DRS,SRS,ERX,DRX,SRX,ERR,DRR,SRR, please separated by commas if more than one id as input)
 		-n | -name # Name of the project/folder to create and store results
@@ -79,12 +77,14 @@ reanalyzerGSE v2.1.1. usage: reanalyzerGSE.pk.sh [options]
 		-De | -differential_expr_software # Software to be used in the differential expression analyses ('edgeR' by default, or 'DESeq2')
 		-Df | -databases_function # Manually provide a comma separated list of databases to be used in automatic functional enrichment analyses of DEGs (check out the R package autoGO::choose_database(), but the most popular GO terms are used by default)
 		-Dc | -deconvolution # Whether to perform deconvolution of the bulk RNA-seq data by CDSeq ('yes', which may require few hours to complete, or 'no', by default)
+		-Dec | -differential_expr_comparisons # Whether to restrict the differential expression analyses to only some of the possible comparisons (a comma-separated list of indexes pointing to the comparisons to keep, which you could get from a preliminar previous run, or 'no', by default)
 		-Of | -options_featureCounts_feature # The feature type to use to count in featureCounts (default 'exon')
 		-Os | -options_featureCounts_seq # The seqid type to use to count in featureCounts (default 'gene_name')
 		-iG | -input_GEO_reads # If you want to combine downloading metadata from GEO with reads from GEO or any database already downloaded, maybe from a previous attempt, please provide an absolute path
 		-cG | -compression_level # Specify the compression level to gzip the downloaded fastq files from GEO (numeric '0' to '9', default '9')
 		-cP | -clusterProfiler # Whether to perform additional functional enrichment analyses using ClusterProfiler (slow if many significant DEGs or multiple number of comparisons, 'no' or 'yes', by default)
 		-cPm | -clusterProfiler_method # Method for adjusting p.value in clusterprofiler iterations (one of 'holm','hochberg','hommel','bonferroni','BH','BY,'none', or 'fdr', by default)
+		-Pm | -panther_method # Method for adjusting p.value in panther analyses via rbioapi (one of 'NONE','BONFERRONI', or 'FDR', by default)
 		-Tc | -time_course_analyses # Whether to perform additional time-course analyses as a last step ('yes' or 'no', by default)
 		-Tcsd | -time_course_std # Standard deviation threshold to filter in time course analyses (numeric, 1 by default)
 		-Tcf | -time_course_fuzzi # Fuziness value for the soft clustering approach (by default an estimate is automatically computed but manual testing is encouraged)
@@ -105,7 +105,7 @@ An improved version of miARma-seq has been included in reanalyzerGSE and used by
 Please refer to the help page or open an issue for any further clarification.
 
 ## Comments
-Please cite this reference when using reanalyzerGSE for your publications: (PENDING IMMINENT RELEASE IN BIORXIV)
+Please cite this reference when using reanalyzerGSE for your publications:
 
 > Ruiz, J. L., Terrón-Camero, L. C., Castillo-González, J., Fernández-Rengel, I., Delgado, M., Gonzalez-Rey, E., & Andrés-León, E. (2023). reanalyzerGSE: tackling the everlasting lack of reproducibility and reanalyses in transcriptomics. bioRxiv, 2023-07.
 
