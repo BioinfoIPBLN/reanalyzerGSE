@@ -579,7 +579,7 @@ restrict_comparisons <- args[11] # if not provided, "no"
     setwd(paste0(output_dir,"/DGE"))
       tryCatch({
         RPKM <- gene_counts_rpkm_to_write[,-grep("Gene_ID",colnames(gene_counts_rpkm_to_write))]
-        a <- data.frame(Type=sub("(.*)_.*", "\\1",colnames(RPKM)))
+        a <- data.frame(Type=sub("_Rep.*","",sub("(.*)_.*", "\\1",colnames(RPKM))))
         rownames(a) <- colnames(RPKM)
         print("Obtaining targets from colum names removing everything after the last underline... This is the result, please double check as it may be the source of errors...")
         print(a)
