@@ -713,13 +713,18 @@ if [[ ! -e "$output_folder/$name/miarma0.ini" ]]; then
 			strand=no
 		fi
 		strand_second_opinion=$(cat $output_folder/$name/strand_prediction/how_are_we_stranded_here_out/check_strandedness_out.log | grep "Data is likely " | sed 's,*Data is likely ,,g')
-		rm $(find $output_folder/$name/strand_prediction/how_are_we_stranded_here_out -type f -name "*.bam")
 		cd $output_folder/$name	
 		echo "Salmon prediction 1: $salmon_strand" > $output_folder/$name/strand_info.txt
 		echo "Salmon prediction 2: $strand" >> $output_folder/$name/strand_info.txt
-		echo -e "how_are_we_stranded_here prediction: $strand_second_opinion" >> $output_folder/$name/strand_info.txt
-		cat $output_folder/$name/strand_info.txt
-		echo "Please double check carefully, based on the kit used in the library preparation, the paper, the GEO entry... because this is crucial for quantification. Please rerun with the argument '-s' in the unlikely case that the prediction by salmon is not correct, or if the second opinion by how_are_we_stranded_here is different (if transcripts from GENCODE or any particular format are used, the latter option may fail to identify the data type though)"
+		echo -e "how_are_we_stranded_here prediction: $strand_second_opinion" >> $output_folder/$name/strand_info.txt		
+		if [ $(grep -c "Data is likely" $output_folder/$name/strand_info.txt) -gt 0 ]; then		
+  			echo "Please double check carefully, based on the kit used in the library preparation, the paper, the GEO entry... because this is crucial for quantification. Please rerun with the argument '-s' in the unlikely case that the prediction by salmon is not correct, or if the second opinion by how_are_we_stranded_here is different (if transcripts from GENCODE or any particular format are used, the latter option may fail to identify the data type though)"
+    			cat $output_folder/$name/strand_info.txt
+			rm $(find $output_folder/$name/strand_prediction/how_are_we_stranded_here_out -type f -name "*.bam")
+		else
+  			echo "Salmon or how_are_we_stranded_here seem to have failed. This is not acceptable, plese double check. Exiting..."
+			exit 1
+		fi
 	fi
 
 ### Prepare other info required by the updated version of miARma...
