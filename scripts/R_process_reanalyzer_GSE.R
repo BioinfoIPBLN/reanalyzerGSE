@@ -141,6 +141,7 @@ restrict_comparisons <- args[11] # if not provided, "no"
   edgeR_object <- DGEList(counts=gene_counts[,grep("Gene_ID|Length",colnames(gene_counts),invert=T)],
                    group=pheno$condition,
                    genes=gene_counts[,c(grep("Gene_ID",colnames(gene_counts)),grep("Length",colnames(gene_counts)))])
+  print("Please note that counts have been normalized and figures have been performed using the groups and samples:"); print(pheno$condition); print(grep("Gene_ID|Length",colnames(gene_counts),invert=T,val=T))
 
 ###### Filter counts:
   filter <- function(filter="standard",data,min_group=3){
@@ -222,8 +223,8 @@ restrict_comparisons <- args[11] # if not provided, "no"
 ###### Similar to above, obtain RPKM counts but from the ComBat-Seq-adjusted counts instead of the raw counts
   if (exists("adjusted_counts")){
     edgeR_object_combat <- DGEList(counts=adjusted_counts,
-                     group=pheno$condition,
-               genes=gene_counts[,c(grep("Gene_ID",colnames(gene_counts)),grep("Length",colnames(gene_counts)))])
+                                   group=pheno$condition,
+                                   genes=gene_counts[,c(grep("Gene_ID",colnames(gene_counts)),grep("Length",colnames(gene_counts)))])
     cat(paste0("Number of genes combat before filter: ", nrow(edgeR_object_combat)),"\n")
     edgeR_object_prefilter_combat <- edgeR_object_combat
     edgeR_object_combat <- filter(filter=filter_option,edgeR_object_combat) # Make sure of use bin to capture Cort and the lower expressed genes
@@ -433,8 +434,8 @@ restrict_comparisons <- args[11] # if not provided, "no"
     ggsave(p, filename = file,width=30, height=30)
     suppressWarnings(htmlwidgets::saveWidget(widget = ggplotly(p),file = gsub("pdf","html",file),selfcontained = TRUE))
   }
-  DGE <- function(comp,organism="mouse", myFDR=0.05, myFC=0){
-    et <- exactTest(edgeR_object_norm,pair = comp)
+  DGE <- function(comp,object=edgeR_object_norm, organism="mouse", myFDR=0.05, myFC=0){
+    et <- exactTest(object,pair = comp)
     #Extracting the statistical data order by p-value
     top1 <- topTags(et, n=nrow(et), adjust.method="BH",sort.by="PValue")
 
@@ -493,7 +494,10 @@ restrict_comparisons <- args[11] # if not provided, "no"
   ## Proceed with DGE analyses:
     print("Attempting differential gene expression analyses between the conditions:")
     dir.create(paste0(output_dir,"/DGE"),showWarnings=F)
-    for (z in list.files(pattern = "design_possible_full", recursive = TRUE, full.names=T, path=paste0(path,"/GEO_info"))){
+    files_designs <- list.files(pattern = "design_possible_full", recursive = TRUE, full.names=T, path=paste0(path,"/GEO_info"))
+    for (n in 1:length(files_designs)){
+      z <- files_designs[n]
+      
       if (length(unique(read.table(z,head=F,blank.lines.skip=T)$V1)) == 1){
          next
       }
@@ -506,6 +510,31 @@ restrict_comparisons <- args[11] # if not provided, "no"
       } else {
         condition <- read.table(z,head=F,blank.lines.skip=FALSE)$V1
       }
+
+      # Create edgeR_objects for each grouping/design if required:
+      edgeR_object_tmp <- DGEList(counts=gene_counts[,grep("Gene_ID|Length",colnames(gene_counts),invert=T)],
+                               		group=condition,
+                               		genes=gene_counts[,c(grep("Gene_ID",colnames(gene_counts)),grep("Length",colnames(gene_counts)))])
+      edgeR_object_tmp <- filter(filter=filter_option,edgeR_object_tmp)
+      edgeR_object_norm_temp <- calcNormFactors(edgeR_object_tmp)      
+      if(covariab == "none"){
+          edgeR_object_norm_temp <- estimateCommonDisp(edgeR_object_norm_temp, robust=TRUE)
+          if (is.na(edgeR_object_norm_temp$common.dispersion)){
+            edgeR_object_norm_temp$common.dispersion <- 0.4 ^ 2
+            cat("\nEstimating Dispersion... Errors or warnings? Likely because no replicates, addressing providing a fixed value for dispersion, but do not trust comparative analyses because it's likely not accurate. Please consult the vignette for further information...\n")
+          }
+          edgeR_object_norm_temp <- estimateTagwiseDisp(edgeR_object_norm_temp)
+      } else { 
+          Treat <- edgeR_object_tmp$samples$group
+          Time <- as.factor(unlist(strsplit(as.character(covariab),",")))
+          design <- model.matrix(~0+Treat+Time)
+          rownames(design) <- colnames(edgeR_object_norm_temp)
+          edgeR_object_norm_temp <- estimateDisp(edgeR_object_norm_temp, design, robust=TRUE) # Preparing for one covariable following edgeR vignette new methods Nov2023
+      }
+      
+      edgeR_object_norm_temp_to_process <- edgeR_object_norm_temp
+
+      # Process each combination
       list_combinations <- strsplit(unique(unlist(lapply(strsplit(apply(expand.grid(unique(condition), unique(condition)),1,function(x){paste(x,collapse="*****")}),"*****",fixed=T),function(x){if (x[1] != x[2]){paste(sort(x),collapse="*****")}}))),"*****",fixed=T)
       list_combinations <- lapply(list_combinations,function(x){if (sum(!startsWith(x,"__"))==2){paste0("__",x)} else {x}})
       print(list_combinations)
@@ -521,6 +550,7 @@ restrict_comparisons <- args[11] # if not provided, "no"
       existing <- length(list.files(path=paste0(output_dir,"/DGE/"),pattern=".RData$"))
     for (i in 1:length(list_combinations)){
       # print(i)    
+      # This if should be updated and probably moved above if the filter is to be used properly
       if (exists("gsm_manual_filter")){
         idxs_gsm_manual_2 <- which(unlist(lapply(strsplit(colnames(gene_counts),"_"),function(x){any(x %in% unlist(strsplit(gsm_manual_filter,",")))})))
         idxs_gsm_manual_2_2 <- which(unlist(lapply(strsplit(pheno$sample,"_"),function(x){any(x %in% unlist(strsplit(gsm_manual_filter,",")))})))
@@ -542,16 +572,23 @@ restrict_comparisons <- args[11] # if not provided, "no"
         colnames(gene_counts_rpkm) <- rownames(edgeR_object_norm$samples)
         gene_counts_rpkm$Gene_ID <- stringr::str_to_title(rownames(gene_counts_rpkm))
       } 
+      
       if(sum(!startsWith(as.character(edgeR_object_norm$samples$group),"__")) == length(as.character(edgeR_object_norm$samples$group))){
         edgeR_object_norm$samples$group <- as.factor(paste0("__",edgeR_object_norm$samples$group))
-      }          
+      }
+      if(sum(!startsWith(as.character(edgeR_object_norm_temp_to_process$samples$group),"__")) == length(as.character(edgeR_object_norm_temp_to_process$samples$group))){
+        edgeR_object_norm_temp_to_process$samples$group <- as.factor(paste0("__",edgeR_object_norm_temp_to_process$samples$group))
+      }
+      
       write.table(paste0("\nComparison number ",i+existing,": ",list_combinations[[i]]),
               file=paste0(output_dir,"/DGE/list_comp.txt"),quote = F,row.names = F, col.names = F,sep = "\n", append=T)
+
+      # Perform DGE:
       if(covariab == "none"){
-        edgeR_results <- DGE(comp=list_combinations[[i]])
+        edgeR_results <- DGE(comp=list_combinations[[i]],object=edgeR_object_norm_temp_to_process)
         colnames(edgeR_results$table)[3] <- paste0(colnames(edgeR_results$table)[3],list_combinations[[i]][1],"_VS_",list_combinations[[i]][2])
       } else {
-        fit <- glmQLFit(edgeR_object_norm, design, robust=TRUE)
+        fit <- glmQLFit(edgeR_object_norm_temp_to_process, design, robust=TRUE)
         contrast <- rep(0,dim(design)[2])
         contrast[grep(paste(gsub("__|_seq1|_seq2","",list_combinations[[i]]),collapse="|"),colnames(design))] <- c(-1,1)
         qlf <- glmQLFTest(fit,contrast=contrast)
