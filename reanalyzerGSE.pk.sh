@@ -19,7 +19,7 @@ for argument in $options; do
 
 ### Gather the parameters, default values, exit if essential not provided...
 	case $argument in
-		-h*) echo "reanalyzerGSE v2.2 - usage: reanalyzerGSE.pk.sh [options]
+		-h*) echo "reanalyzerGSE v2.3 - usage: reanalyzerGSE.pk.sh [options]
 		-h | -help # Type this to get help
 		-i | -input # GEO_ID (GSEXXXXXX, separated by comma if more than one), or folder containing raw reads (please provide full absolute path, e.g. /path/folder_name/), or almost any accession from ENA/SRA to download .fastq from (any of the ids with the prefixes PRJEB,PRJNA,PRJDB,ERP,DRP,SRP,SAMD,SAME,SAMN,ERS,DRS,SRS,ERX,DRX,SRX,ERR,DRR,SRR, please separated by commas if more than one id as input)
 		-n | -name # Name of the project/folder to create and store results
@@ -54,6 +54,7 @@ for argument in $options; do
 		-De | -differential_expr_software # Software to be used in the differential expression analyses ('edgeR' by default, or 'DESeq2')
 		-Df | -databases_function # Manually provide a comma separated list of databases to be used in automatic functional enrichment analyses of DEGs (check out the R package autoGO::choose_database(), but the most popular GO terms are used by default)
 		-Dc | -deconvolution # Whether to perform deconvolution of the bulk RNA-seq data by CDSeq ('yes', which may require few hours to complete, or 'no', by default)
+		-Dm | -debug_module # For debugging, step to remove the content of the corresponding folders and to resume a failed or incomplete run without repeating (one of 'step1', 'step2', 'step3', 'step4', 'step5' or 'all' to execute everything, by default)
 		-Dec | -differential_expr_comparisons # Whether to restrict the differential expression analyses to only some of the possible comparisons (a comma-separated list of indexes pointing to the comparisons to keep, which you could get from a preliminar previous run, or 'no', by default)
 		-Of | -options_featureCounts_feature # The feature type to use to count in featureCounts (default 'exon')
 		-Os | -options_featureCounts_seq # The seqid type to use to count in featureCounts (default 'gene_name')
@@ -103,6 +104,7 @@ for argument in $options; do
 		-Dk) kraken2_databases=${arguments[index]} ;;
 		-Ds) sortmerna_databases=${arguments[index]} ;;
 		-De) differential_expr_soft=${arguments[index]} ;;
+		-Dm*) debug_step=${arguments[index]} ;;
 		-Dec) differential_expr_comparisons=${arguments[index]} ;;
 		-Dc) deconvolution=${arguments[index]} ;;
 		-cP) clusterProfiler=${arguments[index]} ;;
@@ -249,6 +251,10 @@ fi
 if [ -z "$tidy_tmp_files" ]; then
 	tidy_tmp_files="no"
 fi
+if [ -z "$debug_step" ]; then
+	debug_step="all"
+fi
+export debug_step
 ### Info on the kraken2 decontamination step and databases:
 if [ -z "$kraken2_fast" ]; then
 	kraken2_fast="no"
@@ -337,102 +343,105 @@ else
 	echo -e "\nTMPDIR changed to $TMPDIR\n"
 fi
 
-if [[ $input == G* ]]; then
-### Download info:
-	echo -e "\nDownloading info from GEO for $input...\n"
-	R_download_GEO_info.R $input $output_folder
-	arrIN=(${input//,/ })
-	input=$(for a in "${arrIN[@]}"; do echo "$a"; done | sort | tr '\n' '_' | sed 's,_$,,g')
-
-### Get metadata and process the info:
-	echo -e "\nProcessing and downloading more data...\n"
-	cd $output_folder/$name/GEO_info
-	if [ ! -z "$GSM_filter" ]; then
-		echo $GSM_filter > gsm_manual_filter.txt
-	fi
-	series_matrix=$(zcat *_series_matrix.txt.gz | grep SRP | sed 's,.*SRP,SRP,g' | sed 's,",,g')
-	if [ ! -z "$series_matrix" ]; then
-		for f in $series_matrix; do
-			pysradb metadata $f --detailed --assay --desc --expand --saveto sample_info_pysradb_$f.txt
-		done
-		for i in $(zcat *_series_matrix.txt.gz | egrep 'SRP|Series_geo_accession' | sed 's,.*SRP,SRP,g' | sed 's,",,g' | sed 's,.*\t,,g' | grep SRP); do
-			mv $(ls | grep $i) $(ls | grep $i | sed 's,.txt,_,g')$(zcat *_series_matrix.txt.gz | egrep 'SRP|Series_geo_accession' | sed 's,.*SRP,SRP,g' | sed 's,",,g' | sed 's,.*\t,,g' | grep -B1 $i | grep GSE)".txt"
-		done
-	R_process_pysradb.R $input $output_folder
-	fi
-	R_download_GEO_info_process.R $input $output_folder
-	sed -i -r -e 's/[^[:alnum:]_\t]/_/g' -e 's/_\+/_/g' -e 's/(_[^_]*)\1+/\1/g' sample_names.txt
-	if test -f srx_ids.txt; then
-		for i in $(cat srx_ids.txt); do esearch -db sra -query $i | esummary | xtract -pattern DocumentSummary -element Run@acc >> srr_ids.txt; done
-		rm srx_ids.txt
-	fi
-	if test -f srr_ids.txt; then
-		for i in $(cat srr_ids.txt | shuf | head -2); do esearch -db sra -query $i | esummary | egrep "SINGLE|PAIRED" >> library_layout.txt; done && uniq library_layout.txt | sed 's/          //g;s/<//g;s/>//g;s\/\\g' > library_layout_info.txt && rm library_layout.txt
-		paste -d$'\t' srr_ids.txt sample_names.txt $(for f in $(ls | grep full); do echo $f" "$(sort $f | uniq -c | wc -l); done | grep -v " 1" | cut -d" " -f1 | head -1) > samples_info.txt # the third column is a design containing at least more than one element...
-		sed -i -r -e 's/[^[:alnum:]_\t]/_/g' -e 's/_\+/_/g' -e 's/(_[^_]*)\1+/\1/g' -e 's/_([0-9]+)/-\1/g' samples_info.txt # Should be redundant but make sure to remove special characters from the sample names and _1/_2... it's crucial for later steps such as fastqc and miarma-seq
-	fi
-	if [ ! -s srr_ids.txt ]; then
-		echo -e "\nI haven't been able to find SRR accession ids to download the sequences and I'm exiting, please double check manually..."; exit 1
-	fi
-	echo -e "\nAll available info downloaded from GEO, please check it out in $output_folder/$name/GEO_info\n"
-	if [ "$design_custom" == "yes" ]; then
-		echo "You have requested to manually provide the experimental design instead of the ones shown above. This is the list of samples:"
-		cat sample_names.txt
-		echo "Please provide a comma-separated list with the conditions for each sample:"
-		read -r design_input
-		rm $(ls -d $output_folder/$name/GEO_info/* | grep 'design_possible_')
-		echo $design_input | sed 's/,/\n/g' > $output_folder/$name/GEO_info/design_possible_full_1.txt
-		cat $output_folder/$name/GEO_info/design_possible_full_1.txt | sort | uniq > $output_folder/$name/GEO_info/design_possible_1.txt
-	fi
-
-### Stop and continue with other script if it's a single-cell:
-	if [ $(zcat $output_folder/$name/GEO_info/*_series_matrix.txt.gz | egrep -e 'single nuclei|single cell|single-cell|snRNA|scRNA' | wc -l) -gt 0 ] || [ $(zcat $(find . -name "*_series_matrix.txt.gz") | egrep -i -e 'single nuclei|single cell|single-cell|snRNA|scRNA' | wc -l) -gt 0 ]; then
-	  	echo -e "\n\nDetected this could be a single-cell RNA-seq study... I can try to do stuff automatically (i.e. try and normalize the raw counts or give an estimated bulk expression taking the average), but errors are expected. \nThe script 'R_process_reanalyzer_GSE_single_cell.R' is a template built from the case example GSE118257, and valid to other GEO entries where pheno data and matrix counts are supplementary files clearly named.\nHowever, manual changes are most likely required to work with other studies... These changes should be possible, so please open an issue or go for it if you have the expertise and this one fails!. For example, it's likely that it's just required to point to the directory of the matrix counts, or to manually specify the columns/names of the conditions/cells\n\n"
-		# Print the results to review:
-		echo -e "This text in the metadata is what made the pipeline to suggest this could be single-cell:"
-		zcat $output_folder/$name/GEO_info/*_series_matrix.txt.gz | egrep -e 'single nuclei|single cell|single-cell|snRNA|scRNA'
-		zcat $(find . -name "*_series_matrix.txt.gz") | egrep -i -e 'single nuclei|single cell|single-cell|snRNA|scRNA'
-		# Choice:
-		echo -e "\nWrite 'yes' to continue with single-cell analyses, or 'no' to continue with normal analyses after reviewing the entry and the statements in the metadata pointing to single-cell..."
-		read -r single_cell_choice
-		if [ "$single_cell_choice" == "yes" ]; then
-			R_process_reanalyzer_GSE_single_cell.R $input $output_folder $genes; exit 1
-		elif [ "$single_cell_choice" == "no" ]; then
-			echo -e "\nContinuing with bulk RNA-seq analyses...\n"
+if [[ $debug_step == "all" || $debug_step == "step1" ]]; then
+	if [[ $input == G* ]]; then
+	### Download info:
+		echo -e "\nDownloading info from GEO for $input...\n"
+		R_download_GEO_info.R $input $output_folder
+		arrIN=(${input//,/ })
+		input=$(for a in "${arrIN[@]}"; do echo "$a"; done | sort | tr '\n' '_' | sed 's,_$,,g')
+	
+	### Get metadata and process the info:
+		echo -e "\nProcessing and downloading more data...\n"
+		cd $output_folder/$name/GEO_info
+		if [ ! -z "$GSM_filter" ]; then
+			echo $GSM_filter > gsm_manual_filter.txt
 		fi
-	fi
-
-### Stop and continue with other script if it's a microarrays:
-	if [ $(zcat $output_folder/$name/GEO_info/*_series_matrix.txt.gz | egrep -i -e 'Expression profiling by array|microarray' | wc -l) -gt 0 ] || [ $(zcat $(find . -name "*_series_matrix.txt.gz") | egrep -i -e 'Expression profiling by array|microarray' | wc -l) -gt 0 ]; then
-	  	echo -e "\n\nDetected this could be a microarrays study... trying to do analyze automatically, but errors in this log are expected. The script 'R_process_reanalyzer_GSE_microarrays.R' is already supporting the most frequent arrays and platforms, but it could require to be extended in order to work with other studies... These changes should be possible though, so please open an issue or go for it if you have the expertise and this one fails!\n\n"
-		# Choice:
-		echo -e "\nWrite 'yes' to continue with microarrays analyses, or 'no' to continue with normal analyses after reviewing the entry pointing to microarrays..."
-		read -r microarrays_choice
-		if [ "$microarrays_choice" == "yes" ]; then
-		  	R_process_reanalyzer_GSE_microarrays.R $input $output_folder $genes; exit 1
-		elif [ "$microarrays_choice" == "no" ]; then
-			echo -e "\nContinuing with bulk RNA-seq analyses...\n"
+		series_matrix=$(zcat *_series_matrix.txt.gz | grep SRP | sed 's,.*SRP,SRP,g' | sed 's,",,g')
+		if [ ! -z "$series_matrix" ]; then
+			for f in $series_matrix; do
+				pysradb metadata $f --detailed --assay --desc --expand --saveto sample_info_pysradb_$f.txt
+			done
+			for i in $(zcat *_series_matrix.txt.gz | egrep 'SRP|Series_geo_accession' | sed 's,.*SRP,SRP,g' | sed 's,",,g' | sed 's,.*\t,,g' | grep SRP); do
+				mv $(ls | grep $i) $(ls | grep $i | sed 's,.txt,_,g')$(zcat *_series_matrix.txt.gz | egrep 'SRP|Series_geo_accession' | sed 's,.*SRP,SRP,g' | sed 's,",,g' | sed 's,.*\t,,g' | grep -B1 $i | grep GSE)".txt"
+			done
+		R_process_pysradb.R $input $output_folder
 		fi
-	fi
-
-### Stop if SRR not obtained and not single-cell or microarrays
-	if [ ! -s srr_ids.txt ]; then
-		echo -e "\nI haven't been able to find SRR accession ids to download the sequences and I'm exiting, please double check manually..."; exit 1
-	fi
-
-### Get organism:
-	organism=$(zcat $output_folder/$name/GEO_info/*_series_matrix.txt.gz | grep "organism" | awk '{$1=""}1' |tr '"' '\n' | sort -u | sed -r '/^\s*$/d')
-	echo $organism > $output_folder/$name/GEO_info/organism.txt
-	if [ $(zcat $output_folder/$name/GEO_info/*_series_matrix.txt.gz | grep "organism" | awk '{$1=""}1' |tr '"' '\n' | sort -u | sed -r '/^\s*$/d' | wc -l) -gt 1 ]; then
-		echo -e "\n Please keep in mind that two different organisms are detected. You are likely requesting an analysis combining multiple GSEXXXXX, please make sure they are from the same organism. Another possibility is there are multiple series_matrix within the same GSEXXXX id, and you may have requested to stop and manually clarify. Continuing with organism: "
-		organism=$(zcat *_series_matrix.txt.gz | grep "organism" | awk '{$1=""}1' |tr '"' '\n' | sort -u | sed -r '/^\s*$/d' | head -1)
+		R_download_GEO_info_process.R $input $output_folder
+		sed -i -r -e 's/[^[:alnum:]_\t]/_/g' -e 's/_\+/_/g' -e 's/(_[^_]*)\1+/\1/g' sample_names.txt
+		if test -f srx_ids.txt; then
+			for i in $(cat srx_ids.txt); do esearch -db sra -query $i | esummary | xtract -pattern DocumentSummary -element Run@acc >> srr_ids.txt; done
+			rm srx_ids.txt
+		fi
+		if test -f srr_ids.txt; then
+			for i in $(cat srr_ids.txt | shuf | head -2); do esearch -db sra -query $i | esummary | egrep "SINGLE|PAIRED" >> library_layout.txt; done && uniq library_layout.txt | sed 's/          //g;s/<//g;s/>//g;s\/\\g' > library_layout_info.txt && rm library_layout.txt
+			paste -d$'\t' srr_ids.txt sample_names.txt $(for f in $(ls | grep full); do echo $f" "$(sort $f | uniq -c | wc -l); done | grep -v " 1" | cut -d" " -f1 | head -1) > samples_info.txt # the third column is a design containing at least more than one element...
+			sed -i -r -e 's/[^[:alnum:]_\t]/_/g' -e 's/_\+/_/g' -e 's/(_[^_]*)\1+/\1/g' -e 's/_([0-9]+)/-\1/g' samples_info.txt # Should be redundant but make sure to remove special characters from the sample names and _1/_2... it's crucial for later steps such as fastqc and miarma-seq
+		fi
+		if [ ! -s srr_ids.txt ]; then
+			echo -e "\nI haven't been able to find SRR accession ids to download the sequences and I'm exiting, please double check manually..."; exit 1
+		fi
+		echo -e "\nAll available info downloaded from GEO, please check it out in $output_folder/$name/GEO_info\n"
+		if [ "$design_custom" == "yes" ]; then
+			echo "You have requested to manually provide the experimental design instead of the ones shown above. This is the list of samples:"
+			cat sample_names.txt
+			echo "Please provide a comma-separated list with the conditions for each sample:"
+			read -r design_input
+			rm $(ls -d $output_folder/$name/GEO_info/* | grep 'design_possible_')
+			echo $design_input | sed 's/,/\n/g' > $output_folder/$name/GEO_info/design_possible_full_1.txt
+			cat $output_folder/$name/GEO_info/design_possible_full_1.txt | sort | uniq > $output_folder/$name/GEO_info/design_possible_1.txt
+		fi
+	
+	### Stop and continue with other script if it's a single-cell:
+		if [ $(zcat $output_folder/$name/GEO_info/*_series_matrix.txt.gz | egrep -e 'single nuclei|single cell|single-cell|snRNA|scRNA' | wc -l) -gt 0 ] || [ $(zcat $(find . -name "*_series_matrix.txt.gz") | egrep -i -e 'single nuclei|single cell|single-cell|snRNA|scRNA' | wc -l) -gt 0 ]; then
+		  	echo -e "\n\nDetected this could be a single-cell RNA-seq study... I can try to do stuff automatically (i.e. try and normalize the raw counts or give an estimated bulk expression taking the average), but errors are expected. \nThe script 'R_process_reanalyzer_GSE_single_cell.R' is a template built from the case example GSE118257, and valid to other GEO entries where pheno data and matrix counts are supplementary files clearly named.\nHowever, manual changes are most likely required to work with other studies... These changes should be possible, so please open an issue or go for it if you have the expertise and this one fails!. For example, it's likely that it's just required to point to the directory of the matrix counts, or to manually specify the columns/names of the conditions/cells\n\n"
+			# Print the results to review:
+			echo -e "This text in the metadata is what made the pipeline to suggest this could be single-cell:"
+			zcat $output_folder/$name/GEO_info/*_series_matrix.txt.gz | egrep -e 'single nuclei|single cell|single-cell|snRNA|scRNA'
+			zcat $(find . -name "*_series_matrix.txt.gz") | egrep -i -e 'single nuclei|single cell|single-cell|snRNA|scRNA'
+			# Choice:
+			echo -e "\nWrite 'yes' to continue with single-cell analyses, or 'no' to continue with normal analyses after reviewing the entry and the statements in the metadata pointing to single-cell..."
+			read -r single_cell_choice
+			if [ "$single_cell_choice" == "yes" ]; then
+				R_process_reanalyzer_GSE_single_cell.R $input $output_folder $genes; exit 1
+			elif [ "$single_cell_choice" == "no" ]; then
+				echo -e "\nContinuing with bulk RNA-seq analyses...\n"
+			fi
+		fi
+	
+	### Stop and continue with other script if it's a microarrays:
+		if [ $(zcat $output_folder/$name/GEO_info/*_series_matrix.txt.gz | egrep -i -e 'Expression profiling by array|microarray' | wc -l) -gt 0 ] || [ $(zcat $(find . -name "*_series_matrix.txt.gz") | egrep -i -e 'Expression profiling by array|microarray' | wc -l) -gt 0 ]; then
+		  	echo -e "\n\nDetected this could be a microarrays study... trying to do analyze automatically, but errors in this log are expected. The script 'R_process_reanalyzer_GSE_microarrays.R' is already supporting the most frequent arrays and platforms, but it could require to be extended in order to work with other studies... These changes should be possible though, so please open an issue or go for it if you have the expertise and this one fails!\n\n"
+			# Choice:
+			echo -e "\nWrite 'yes' to continue with microarrays analyses, or 'no' to continue with normal analyses after reviewing the entry pointing to microarrays..."
+			read -r microarrays_choice
+			if [ "$microarrays_choice" == "yes" ]; then
+			  	R_process_reanalyzer_GSE_microarrays.R $input $output_folder $genes; exit 1
+			elif [ "$microarrays_choice" == "no" ]; then
+				echo -e "\nContinuing with bulk RNA-seq analyses...\n"
+			fi
+		fi
+	
+	### Stop if SRR not obtained and not single-cell or microarrays
+		if [ ! -s srr_ids.txt ]; then
+			echo -e "\nI haven't been able to find SRR accession ids to download the sequences and I'm exiting, please double check manually..."; exit 1
+		fi
+	
+	### Get organism:
+		organism=$(zcat $output_folder/$name/GEO_info/*_series_matrix.txt.gz | grep "organism" | awk '{$1=""}1' |tr '"' '\n' | sort -u | sed -r '/^\s*$/d')
 		echo $organism > $output_folder/$name/GEO_info/organism.txt
-		echo -e "$organism\nPlease request on the next run a stop with parameter '-S' and modify manually the file GEO_info/organism.txt if not required...\n"
+		if [ $(zcat $output_folder/$name/GEO_info/*_series_matrix.txt.gz | grep "organism" | awk '{$1=""}1' |tr '"' '\n' | sort -u | sed -r '/^\s*$/d' | wc -l) -gt 1 ]; then
+			echo -e "\n Please keep in mind that two different organisms are detected. You are likely requesting an analysis combining multiple GSEXXXXX, please make sure they are from the same organism. Another possibility is there are multiple series_matrix within the same GSEXXXX id, and you may have requested to stop and manually clarify. Continuing with organism: "
+			organism=$(zcat *_series_matrix.txt.gz | grep "organism" | awk '{$1=""}1' |tr '"' '\n' | sort -u | sed -r '/^\s*$/d' | head -1)
+			echo $organism > $output_folder/$name/GEO_info/organism.txt
+			echo -e "$organism\nPlease request on the next run a stop with parameter '-S' and modify manually the file GEO_info/organism.txt if not required...\n"
+		fi
+		echo -e "\nSTEP 1 DONE. Current time: $(date)\n"
 	fi
-echo -e "\nSTEP 2 DONE. Current time: $(date)\n"
+export debug_step="all"
+fi
 
-
-
+el if del input... y nuevo step entonces
 ###### 3. Download fastq files:
 	seqs_location=$output_folder/$name/raw_reads
 	if [ "$stop" == "yes" ]; then
