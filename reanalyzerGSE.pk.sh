@@ -933,6 +933,7 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 	echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
 	for index in "${!array[@]}"; do
 		cd $output_folder/$name/final_results_reanalysis$index/DGE/
+		rm -rf $(ls | egrep '_clusterProfiler|_autoGO|_panther')
 		if [ -z "$annotation_file" ]; then
 			annotation_file=${array[index]}
 		fi
