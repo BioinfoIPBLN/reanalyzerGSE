@@ -653,7 +653,7 @@ fi
 
 
 ### STEP 2. Decontamination if required:
-if [[ $debug == "all" || $debug == "step2" ]]; then
+if [[ $debug_step == "all" || $debug_step == "step2" ]]; then
 	echo -e "\n\nSTEP 2: Starting...\nCurrent date/time: $(date)\n\n"
 	if [ ! -z "$kraken2_databases" ]; then
 		mkdir -p $output_folder/$name/raw_reads_k2; cd $output_folder/$name/raw_reads_k2
@@ -715,7 +715,7 @@ fi
 
 
 ### STEP3a. Prepare the data and info for running miARma-seq:
-if [[ $debug == "all" || $debug == "step3a" ]]; then
+if [[ $debug_step == "all" || $debug_step == "step3a" ]]; then
 	echo -e "\n\nSTEP 3a: Starting...\nCurrent date/time: $(date)\n\n"
 	### Prepare the salmon index from the trancripts sequences if required and strandness prediction... (if the miarma0.ini does not exist yet, pointing to a previous miarma run)
 	if [[ ! -e "$output_folder/$name/miarma0.ini" ]]; then
@@ -848,7 +848,7 @@ fi
 ### STEP3b. Running miARma-seq:
 # 2024: I've modified miARma RNA-seq mode to leverage GNU's parallel and increase speed, introduce limit RAM in aligners and multithreading index, replace the shebang with #!/usr/bin/env perl so it uses the PATH's/environment's one, etc...
 # Eventually, WIP nicludes to also improve and integrate the rest of modules of miARma, such as adapter cutting, stats, miRNAs...
-if [[ $debug == "all" || $debug == "step3b" ]]; then
+if [[ $debug_step == "all" || $debug_step == "step3b" ]]; then
 	echo -e "\n\nSTEP 3b: Starting...\nCurrent date/time: $(date)\n\n"
 	echo "Please double check all the parameters above, in particular the stranded or the reference genome files and annotation used. Proceeding with miARma execution in..."
 	secs=$((1 * 30))
@@ -880,7 +880,7 @@ fi
 
 
 ### STEP 4. Process output of miARma. Get figures, final counts, standard DGE, violin plots...
-if [[ $debug == "all" || $debug == "step4" ]]; then
+if [[ $debug_step == "all" || $debug_step == "step4" ]]; then
 	echo -e "\n\nSTEP 4: Starting...\nCurrent date/time: $(date)\n\n"
 	IFS=', ' read -r -a array2 <<< "$filter"
 	for index in "${!array[@]}"; do
@@ -895,7 +895,7 @@ fi
 
 
 ### STEP 5. Time course analyses if required
-if [[ $debug == "all" || $debug == "step5" ]]; then
+if [[ $debug_step == "all" || $debug_step == "step5" ]]; then
 	echo -e "\n\nSTEP 5: Starting...\nCurrent date/time: $(date)\n\n"
 	for index in "${!array[@]}"; do
 		if [[ "$time_course" == "yes" ]]; then 
@@ -909,7 +909,7 @@ fi
 
 
 ### STEP 6. Functional enrichment analyses: clusterProfiler, autoGO, Panther, network analyses...
-if [[ $debug == "all" || $debug == "step6" ]]; then
+if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 	echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
 	for index in "${!array[@]}"; do
 		if [[ "$organism" == "Mus_musculus" || "$organism" == "Homo_sapiens" || "$organism" == "Mus musculus" || "$organism" == "Homo sapiens" ]]; then
@@ -966,7 +966,7 @@ fi
 
  
 ### STEP 7. Annotation: Tables of DEGs, lists of genes, etc
-if [[ $debug == "all" || $debug == "step7" ]]; then
+if [[ $debug_step == "all" || $debug_step == "step7" ]]; then
 	echo -e "\n\nSTEP 7: Starting...\nCurrent date/time: $(date)\n\n"
 	for index in "${!array[@]}"; do
 		# All the tables that contain list of genes, annotate them:
@@ -986,7 +986,7 @@ fi
 
 ###### STEP 8. Tidy up, prepare for storage if final results have been created and the number of aligned files is equal to the numbers of samples, rename folders, convert tables to xlsx if required... etc
 # Compress the folders
-if [[ $debug == "all" || $debug == "step8" ]]; then
+if [[ $debug_step == "all" || $debug_step == "step8" ]]; then
 	echo -e "\n\nSTEP 8: Starting...\nCurrent date/time: $(date)\n\n"
 	for index in "${!array[@]}"; do
 	 	cd $output_folder/$name/final_results_reanalysis$index/DGE/
