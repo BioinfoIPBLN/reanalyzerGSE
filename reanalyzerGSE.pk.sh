@@ -923,8 +923,8 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 	fi
 	if [ -z "$taxonid" ]; then
 		cd $TMPDIR
-		wget https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/taxdmp.zip && unzip taxdmp.zip && rm taxdmp.zip
-  		taxonid=$(echo $organism | sed 's/_\+/ /g' | taxonkit name2taxid --data-dir $PWD/taxdump | head -1 | cut -f2)
+		mkdir taxdump && cd taxdump && wget -q https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/taxdmp.zip && unzip -qq taxdmp.zip && rm taxdmp.zip
+  		taxonid=$(echo $organism | sed 's/_\+/ /g' | taxonkit name2taxid --data-dir $PWD | head -1 | cut -f2)
 	fi
 	if [ -z "${!array[@]}" ]; then
 		IFS=', ' read -r -a array <<< "$annotation"
@@ -932,11 +932,13 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 	
 	echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
 	for index in "${!array[@]}"; do
+		cd $output_folder/$name/final_results_reanalysis$index/DGE/
 		if [ -z "$annotation_file" ]; then
 			annotation_file=${array[index]}
 		fi
 		if [[ "$organism" == "Mus_musculus" || "$organism" == "Homo_sapiens" || "$organism" == "Mus musculus" || "$organism" == "Homo sapiens" ]]; then
 			if [ ! -z "$taxonid" ]; then			
+				mkdir -p network_analyses && rm -rf network_analyses/* && cd network_analyses
 				R_network_analyses.R $output_folder/$name/final_results_reanalysis$index/DGE/ $output_folder/$name/final_results_reanalysis$index/RPKM_counts_genes.txt "^DGE_analysis_comp[0-9]+.txt$" $taxonid &> network_analyses_funct_enrichment.log
 			fi
 			if [[ "$clusterProfiler" == "no" ]]; then
