@@ -916,8 +916,25 @@ fi
 
 ### STEP 6. Functional enrichment analyses: clusterProfiler, autoGO, Panther, network analyses...
 if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
+	# If the running is resumed in this step, this variables has to be created because they would not exist
+ 	# The same may happen in other steps, this is WIP
+	if [ -z "$organism" ]; then
+		organism=$(cat $output_folder/$name/GEO_info/organism.txt)
+	fi
+	if [ -z "$taxonid" ]; then
+		cd $TMPDIR
+		wget https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/taxdmp.zip && unzip taxdmp.zip && rm taxdmp.zip
+  		taxonid=$(echo $organism | sed 's/_\+/ /g' | taxonkit name2taxid --data-dir $PWD/taxdump | head -1 | cut -f2)
+	fi
+	if [ -z "${!array[@]}" ]; then
+		IFS=', ' read -r -a array <<< "$annotation"
+	fi
+	
 	echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
 	for index in "${!array[@]}"; do
+		if [ -z "$annotation_file" ]; then
+			annotation_file=${array[index]}
+		fi
 		if [[ "$organism" == "Mus_musculus" || "$organism" == "Homo_sapiens" || "$organism" == "Mus musculus" || "$organism" == "Homo sapiens" ]]; then
 			if [ ! -z "$taxonid" ]; then			
 				R_network_analyses.R $output_folder/$name/final_results_reanalysis$index/DGE/ $output_folder/$name/final_results_reanalysis$index/RPKM_counts_genes.txt "^DGE_analysis_comp[0-9]+.txt$" $taxonid &> network_analyses_funct_enrichment.log
