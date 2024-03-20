@@ -204,7 +204,13 @@ if [ -z "$miarma_path" ]; then
 	miarma_path=$CURRENT_DIR/external_software/miARma-seq
 fi
 if [ -d "$output_folder/$name" ]; then
-	echo -e "Please note that $output_folder/$name already exists... reanalyzerGSE is going to attempt a new run or resume running, but you may want to remove the folder, change the destination folder with '-o' or '-n', use downloaded raw data from an external software... etc. Sleeping for a while to give you time to exit if you want, and then continuing..."; sleep 60
+	echo -e "Please note that $output_folder/$name already exists... reanalyzerGSE is going to attempt a new run or resume running, but you may want to remove the folder, change the destination folder with '-o' or '-n', use downloaded raw data from an external software... etc. Sleeping for a while to give you time to exit if you want, and then continuing..."
+	secs=$((1 * 30))	
+	while [ $secs -gt 0 ]; do
+		echo -ne "$secs\033[0K\r"
+		sleep 1
+		: $((secs--))
+	done
 fi
 if [ -z "$databases_function" ]; then
 	databases_function="GO_Biological_Process_2023,GO_Molecular_Function_2023,GO_Cellular_Component_2023"
