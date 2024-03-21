@@ -858,8 +858,7 @@ if [[ $debug_step == "all" || $debug_step == "step3a" ]]; then
 				for i in $(ls $seqs_location/*); do mv $i $(echo $i | sed 's,_SRR.*_,_,g'); done
 			fi
 		done
-	fi
-	echo -e "\nDONE. Current date/time: $(date)"; time1=`date +%s`; echo -e "Elapsed time (secs): $((time1-start))"; echo -e "Elapsed time (hours): $(echo "scale=2; $((time1-start))/3600" | bc -l)\n"
+	fi	
 	export debug_step="all"
 	echo -e "\n\nSTEP 3a: DONE\nCurrent date/time: $(date)\n\n"
 fi
