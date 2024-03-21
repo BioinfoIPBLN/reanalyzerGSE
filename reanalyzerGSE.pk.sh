@@ -928,7 +928,7 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 	fi
 	if [ -z "$taxonid" ]; then
 		cd $TMPDIR
-		mkdir taxdump && cd taxdump && wget -q https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/taxdmp.zip && unzip -qq taxdmp.zip && rm taxdmp.zip
+		mkdir -p taxdump && cd taxdump && rm -rf * && wget -q https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/taxdmp.zip && unzip -qq taxdmp.zip && rm taxdmp.zip
   		taxonid=$(echo $organism | sed 's/_\+/ /g' | taxonkit name2taxid --data-dir $PWD | head -1 | cut -f2)
 	fi
 	if [ -z "${!array[@]}" ]; then
