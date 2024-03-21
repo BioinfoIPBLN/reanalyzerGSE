@@ -733,6 +733,9 @@ if [[ $debug_step == "all" || $debug_step == "step3a" ]]; then
 	if [ -z "$organism" ]; then
 		organism=$(cat $output_folder/$name/GEO_info/organism.txt | sed 's, ,_,g;s,_+,_,g')
 	fi
+	if [[ $debug_step == "step3a" || $debug_step == "step3b" ]]; then
+		rm -rf mi* && mkdir -p $TMPDIR
+	fi
 	### Prepare the salmon index from the trancripts sequences if required and strandness prediction... (if the miarma0.ini does not exist yet, pointing to a previous miarma run)
 	if [[ ! -e "$output_folder/$name/miarma0.ini" ]]; then
 		if [ -z "$strand" ]; then
