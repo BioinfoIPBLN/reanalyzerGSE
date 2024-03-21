@@ -68,7 +68,8 @@ for argument in $options; do
 		-Tcf | -time_course_fuzzi # Fuziness value for the soft clustering approach (by default an estimate is automatically computed but manual testing is encouraged)
 		-Ti | -tidy_tmp_files # Space-efficient run, with a last step removing raw reads if downloaded, converting bam to cram, removing tmp files... etc ('yes' or 'no', by default)
 		-Txls | -tables_in_xlsx # Convert all tables in results from .txt format, without limitation of size to Excel's .xlsx format, with a limitation of 32,767 characters ('yes' or 'no', by default)
-		-Tx | -taxon_id # NCBI's taxon id of the organism, please not it is required for network analyses
+		-Tx | -taxon_id # NCBI's taxon id of the organism, please note it is required for network analyses
+		-Na | -network_analyses # Whether to perform network analyses, only for human or mouse analyses ('yes' or 'no', by default)
 		-Gt | -revigo_threshold_similarity # Similarity threshold for Revigo summaries of GO terms (0-1, suggested values are 0.9, 0.7, 0.5, 0.4 for large, medium, small, and tiny levels of similarity, respectively, being default 0.7
 		-TMP | -TMPDIR # Directory to export the environmental variable TMPDIR (by default or if left empty an internal folder of the output directory is used, or please enter 'system' to use system's default, or an absolute pathway that will be created if it does not exist)
 		-M | -memory_max # Max RAM memory to be used by aligner or JAVA in bytes (by default 257698037760, or 240GB, used)" && exit 1;;
@@ -123,6 +124,7 @@ for argument in $options; do
 		-q) qc_raw_reads=${arguments[index]} ;;
 		-cPm) clusterProfiler_method=${arguments[index]} ;;
   		-Pm) panther_method=${arguments[index]} ;;
+		-Na) network_analyses=${arguments[index]} ;;
 	esac
 done
 
@@ -256,6 +258,9 @@ if [ -z "$target" ]; then
 fi
 if [ -z "$tidy_tmp_files" ]; then
 	tidy_tmp_files="no"
+fi
+if [ -z "$tidy_tmp_files" ]; then
+	network_analyses="no"
 fi
 if [ -z "$debug_step" ]; then
 	debug_step="all"
@@ -926,10 +931,12 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 	if [ -z "$organism" ]; then
 		organism=$(cat $output_folder/$name/GEO_info/organism.txt | sed 's, ,_,g;s,_+,_,g')
 	fi
-	if [ -z "$taxonid" ]; then
-		cd $TMPDIR
-		mkdir -p taxdump && cd taxdump && rm -rf * && wget -q https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/taxdmp.zip && unzip -qq taxdmp.zip && rm taxdmp.zip
-  		taxonid=$(echo $organism | sed 's/_\+/ /g' | taxonkit name2taxid --data-dir $PWD | head -1 | cut -f2)
+	if [[ $network_analyses == "yes" ]]; then
+		if [ -z "$taxonid" ]; then
+			cd $TMPDIR
+			mkdir -p taxdump && cd taxdump && rm -rf * && wget -q https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/taxdmp.zip && unzip -qq taxdmp.zip && rm taxdmp.zip
+  			taxonid=$(echo $organism | sed 's/_\+/ /g' | taxonkit name2taxid --data-dir $PWD | head -1 | cut -f2)
+		fi
 	fi
 	if [ -z "${!array[@]}" ]; then
 		IFS=', ' read -r -a array <<< "$annotation"
@@ -943,8 +950,9 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 			annotation_file=${array[index]}
 		fi
 		if [[ "$organism" == "Mus_musculus" || "$organism" == "Homo_sapiens" || "$organism" == "Mus musculus" || "$organism" == "Homo sapiens" ]]; then
-			if [ ! -z "$taxonid" ]; then			
+			if [[ $network_analyses == "yes" ]]; then
 				mkdir -p network_analyses && rm -rf network_analyses/* && cd network_analyses
+				echo -e "\nPerforming network analyses...\n"
 				R_network_analyses.R $output_folder/$name/final_results_reanalysis$index/DGE/ $output_folder/$name/final_results_reanalysis$index/RPKM_counts_genes.txt "^DGE_analysis_comp[0-9]+.txt$" $taxonid &> network_analyses_funct_enrichment.log
 			fi
 			if [[ "$clusterProfiler" == "no" ]]; then
