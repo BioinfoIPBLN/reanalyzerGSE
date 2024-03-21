@@ -726,7 +726,7 @@ if [[ $debug_step == "all" || $debug_step == "step3a" ]]; then
 	# If the running is resumed in this step, this variables has to be created because they would not exist
 	# The same may happen in other steps, this is WIP
 	if [ -z "$organism" ]; then
-		organism=$(cat $output_folder/$name/GEO_info/organism.txt)
+		organism=$(cat $output_folder/$name/GEO_info/organism.txt | sed 's, ,_,g;s,_+,_,g')
 	fi
 	### Prepare the salmon index from the trancripts sequences if required and strandness prediction... (if the miarma0.ini does not exist yet, pointing to a previous miarma run)
 	if [[ ! -e "$output_folder/$name/miarma0.ini" ]]; then
@@ -924,7 +924,7 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 	# If the running is resumed in this step, this variables has to be created because they would not exist
  	# The same may happen in other steps, this is WIP
 	if [ -z "$organism" ]; then
-		organism=$(cat $output_folder/$name/GEO_info/organism.txt)
+		organism=$(cat $output_folder/$name/GEO_info/organism.txt | sed 's, ,_,g;s,_+,_,g')
 	fi
 	if [ -z "$taxonid" ]; then
 		cd $TMPDIR
