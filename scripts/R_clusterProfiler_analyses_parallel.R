@@ -91,8 +91,43 @@ print(paste0("Done!"))
 # grep("^readlist_|^entrez|^genes_of",ls(),val=T)
 rm(genes_of_interest);rm(readlist_fc_fdr_01);rm(readlist_fc_fdr_05)
 
+# Deduce the naming convention in the orgDB package:
+check_naming <- function(names) {
+  names <- grep("[[:punct:]]|orf|p43|p45",names,val=T,invert=T)  
+  print(paste0("Looking at the annotation of ",length(names)," genes..."))
+  all_upper <- all(grepl("^[A-Z0-9]+$", names))
+  all_lower <- all(grepl("^[a-z0-9]+$", names))
+  
+  # Checks if the first letter is uppercase followed by lowercase letters or numbers, for names with at least one letter
+  first_upper_rest_lower <- all(sapply(names, function(name) {
+    if (grepl("[A-Za-z]", name)) { # Check if the name contains at least one letter
+      # Extract the first letter and the rest of the string separately
+      first_letter <- substr(name, regexpr("[A-Za-z]", name), regexpr("[A-Za-z]", name))
+      rest <- substr(name, regexpr("[A-Za-z]", name) + 1, nchar(name))
+      # Check if the first letter is uppercase and the rest of the string is lowercase or numeric (ignoring leading numbers)
+      return(grepl("^[A-Z]$", first_letter) && grepl("^[a-z0-9]*$", rest))
+    } else {
+      return(TRUE) # If the name doesn't contain letters, it trivially satisfies the condition
+    }
+  }))
+  
+  return(c("all_upper","all_lower","first_upper_rest_lower")[c(all_upper,all_lower,first_upper_rest_lower)])
+}
+convert_ids <- function(ids,mode) {
+  if(mode=="all_upper"){
+    ids2 <- toupper(ids)
+  } else if {mode=="all_lower"} {
+    ids2 <- tolower(ids)
+  } else if {mode=="first_upper_rest_lower"} {
+    ids2 <- stringr::str_to_title(ids)
+  }
+  return(ids2)
+}
+mode <- check_naming(keys(eval(parse(text=orgDB)), keytype = "SYMBOL"))
+
 
 process_file <- function(file){
+  invisible(biomaRt::biomartCacheClear())
   # file="DGE_analysis_comp1.txt"
   print(paste0("Processing ",file, "_Current date: ",date()))
 
@@ -104,13 +139,11 @@ process_file <- function(file){
   a$logFC_sense[a$logFC_sense] <- "POS"; a$logFC_sense[a$logFC_sense=="FALSE"] <- "NEG"
   path2 <- paste0(path,"/",basename,"_funct_enrich_clusterProfiler")
   genes_of_interest <- eval(parse(text=name))
-    
-
-
-
+  
   # FUNCTION INTERNAL:
   process_file_within <- function(name_internal){
-    print(paste0(file,"_",name_internal))
+    invisible(biomaRt::biomartCacheClear())
+    print(paste0("Processing ",file,"_",name_internal))
     geneset <- name_internal
     i <- padjustmethod
     entrez_ids <- entrez_ids_keys$ENTREZID[entrez_ids_keys$SYMBOL %in% genes_of_interest[[geneset]]]
@@ -119,7 +152,7 @@ process_file <- function(file){
     setwd(path2)
     suppressMessages(library(orgDB, character.only = TRUE,quiet = T,warn.conflicts = F)) # Crucial apparently, so the functions using the orgDB object can be done in parallel
 
-    print(paste0("Processing ",file,"... Gene classification based on GO distribution at a specific level (2-6)"))
+    print(paste0("Processing ",file,"_",name_internal,"... Gene classification based on GO distribution at a specific level (2-6)"))
     ### 1. Gene classification based on GO distribution at a specific level:
       for (levelgo in 2:6){
         # print(paste0("groupGO_level_",levelgo))
@@ -158,7 +191,7 @@ process_file <- function(file){
       },silent=T)
       }
       try({
-        b <- Gene2GOTermAndLevel_ON(genes = entrez_ids_keys$ENTREZID[entrez_ids_keys$SYMBOL %in% genes_of_interest[[geneset]]], organism = organism_cp, domain = "BP")
+        b <- Gene2GOTermAndLevel_ON(genes = entrez_ids_keys$ENTREZID[toupper(entrez_ids_keys$SYMBOL) %in% toupper(genes_of_interest[[geneset]]]), organism = organism_cp, domain = "BP")
         b$GO_Description <- Term(b$"GO ID"); b$Gene_ID <- sapply(b$"Entrezgene ID",function(x){paste(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x],collapse=",")})
         # Assuming your data is in a data frame named 'df'
         d <- do.call(rbind, lapply(split(b, b$"GO ID"), function(group) {data.frame(GO_ID = unique(group$"GO ID"),GO_Description = unique(group$GO_Description),
@@ -181,7 +214,7 @@ process_file <- function(file){
                                                                                     Level = mean(group$Level), Gene_ID = paste(group$Gene_ID, collapse = ","),ENTREZ_ID = paste(group$"Entrezgene ID", collapse = ","))}))
         write.table(d,file=paste0("GO_description_all_",geneset,"_CC.txt"),col.names = T,row.names = F,quote = F,sep="\t")
       },silent=T)
-    print(paste0("Processing ",file,"... GO over-representation analyses"))
+    print(paste0("Processing ",file,"_",name_internal,"... GO over-representation analyses"))
     ### 2. GO over-representation analyses:
       try({
                   ego <- enrichGO(gene          = genes_of_interest[[geneset]],
@@ -308,7 +341,7 @@ process_file <- function(file){
                   suppressMessages(ggsave(upsetplot(ego), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_CC_",i,"_",geneset,"_upsetplot.pdf"),width=30, height=30))
                   suppressMessages(ggsave(pmcplot(ego$Description[1:10], 2010:paste0("20",unlist(lapply(strsplit(date(),"20"),function(x){x[2]})))), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_CC_",i,"_",geneset,"_pmcplot.pdf"),width=30, height=30))
       },silent=T)
-    print(paste0("Processing ",file,"... Gene Set Enrichment Analysis of Gene Ontology"))
+    print(paste0("Processing ",file,"_",name_internal,"... Gene Set Enrichment Analysis of Gene Ontology"))
     ### 3. Gene Set Enrichment Analysis of Gene Ontology:        
       if(geneset=="fdr_05" || geneset=="fdr_01"){
           f <- paste0("readlist_fc_",geneset)
@@ -548,7 +581,7 @@ process_file <- function(file){
                     write.table(clusters$similarity,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_CC_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
           },silent=T)
       }  
-    print(paste0("Processing ",file,"... KEGG over-representation"))
+    print(paste0("Processing ",file,"_",name_internal,"... KEGG over-representation"))
     ### 4. KEGG over-representation:    
       try({
           kk <- suppressMessages(enrichKEGG(gene= entrez_ids,
@@ -578,7 +611,7 @@ process_file <- function(file){
           write.table(clusters$clusters,file=paste0("KEGG_enrich_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
           write.table(clusters$similarity,file=paste0("KEGG_enrich_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
       },silent=T)     
-    print(paste0("Processing ",file,"... KEGG pathways visualization"))
+    print(paste0("Processing ",file,"_",name_internal,"... KEGG pathways visualization"))
     ### 5. KEGG pathways visualization:
           paths_list <- unique(unlist(lapply(list.files(path = getwd(), pattern = "^KEGG", full.names = TRUE), function(x){
             data <- read.delim(x)
@@ -586,7 +619,7 @@ process_file <- function(file){
           })))
           for (f in paths_list){try({suppressMessages(pathview(gene.data=kk@result,pathway.id=f,species=org,kegg.dir=paste0(getwd(),"/kegg_paths_snapshots")))},silent=T)}
           invisible(file.remove(list.files(path=getwd(),pattern="*.pathview.png",full.names = T)))
-    print(paste0("Processing ",file,"... Gene Set Enrichment Analysis of KEGG"))
+    print(paste0("Processing ",file,"_",name_internal,"... Gene Set Enrichment Analysis of KEGG"))
     ### 6. Gene Set Enrichment Analysis of KEGG:
       if(geneset=="fdr_05" || geneset=="fdr_01"){
           f <- paste0("readlist_fc_",geneset)
@@ -649,7 +682,7 @@ process_file <- function(file){
                   write.table(clusters$similarity,file=paste0("KEGG_GSEA_",f,"_",i,"_DOSE_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
           },silent=T)
       }
-    print(paste0("Processing ",file,"... KEGG Module over-representation"))
+    print(paste0("Processing ",file,"_",name_internal,"... KEGG Module over-representation"))
     ### 7. KEGG Module over-representation:
       try({
             gse_enrich <- suppressMessages(enrichMKEGG(gene= entrez_ids,
@@ -673,7 +706,7 @@ process_file <- function(file){
             write.table(clusters$clusters,file=paste0("MKEGG_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
             write.table(clusters$similarity,file=paste0("MKEGG_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
       },silent=T)
-    print(paste0("Processing ",file,"... Gene Set Enrichment Analysis of KEGG modules"))
+    print(paste0("Processing ",file,"_",name_internal,"... Gene Set Enrichment Analysis of KEGG modules"))
     ### 8. Gene Set Enrichment Analysis of KEGG modules:
       if(geneset=="fdr_05" || geneset=="fdr_01"){
             f <- paste0("readlist_fc_",geneset)
@@ -725,7 +758,7 @@ process_file <- function(file){
                   write.table(clusters$similarity,file=paste0("MKEGG_GSEA_",f,"_",i,"_DOSE_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
             },silent=T)      
       }    
-    print(paste0("Processing ",file,"... WikiPathways over-representation"))
+    print(paste0("Processing ",file,"_",name_internal,"... WikiPathways over-representation"))
     ### 9. WikiPathways over-representation:
       try({
         gse_enrich <- suppressMessages(enrichWP(gene= entrez_ids,
@@ -749,7 +782,7 @@ process_file <- function(file){
         write.table(clusters$clusters,file=paste0("WP_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
         write.table(clusters$similarity,file=paste0("WP_",i,"_",geneset,"_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
       },silent=T)            
-    print(paste0("Processing ",file,"... Gene set enrichment analyses of WikiPathways"))
+    print(paste0("Processing ",file,"_",name_internal,"... Gene set enrichment analyses of WikiPathways"))
     ### 10. Gene set enrichment analyses of WikiPathways: 
       if(geneset=="fdr_05" || geneset=="fdr_01"){
         f <- paste0("readlist_fc_",geneset)
@@ -801,7 +834,7 @@ process_file <- function(file){
                 write.table(clusters$similarity,file=paste0("WP_GSEA_",i,"_",geneset,"_DOSE_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
         },silent=T)
       }
-    print(paste0("Processing ",file,"... Reactome over-representation"))
+    print(paste0("Processing ",file,"_",name_internal,"... Reactome over-representation"))
     ### 11. Reactome over-representation:      
       try({
         gse_enrich <- suppressMessages(enrichPathway(gene= entrez_ids,
@@ -825,7 +858,7 @@ process_file <- function(file){
         write.table(clusters$clusters,file=paste0("REACT_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
         write.table(clusters$similarity,file=paste0("REACT_",i,"_",geneset,"_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
       },silent=T)            
-    print(paste0("Processing ",file,"... Gene set enrichment analyses of Reactome"))
+    print(paste0("Processing ",file,"_",name_internal,"... Gene set enrichment analyses of Reactome"))
     ### 12. Gene set enrichment analyses of Reactome: 
       if(geneset=="fdr_05" || geneset=="fdr_01"){
               f <- paste0("readlist_fc_",geneset)
@@ -877,14 +910,14 @@ process_file <- function(file){
                 write.table(clusters$similarity,file=paste0("REACT_GSEA_",i,"_",geneset,"_DOSE_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
               },silent=T)
       }
-    print(paste0("Processing ",file,"... Reactome pathways visualization"))
+    print(paste0("Processing ",file,"_",name_internal,"... Reactome pathways visualization"))
     ### 13. Reactome pathways visualization:
       paths_list <- unique(unlist(lapply(list.files(path = getwd(), pattern = "^REACT", full.names = TRUE), function(x){
           data <- read.delim(x)
           data_filtered <- data$Description[data$pvalue < 0.05]
       })))
       for (f in paths_list){try({suppressMessages(ggsave(viewPathway(f,readable = TRUE,organism = organism_cp_react),filename = paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome.pdf"),width=30, height=30))},silent=T)}
-    print(paste0("Processing ",file,"... Over-representation analyses for human databases (DO, NCG and DGN)"))
+    print(paste0("Processing ",file,"_",name_internal,"... Over-representation analyses for human databases (DO, NCG and DGN)"))
     ### 14. Over-representation analyses for human databases (DO, NCG and DGN):
       if(organism_cp=="Homo sapiens"){
               try({
