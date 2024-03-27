@@ -146,18 +146,19 @@ process_file <- function(file){
     print(paste0("Processing ",file,"_",name_internal))
     geneset <- name_internal
     i <- padjustmethod
-    entrez_ids <- entrez_ids_keys$ENTREZID[entrez_ids_keys$SYMBOL %in% genes_of_interest[[geneset]]]
-    entrez_ids_backg <- entrez_ids_keys$ENTREZID[entrez_ids_keys$SYMBOL %in% genes_of_interest[["genes_backg"]]]
+    entrez_ids <- entrez_ids_keys$ENTREZID[entrez_ids_keys$SYMBOL %in% convert_ids(genes_of_interest[[geneset]],mode)]
+    entrez_ids_backg <- entrez_ids_keys$ENTREZID[entrez_ids_keys$SYMBOL %in% convert_ids(genes_of_interest[["genes_backg"]],mode)]
     dir.create(paste0(path2,"/kegg_paths_snapshots"),recursive=T,showWarnings=F); dir.create(paste0(path2,"/reactome_paths_snapshots"),recursive=T,showWarnings=F);dir.create(paste0(path2,"/go_figs/"),recursive=T,showWarnings=F)
     setwd(path2)
     suppressMessages(library(orgDB, character.only = TRUE,quiet = T,warn.conflicts = F)) # Crucial apparently, so the functions using the orgDB object can be done in parallel
 
     print(paste0("Processing ",file,"_",name_internal,"... Gene classification based on GO distribution at a specific level (2-6)"))
-    ### 1. Gene classification based on GO distribution at a specific level:
+    
+    ###### 1. Gene classification based on GO distribution at a specific level:
       for (levelgo in 2:6){
         # print(paste0("groupGO_level_",levelgo))
         tryCatch({
-          ggo <- groupGO(gene     = convert_ids(axgenes_of_interest[[geneset]],mode),
+          ggo <- groupGO(gene     = convert_ids(genes_of_interest[[geneset]],mode),
                          OrgDb    = orgDB,
                          keyType  = "SYMBOL",
                          ont      = "BP",
@@ -167,7 +168,7 @@ process_file <- function(file){
           # ggo@result$Count
           write.table(ggo@result,file=paste0("GO_description_level_",levelgo,"_",geneset,"_groupGO_BP.txt"),col.names = T,row.names = F,quote = F,sep="\t")
         }, error = function(e) {
-          writeLines(as.character(e), paste0("GO_description_level_",levelgo,"_",geneset,"_groupGO_BP.txt"))
+          writeLines(as.character(e), paste0("GO_description_level_",levelgo,"_",geneset,"_groupGO_BP_err.txt"))
         })
         tryCatch({
           ggo <- groupGO(gene     = convert_ids(genes_of_interest[[geneset]],mode),
@@ -180,7 +181,7 @@ process_file <- function(file){
           # ggo@result$Count
           write.table(ggo@result,file=paste0("GO_description_level_",levelgo,"_",geneset,"_groupGO_MF.txt"),col.names = T,row.names = F,quote = F,sep="\t")
         }, error = function(e) {
-          writeLines(as.character(e), paste0("GO_description_level_",levelgo,"_",geneset,"_groupGO_MF.txt"))
+          writeLines(as.character(e), paste0("GO_description_level_",levelgo,"_",geneset,"_groupGO_MF_err.txt"))
         })
         tryCatch({
           ggo <- groupGO(gene     = convert_ids(genes_of_interest[[geneset]],mode),
@@ -193,45 +194,46 @@ process_file <- function(file){
           # ggo@result$Count
           write.table(ggo@result,file=paste0("GO_description_level_",levelgo,"_",geneset,"_groupGO_CC.txt"),col.names = T,row.names = F,quote = F,sep="\t")
       }, error = function(e) {
-          writeLines(as.character(e), paste0("GO_description_level_",levelgo,"_",geneset,"_groupGO_CC.txt"))
+          writeLines(as.character(e), paste0("GO_description_level_",levelgo,"_",geneset,"_groupGO_CC_err.txt"))
         })
       }
       tryCatch({
-        b <- Gene2GOTermAndLevel_ON(genes = entrez_ids_keys$ENTREZID[toupper(entrez_ids_keys$SYMBOL) %in% toupper(genes_of_interest[[geneset]]]), organism = organism_cp, domain = "BP")
+        b <- Gene2GOTermAndLevel_ON(genes = entrez_ids_keys$ENTREZID[entrez_ids_keys$SYMBOL %in% convert_ids(genes_of_interest[[geneset]],mode)], organism = organism_cp, domain = "BP")
         b$GO_Description <- Term(b$"GO ID"); b$Gene_ID <- sapply(b$"Entrezgene ID",function(x){paste(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x],collapse=",")})
         # Assuming your data is in a data frame named 'df'
         d <- do.call(rbind, lapply(split(b, b$"GO ID"), function(group) {data.frame(GO_ID = unique(group$"GO ID"),GO_Description = unique(group$GO_Description),
                                                                                     Level = mean(group$Level), Gene_ID = paste(group$Gene_ID, collapse = ","),ENTREZ_ID = paste(group$"Entrezgene ID", collapse = ","))}))
         write.table(d,file=paste0("GO_description_all_",geneset,"_BP.txt"),col.names = T,row.names = F,quote = F,sep="\t")
       }, error = function(e) {
-          writeLines(as.character(e), paste0("GO_description_all_",geneset,"_BP.txt"))
+          writeLines(as.character(e), paste0("GO_description_all_",geneset,"_BP_err.txt"))
       })
       tryCatch({
-        b <- Gene2GOTermAndLevel_ON(genes = entrez_ids_keys$ENTREZID[entrez_ids_keys$SYMBOL %in% genes_of_interest[[geneset]]], organism = organism_cp, domain = "MF")
+        b <- Gene2GOTermAndLevel_ON(genes = entrez_ids_keys$ENTREZID[entrez_ids_keys$SYMBOL %in% convert_ids(genes_of_interest[[geneset]],mode)], organism = organism_cp, domain = "MF")
         b$GO_Description <- Term(b$"GO ID"); b$Gene_ID <- sapply(b$"Entrezgene ID",function(x){paste(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x],collapse=",")})
         # Assuming your data is in a data frame named 'df'
         d <- do.call(rbind, lapply(split(b, b$"GO ID"), function(group) {data.frame(GO_ID = unique(group$"GO ID"),GO_Description = unique(group$GO_Description),
                                                                                     Level = mean(group$Level), Gene_ID = paste(group$Gene_ID, collapse = ","),ENTREZ_ID = paste(group$"Entrezgene ID", collapse = ","))}))
         write.table(d,file=paste0("GO_description_all_",geneset,"_MF.txt"),col.names = T,row.names = F,quote = F,sep="\t")
       }, error = function(e) {
-          writeLines(as.character(e), paste0("GO_description_all_",geneset,"_MF.txt"))
+          writeLines(as.character(e), paste0("GO_description_all_",geneset,"_MF_err.txt"))
       })
       tryCatch({
-        b <- Gene2GOTermAndLevel_ON(genes = entrez_ids_keys$ENTREZID[entrez_ids_keys$SYMBOL %in% genes_of_interest[[geneset]]], organism = organism_cp, domain = "CC")
+        b <- Gene2GOTermAndLevel_ON(genes = entrez_ids_keys$ENTREZID[entrez_ids_keys$SYMBOL %in% convert_ids(genes_of_interest[[geneset]],mode)], organism = organism_cp, domain = "CC")
         b$GO_Description <- Term(b$"GO ID"); b$Gene_ID <- sapply(b$"Entrezgene ID",function(x){paste(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x],collapse=",")})
         # Assuming your data is in a data frame named 'df'
         d <- do.call(rbind, lapply(split(b, b$"GO ID"), function(group) {data.frame(GO_ID = unique(group$"GO ID"),GO_Description = unique(group$GO_Description),
                                                                                     Level = mean(group$Level), Gene_ID = paste(group$Gene_ID, collapse = ","),ENTREZ_ID = paste(group$"Entrezgene ID", collapse = ","))}))
         write.table(d,file=paste0("GO_description_all_",geneset,"_CC.txt"),col.names = T,row.names = F,quote = F,sep="\t")
       }, error = function(e) {
-          writeLines(as.character(e), paste0("GO_description_all_",geneset,"_CC.txt"))
+          writeLines(as.character(e), paste0("GO_description_all_",geneset,"_CC_err.txt"))
       })
     print(paste0("Processing ",file,"_",name_internal,"... GO over-representation analyses"))
-    ### 2. GO over-representation analyses:
-      try({
-                  ego <- enrichGO(gene          = genes_of_interest[[geneset]],
+    
+    ###### 2. GO over-representation analyses:
+      tryCatch({
+                  ego <- enrichGO(gene          = convert_ids(genes_of_interest[[geneset]],mode),
                                 # universe      = unname(as.character(eval(parse(text=paste0(gsub(".db","",orgDB),"SYMBOL"))))), # It's the same than default
-                                universe = genes_of_interest[["genes_backg"]],
+                                universe = convert_ids(genes_of_interest[["genes_backg"]],mode),
                                 OrgDb         = orgDB,
                                 keyType  = "SYMBOL",
                                 ont           = "ALL",
@@ -252,11 +254,13 @@ process_file <- function(file){
                   clusters <- findPathClusters(ego@result)
                   write.table(clusters$clusters,file=paste0("GO_overrepresentation_test_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                   write.table(clusters$similarity,file=paste0("GO_overrepresentation_test_",i,"_",geneset,"_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-      },silent=T)
-      try({
-                  ego <- enrichGO(gene          = genes_of_interest[[geneset]],
+      }, error = function(e) {
+          writeLines(as.character(e), paste0("GO_overrepresentation_test_",i,"_",geneset,"_err.txt"))
+      })
+      tryCatch({
+                  ego <- enrichGO(gene          = convert_ids(genes_of_interest[[geneset]],mode),
                                 # universe      = unname(as.character(eval(parse(text=paste0(gsub(".db","",orgDB),"SYMBOL"))))),
-                                universe = genes_of_interest[["genes_backg"]],
+                                universe = convert_ids(genes_of_interest[["genes_backg"]],mode),
                                 OrgDb         = orgDB,
                                 keyType  = "SYMBOL",
                                 ont           = "BP",
@@ -285,11 +289,13 @@ process_file <- function(file){
                   suppressMessages(ggsave(emapplot(pairwise_termsim(ego)), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_BP_",i,"_",geneset,"_emapplot.pdf"),width=30, height=30))
                   suppressMessages(ggsave(upsetplot(ego), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_BP_",i,"_",geneset,"_upsetplot.pdf"),width=30, height=30))
                   suppressMessages(ggsave(pmcplot(ego$Description[1:10], 2010:paste0("20",unlist(lapply(strsplit(date(),"20"),function(x){x[2]})))), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_BP_",i,"_",geneset,"_pmcplot.pdf"),width=30, height=30))
-      },silent=T)
-      try({
-                  ego <- enrichGO(gene          = genes_of_interest[[geneset]],
+      }, error = function(e) {
+          writeLines(as.character(e), paste0("GO_overrepresentation_test_BP_",i,"_",geneset,"_err.txt"))
+      })
+      tryCatch({
+                  ego <- enrichGO(gene          = convert_ids(genes_of_interest[[geneset]],mode),
                                 # universe      = unname(as.character(eval(parse(text=paste0(gsub(".db","",orgDB),"SYMBOL"))))),
-                                universe = genes_of_interest[["genes_backg"]],
+                                universe = convert_ids(genes_of_interest[["genes_backg"]],mode),
                                 OrgDb         = orgDB,
                                 keyType  = "SYMBOL",
                                 ont           = "MF",
@@ -319,11 +325,13 @@ process_file <- function(file){
                   suppressMessages(ggsave(emapplot(pairwise_termsim(ego)), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_MF_",i,"_",geneset,"_emapplot.pdf"),width=30, height=30))
                   suppressMessages(ggsave(upsetplot(ego), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_MF_",i,"_",geneset,"_upsetplot.pdf"),width=30, height=30))
                   suppressMessages(ggsave(pmcplot(ego$Description[1:10], 2010:paste0("20",unlist(lapply(strsplit(date(),"20"),function(x){x[2]})))), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_MF_",i,"_",geneset,"_pmcplot.pdf"),width=30, height=30))
-      },silent=T)
-      try({  
-                  ego <- enrichGO(gene          = genes_of_interest[[geneset]],
+      }, error = function(e) {
+          writeLines(as.character(e), paste0("GO_overrepresentation_test_MF_",i,"_",geneset,"_err.txt"))
+      })
+      tryCatch({
+                  ego <- enrichGO(gene          = convert_ids(genes_of_interest[[geneset]],mode),
                               #universe      = unname(as.character(eval(parse(text=paste0(gsub(".db","",orgDB),"SYMBOL"))))),
-                              universe = genes_of_interest[["genes_backg"]],
+                              universe = convert_ids(genes_of_interest[["genes_backg"]],mode),
                               OrgDb         = orgDB,
                               keyType  = "SYMBOL",
                               ont           = "CC",
@@ -352,13 +360,16 @@ process_file <- function(file){
                   suppressMessages(ggsave(emapplot(pairwise_termsim(ego)), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_CC_",i,"_",geneset,"_emapplot.pdf"),width=30, height=30))
                   suppressMessages(ggsave(upsetplot(ego), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_CC_",i,"_",geneset,"_upsetplot.pdf"),width=30, height=30))
                   suppressMessages(ggsave(pmcplot(ego$Description[1:10], 2010:paste0("20",unlist(lapply(strsplit(date(),"20"),function(x){x[2]})))), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_CC_",i,"_",geneset,"_pmcplot.pdf"),width=30, height=30))
-      },silent=T)
+      }, error = function(e) {
+          writeLines(as.character(e), paste0("GO_overrepresentation_test_CC_",i,"_",geneset,"_err.txt"))
+      })
     print(paste0("Processing ",file,"_",name_internal,"... Gene Set Enrichment Analysis of Gene Ontology"))
-    ### 3. Gene Set Enrichment Analysis of Gene Ontology:        
+    
+    ###### 3. Gene Set Enrichment Analysis of Gene Ontology:        
       if(geneset=="fdr_05" || geneset=="fdr_01"){
           f <- paste0("readlist_fc_",geneset)
-          b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- gsub(paste0(f,"."),"",names(b))
-          try({
+          b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- convert_ids(gsub(paste0(f,"."),"",names(b)),mode)
+          tryCatch({
                     gse_enrich <- suppressMessages(gseGO(geneList= b,
                                        OrgDb        = orgDB,
                                        ont          = "ALL",
@@ -379,8 +390,10 @@ process_file <- function(file){
                     clusters <- findPathClusters(df)
                     write.table(clusters$clusters,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                     write.table(clusters$similarity,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-          },silent=T)
-          try({
+          }, error = function(e) {
+                    writeLines(as.character(e), paste0("GO_GSEA_",f,"_",i,"_fgsea_err.txt"))
+          })
+          tryCatch({
                     gse_enrich <- suppressMessages(gseGO(geneList=b,
                                      OrgDb        = orgDB,
                                      ont          = "BP",
@@ -410,8 +423,10 @@ process_file <- function(file){
                     clusters <- findPathClusters(df)
                     write.table(clusters$clusters,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_BP_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                     write.table(clusters$similarity,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_BP_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-          },silent=T)
-          try({
+          }, error = function(e) {
+                    writeLines(as.character(e), paste0("GO_GSEA_",f,"_",i,"_fgsea_BP_err.txt"))
+          })
+          tryCatch({
                     gse_enrich <- suppressMessages(gseGO(geneList=b,
                                      OrgDb        = orgDB,
                                      ont          = "MF",
@@ -441,8 +456,10 @@ process_file <- function(file){
                     clusters <- findPathClusters(df)
                     write.table(clusters$clusters,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_MF_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                     write.table(clusters$similarity,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_MF_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-          },silent=T)
-          try({
+          }, error = function(e) {
+                    writeLines(as.character(e), paste0("GO_GSEA_",f,"_",i,"_fgsea_MF_err.txt"))
+          })
+          tryCatch({
                     gse_enrich <- suppressMessages(gseGO(geneList=b,
                                      OrgDb        = orgDB,
                                      ont          = "CC",
@@ -472,8 +489,10 @@ process_file <- function(file){
                     clusters <- findPathClusters(df)
                     write.table(clusters$clusters,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_CC_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                     write.table(clusters$similarity,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_CC_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-          },silent=T)
-          try({
+          }, error = function(e) {
+                    writeLines(as.character(e), paste0("GO_GSEA_",f,"_",i,"_fgsea_CC_err.txt"))
+          })
+          tryCatch({
                     gse_enrich <- suppressMessages(gseGO(geneList=b,
                                      OrgDb        = orgDB,
                                      ont          = "ALL",
@@ -495,8 +514,10 @@ process_file <- function(file){
                     clusters <- findPathClusters(df)
                     write.table(clusters$clusters,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                     write.table(clusters$similarity,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-          },silent=T)
-          try({
+          }, error = function(e) {
+                    writeLines(as.character(e), paste0("GO_GSEA_",f,"_",i,"_DOSE_err.txt"))
+          })
+          tryCatch({
                     gse_enrich <- suppressMessages(gseGO(geneList=b,
                                     OrgDb        = orgDB,
                                     ont          = "BP",
@@ -527,8 +548,10 @@ process_file <- function(file){
                     clusters <- findPathClusters(df)
                     write.table(clusters$clusters,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_BP_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                     write.table(clusters$similarity,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_BP_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-          },silent=T)
-          try({
+          }, error = function(e) {
+                    writeLines(as.character(e), paste0("GO_GSEA_",f,"_",i,"_DOSE_BP_err.txt"))
+          })
+          tryCatch({
                     gse_enrich <- suppressMessages(gseGO(geneList=b,
                                     OrgDb        = orgDB,
                                     ont          = "MF",
@@ -559,8 +582,10 @@ process_file <- function(file){
                     clusters <- findPathClusters(df)
                     write.table(clusters$clusters,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_MF_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                     write.table(clusters$similarity,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_MF_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-          },silent=T)
-          try({
+          }, error = function(e) {
+                    writeLines(as.character(e), paste0("GO_GSEA_",f,"_",i,"_DOSE_MF_err.txt"))
+          })
+          tryCatch({
                     gse_enrich <- suppressMessages(gseGO(geneList=b,
                                     OrgDb        = orgDB,
                                     ont          = "CC",
@@ -591,11 +616,14 @@ process_file <- function(file){
                     clusters <- findPathClusters(df)
                     write.table(clusters$clusters,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_CC_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                     write.table(clusters$similarity,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_CC_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-          },silent=T)
+          }, error = function(e) {
+                    writeLines(as.character(e), paste0("GO_GSEA_",f,"_",i,"_DOSE_CC_err.txt"))
+          })
       }  
     print(paste0("Processing ",file,"_",name_internal,"... KEGG over-representation"))
-    ### 4. KEGG over-representation:    
-      try({
+    
+    ###### 4. KEGG over-representation:    
+      tryCatch({
           kk <- suppressMessages(enrichKEGG(gene= entrez_ids,
                            organism     = org,
                            universe = entrez_ids_backg,
@@ -622,22 +650,32 @@ process_file <- function(file){
           clusters <- findPathClusters(kk_write)
           write.table(clusters$clusters,file=paste0("KEGG_enrich_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
           write.table(clusters$similarity,file=paste0("KEGG_enrich_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-      },silent=T)     
+      }, error = function(e) {
+          writeLines(as.character(e), paste0("KEGG_enrich_",i,"_",geneset,"_err.txt"))
+      })
     print(paste0("Processing ",file,"_",name_internal,"... KEGG pathways visualization"))
-    ### 5. KEGG pathways visualization:
+    
+    ###### 5. KEGG pathways visualization:
           paths_list <- unique(unlist(lapply(list.files(path = getwd(), pattern = "^KEGG", full.names = TRUE), function(x){
             data <- read.delim(x)
             data_filtered <- data$ID[data$pvalue < 0.05]
           })))
-          for (f in paths_list){try({suppressMessages(pathview(gene.data=kk@result,pathway.id=f,species=org,kegg.dir=paste0(getwd(),"/kegg_paths_snapshots")))},silent=T)}
+          for (f in paths_list){
+            tryCatch({
+              suppressMessages(pathview(gene.data=kk@result,pathway.id=f,species=org,kegg.dir=paste0(getwd(),"/kegg_paths_snapshots")))
+            }, error = function(e) {
+              writeLines(as.character(e), paste0(getwd(),"/kegg_paths_snapshots/err.txt"))
+            })
+          }
           invisible(file.remove(list.files(path=getwd(),pattern="*.pathview.png",full.names = T)))
     print(paste0("Processing ",file,"_",name_internal,"... Gene Set Enrichment Analysis of KEGG"))
-    ### 6. Gene Set Enrichment Analysis of KEGG:
+    
+    ###### 6. Gene Set Enrichment Analysis of KEGG:
       if(geneset=="fdr_05" || geneset=="fdr_01"){
           f <- paste0("readlist_fc_",geneset)
-          b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- gsub(paste0(f,"."),"",names(b))
+          b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- convert_ids(gsub(paste0(f,"."),"",names(b)),mode)
           b <- b[names(b) %in% entrez_ids_keys$SYMBOL]; names(b) <- entrez_ids_keys$ENTREZID[match(names(b),entrez_ids_keys$SYMBOL)]
-          try({
+          tryCatch({
                   gse_enrich <- suppressMessages(gseKEGG(geneList= b,
                                                          organism = org,
                                                          pvalueCutoff = 1,
@@ -664,8 +702,10 @@ process_file <- function(file){
                   clusters <- findPathClusters(df)
                   write.table(clusters$clusters,file=paste0("KEGG_GSEA_",f,"_",i,"_fgsea_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                   write.table(clusters$similarity,file=paste0("KEGG_GSEA_",f,"_",i,"_fgsea_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-          },silent=T)
-          try({
+          }, error = function(e) {
+              writeLines(as.character(e), paste0("KEGG_GSEA_",f,"_",i,"_fgsea_err.txt"))
+          })
+          tryCatch({
                   gse_enrich <- suppressMessages(gseKEGG(geneList= b,
                                                          organism = org,
                                                          pvalueCutoff = 1,
@@ -692,11 +732,14 @@ process_file <- function(file){
                   clusters <- findPathClusters(df)
                   write.table(clusters$clusters,file=paste0("KEGG_GSEA_",f,"_",i,"_DOSE_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                   write.table(clusters$similarity,file=paste0("KEGG_GSEA_",f,"_",i,"_DOSE_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-          },silent=T)
+          }, error = function(e) {
+              writeLines(as.character(e), paste0("KEGG_DOSE_",f,"_",i,"_DOSE_err.txt"))
+          })
       }
     print(paste0("Processing ",file,"_",name_internal,"... KEGG Module over-representation"))
-    ### 7. KEGG Module over-representation:
-      try({
+    
+    ###### 7. KEGG Module over-representation:
+      tryCatch({
             gse_enrich <- suppressMessages(enrichMKEGG(gene= entrez_ids,
                                                        universe = entrez_ids_backg,
                                                        organism = org,
@@ -717,14 +760,17 @@ process_file <- function(file){
             clusters <- findPathClusters(kk_write)
             write.table(clusters$clusters,file=paste0("MKEGG_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
             write.table(clusters$similarity,file=paste0("MKEGG_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-      },silent=T)
+      }, error = function(e) {
+              writeLines(as.character(e), paste0("MKEGG_",i,"_",geneset,"_err.txt"))
+      })
     print(paste0("Processing ",file,"_",name_internal,"... Gene Set Enrichment Analysis of KEGG modules"))
-    ### 8. Gene Set Enrichment Analysis of KEGG modules:
+    
+    ###### 8. Gene Set Enrichment Analysis of KEGG modules:
       if(geneset=="fdr_05" || geneset=="fdr_01"){
             f <- paste0("readlist_fc_",geneset)
-            b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- gsub(paste0(f,"."),"",names(b))
+            b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- convert_ids(gsub(paste0(f,"."),"",names(b)),mode)
             b <- b[names(b) %in% entrez_ids_keys$SYMBOL]; names(b) <- entrez_ids_keys$ENTREZID[match(names(b),entrez_ids_keys$SYMBOL)]
-            try({
+            tryCatch({
                   gse_enrich <- suppressMessages(gseMKEGG(geneList= b,
                                                           organism = org,
                                                           pvalueCutoff = 1,
@@ -745,8 +791,10 @@ process_file <- function(file){
                   clusters <- findPathClusters(df)
                   write.table(clusters$clusters,file=paste0("MKEGG_GSEA_",f,"_",i,"_fgsea_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                   write.table(clusters$similarity,file=paste0("MKEGG_GSEA_",f,"_",i,"_fgsea_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-            },silent=T)
-            try({
+            }, error = function(e) {
+              writeLines(as.character(e), paste0("MKEGG_GSEA_",f,"_",i,"_fgsea_err.txt"))
+            })
+            tryCatch({
                   gse_enrich <- suppressMessages(gseMKEGG(geneList= b,
                                                           organism = org,
                                                           pvalueCutoff = 1,
@@ -768,11 +816,14 @@ process_file <- function(file){
                   clusters <- findPathClusters(df)
                   write.table(clusters$clusters,file=paste0("MKEGG_GSEA_",f,"_",i,"_DOSE_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                   write.table(clusters$similarity,file=paste0("MKEGG_GSEA_",f,"_",i,"_DOSE_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-            },silent=T)      
+            }, error = function(e) {
+              writeLines(as.character(e), paste0("MKEGG_GSEA_",f,"_",i,"_DOSE_err.txt"))
+            })
       }    
     print(paste0("Processing ",file,"_",name_internal,"... WikiPathways over-representation"))
-    ### 9. WikiPathways over-representation:
-      try({
+    
+    ###### 9. WikiPathways over-representation:
+      tryCatch({
         gse_enrich <- suppressMessages(enrichWP(gene= entrez_ids,
                                                    organism = organism_cp,
                                                    universe = entrez_ids_backg,
@@ -793,14 +844,17 @@ process_file <- function(file){
         clusters <- findPathClusters(df)
         write.table(clusters$clusters,file=paste0("WP_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
         write.table(clusters$similarity,file=paste0("WP_",i,"_",geneset,"_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-      },silent=T)            
+      }, error = function(e) {
+              writeLines(as.character(e), paste0("WP_",i,"_",geneset,"_err.txt"))
+      })            
     print(paste0("Processing ",file,"_",name_internal,"... Gene set enrichment analyses of WikiPathways"))
-    ### 10. Gene set enrichment analyses of WikiPathways: 
+    
+    ###### 10. Gene set enrichment analyses of WikiPathways: 
       if(geneset=="fdr_05" || geneset=="fdr_01"){
         f <- paste0("readlist_fc_",geneset)
-        b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- gsub(paste0(f,"."),"",names(b))
+        b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- convert_ids(gsub(paste0(f,"."),"",names(b)),mode)
         b <- b[names(b) %in% entrez_ids_keys$SYMBOL]; names(b) <- entrez_ids_keys$ENTREZID[match(names(b),entrez_ids_keys$SYMBOL)]
-        try({
+        tryCatch({
                 gse_enrich <- suppressMessages(gseWP(geneList= b,
                                                         organism = organism_cp,
                                                         pvalueCutoff = 1,
@@ -821,8 +875,10 @@ process_file <- function(file){
                 clusters <- findPathClusters(df)
                 write.table(clusters$clusters,file=paste0("WP_GSEA_",i,"_",geneset,"_fgsea_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                 write.table(clusters$similarity,file=paste0("WP_GSEA_",i,"_",geneset,"_fgsea_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-        },silent=T)
-        try({
+        }, error = function(e) {
+              writeLines(as.character(e), paste0("WP_GSEA_",f,"_",i,"_fgsea_err.txt"))
+        })
+        tryCatch({
                 gse_enrich <- suppressMessages(gseWP(geneList= b,
                                                         organism = organism_cp,
                                                         pvalueCutoff = 1,
@@ -844,11 +900,14 @@ process_file <- function(file){
                 clusters <- findPathClusters(df)
                 write.table(clusters$clusters,file=paste0("WP_GSEA_",i,"_",geneset,"_DOSE_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                 write.table(clusters$similarity,file=paste0("WP_GSEA_",i,"_",geneset,"_DOSE_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-        },silent=T)
+        }, error = function(e) {
+              writeLines(as.character(e), paste0("WP_GSEA_",f,"_",i,"_DOSE_err.txt"))
+        })
       }
     print(paste0("Processing ",file,"_",name_internal,"... Reactome over-representation"))
-    ### 11. Reactome over-representation:      
-      try({
+    
+    ###### 11. Reactome over-representation:      
+      tryCatch({
         gse_enrich <- suppressMessages(enrichPathway(gene= entrez_ids,
                                                 organism = organism_cp_react,
                                                 universe = entrez_ids_backg,
@@ -869,14 +928,17 @@ process_file <- function(file){
         clusters <- findPathClusters(df)
         write.table(clusters$clusters,file=paste0("REACT_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
         write.table(clusters$similarity,file=paste0("REACT_",i,"_",geneset,"_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-      },silent=T)            
+      }, error = function(e) {
+              writeLines(as.character(e), paste0("REACT_",i,"_",geneset,"_err.txt"))
+      })
     print(paste0("Processing ",file,"_",name_internal,"... Gene set enrichment analyses of Reactome"))
-    ### 12. Gene set enrichment analyses of Reactome: 
+    
+    ###### 12. Gene set enrichment analyses of Reactome: 
       if(geneset=="fdr_05" || geneset=="fdr_01"){
               f <- paste0("readlist_fc_",geneset)
-              b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- gsub(paste0(f,"."),"",names(b))
+              b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- convert_ids(gsub(paste0(f,"."),"",names(b)),mode)
               b <- b[names(b) %in% entrez_ids_keys$SYMBOL]; names(b) <- entrez_ids_keys$ENTREZID[match(names(b),entrez_ids_keys$SYMBOL)]
-              try({
+              tryCatch({
                 gse_enrich <- suppressMessages(gsePathway(geneList=b,
                                                      organism = organism_cp_react,
                                                      pvalueCutoff = 1,
@@ -897,8 +959,10 @@ process_file <- function(file){
                 clusters <- findPathClusters(df)
                 write.table(clusters$clusters,file=paste0("REACT_GSEA_",i,"_",geneset,"_fgsea_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                 write.table(clusters$similarity,file=paste0("REACT_GSEA_",i,"_",geneset,"_fgsea_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-              },silent=T)
-              try({
+              }, error = function(e) {
+                writeLines(as.character(e), paste0("REACT_GSEA_",f,"_",i,"_fgsea_err.txt"))
+              })
+              tryCatch({
                 gse_enrich <- suppressMessages(gsePathway(geneList=b,
                                                      organism = organism_cp_react,
                                                      pvalueCutoff = 1,
@@ -920,19 +984,29 @@ process_file <- function(file){
                 clusters <- findPathClusters(df)
                 write.table(clusters$clusters,file=paste0("REACT_GSEA_",i,"_",geneset,"_DOSE_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                 write.table(clusters$similarity,file=paste0("REACT_GSEA_",i,"_",geneset,"_DOSE_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-              },silent=T)
+              }, error = function(e) {
+                writeLines(as.character(e), paste0("REACT_GSEA_",f,"_",i,"_DOSE_err.txt"))
+              })
       }
     print(paste0("Processing ",file,"_",name_internal,"... Reactome pathways visualization"))
-    ### 13. Reactome pathways visualization:
+    
+    ###### 13. Reactome pathways visualization:
       paths_list <- unique(unlist(lapply(list.files(path = getwd(), pattern = "^REACT", full.names = TRUE), function(x){
           data <- read.delim(x)
           data_filtered <- data$Description[data$pvalue < 0.05]
       })))
-      for (f in paths_list){try({suppressMessages(ggsave(viewPathway(f,readable = TRUE,organism = organism_cp_react),filename = paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome.pdf"),width=30, height=30))},silent=T)}
+      for (f in paths_list){
+        tryCatch({
+          suppressMessages(ggsave(viewPathway(f,readable = TRUE,organism = organism_cp_react),filename = paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome.pdf"),width=30, height=30))
+        }, error = function(e) {
+          writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
+        })
+      }
     print(paste0("Processing ",file,"_",name_internal,"... Over-representation analyses for human databases (DO, NCG and DGN)"))
-    ### 14. Over-representation analyses for human databases (DO, NCG and DGN):
+        
+    ###### 14. Over-representation analyses for human databases (DO, NCG and DGN):
       if(organism_cp=="Homo sapiens"){
-              try({
+              tryCatch({
                 ego <- enrichDO(gene          = entrez_ids,
                                 ont           = "DO",
                                 universe = entrez_ids_backg,
@@ -942,8 +1016,10 @@ process_file <- function(file){
                                 readable      = TRUE)
                 # head(ego)
                 write.table(ego,file=paste0("DO_overrepresentation_test_",i,"_",geneset,"_DO.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-              },silent=T)
-              try({
+              }, error = function(e) {
+                writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
+              })
+              tryCatch({
                 ego <- enrichDO(gene          = entrez_ids,
                                 ont           = "DOLite",
                                 universe = entrez_ids_backg,
@@ -953,8 +1029,10 @@ process_file <- function(file){
                                 readable      = TRUE)
                 # head(ego)
                 write.table(ego,file=paste0("DO_overrepresentation_test_",i,"_",geneset,"_DOLite.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-              },silent=T)
-              try({
+              }, error = function(e) {
+                writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
+              })
+              tryCatch({
                   ego <- enrichNCG(gene          = entrez_ids,
                                    pAdjustMethod = i,
                                    universe = entrez_ids_backg,
@@ -963,8 +1041,10 @@ process_file <- function(file){
                                    readable      = TRUE)
                   # head(ego)
                   write.table(ego,file=paste0("NGC_overrepresentation_test_",i,"_",geneset,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
-              },silent=T)
-              try({
+              }, error = function(e) {
+                writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
+              })
+              tryCatch({
                   ego <- enrichDGN(gene          = entrez_ids,
                                    pAdjustMethod = i,
                                    universe = entrez_ids_backg,
@@ -973,66 +1053,80 @@ process_file <- function(file){
                                    readable      = TRUE)
                   # head(ego)
                   write.table(ego,file=paste0("DGN_overrepresentation_test_",i,"_",geneset,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
-              },silent=T)
+              }, error = function(e) {
+                writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
+              })
                    
             
               if(geneset=="fdr_05" || geneset=="fdr_01"){
-              f <- paste0("readlist_fc_",geneset)
-              b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- gsub(paste0(f,"."),"",names(b))
-              b <- b[names(b) %in% entrez_ids_keys$SYMBOL]; names(b) <- entrez_ids_keys$ENTREZID[match(names(b),entrez_ids_keys$SYMBOL)]
-              try({
-                    gse_enrich <- suppressMessages(gseDO(geneList= sort(eval(parse(text=f)),decreasing=T)[!is.na(names(sort(eval(parse(text=f)),decreasing=T)))],
-                                                              pvalueCutoff = 1,
-                                                              pAdjustMethod = i,
-                                                              verbose      = FALSE,
-                                                              by="fgsea"))
-                    write.table(gse_enrich@result,file=paste0("DO_GSEA_",f,"_",i,"_fgsea.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-              },silent=T)
-              try({
-                    gse_enrich <- suppressMessages(gseDO(geneList= sort(eval(parse(text=f)),decreasing=T)[!is.na(names(sort(eval(parse(text=f)),decreasing=T)))],
-                                                              pvalueCutoff = 1,
-                                                              pAdjustMethod = i,
-                                                              verbose      = FALSE,
-                                                              by="DOSE",
-                                                              nPerm = 100))
-                    write.table(gse_enrich@result,file=paste0("DO_GSEA_",f,"_",i,"_DOSE.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-              },silent=T)
-              
-              try({
-                    gse_enrich <- suppressMessages(gseNCG(geneList= sort(eval(parse(text=f)),decreasing=T)[!is.na(names(sort(eval(parse(text=f)),decreasing=T)))],
-                                                         pvalueCutoff = 1,
-                                                         pAdjustMethod = i,
-                                                         verbose      = FALSE,
-                                                         by="fgsea"))
-                    write.table(gse_enrich@result,file=paste0("NCG_GSEA_",f,"_",i,"_fgsea.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-              },silent=T)
-              try({
-                    gse_enrich <- suppressMessages(gseNCG(geneList= sort(eval(parse(text=f)),decreasing=T)[!is.na(names(sort(eval(parse(text=f)),decreasing=T)))],
-                                                         pvalueCutoff = 1,
-                                                         pAdjustMethod = i,
-                                                         verbose      = FALSE,
-                                                         by="DOSE",
-                                                         nPerm = 100))
-                    write.table(gse_enrich@result,file=paste0("NCG_GSEA_",f,"_",i,"_DOSE.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-              },silent=T)
-              
-              try({
-                    gse_enrich <- suppressMessages(gseDGN(geneList= sort(eval(parse(text=f)),decreasing=T)[!is.na(names(sort(eval(parse(text=f)),decreasing=T)))],
-                                                          pvalueCutoff = 1,
-                                                          pAdjustMethod = i,
-                                                          verbose      = FALSE,
-                                                          by="fgsea"))
-                    write.table(gse_enrich@result,file=paste0("DGN_GSEA_",f,"_",i,"_fgsea.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-              },silent=T)
-              try({
-                    gse_enrich <- suppressMessages(gseDGN(geneList= sort(eval(parse(text=f)),decreasing=T)[!is.na(names(sort(eval(parse(text=f)),decreasing=T)))],
-                                                          pvalueCutoff = 1,
-                                                          pAdjustMethod = i,
-                                                          verbose      = FALSE,
-                                                          by="DOSE",
-                                                          nPerm = 100))
-                    write.table(gse_enrich@result,file=paste0("DGN_GSEA_",f,"_",i,"_DOSE.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-              },silent=T)
+                f <- paste0("readlist_fc_",geneset)
+                b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- convert_ids(gsub(paste0(f,"."),"",names(b)),mode)
+                b <- b[names(b) %in% entrez_ids_keys$SYMBOL]; names(b) <- entrez_ids_keys$ENTREZID[match(names(b),entrez_ids_keys$SYMBOL)]
+                tryCatch({
+                      gse_enrich <- suppressMessages(gseDO(geneList= sort(eval(parse(text=f)),decreasing=T)[!is.na(names(sort(eval(parse(text=f)),decreasing=T)))],
+                                                                pvalueCutoff = 1,
+                                                                pAdjustMethod = i,
+                                                                verbose      = FALSE,
+                                                                by="fgsea"))
+                      write.table(gse_enrich@result,file=paste0("DO_GSEA_",f,"_",i,"_fgsea.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                }, error = function(e) {
+                  writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
+                })
+                tryCatch({
+                      gse_enrich <- suppressMessages(gseDO(geneList= sort(eval(parse(text=f)),decreasing=T)[!is.na(names(sort(eval(parse(text=f)),decreasing=T)))],
+                                                                pvalueCutoff = 1,
+                                                                pAdjustMethod = i,
+                                                                verbose      = FALSE,
+                                                                by="DOSE",
+                                                                nPerm = 100))
+                      write.table(gse_enrich@result,file=paste0("DO_GSEA_",f,"_",i,"_DOSE.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                }, error = function(e) {
+                  writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
+                })
+                
+                tryCatch({
+                      gse_enrich <- suppressMessages(gseNCG(geneList= sort(eval(parse(text=f)),decreasing=T)[!is.na(names(sort(eval(parse(text=f)),decreasing=T)))],
+                                                           pvalueCutoff = 1,
+                                                           pAdjustMethod = i,
+                                                           verbose      = FALSE,
+                                                           by="fgsea"))
+                      write.table(gse_enrich@result,file=paste0("NCG_GSEA_",f,"_",i,"_fgsea.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                }, error = function(e) {
+                  writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
+                })
+                tryCatch({
+                      gse_enrich <- suppressMessages(gseNCG(geneList= sort(eval(parse(text=f)),decreasing=T)[!is.na(names(sort(eval(parse(text=f)),decreasing=T)))],
+                                                           pvalueCutoff = 1,
+                                                           pAdjustMethod = i,
+                                                           verbose      = FALSE,
+                                                           by="DOSE",
+                                                           nPerm = 100))
+                      write.table(gse_enrich@result,file=paste0("NCG_GSEA_",f,"_",i,"_DOSE.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                }, error = function(e) {
+                  writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
+                })
+                
+                tryCatch({
+                      gse_enrich <- suppressMessages(gseDGN(geneList= sort(eval(parse(text=f)),decreasing=T)[!is.na(names(sort(eval(parse(text=f)),decreasing=T)))],
+                                                            pvalueCutoff = 1,
+                                                            pAdjustMethod = i,
+                                                            verbose      = FALSE,
+                                                            by="fgsea"))
+                      write.table(gse_enrich@result,file=paste0("DGN_GSEA_",f,"_",i,"_fgsea.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                }, error = function(e) {
+                  writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
+                })
+                tryCatch({
+                      gse_enrich <- suppressMessages(gseDGN(geneList= sort(eval(parse(text=f)),decreasing=T)[!is.na(names(sort(eval(parse(text=f)),decreasing=T)))],
+                                                            pvalueCutoff = 1,
+                                                            pAdjustMethod = i,
+                                                            verbose      = FALSE,
+                                                            by="DOSE",
+                                                            nPerm = 100))
+                      write.table(gse_enrich@result,file=paste0("DGN_GSEA_",f,"_",i,"_DOSE.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                }, error = function(e) {
+                  writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
+                })
               }
       }
     }
