@@ -116,9 +116,9 @@ check_naming <- function(names) {
 convert_ids <- function(ids,mode) {
   if(mode=="all_upper"){
     ids2 <- toupper(ids)
-  } else if {mode=="all_lower"} {
+  } else if (mode=="all_lower") {
     ids2 <- tolower(ids)
-  } else if {mode=="first_upper_rest_lower"} {
+  } else if (mode=="first_upper_rest_lower") {
     ids2 <- stringr::str_to_title(ids)
   }
   return(ids2)
@@ -156,8 +156,8 @@ process_file <- function(file){
     ### 1. Gene classification based on GO distribution at a specific level:
       for (levelgo in 2:6){
         # print(paste0("groupGO_level_",levelgo))
-        try({
-          ggo <- groupGO(gene     = genes_of_interest[[geneset]],
+        tryCatch({
+          ggo <- groupGO(gene     = convert_ids(axgenes_of_interest[[geneset]],mode),
                          OrgDb    = orgDB,
                          keyType  = "SYMBOL",
                          ont      = "BP",
@@ -166,9 +166,11 @@ process_file <- function(file){
           # ggo@result
           # ggo@result$Count
           write.table(ggo@result,file=paste0("GO_description_level_",levelgo,"_",geneset,"_groupGO_BP.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-        },silent=T)
-        try({
-          ggo <- groupGO(gene     = genes_of_interest[[geneset]],
+        }, error = function(e) {
+          writeLines(as.character(e), paste0("GO_description_level_",levelgo,"_",geneset,"_groupGO_BP.txt"))
+        })
+        tryCatch({
+          ggo <- groupGO(gene     = convert_ids(genes_of_interest[[geneset]],mode),
                          OrgDb    = orgDB,
                          keyType  = "SYMBOL",
                          ont      = "MF",
@@ -177,9 +179,11 @@ process_file <- function(file){
           # ggo@result
           # ggo@result$Count
           write.table(ggo@result,file=paste0("GO_description_level_",levelgo,"_",geneset,"_groupGO_MF.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-        },silent=T)
-        try({
-          ggo <- groupGO(gene     = genes_of_interest[[geneset]],
+        }, error = function(e) {
+          writeLines(as.character(e), paste0("GO_description_level_",levelgo,"_",geneset,"_groupGO_MF.txt"))
+        })
+        tryCatch({
+          ggo <- groupGO(gene     = convert_ids(genes_of_interest[[geneset]],mode),
                        OrgDb    = orgDB,
                        keyType  = "SYMBOL",
                        ont      = "CC",
@@ -188,32 +192,40 @@ process_file <- function(file){
           # ggo@result
           # ggo@result$Count
           write.table(ggo@result,file=paste0("GO_description_level_",levelgo,"_",geneset,"_groupGO_CC.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-      },silent=T)
+      }, error = function(e) {
+          writeLines(as.character(e), paste0("GO_description_level_",levelgo,"_",geneset,"_groupGO_CC.txt"))
+        })
       }
-      try({
+      tryCatch({
         b <- Gene2GOTermAndLevel_ON(genes = entrez_ids_keys$ENTREZID[toupper(entrez_ids_keys$SYMBOL) %in% toupper(genes_of_interest[[geneset]]]), organism = organism_cp, domain = "BP")
         b$GO_Description <- Term(b$"GO ID"); b$Gene_ID <- sapply(b$"Entrezgene ID",function(x){paste(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x],collapse=",")})
         # Assuming your data is in a data frame named 'df'
         d <- do.call(rbind, lapply(split(b, b$"GO ID"), function(group) {data.frame(GO_ID = unique(group$"GO ID"),GO_Description = unique(group$GO_Description),
                                                                                     Level = mean(group$Level), Gene_ID = paste(group$Gene_ID, collapse = ","),ENTREZ_ID = paste(group$"Entrezgene ID", collapse = ","))}))
         write.table(d,file=paste0("GO_description_all_",geneset,"_BP.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-      },silent=T)
-      try({
+      }, error = function(e) {
+          writeLines(as.character(e), paste0("GO_description_all_",geneset,"_BP.txt"))
+      })
+      tryCatch({
         b <- Gene2GOTermAndLevel_ON(genes = entrez_ids_keys$ENTREZID[entrez_ids_keys$SYMBOL %in% genes_of_interest[[geneset]]], organism = organism_cp, domain = "MF")
         b$GO_Description <- Term(b$"GO ID"); b$Gene_ID <- sapply(b$"Entrezgene ID",function(x){paste(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x],collapse=",")})
         # Assuming your data is in a data frame named 'df'
         d <- do.call(rbind, lapply(split(b, b$"GO ID"), function(group) {data.frame(GO_ID = unique(group$"GO ID"),GO_Description = unique(group$GO_Description),
                                                                                     Level = mean(group$Level), Gene_ID = paste(group$Gene_ID, collapse = ","),ENTREZ_ID = paste(group$"Entrezgene ID", collapse = ","))}))
         write.table(d,file=paste0("GO_description_all_",geneset,"_MF.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-      },silent=T)
-      try({
+      }, error = function(e) {
+          writeLines(as.character(e), paste0("GO_description_all_",geneset,"_MF.txt"))
+      })
+      tryCatch({
         b <- Gene2GOTermAndLevel_ON(genes = entrez_ids_keys$ENTREZID[entrez_ids_keys$SYMBOL %in% genes_of_interest[[geneset]]], organism = organism_cp, domain = "CC")
         b$GO_Description <- Term(b$"GO ID"); b$Gene_ID <- sapply(b$"Entrezgene ID",function(x){paste(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x],collapse=",")})
         # Assuming your data is in a data frame named 'df'
         d <- do.call(rbind, lapply(split(b, b$"GO ID"), function(group) {data.frame(GO_ID = unique(group$"GO ID"),GO_Description = unique(group$GO_Description),
                                                                                     Level = mean(group$Level), Gene_ID = paste(group$Gene_ID, collapse = ","),ENTREZ_ID = paste(group$"Entrezgene ID", collapse = ","))}))
         write.table(d,file=paste0("GO_description_all_",geneset,"_CC.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-      },silent=T)
+      }, error = function(e) {
+          writeLines(as.character(e), paste0("GO_description_all_",geneset,"_CC.txt"))
+      })
     print(paste0("Processing ",file,"_",name_internal,"... GO over-representation analyses"))
     ### 2. GO over-representation analyses:
       try({
