@@ -19,7 +19,7 @@ for argument in $options; do
 
 ### Gather the parameters, default values, exit if essential not provided...
 	case $argument in
-		-h*) echo "reanalyzerGSE v2.3.0 - usage: reanalyzerGSE.pk.sh [options]
+		-h*) echo "reanalyzerGSE v2.5.0 - usage: reanalyzerGSE.pk.sh [options]
 		-h | -help # Type this to get help
 		-i | -input # GEO_ID (GSEXXXXXX, separated by comma if more than one), or folder containing raw reads (please provide full absolute path, e.g. /path/folder_name/), or almost any accession from ENA/SRA to download .fastq from (any of the ids with the prefixes PRJEB,PRJNA,PRJDB,ERP,DRP,SRP,SAMD,SAME,SAMN,ERS,DRS,SRS,ERX,DRX,SRX,ERR,DRR,SRR, please separated by commas if more than one id as input)
 		-n | -name # Name of the project/folder to create and store results
@@ -43,7 +43,7 @@ for argument in $options; do
 		-bv | -batch_vector # Comma-separated list of numbers for use as batch vector with Combat-seq
 		-bc | -batch_biological_covariable # Comma-separated list of numbers for use as batch vector of covariables of biological interest with Combat-seq
 		-d | -design_custom # Manually specifying the experimental design for GEO download ('no' by default and if 'yes', please expect an interactive prompt after data download from GEO, and please enter the assignment to groups when asked in the terminal, with a comma-separated list of the same length than the number of samples)
-		-D | -design_custom_local # Specifying here the experimental design for the local dataset (by default an interactive prompt will ask for a comma-separated list of the same length than the number of samples, if you want to avoid that manual input please provide the list in this argument)
+		-D | -design_custom_local # Specifying here the experimental design for the local dataset (by default an interactive prompt will ask for a comma-separated list of the same length than the number of samples, if you want to avoid that manual input please provide the list in this argument. If more than one design to provide, please input comma-separated list separed by a '/', without spaces)
 		-O | -organism # Specifying here the scientific name of the organism for the local dataset (by default an interactive prompt will ask for it, if you want to avoid that manual input please provide the full organism name in this argument, please use underline instead of space)
 		-C | -covariables # Please input a comma-separated list for the covariable that should be included in the edgeR model for DGE (for now only one covariable allowed, for example a proven batch effect) 
 		-T | -target_file # Protopical target file for attempts to differential gene expression analyses (containing filenames and covariates, automatically built if not provided)
@@ -398,11 +398,18 @@ if [[ $debug_step == "all" || $debug_step == "step1" ]]; then
 		if [ "$design_custom" == "yes" ]; then
 			echo "You have requested to manually provide the experimental design instead of the ones shown above. This is the list of samples:"
 			cat sample_names.txt
-			echo "Please provide a comma-separated list with the conditions for each sample:"
+			echo "Please provide a comma-separated list with the conditions for each sample, and if more than one separate the comma-separated lists with '/', no spaces:"
 			read -r design_input
 			rm $(ls -d $output_folder/$name/GEO_info/* | grep 'design_possible_')
-			echo $design_input | sed 's/,/\n/g' > $output_folder/$name/GEO_info/design_possible_full_1.txt
-			cat $output_folder/$name/GEO_info/design_possible_full_1.txt | sort | uniq > $output_folder/$name/GEO_info/design_possible_1.txt
+			IFS='/' read -ra ADDR <<< "$design_input"
+			for i in "${!ADDR[@]}"; do
+				# For each comma-separated list, split by ',' and echo to file
+				IFS=',' read -ra ITEMS <<< "${ADDR[$i]}"
+				for item in "${ITEMS[@]}"; do
+					echo "$item"
+				done > "$output_folder/$name/GEO_info/design_possible_full_$(($i + 1)).txt"
+				cat "$output_folder/$name/GEO_info/design_possible_full_$(($i + 1)).txt" | sort | uniq > "$output_folder/$name/GEO_info/design_possible_$(($i + 1)).txt"
+			done
 		fi
 	
 	### Stop and continue with other script if it's a single-cell:
@@ -590,16 +597,23 @@ if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
 		fi
 	 	echo -e "This is the content of $seqs_location:\n$(ls -l $seqs_location | awk '{ print $9 }' | tail -n +2)\n"
 		if [ -z "$design_custom_local" ]; then
-			echo -n "From the ordered list above, please input a comma-separated list with the conditions for each sample. Remember to try and avoid complex names, use as few underlines as possible, avoid names starting with numbers or others that would not be sorted appropriately such as containing spaces, and if reads are paired-end, only one name of condition per pair of reads: "
+			echo -n "From the ordered list above, please input a comma-separated list with the conditions for each sample. Remember to try and avoid complex names, use as few underlines as possible, avoid names starting with numbers or others that would not be sorted appropriately such as containing spaces, if reads are paired-end, only one name of condition per pair of reads, and if you want to provide more than one design, separate the comma-separated list with a '/', no spaces: "
 			read -r design_input
 		else
 			design_input=$design_custom_local
-			echo -e "The used conditions are:\n$(echo $design_input | sed 's_,_\n_g')"
+			echo -e "The used conditions are:\n$(echo $design_input | sed 's_,_\n_g;s,/,\n\n,g')"
 		fi
 		mkdir -p $output_folder/$name/GEO_info/
-		paste <(ls $seqs_location | egrep '.fq|.fastq' | sed "s/_1.fastq.gz//" | sed "s/_2.fastq.gz//" | uniq) <(paste -d'_' <(ls $seqs_location | egrep '.fq|.fastq' | egrep '.fq|.fastq' | sed "s/_1.fastq.gz//" | sed "s/_2.fastq.gz//" | uniq) <(echo $design_input | sed 's/,/\n/g')) <(echo $design_input | sed 's/,/\n/g') > $output_folder/$name/GEO_info/samples_info.txt
-		echo $design_input | sed 's/,/\n/g' > $output_folder/$name/GEO_info/design_possible_full_1.txt
-		cat $output_folder/$name/GEO_info/design_possible_full_1.txt | sort | uniq > $output_folder/$name/GEO_info/design_possible_1.txt
+		paste <(ls $seqs_location | egrep '.fq|.fastq' | sed "s/_1.fastq.gz//" | sed "s/_2.fastq.gz//" | uniq) <(paste -d'_' <(ls $seqs_location | egrep '.fq|.fastq' | egrep '.fq|.fastq' | sed "s/_1.fastq.gz//" | sed "s/_2.fastq.gz//" | uniq) <(echo $design_input | sed 's*/*\t*g'| cut -f1 | sed 's*,*\n*g')) <(echo $design_input | sed 's*/*\t*g'| cut -f1 | sed 's*,*\n*g') > $output_folder/$name/GEO_info/samples_info.txt
+		IFS='/' read -ra ADDR <<< "$design_input"
+		for i in "${!ADDR[@]}"; do
+			# For each comma-separated list, split by ',' and echo to file
+			IFS=',' read -ra ITEMS <<< "${ADDR[$i]}"
+			for item in "${ITEMS[@]}"; do
+				echo "$item"
+			done > "$output_folder/$name/GEO_info/design_possible_full_$(($i + 1)).txt"
+			cat "$output_folder/$name/GEO_info/design_possible_full_$(($i + 1)).txt" | sort | uniq > "$output_folder/$name/GEO_info/design_possible_$(($i + 1)).txt"
+		done		
 		echo $name > $output_folder/$name/GEO_info/study_title.txt
 		if [ -z "$organism_argument" ]; then
 			echo -n "Please input the scientific name of the organism: "
