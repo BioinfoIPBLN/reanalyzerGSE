@@ -948,7 +948,7 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 	echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
 	for index in "${!array[@]}"; do
 		cd $output_folder/$name/final_results_reanalysis$index/DGE/
-		rm -rf $(find . -type d \( -name "*_autoGO" -o -name "*_clusterProfiler" -o -name "*_panther" \))
+		rm -rf $(find . -type d \( -name "*_autoGO" -o -name "*_clusterProfiler" -o -name "*_panther" -o -name "*funct_enr*" \)) $(find . -type f \( -name "*_autoGO" -o -name "*_clusterProfiler" -o -name "*_panther" -o -name "*funct_enr*" \))
 		if [ -z "$annotation_file" ]; then
 			annotation_file=${array[index]}
 		fi
