@@ -906,7 +906,7 @@ if [[ $debug_step == "all" || $debug_step == "step3b" ]]; then
 	### Reformat the logs by parallel...
 	for f in $(find $output_folder/$name -name "*_log_parallel.txt"); do awk -F"\t" 'NR==1; NR > 1{OFS="\t"; $3=strftime("%Y-%m-%d %H:%M:%S", $3); print $0}' $f > tmp && mv tmp $f; done
 	
- 	echo -e "\nmiARma-seq and STEP 4 DONE. Current date/time: $(date)"; time1=`date +%s`; echo -e "Elapsed time (secs): $((time1-start))"; echo -e "Elapsed time (hours): $(echo "scale=2; $((time1-start))/3600" | bc -l)\n"
+ 	echo -e "\nmiARma-seq DONE. Current date/time: $(date)"; time1=`date +%s`; echo -e "Elapsed time (secs): $((time1-start))"; echo -e "Elapsed time (hours): $(echo "scale=2; $((time1-start))/3600" | bc -l)\n"
 	export debug_step="all"
 	echo -e "\n\nSTEP 3b: DONE\nCurrent date/time: $(date)\n\n"
 fi
