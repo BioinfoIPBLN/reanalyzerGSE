@@ -127,7 +127,7 @@ rm check_strandedness.py; wget -q https://github.com/signalbash/how_are_we_stran
 echo -e "\n\nInstalling the perl modules required for miARma-Seq via cpanm...\n\n"
 cd $conda_envs_path/reanalyzerGSE/bin
 export PATH=$conda_envs_path/reanalyzerGSE/bin/:$PATH
-curl -L https://cpanmin.us/ -o cpanm; chmod +x cpanm
+curl -s -L https://cpanmin.us/ -o cpanm; chmod +x cpanm
 ./cpanm -q -f Config::IniFiles DateTime Strict::Perl LWP Cwd less Statistics::R
 
 echo -e "\n\nInstalling the CRAN's package 'autoGO' and some other dependencies, not available through conda as of yet... This manual installation implies that the version of the installed R packages are not frozen. So, not likely, but please do keep in mind that this may be a source of errors in the mid-term if newer versions of the R packages are installed...\n\n"
