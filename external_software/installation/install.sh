@@ -28,7 +28,7 @@ fi
 
 #### Get the directory of the script:
 CURRENT_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-echo -e "\nThe current folder is $CURRENT_DIR\n"
+cd $CURRENT_DIR; echo -e "\nThe current folder is $CURRENT_DIR\n"
 
 #### Setting permissions of executables:
 echo -e "\n\nSetting permissions...\n\n"
@@ -61,9 +61,9 @@ if [ "$conda_install" == "yes" ]; then
 fi
 
 #### Install packages via conda:   
-conda_exec=$(which conda)
-conda_dir=$(dirname $conda_exec | sed 's,/bin$,,g' | sed 's,/condabin$,,g')
-conda_envs_path=$(dirname $conda_exec | sed 's,/bin$,/envs,g' | sed 's,/condabin$,/envs,g')
+conda_exec=$(conda env list | grep -v "#" | head -1 | sed 's,.* ,,g')/bin
+conda_dir=$(echo $conda_exec | sed 's,/bin$,,g;s,/condabin$,,g')
+conda_envs_path=$(echo $conda_exec | sed 's,/bin$,/envs,g;s,/condabin$,/envs,g')
 echo -e "\n\n\nI'm downloading and installing several packages in four environments in $conda_dir...\nThe conda executable used is located in the conda located in $conda_exec\n\n"
 echo -e "\n\n\nThe pathway to conda environments is $conda_envs_path...\n\n\n"
 
@@ -91,7 +91,7 @@ else
 fi
 
 echo -e "\nRemoving tmp files in pkgs directory\n"
-rm -rf $(find $(which conda | sed 's,/bin/conda,,g') -type d -name pkgs) # Remove temp files
+rm -rf $(find $conda_dir -type d -name pkgs) # Remove temp files
 
 $conda_envs_path/reanalyzerGSE_4/bin/pip -q install statistics
 $conda_envs_path/reanalyzerGSE/bin/pip -q install deeptools
