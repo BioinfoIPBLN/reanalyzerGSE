@@ -61,7 +61,7 @@ if [ "$conda_install" == "yes" ]; then
 fi
 
 #### Install packages via conda:   
-conda_exec=$(conda env list | grep -v "#" | head -1 | sed 's,.* ,,g')/bin
+conda_exec=$(conda env list | grep -v "#" | head -1 | sed 's,.* ,,g;s,/envs.*,,g')/bin
 conda_dir=$(echo $conda_exec | sed 's,/bin$,,g;s,/condabin$,,g')
 conda_envs_path=$(echo $conda_exec | sed 's,/bin$,/envs,g;s,/condabin$,/envs,g')
 echo -e "\n\n\nI'm downloading and installing several packages in four environments in $conda_dir...\nThe conda executable used is located in the conda located in $conda_exec\n\n"
