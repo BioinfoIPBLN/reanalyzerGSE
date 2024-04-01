@@ -686,7 +686,9 @@ restrict_comparisons <- args[11] # if not provided, "no"
       # qpdf::pdf_combine(input = list.files(pattern="KOvsWT12m_hallmark_bars_"),output="KOvsWT12m_hallmark_bars.pdf")
       # file.remove(list.files(pattern="KOvsWT12m_hallmark_bars_"))
       file.remove(list.files(pattern="temp_targets.txt"))
-    })    
+      }, error = function(e) {
+          writeLines(as.character(e), paste0("Housekeeping_err.txt"))
+      })
     
 
 
