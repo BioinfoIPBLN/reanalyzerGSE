@@ -759,8 +759,7 @@ Venn_funct <- function(files){
     sink(); unlink(tmp_file)
   }
 }
-tar("venn_diagrams.tar", files = Sys.glob("Venn_diagram_combn_*.png"))
-invisible(file.remove(Sys.glob("Venn_diagram_combn_*.png")))
+system("tar cf venn_diagrams.tar Venn_diagram*; rm Venn_diagram*")
 
 if(length(list.files(path=paste0(output_dir,"/DGE"),full.names=T,pattern="^DGE_analysis_comp\\d+\\.txt$"))>1){
   print("Attempting to perform Venn diagrams for DGE analyses...")
@@ -905,7 +904,7 @@ save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
     stat = "identity"
   ) + theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
   bar_plot + 
-    geom_text(aes(label = reads), vjust = -0.5, color = "black", size=3) + labs(title="raw_reads") + guides(color = "none")
+    geom_text(aes(label = reads), vjust = -0.5, color = "black", size=3) + labs(title="raw_reads") + guides(color = "none") + theme(legend.position = "none")
 
   reads <- c()
   files <- grep("_1_fastqc.html",list.files(path=input_dir,full.names=T,recursive=T),val=T)
@@ -929,7 +928,7 @@ save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
     perc <- c()
     for (i in 1:length(reads)){perc<-c(perc,round(bam_reads_2$reads[i]*100/fastq_reads_2$reads[i],2))}
     bar_plot + 
-       geom_text(aes(label = paste0(reads," (bam/fastq: ",perc, " %)"), angle=45), vjust = -0.5, color = "black", size=2) + labs(title="bam_reads") + guides(color = "none")
+       geom_text(aes(label = paste0(reads," (bam/fastq: ",perc, " %)"), angle=45), vjust = -0.5, color = "black", size=2) + labs(title="bam_reads") + guides(color = "none") + theme(legend.position = "none")
   }
   ### 4. Corrplot no log
   tmp <- lcpm_no_log; colnames(tmp) <- gsub("_t|m_Rep|_seq|_KO|_WT","",colnames(tmp))
