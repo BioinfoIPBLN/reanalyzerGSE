@@ -488,7 +488,12 @@ if [[ $debug_step == "all" || $debug_step == "step1a" ]]; then
 			else
 				echo -e "\nSoft linking the already downloaded raw reads from the provided directory: $input_geo_reads\n"
 				ln -sf $input_geo_reads/* $seqs_location
-			fi		
+			fi
+			num_files=$(ls | wc -l); num_samples=$(cat $output_folder/$name/GEO_info/srr_ids.txt | wc -l)
+			if [ "$num_files" -lt "$num_samples" ]; then
+				echo -e "\nPlease double check manually, is there some issue with the downloaded raw data? Exiting the script...\n"
+				exit 1
+			fi
 		fi
 		echo -e "\nDONE. Current date/time: $(date)"; time1=`date +%s`; echo -e "Elapsed time (secs): $((time1-start))"; echo -e "Elapsed time (hours): $(echo "scale=2; $((time1-start))/3600" | bc -l)\n"
 	
@@ -913,6 +918,14 @@ fi
 
 ### STEP 4. Process output of miARma. Get figures, final counts, standard DGE, violin plots...
 if [[ $debug_step == "all" || $debug_step == "step4" ]]; then
+	# If the running is resumed in this step, this variables has to be created because they would not exist
+ 	# The same may happen in other steps, this is WIP
+	if [ -z "$organism" ]; then
+		organism=$(cat $output_folder/$name/GEO_info/organism.txt | sed 's, ,_,g;s,_+,_,g')
+	fi
+	if [ -z "${!array[@]}" ]; then
+		IFS=', ' read -r -a array <<< "$annotation"
+	fi
 	echo -e "\n\nSTEP 4: Starting...\nCurrent date/time: $(date)\n\n"
 	IFS=', ' read -r -a array2 <<< "$filter"
 	for index in "${!array[@]}"; do
