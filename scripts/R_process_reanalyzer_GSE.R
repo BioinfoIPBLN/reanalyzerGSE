@@ -761,13 +761,13 @@ Venn_funct <- function(files){
     sink(); unlink(tmp_file)
   }
 }
-system("tar cf venn_diagrams.tar Venn_diagram*; rm Venn_diagram*")
 
 if(length(list.files(path=paste0(output_dir,"/DGE"),full.names=T,pattern="^DGE_analysis_comp\\d+\\.txt$"))>1){
   print("Attempting to perform Venn diagrams for DGE analyses...")
   Venn_funct(list.files(path=paste0(output_dir,"/DGE"),full.names=T,pattern="^DGE_analysis_comp\\d+\\.txt$"))
 }
 
+try(system("tar cf venn_diagrams.tar Venn_diagram*; rm Venn_diagram*"))
 
 save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
 ###### QC PDF from Bioinfo and Laura:
