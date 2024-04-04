@@ -78,8 +78,7 @@ Venn_funct <- function(files){
 		        cat.fontfamily = "sans")
 		sink(); unlink(tmp_file)
 	}
-	tar("venn_diagrams.tar", files = Sys.glob("Venn_diagram_combn_*.png"))
-	invisible(file.remove(Sys.glob("Venn_diagram_combn_*.png")))
+	try(system("tar cf venn_diagrams.tar Venn_diagram*; rm Venn_diagram*"))
 }
 
 
