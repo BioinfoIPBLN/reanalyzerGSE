@@ -170,6 +170,7 @@ process_file <- function(file){
       for (levelgo in 2:6){
         # print(paste0("groupGO_level_",levelgo))
         tryCatch({
+          ggo <- c(); Sys.sleep(2)
           ggo <- groupGO(gene     = convert_ids(genes_of_interest[[geneset]],mode),
                          OrgDb    = orgDB,
                          keyType  = "SYMBOL",
@@ -183,6 +184,7 @@ process_file <- function(file){
           writeLines(as.character(e), paste0("GO_description_level_",levelgo,"_",geneset,"_groupGO_BP_err.txt"))
         })
         tryCatch({
+          ggo <- c(); Sys.sleep(2)
           ggo <- groupGO(gene     = convert_ids(genes_of_interest[[geneset]],mode),
                          OrgDb    = orgDB,
                          keyType  = "SYMBOL",
@@ -196,6 +198,7 @@ process_file <- function(file){
           writeLines(as.character(e), paste0("GO_description_level_",levelgo,"_",geneset,"_groupGO_MF_err.txt"))
         })
         tryCatch({
+          ggo <- c(); Sys.sleep(2)
           ggo <- groupGO(gene     = convert_ids(genes_of_interest[[geneset]],mode),
                        OrgDb    = orgDB,
                        keyType  = "SYMBOL",
@@ -210,6 +213,7 @@ process_file <- function(file){
         })
       }
       tryCatch({
+        b <- c(); Sys.sleep(2)
         b <- Gene2GOTermAndLevel_ON(genes = entrez_ids_keys$ENTREZID[entrez_ids_keys$SYMBOL %in% convert_ids(genes_of_interest[[geneset]],mode)], organism = organism_cp, domain = "BP")
         b$GO_Description <- Term(b$"GO ID"); b$Gene_ID <- sapply(b$"Entrezgene ID",function(x){paste(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x],collapse=",")})
         # Assuming your data is in a data frame named 'df'
@@ -220,6 +224,7 @@ process_file <- function(file){
           writeLines(as.character(e), paste0("GO_description_all_",geneset,"_BP_err.txt"))
       })
       tryCatch({
+        b <- c(); Sys.sleep(2)
         b <- Gene2GOTermAndLevel_ON(genes = entrez_ids_keys$ENTREZID[entrez_ids_keys$SYMBOL %in% convert_ids(genes_of_interest[[geneset]],mode)], organism = organism_cp, domain = "MF")
         b$GO_Description <- Term(b$"GO ID"); b$Gene_ID <- sapply(b$"Entrezgene ID",function(x){paste(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x],collapse=",")})
         # Assuming your data is in a data frame named 'df'
@@ -230,6 +235,7 @@ process_file <- function(file){
           writeLines(as.character(e), paste0("GO_description_all_",geneset,"_MF_err.txt"))
       })
       tryCatch({
+        b <- c(); Sys.sleep(2)
         b <- Gene2GOTermAndLevel_ON(genes = entrez_ids_keys$ENTREZID[entrez_ids_keys$SYMBOL %in% convert_ids(genes_of_interest[[geneset]],mode)], organism = organism_cp, domain = "CC")
         b$GO_Description <- Term(b$"GO ID"); b$Gene_ID <- sapply(b$"Entrezgene ID",function(x){paste(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x],collapse=",")})
         # Assuming your data is in a data frame named 'df'
@@ -243,6 +249,7 @@ process_file <- function(file){
     
     ###### 2. GO over-representation analyses:
       tryCatch({
+                  ego <- c(); Sys.sleep(2)
                   ego <- enrichGO(gene          = convert_ids(genes_of_interest[[geneset]],mode),
                                 # universe      = unname(as.character(eval(parse(text=paste0(gsub(".db","",orgDB),"SYMBOL"))))), # It's the same than default
                                 universe = convert_ids(genes_of_interest[["genes_backg"]],mode),
@@ -270,6 +277,7 @@ process_file <- function(file){
           writeLines(as.character(e), paste0("GO_overrepresentation_test_",i,"_",geneset,"_err.txt"))
       })
       tryCatch({
+                  ego <- c(); Sys.sleep(2)
                   ego <- enrichGO(gene          = convert_ids(genes_of_interest[[geneset]],mode),
                                 # universe      = unname(as.character(eval(parse(text=paste0(gsub(".db","",orgDB),"SYMBOL"))))),
                                 universe = convert_ids(genes_of_interest[["genes_backg"]],mode),
@@ -286,12 +294,6 @@ process_file <- function(file){
                   ego_df$summary_POS <- unlist(lapply(strsplit(ego_df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
                   ego_df$summary_NEG <- unlist(lapply(strsplit(ego_df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
                   write.table(ego_df,file=paste0("GO_overrepresentation_test_BP_",i,"_",geneset,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                  p <- enrichmentNetwork(ego@result, repelLabels = TRUE, drawEllipses = TRUE)
-                  ggsave(p, filename = paste0("GO_overrepresentation_test_BP_",i,"_",geneset,"_aPEAR.pdf"),width=30, height=30)
-                  suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_overrepresentation_test_BP_",i,"_",geneset,"_aPEAR.html"),selfcontained = TRUE))
-                  clusters <- findPathClusters(ego@result)
-                  write.table(clusters$clusters,file=paste0("GO_overrepresentation_test_BP_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                  write.table(clusters$similarity,file=paste0("GO_overrepresentation_test_BP_",i,"_",geneset,"_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                   suppressMessages(ggsave(goplot(ego), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_BP_",i,"_",geneset,".pdf"),width=30, height=30))
                   suppressMessages(ggsave(barplot(ego, showCategory=20), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_BP_",i,"_",geneset,"_barplot.pdf"),width=30, height=30))
                   suppressMessages(ggsave(dotplot(ego, showCategory=20), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_BP_",i,"_",geneset,"_dotplot.pdf"),width=30, height=30))
@@ -301,6 +303,12 @@ process_file <- function(file){
                   suppressMessages(ggsave(emapplot(pairwise_termsim(ego)), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_BP_",i,"_",geneset,"_emapplot.pdf"),width=30, height=30))
                   suppressMessages(ggsave(upsetplot(ego), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_BP_",i,"_",geneset,"_upsetplot.pdf"),width=30, height=30))
                   suppressMessages(ggsave(pmcplot(ego$Description[1:10], 2010:paste0("20",unlist(lapply(strsplit(date(),"20"),function(x){x[2]})))), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_BP_",i,"_",geneset,"_pmcplot.pdf"),width=30, height=30))
+                  p <- enrichmentNetwork(ego@result, repelLabels = TRUE, drawEllipses = TRUE)
+                  ggsave(p, filename = paste0("GO_overrepresentation_test_BP_",i,"_",geneset,"_aPEAR.pdf"),width=30, height=30)
+                  suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_overrepresentation_test_BP_",i,"_",geneset,"_aPEAR.html"),selfcontained = TRUE))
+                  clusters <- findPathClusters(ego@result)
+                  write.table(clusters$clusters,file=paste0("GO_overrepresentation_test_BP_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                  write.table(clusters$similarity,file=paste0("GO_overrepresentation_test_BP_",i,"_",geneset,"_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")                  
       }, error = function(e) {
           writeLines(as.character(e), paste0("GO_overrepresentation_test_BP_",i,"_",geneset,"_err.txt"))
       })
