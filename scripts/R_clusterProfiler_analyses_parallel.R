@@ -5,6 +5,8 @@ organism <- args[2]
 cores <- as.numeric(args[3])
 padjustmethod <- args[4]
 pattern_search <- args[5]
+go_descript <- args[6] # if not provided, "no"
+cluster_enrich <- args[7] # if not provided, "no"
 
 ### Preparing:
 print(paste0("Current date: ",date()))
