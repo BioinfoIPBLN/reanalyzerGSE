@@ -59,7 +59,9 @@ for argument in $options; do
 		-Os | -options_featureCounts_seq # The seqid type to use to count in featureCounts (default 'gene_name')
 		-iG | -input_GEO_reads # If you want to combine downloading metadata from GEO with reads from GEO or any database already downloaded, maybe from a previous attempt, please provide an absolute path
 		-cG | -compression_level # Specify the compression level to gzip the downloaded fastq files from GEO (numeric '0' to '9', default '9')
-		-cP | -clusterProfiler # Whether to perform additional functional enrichment analyses using ClusterProfiler (slow if many significant DEGs or multiple number of comparisons, 'no' or 'yes', by default)
+		-fe | -functional_enrichment_analyses # Whether to perform functional enrichment analyses ('no' or 'yes', by default)
+		-cP | -clusterProfiler_full # Whether to perform additional functional enrichment analyses with multiple databases using ClusterProfiler, by default only overrepresentation analyses GO BP, GO MF and GO CC will be performed, additional analyses may be slow if many significant DEGs or multiple number of comparisons ('yes' or 'no', by default)
+		-aP | -aPEAR_execution # Whether to simplify pathway enrichment analysis results by detecting clusters of similar pathways and visualizing enrichment networks by aPEAR package, which may be slow ('yes' or 'no', by default)
 		-cPm | -clusterProfiler_method # Method for adjusting p.value in clusterprofiler iterations (one of 'holm','hochberg','hommel','bonferroni','BH','BY,'none', or 'fdr', by default)
 		-Pm | -panther_method # Method for adjusting p.value in panther analyses via rbioapi (one of 'NONE','BONFERRONI', or 'FDR', by default)
 		-Tc | -time_course_analyses # Whether to perform additional time-course analyses as a last step ('yes' or 'no', by default)
@@ -107,7 +109,9 @@ for argument in $options; do
 		-Dm) debug_step=${arguments[index]} ;;
 		-Dec) differential_expr_comparisons=${arguments[index]} ;;
 		-Dc) deconvolution=${arguments[index]} ;;
-		-cP) clusterProfiler=${arguments[index]} ;;
+		-cP) clusterProfiler_full=${arguments[index]} ;;
+		-fe) functional_enrichment_analyses=${arguments[index]} ;;
+		-aP) aPEAR_execution=${arguments[index]} ;;
 		-Of) optionsFeatureCounts_feat=${arguments[index]} ;;
 		-O) organism_argument=${arguments[index]} ;;
 		-Os) optionsFeatureCounts_seq=${arguments[index]} ;;
@@ -225,8 +229,14 @@ fi
 if [ -z "$indexthreads" ]; then
 	indexthreads=$cores
 fi
-if [ -z "$clusterProfiler" ]; then
-	clusterProfiler="yes"
+if [ -z "$clusterProfiler_full" ]; then
+	clusterProfiler_full="no"
+fi
+if [ -z "$functional_enrichment_analyses" ]; then
+	functional_enrichment_analyses="yes"
+fi
+if [ -z "$aPEAR_execution" ]; then
+	aPEAR_execution="no"
 fi
 if [ -z "$time_course" ]; then
 	time_course="no"
@@ -984,7 +994,7 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 				echo -e "\nPerforming network analyses...\n"
 				R_network_analyses.R $output_folder/$name/final_results_reanalysis$index/DGE/ $output_folder/$name/final_results_reanalysis$index/RPKM_counts_genes.txt "^DGE_analysis_comp[0-9]+.txt$" $taxonid &> network_analyses_funct_enrichment.log
 			fi
-			if [[ "$clusterProfiler" == "no" ]]; then
+			if [[ "$functional_enrichment_analyses" == "no" ]]; then #######################################################
 				echo -e "\nSkipping final clusterProfiler execution\n"
 			else
 				echo -e "\nPerforming clusterProfiler execution for DEGs. The results up to this point are ready to use (including DEGs and expression, even if not annotated), this and the may take long if many significant DEGs or comparisons, but check out the final steps of annotating and tyding and you may not need to wait...\n"
@@ -1003,10 +1013,10 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 						cd $output_folder/$name/final_results_reanalysis$index/time_course_analyses; rm -rf $(ls | grep _clusterProfiler)
 						R_clusterProfiler_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index/time_course_analyses $organism "1" $clusterProfiler_method "^DGE_limma_timecourse.*.txt$" &> clusterProfiler_funct_enrichment_serial.log
 					fi
-				fi
+				fi			
+				echo -e "\nPerforming autoGO and Panther execution for the rest of relevant datasets. The rest of the results are ready, this may take long if many genes or comparisons...\n"		
+				R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism $cores $databases_function "^DGE_analysis_comp.*\\.txt$|^DGE_limma_timecourse.*.txt$" $panther_method &> autoGO_panther_funct_enrichment.log
 			fi
-			echo -e "\nPerforming autoGO and Panther execution for the rest of relevant datasets. The rest of the results are ready, this may take long if many genes or comparisons...\n"		
-			R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism $cores $databases_function "^DGE_analysis_comp.*\\.txt$|^DGE_limma_timecourse.*.txt$" $panther_method &> autoGO_panther_funct_enrichment.log
 		else
 			echo "Organism is $organism... Functional analyses apart from human/mouse is not fully supported yet"
 			if [ $(egrep -c "GO:|Ontology|tology_term|tology term" $annotation_file) -gt 0 ]; then
