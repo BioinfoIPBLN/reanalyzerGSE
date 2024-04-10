@@ -304,7 +304,7 @@ dependencies:
   - oniguruma=6.9.8=h166bdaf_0
   - openjdk=21.0.2=haa376d0_0
   - openjpeg=2.5.2=h488ebb8_0
-  - openpyxl=3.1.1=py311h2582759_0
+  - openpyxl=3.1.2=py311h459d7ec_1
   - openssl=3.2.1=hd590300_1
   - orc=1.9.0=h385abfd_1
   - ossuuid=1.6.2=hf484d3e_1000
@@ -829,7 +829,7 @@ dependencies:
       - how-are-we-stranded-here==1.0.1
       - imagesize==1.4.1
       - numpydoc==1.5.0
-      - plotly==5.14.1
+      - plotly==5.20.0
       - py2bit==0.3.0
       - pybigwig==0.3.18
       - pysam==0.20.0
