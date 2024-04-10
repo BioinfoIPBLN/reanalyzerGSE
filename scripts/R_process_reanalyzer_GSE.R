@@ -165,15 +165,17 @@ restrict_comparisons <- args[11] # if not provided, "no"
   edgeR_object_prefilter <- edgeR_object
   edgeR_object <- filter(filter=filter_option,edgeR_object) # Make sure of use bin to capture Cort and the lower expressed genes
   cat(paste0("Number of genes after filter: ", nrow(edgeR_object)),"\n")
-  edgeR_object_norm <- calcNormFactors(edgeR_object)
+  # edgeR_object_norm <- calcNormFactors(edgeR_object)
+  edgeR_object_norm <- normLibSizes(edgeR_object)
 
   if(covariab == "none"){
-    edgeR_object_norm <- estimateCommonDisp(edgeR_object_norm, robust=TRUE)
+    #edgeR_object_norm <- estimateCommonDisp(edgeR_object_norm, robust=TRUE)
+    edgeR_object_norm <- estimateDisp(edgeR_object_norm, robust=TRUE)
     if (is.na(edgeR_object_norm$common.dispersion)){
       edgeR_object_norm$common.dispersion <- 0.4 ^ 2
       cat("\nEstimating Dispersion... Errors or warnings? Likely because no replicates, addressing providing a fixed value for dispersion, but do not trust comparative analyses because it's likely not accurate. Please consult the vignette for further information...\n")
     }
-    edgeR_object_norm <- estimateTagwiseDisp(edgeR_object_norm)
+    #edgeR_object_norm <- estimateTagwiseDisp(edgeR_object_norm)
   } else { 
     Treat <- edgeR_object$samples$group
     Time <- as.factor(unlist(strsplit(as.character(covariab),",")))
@@ -229,14 +231,16 @@ restrict_comparisons <- args[11] # if not provided, "no"
     edgeR_object_prefilter_combat <- edgeR_object_combat
     edgeR_object_combat <- filter(filter=filter_option,edgeR_object_combat) # Make sure of use bin to capture Cort and the lower expressed genes
     cat(paste0("Number of genes combat after filter: ", nrow(edgeR_object_combat)),"\n")
-    edgeR_object_norm_combat <- calcNormFactors(edgeR_object_combat)
-    edgeR_object_norm_combat <- estimateCommonDisp(edgeR_object_norm_combat, robust=TRUE)
+    #edgeR_object_norm_combat <- calcNormFactors(edgeR_object_combat)
+    #edgeR_object_norm_combat <- estimateCommonDisp(edgeR_object_norm_combat, robust=TRUE)
+    edgeR_object_norm_combat <- normLibSizes(edgeR_object_combat)
+    edgeR_object_norm_combat <- estimateDisp(edgeR_object_norm_combat, robust=TRUE)
     if (is.na(edgeR_object_norm_combat$common.dispersion)){
       edgeR_object_norm_combat$common.dispersion <- 0.4 ^ 2
       # https://www.bioconductor.org/packages/devel/bioc/vignettes/edgeR/inst/doc/edgeRUsersGuide.pdf
       cat("Estimating Dispersion... Errors or warnings? Likely because no replicates, addressing providing a fixed value for dispersion, but do not trust comparative analyses because it's likely not accurate...")
     }
-    edgeR_object_norm_combat <- estimateTagwiseDisp(edgeR_object_norm_combat)
+    #edgeR_object_norm_combat <- estimateTagwiseDisp(edgeR_object_norm_combat)
     gene_counts_rpkm_combat <- as.data.frame(rpkm(edgeR_object_norm_combat,normalized.lib.sizes=TRUE))
     colnames(gene_counts_rpkm_combat) <- rownames(edgeR_object_norm_combat$samples)
     gene_counts_rpkm_combat$Gene_ID <- stringr::str_to_title(rownames(gene_counts_rpkm_combat))
@@ -516,20 +520,22 @@ restrict_comparisons <- args[11] # if not provided, "no"
                                		group=condition,
                                		genes=gene_counts[,c(grep("Gene_ID",colnames(gene_counts)),grep("Length",colnames(gene_counts)))])
       edgeR_object_tmp <- filter(filter=filter_option,edgeR_object_tmp)
-      edgeR_object_norm_temp <- calcNormFactors(edgeR_object_tmp)      
+      edgeR_object_norm_temp <- normLibSizes(edgeR_object_tmp)
+      # edgeR_object_norm_temp <- calcNormFactors(edgeR_object_tmp)      
       if(covariab == "none"){
-          edgeR_object_norm_temp <- estimateCommonDisp(edgeR_object_norm_temp, robust=TRUE)
+          #edgeR_object_norm_temp <- estimateCommonDisp(edgeR_object_norm_temp, robust=TRUE)
+          edgeR_object_norm_temp <- estimateDisp(edgeR_object_norm_temp, robust=TRUE)
           if (is.na(edgeR_object_norm_temp$common.dispersion)){
             edgeR_object_norm_temp$common.dispersion <- 0.4 ^ 2
             cat("\nEstimating Dispersion... Errors or warnings? Likely because no replicates, addressing providing a fixed value for dispersion, but do not trust comparative analyses because it's likely not accurate. Please consult the vignette for further information...\n")
           }
-          edgeR_object_norm_temp <- estimateTagwiseDisp(edgeR_object_norm_temp)
+          #edgeR_object_norm_temp <- estimateTagwiseDisp(edgeR_object_norm_temp)
       } else { 
           Treat <- edgeR_object_tmp$samples$group
           Time <- as.factor(unlist(strsplit(as.character(covariab),",")))
           design <- model.matrix(~0+Treat+Time)
           rownames(design) <- colnames(edgeR_object_norm_temp)
-          edgeR_object_norm_temp <- estimateDisp(edgeR_object_norm_temp, design, robust=TRUE) # Preparing for one covariable following edgeR vignette new methods Nov2023
+          edgeR_object_norm_temp <- estimateDisp(edgeR_object_norm_temp, design, robust=TRUE) # Preparing for one covariable following edgeR vignette new methods Nov2023          
       }
       
       edgeR_object_norm_temp_to_process <- edgeR_object_norm_temp
@@ -560,14 +566,16 @@ restrict_comparisons <- args[11] # if not provided, "no"
                          genes=gene_counts[,c(grep("Gene_ID",colnames(gene_counts)),grep("Length",colnames(gene_counts)))])
         edgeR_object_prefilter <- edgeR_object
         edgeR_object <- filter(filter=filter_option,edgeR_object) # Make sure of use bin to capture Cort and the lower expressed genes
-        edgeR_object_norm <- calcNormFactors(edgeR_object)
-        edgeR_object_norm <- estimateCommonDisp(edgeR_object_norm, robust=TRUE)
+        #edgeR_object_norm <- calcNormFactors(edgeR_object)
+        #edgeR_object_norm <- estimateCommonDisp(edgeR_object_norm, robust=TRUE)
+        edgeR_object_norm <- normLibSizes(edgeR_object_norm)
+        edgeR_object_norm <- estimateDisp(edgeR_object_norm, robust=TRUE)
         if (is.na(edgeR_object_norm$common.dispersion)){
           edgeR_object_norm$common.dispersion <- 0.4 ^ 2
           # https://www.bioconductor.org/packages/devel/bioc/vignettes/edgeR/inst/doc/edgeRUsersGuide.pdf
           cat("Estimating Dispersion... Errors or warnings? Likely because no replicates, addressing providing a fixed value for dispersion, but do not trust comparative analyses because it's likely not accurate...")
         }
-        edgeR_object_norm <- estimateTagwiseDisp(edgeR_object_norm)
+        #edgeR_object_norm <- estimateTagwiseDisp(edgeR_object_norm)
         gene_counts_rpkm <- as.data.frame(rpkm(edgeR_object_norm,normalized.lib.sizes=TRUE))
         colnames(gene_counts_rpkm) <- rownames(edgeR_object_norm$samples)
         gene_counts_rpkm$Gene_ID <- stringr::str_to_title(rownames(gene_counts_rpkm))
