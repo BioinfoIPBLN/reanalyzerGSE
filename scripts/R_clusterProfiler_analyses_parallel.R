@@ -4,9 +4,10 @@ path <- args[1]
 organism <- args[2]
 cores <- as.numeric(args[3])
 padjustmethod <- args[4]
-pattern_search <- args[5]
-go_descript <- args[6] # if not provided, "no"
-cluster_enrich <- args[7] # if not provided, "no"
+all_analyses <- args[5] # if not provided, "no"
+cluster_enrich <- args[6] # if not provided, "no"
+pattern_search <- args[7]
+
 
 ### Preparing:
 print(paste0("Current date: ",date()))
@@ -167,88 +168,88 @@ process_file <- function(file){
     suppressMessages(library(orgDB, character.only = TRUE,quiet = T,warn.conflicts = F)) # Crucial apparently, so the functions using the orgDB object can be done in parallel
 
     print(paste0("Processing ",file,"_",name_internal,"... Gene classification based on GO distribution at a specific level (2-6)"))
-    
-    ###### 1. Gene classification based on GO distribution at a specific level:
-      for (levelgo in 2:6){
-        # print(paste0("groupGO_level_",levelgo))
-        tryCatch({
-          ggo <- c(); Sys.sleep(2)
-          ggo <- groupGO(gene     = convert_ids(genes_of_interest[[geneset]],mode),
+    if(all_analyses=="yes"){
+      ###### 1. Gene classification based on GO distribution at a specific level:
+        for (levelgo in 2:6){
+          # print(paste0("groupGO_level_",levelgo))
+          tryCatch({
+            ggo <- c(); Sys.sleep(2)
+            ggo <- groupGO(gene     = convert_ids(genes_of_interest[[geneset]],mode),
+                           OrgDb    = orgDB,
+                           keyType  = "SYMBOL",
+                           ont      = "BP",
+                           level    = levelgo,
+                           readable = TRUE)
+            # ggo@result
+            # ggo@result$Count
+            write.table(ggo@result,file=paste0("GO_description_level_",levelgo,"_",geneset,"_groupGO_BP.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+          }, error = function(e) {
+            writeLines(as.character(e), paste0("GO_description_level_",levelgo,"_",geneset,"_groupGO_BP_err.txt"))
+          })
+          tryCatch({
+            ggo <- c(); Sys.sleep(2)
+            ggo <- groupGO(gene     = convert_ids(genes_of_interest[[geneset]],mode),
+                           OrgDb    = orgDB,
+                           keyType  = "SYMBOL",
+                           ont      = "MF",
+                           level    = levelgo,
+                           readable = TRUE)
+            # ggo@result
+            # ggo@result$Count
+            write.table(ggo@result,file=paste0("GO_description_level_",levelgo,"_",geneset,"_groupGO_MF.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+          }, error = function(e) {
+            writeLines(as.character(e), paste0("GO_description_level_",levelgo,"_",geneset,"_groupGO_MF_err.txt"))
+          })
+          tryCatch({
+            ggo <- c(); Sys.sleep(2)
+            ggo <- groupGO(gene     = convert_ids(genes_of_interest[[geneset]],mode),
                          OrgDb    = orgDB,
                          keyType  = "SYMBOL",
-                         ont      = "BP",
+                         ont      = "CC",
                          level    = levelgo,
                          readable = TRUE)
-          # ggo@result
-          # ggo@result$Count
-          write.table(ggo@result,file=paste0("GO_description_level_",levelgo,"_",geneset,"_groupGO_BP.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+            # ggo@result
+            # ggo@result$Count
+            write.table(ggo@result,file=paste0("GO_description_level_",levelgo,"_",geneset,"_groupGO_CC.txt"),col.names = T,row.names = F,quote = F,sep="\t")
         }, error = function(e) {
-          writeLines(as.character(e), paste0("GO_description_level_",levelgo,"_",geneset,"_groupGO_BP_err.txt"))
+            writeLines(as.character(e), paste0("GO_description_level_",levelgo,"_",geneset,"_groupGO_CC_err.txt"))
+          })
+        }
+        tryCatch({
+          b <- c(); Sys.sleep(2)
+          b <- Gene2GOTermAndLevel_ON(genes = entrez_ids_keys$ENTREZID[entrez_ids_keys$SYMBOL %in% convert_ids(genes_of_interest[[geneset]],mode)], organism = organism_cp, domain = "BP")
+          b$GO_Description <- Term(b$"GO ID"); b$Gene_ID <- sapply(b$"Entrezgene ID",function(x){paste(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x],collapse=",")})
+          # Assuming your data is in a data frame named 'df'
+          d <- do.call(rbind, lapply(split(b, b$"GO ID"), function(group) {data.frame(GO_ID = unique(group$"GO ID"),GO_Description = unique(group$GO_Description),
+                                                                                      Level = mean(group$Level), Gene_ID = paste(group$Gene_ID, collapse = ","),ENTREZ_ID = paste(group$"Entrezgene ID", collapse = ","))}))
+          write.table(d,file=paste0("GO_description_all_",geneset,"_BP.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+        }, error = function(e) {
+            writeLines(as.character(e), paste0("GO_description_all_",geneset,"_BP_err.txt"))
         })
         tryCatch({
-          ggo <- c(); Sys.sleep(2)
-          ggo <- groupGO(gene     = convert_ids(genes_of_interest[[geneset]],mode),
-                         OrgDb    = orgDB,
-                         keyType  = "SYMBOL",
-                         ont      = "MF",
-                         level    = levelgo,
-                         readable = TRUE)
-          # ggo@result
-          # ggo@result$Count
-          write.table(ggo@result,file=paste0("GO_description_level_",levelgo,"_",geneset,"_groupGO_MF.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+          b <- c(); Sys.sleep(2)
+          b <- Gene2GOTermAndLevel_ON(genes = entrez_ids_keys$ENTREZID[entrez_ids_keys$SYMBOL %in% convert_ids(genes_of_interest[[geneset]],mode)], organism = organism_cp, domain = "MF")
+          b$GO_Description <- Term(b$"GO ID"); b$Gene_ID <- sapply(b$"Entrezgene ID",function(x){paste(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x],collapse=",")})
+          # Assuming your data is in a data frame named 'df'
+          d <- do.call(rbind, lapply(split(b, b$"GO ID"), function(group) {data.frame(GO_ID = unique(group$"GO ID"),GO_Description = unique(group$GO_Description),
+                                                                                      Level = mean(group$Level), Gene_ID = paste(group$Gene_ID, collapse = ","),ENTREZ_ID = paste(group$"Entrezgene ID", collapse = ","))}))
+          write.table(d,file=paste0("GO_description_all_",geneset,"_MF.txt"),col.names = T,row.names = F,quote = F,sep="\t")
         }, error = function(e) {
-          writeLines(as.character(e), paste0("GO_description_level_",levelgo,"_",geneset,"_groupGO_MF_err.txt"))
+            writeLines(as.character(e), paste0("GO_description_all_",geneset,"_MF_err.txt"))
         })
         tryCatch({
-          ggo <- c(); Sys.sleep(2)
-          ggo <- groupGO(gene     = convert_ids(genes_of_interest[[geneset]],mode),
-                       OrgDb    = orgDB,
-                       keyType  = "SYMBOL",
-                       ont      = "CC",
-                       level    = levelgo,
-                       readable = TRUE)
-          # ggo@result
-          # ggo@result$Count
-          write.table(ggo@result,file=paste0("GO_description_level_",levelgo,"_",geneset,"_groupGO_CC.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-      }, error = function(e) {
-          writeLines(as.character(e), paste0("GO_description_level_",levelgo,"_",geneset,"_groupGO_CC_err.txt"))
+          b <- c(); Sys.sleep(2)
+          b <- Gene2GOTermAndLevel_ON(genes = entrez_ids_keys$ENTREZID[entrez_ids_keys$SYMBOL %in% convert_ids(genes_of_interest[[geneset]],mode)], organism = organism_cp, domain = "CC")
+          b$GO_Description <- Term(b$"GO ID"); b$Gene_ID <- sapply(b$"Entrezgene ID",function(x){paste(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x],collapse=",")})
+          # Assuming your data is in a data frame named 'df'
+          d <- do.call(rbind, lapply(split(b, b$"GO ID"), function(group) {data.frame(GO_ID = unique(group$"GO ID"),GO_Description = unique(group$GO_Description),
+                                                                                      Level = mean(group$Level), Gene_ID = paste(group$Gene_ID, collapse = ","),ENTREZ_ID = paste(group$"Entrezgene ID", collapse = ","))}))
+          write.table(d,file=paste0("GO_description_all_",geneset,"_CC.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+        }, error = function(e) {
+            writeLines(as.character(e), paste0("GO_description_all_",geneset,"_CC_err.txt"))
         })
-      }
-      tryCatch({
-        b <- c(); Sys.sleep(2)
-        b <- Gene2GOTermAndLevel_ON(genes = entrez_ids_keys$ENTREZID[entrez_ids_keys$SYMBOL %in% convert_ids(genes_of_interest[[geneset]],mode)], organism = organism_cp, domain = "BP")
-        b$GO_Description <- Term(b$"GO ID"); b$Gene_ID <- sapply(b$"Entrezgene ID",function(x){paste(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x],collapse=",")})
-        # Assuming your data is in a data frame named 'df'
-        d <- do.call(rbind, lapply(split(b, b$"GO ID"), function(group) {data.frame(GO_ID = unique(group$"GO ID"),GO_Description = unique(group$GO_Description),
-                                                                                    Level = mean(group$Level), Gene_ID = paste(group$Gene_ID, collapse = ","),ENTREZ_ID = paste(group$"Entrezgene ID", collapse = ","))}))
-        write.table(d,file=paste0("GO_description_all_",geneset,"_BP.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-      }, error = function(e) {
-          writeLines(as.character(e), paste0("GO_description_all_",geneset,"_BP_err.txt"))
-      })
-      tryCatch({
-        b <- c(); Sys.sleep(2)
-        b <- Gene2GOTermAndLevel_ON(genes = entrez_ids_keys$ENTREZID[entrez_ids_keys$SYMBOL %in% convert_ids(genes_of_interest[[geneset]],mode)], organism = organism_cp, domain = "MF")
-        b$GO_Description <- Term(b$"GO ID"); b$Gene_ID <- sapply(b$"Entrezgene ID",function(x){paste(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x],collapse=",")})
-        # Assuming your data is in a data frame named 'df'
-        d <- do.call(rbind, lapply(split(b, b$"GO ID"), function(group) {data.frame(GO_ID = unique(group$"GO ID"),GO_Description = unique(group$GO_Description),
-                                                                                    Level = mean(group$Level), Gene_ID = paste(group$Gene_ID, collapse = ","),ENTREZ_ID = paste(group$"Entrezgene ID", collapse = ","))}))
-        write.table(d,file=paste0("GO_description_all_",geneset,"_MF.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-      }, error = function(e) {
-          writeLines(as.character(e), paste0("GO_description_all_",geneset,"_MF_err.txt"))
-      })
-      tryCatch({
-        b <- c(); Sys.sleep(2)
-        b <- Gene2GOTermAndLevel_ON(genes = entrez_ids_keys$ENTREZID[entrez_ids_keys$SYMBOL %in% convert_ids(genes_of_interest[[geneset]],mode)], organism = organism_cp, domain = "CC")
-        b$GO_Description <- Term(b$"GO ID"); b$Gene_ID <- sapply(b$"Entrezgene ID",function(x){paste(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x],collapse=",")})
-        # Assuming your data is in a data frame named 'df'
-        d <- do.call(rbind, lapply(split(b, b$"GO ID"), function(group) {data.frame(GO_ID = unique(group$"GO ID"),GO_Description = unique(group$GO_Description),
-                                                                                    Level = mean(group$Level), Gene_ID = paste(group$Gene_ID, collapse = ","),ENTREZ_ID = paste(group$"Entrezgene ID", collapse = ","))}))
-        write.table(d,file=paste0("GO_description_all_",geneset,"_CC.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-      }, error = function(e) {
-          writeLines(as.character(e), paste0("GO_description_all_",geneset,"_CC_err.txt"))
-      })
-    print(paste0("Processing ",file,"_",name_internal,"... GO over-representation analyses"))
-    
+      print(paste0("Processing ",file,"_",name_internal,"... GO over-representation analyses"))
+    }
     ###### 2. GO over-representation analyses:
       tryCatch({
                   ego <- c(); Sys.sleep(2)
@@ -269,12 +270,14 @@ process_file <- function(file){
                   ego_df$summary_POS <- unlist(lapply(strsplit(ego_df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
                   ego_df$summary_NEG <- unlist(lapply(strsplit(ego_df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
                   write.table(ego_df,file=paste0("GO_overrepresentation_test_",i,"_",geneset,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                  p <- enrichmentNetwork(ego@result, repelLabels = TRUE, drawEllipses = TRUE)
-                  ggsave(p, filename = paste0("GO_overrepresentation_test_",i,"_",geneset,"_aPEAR.pdf"),width=30, height=30)
-                  suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_overrepresentation_test_",i,"_",geneset,"_aPEAR.html"),selfcontained = TRUE))
-                  clusters <- findPathClusters(ego@result)
-                  write.table(clusters$clusters,file=paste0("GO_overrepresentation_test_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                  write.table(clusters$similarity,file=paste0("GO_overrepresentation_test_",i,"_",geneset,"_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                  if(cluster_enrich=="yes"){
+                    p <- enrichmentNetwork(ego@result, repelLabels = TRUE, drawEllipses = TRUE)
+                    ggsave(p, filename = paste0("GO_overrepresentation_test_",i,"_",geneset,"_aPEAR.pdf"),width=30, height=30)
+                    suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_overrepresentation_test_",i,"_",geneset,"_aPEAR.html"),selfcontained = TRUE))
+                    clusters <- findPathClusters(ego@result)
+                    write.table(clusters$clusters,file=paste0("GO_overrepresentation_test_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                    write.table(clusters$similarity,file=paste0("GO_overrepresentation_test_",i,"_",geneset,"_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                  }
       }, error = function(e) {
           writeLines(as.character(e), paste0("GO_overrepresentation_test_",i,"_",geneset,"_err.txt"))
       })
@@ -305,12 +308,14 @@ process_file <- function(file){
                   suppressMessages(ggsave(emapplot(pairwise_termsim(ego)), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_BP_",i,"_",geneset,"_emapplot.pdf"),width=30, height=30))
                   suppressMessages(ggsave(upsetplot(ego), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_BP_",i,"_",geneset,"_upsetplot.pdf"),width=30, height=30))
                   suppressMessages(ggsave(pmcplot(ego$Description[1:10], 2010:paste0("20",unlist(lapply(strsplit(date(),"20"),function(x){x[2]})))), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_BP_",i,"_",geneset,"_pmcplot.pdf"),width=30, height=30))
-                  p <- enrichmentNetwork(ego@result, repelLabels = TRUE, drawEllipses = TRUE)
-                  ggsave(p, filename = paste0("GO_overrepresentation_test_BP_",i,"_",geneset,"_aPEAR.pdf"),width=30, height=30)
-                  suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_overrepresentation_test_BP_",i,"_",geneset,"_aPEAR.html"),selfcontained = TRUE))
-                  clusters <- findPathClusters(ego@result)
-                  write.table(clusters$clusters,file=paste0("GO_overrepresentation_test_BP_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                  write.table(clusters$similarity,file=paste0("GO_overrepresentation_test_BP_",i,"_",geneset,"_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")                  
+                  if(cluster_enrich=="yes"){          
+                    p <- enrichmentNetwork(ego@result, repelLabels = TRUE, drawEllipses = TRUE)
+                    ggsave(p, filename = paste0("GO_overrepresentation_test_BP_",i,"_",geneset,"_aPEAR.pdf"),width=30, height=30)
+                    suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_overrepresentation_test_BP_",i,"_",geneset,"_aPEAR.html"),selfcontained = TRUE))
+                    clusters <- findPathClusters(ego@result)
+                    write.table(clusters$clusters,file=paste0("GO_overrepresentation_test_BP_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                    write.table(clusters$similarity,file=paste0("GO_overrepresentation_test_BP_",i,"_",geneset,"_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")                  
+                  }
       }, error = function(e) {
           writeLines(as.character(e), paste0("GO_overrepresentation_test_BP_",i,"_",geneset,"_err.txt"))
       })
@@ -342,12 +347,14 @@ process_file <- function(file){
                   suppressMessages(ggsave(emapplot(pairwise_termsim(ego)), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_MF_",i,"_",geneset,"_emapplot.pdf"),width=30, height=30))
                   suppressMessages(ggsave(upsetplot(ego), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_MF_",i,"_",geneset,"_upsetplot.pdf"),width=30, height=30))
                   suppressMessages(ggsave(pmcplot(ego$Description[1:10], 2010:paste0("20",unlist(lapply(strsplit(date(),"20"),function(x){x[2]})))), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_MF_",i,"_",geneset,"_pmcplot.pdf"),width=30, height=30))
-                  p <- enrichmentNetwork(ego@result, repelLabels = TRUE, drawEllipses = TRUE)
-                  ggsave(p, filename = paste0("GO_overrepresentation_test_MF_",i,"_",geneset,"_aPEAR.pdf"),width=30, height=30)
-                  suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_overrepresentation_test_MF_",i,"_",geneset,"_aPEAR.html"),selfcontained = TRUE))
-                  clusters <- findPathClusters(ego@result)
-                  write.table(clusters$clusters,file=paste0("GO_overrepresentation_test_MF_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                  write.table(clusters$similarity,file=paste0("GO_overrepresentation_test_MF_",i,"_",geneset,"_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")                  
+                  if(cluster_enrich=="yes"){
+                    p <- enrichmentNetwork(ego@result, repelLabels = TRUE, drawEllipses = TRUE)
+                    ggsave(p, filename = paste0("GO_overrepresentation_test_MF_",i,"_",geneset,"_aPEAR.pdf"),width=30, height=30)
+                    suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_overrepresentation_test_MF_",i,"_",geneset,"_aPEAR.html"),selfcontained = TRUE))
+                    clusters <- findPathClusters(ego@result)
+                    write.table(clusters$clusters,file=paste0("GO_overrepresentation_test_MF_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                    write.table(clusters$similarity,file=paste0("GO_overrepresentation_test_MF_",i,"_",geneset,"_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")                  
+                  }
       }, error = function(e) {
           writeLines(as.character(e), paste0("GO_overrepresentation_test_MF_",i,"_",geneset,"_err.txt"))
       })
@@ -378,810 +385,854 @@ process_file <- function(file){
                   suppressMessages(ggsave(emapplot(pairwise_termsim(ego)), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_CC_",i,"_",geneset,"_emapplot.pdf"),width=30, height=30))
                   suppressMessages(ggsave(upsetplot(ego), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_CC_",i,"_",geneset,"_upsetplot.pdf"),width=30, height=30))
                   suppressMessages(ggsave(pmcplot(ego$Description[1:10], 2010:paste0("20",unlist(lapply(strsplit(date(),"20"),function(x){x[2]})))), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_CC_",i,"_",geneset,"_pmcplot.pdf"),width=30, height=30))
-                  p <- enrichmentNetwork(ego@result, repelLabels = TRUE, drawEllipses = TRUE)
-                  ggsave(p, filename = paste0("GO_overrepresentation_test_CC_",i,"_",geneset,"_aPEAR.pdf"),width=30, height=30)
-                  suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_overrepresentation_test_CC_",i,"_",geneset,"_aPEAR.html"),selfcontained = TRUE))
-                  clusters <- findPathClusters(ego@result)
-                  write.table(clusters$clusters,file=paste0("GO_overrepresentation_test_CC_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                  write.table(clusters$similarity,file=paste0("GO_overrepresentation_test_CC_",i,"_",geneset,"_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")                  
+                  if(cluster_enrich=="yes"){
+                    p <- enrichmentNetwork(ego@result, repelLabels = TRUE, drawEllipses = TRUE)
+                    ggsave(p, filename = paste0("GO_overrepresentation_test_CC_",i,"_",geneset,"_aPEAR.pdf"),width=30, height=30)
+                    suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_overrepresentation_test_CC_",i,"_",geneset,"_aPEAR.html"),selfcontained = TRUE))
+                    clusters <- findPathClusters(ego@result)
+                    write.table(clusters$clusters,file=paste0("GO_overrepresentation_test_CC_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                    write.table(clusters$similarity,file=paste0("GO_overrepresentation_test_CC_",i,"_",geneset,"_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")                  
+                  }
       }, error = function(e) {
           writeLines(as.character(e), paste0("GO_overrepresentation_test_CC_",i,"_",geneset,"_err.txt"))
       })
     print(paste0("Processing ",file,"_",name_internal,"... Gene Set Enrichment Analysis of Gene Ontology"))
-    
-    ###### 3. Gene Set Enrichment Analysis of Gene Ontology:        
-      if(geneset=="fdr_05" || geneset=="fdr_01"){
-          f <- paste0("readlist_fc_",geneset)
-          b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- convert_ids(gsub(paste0(f,"."),"",names(b)),mode)
+
+    if(all_analyses=="yes"){
+        ###### 3. Gene Set Enrichment Analysis of Gene Ontology:        
+          if(geneset=="fdr_05" || geneset=="fdr_01"){
+              f <- paste0("readlist_fc_",geneset)
+              b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- convert_ids(gsub(paste0(f,"."),"",names(b)),mode)
+              tryCatch({
+                        gse_enrich <- c(); Sys.sleep(2)
+                        gse_enrich <- suppressMessages(gseGO(geneList= b,
+                                           OrgDb        = orgDB,
+                                           ont          = "ALL",
+                                           keyType  = "SYMBOL",
+                                           pvalueCutoff = 1,
+                                           pAdjustMethod = i,
+                                           verbose      = FALSE,
+                                           by="fgsea"))
+                        df <- gse_enrich@result
+                        df$summary_LogFC <- unlist(lapply(lapply(df$core_enrichment, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,"/"))]}),function(y){paste(y,collapse=",")}))
+                        df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
+                        df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
+                        df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
+                        write.table(df,file=paste0("GO_GSEA_",f,"_",i,"_fgsea.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                        if(cluster_enrich=="yes"){
+                          p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+                          ggsave(p, filename = paste0("GO_GSEA_",f,"_",i,"_fgsea_aPEAR.pdf"),width=30, height=30)
+                          suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_GSEA_",f,"_",i,"_fgsea_aPEAR.html"),selfcontained = TRUE))
+                          clusters <- findPathClusters(df)
+                          write.table(clusters$clusters,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                          write.table(clusters$similarity,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                        }
+              }, error = function(e) {
+                        writeLines(as.character(e), paste0("GO_GSEA_",f,"_",i,"_fgsea_err.txt"))
+              })
+              tryCatch({
+                        gse_enrich <- c(); Sys.sleep(2)
+                        gse_enrich <- suppressMessages(gseGO(geneList=b,
+                                         OrgDb        = orgDB,
+                                         ont          = "BP",
+                                         keyType  = "SYMBOL",
+                                         pvalueCutoff = 1,
+                                         pAdjustMethod = i,
+                                         verbose      = FALSE,
+                                         by="fgsea"))
+                        df <- gse_enrich@result
+                        df$summary_LogFC <- unlist(lapply(lapply(df$core_enrichment, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,"/"))]}),function(y){paste(y,collapse=",")}))
+                        df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
+                        df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
+                        df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
+                        write.table(df,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_BP.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                        suppressMessages(ggsave(goplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_BP.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(dotplot(gse_enrich, showCategory=20), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_BP_dotplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(cnetplot(gse_enrich,foldChange=sort(eval(parse(text=f)),decreasing = T)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_BP_cnetplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(heatplot(gse_enrich, showCategory=20,foldChange=sort(eval(parse(text=f)),decreasing = T)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_BP_heatplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(treeplot(pairwise_termsim(gse_enrich)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_BP_treeplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(emapplot(pairwise_termsim(gse_enrich)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_BP_emapplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(upsetplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_BP_upsetplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(pmcplot(gse_enrich@result$Description[1:10], 2010:paste0("20",unlist(lapply(strsplit(date(),"20"),function(x){x[2]})))), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_BP_pmcplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(ridgeplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_BP_ridgeplot.pdf"),width=30, height=30))
+                        if(cluster_enrich=="yes"){
+                          p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+                          ggsave(p, filename = paste0("GO_GSEA_",f,"_",i,"_fgsea_BP_aPEAR.pdf"),width=30, height=30)
+                          suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_GSEA_",f,"_",i,"_fgsea_BP_aPEAR.html"),selfcontained = TRUE))
+                          clusters <- findPathClusters(df)
+                          write.table(clusters$clusters,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_BP_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                          write.table(clusters$similarity,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_BP_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                        }
+              }, error = function(e) {
+                        writeLines(as.character(e), paste0("GO_GSEA_",f,"_",i,"_fgsea_BP_err.txt"))
+              })
+              tryCatch({
+                        gse_enrich <- c(); Sys.sleep(2)
+                        gse_enrich <- suppressMessages(gseGO(geneList=b,
+                                         OrgDb        = orgDB,
+                                         ont          = "MF",
+                                         keyType  = "SYMBOL",
+                                         pvalueCutoff = 1,
+                                         pAdjustMethod = i,
+                                         verbose      = FALSE,
+                                         by="fgsea"))
+                        df <- gse_enrich@result
+                        df$summary_LogFC <- unlist(lapply(lapply(df$core_enrichment, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,"/"))]}),function(y){paste(y,collapse=",")}))
+                        df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
+                        df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
+                        df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
+                        write.table(df,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_MF.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                        suppressMessages(ggsave(goplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_MF.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(dotplot(gse_enrich, showCategory=20), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_MF_dotplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(cnetplot(gse_enrich,foldChange=sort(eval(parse(text=f)),decreasing = T)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_MF_cnetplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(heatplot(gse_enrich, showCategory=20,foldChange=sort(eval(parse(text=f)),decreasing = T)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_MF_heatplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(treeplot(pairwise_termsim(gse_enrich)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_MF_treeplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(emapplot(pairwise_termsim(gse_enrich)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_MF_emapplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(upsetplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_MF_upsetplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(pmcplot(gse_enrich@result$Description[1:10], 2010:paste0("20",unlist(lapply(strsplit(date(),"20"),function(x){x[2]})))), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_MF_pmcplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(ridgeplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_MF_ridgeplot.pdf"),width=30, height=30))
+                        if(cluster_enrich=="yes"){
+                          p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+                          ggsave(p, filename = paste0("GO_GSEA_",f,"_",i,"_fgsea_MF_aPEAR.pdf"),width=30, height=30)
+                          suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_GSEA_",f,"_",i,"_fgsea_MF_aPEAR.html"),selfcontained = TRUE))
+                          clusters <- findPathClusters(df)
+                          write.table(clusters$clusters,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_MF_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                          write.table(clusters$similarity,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_MF_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                        }
+              }, error = function(e) {
+                        writeLines(as.character(e), paste0("GO_GSEA_",f,"_",i,"_fgsea_MF_err.txt"))
+              })
+              tryCatch({
+                        gse_enrich <- c(); Sys.sleep(2)
+                        gse_enrich <- suppressMessages(gseGO(geneList=b,
+                                         OrgDb        = orgDB,
+                                         ont          = "CC",
+                                         keyType  = "SYMBOL",
+                                         pvalueCutoff = 1,
+                                         pAdjustMethod = i,
+                                         verbose      = FALSE,
+                                         by="fgsea"))
+                        df <- gse_enrich@result
+                        df$summary_LogFC <- unlist(lapply(lapply(df$core_enrichment, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,"/"))]}),function(y){paste(y,collapse=",")}))
+                        df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
+                        df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
+                        df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
+                        write.table(df,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_CC.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                        suppressMessages(ggsave(goplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_CC.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(dotplot(gse_enrich, showCategory=20), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_CC_dotplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(cnetplot(gse_enrich,foldChange=sort(eval(parse(text=f)),decreasing = T)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_CC_cnetplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(heatplot(gse_enrich, showCategory=20,foldChange=sort(eval(parse(text=f)),decreasing = T)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_CC_heatplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(treeplot(pairwise_termsim(gse_enrich)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_CC_treeplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(emapplot(pairwise_termsim(gse_enrich)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_CC_emapplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(upsetplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_CC_upsetplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(pmcplot(gse_enrich@result$Description[1:10], 2010:paste0("20",unlist(lapply(strsplit(date(),"20"),function(x){x[2]})))), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_CC_pmcplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(ridgeplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_CC_ridgeplot.pdf"),width=30, height=30))
+                        if(cluster_enrich=="yes"){
+                          p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+                          ggsave(p, filename = paste0("GO_GSEA_",f,"_",i,"_fgsea_CC_aPEAR.pdf"),width=30, height=30)
+                          suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_GSEA_",f,"_",i,"_fgsea_CC_aPEAR.html"),selfcontained = TRUE))
+                          clusters <- findPathClusters(df)
+                          write.table(clusters$clusters,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_CC_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                          write.table(clusters$similarity,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_CC_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                        }
+              }, error = function(e) {
+                        writeLines(as.character(e), paste0("GO_GSEA_",f,"_",i,"_fgsea_CC_err.txt"))
+              })
+              tryCatch({
+                        gse_enrich <- c(); Sys.sleep(2)
+                        gse_enrich <- suppressMessages(gseGO(geneList=b,
+                                         OrgDb        = orgDB,
+                                         ont          = "ALL",
+                                         keyType  = "SYMBOL",
+                                         pvalueCutoff = 1,
+                                         pAdjustMethod = i,
+                                         verbose      = FALSE,
+                                         by="DOSE",
+                                         nPerm = 100))
+                        df <- gse_enrich@result
+                        df$summary_LogFC <- unlist(lapply(lapply(df$core_enrichment, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,"/"))]}),function(y){paste(y,collapse=",")}))
+                        df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
+                        df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
+                        df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
+                        write.table(df,file=paste0("GO_GSEA_",f,"_",i,"_DOSE.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                        if(cluster_enrich=="yes"){
+                          p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+                          ggsave(p, filename = paste0("GO_GSEA_",f,"_",i,"_DOSE_aPEAR.pdf"),width=30, height=30)
+                          suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_GSEA_",f,"_",i,"_DOSE_aPEAR.html"),selfcontained = TRUE))
+                          clusters <- findPathClusters(df)
+                          write.table(clusters$clusters,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                          write.table(clusters$similarity,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                        }
+              }, error = function(e) {
+                        writeLines(as.character(e), paste0("GO_GSEA_",f,"_",i,"_DOSE_err.txt"))
+              })
+              tryCatch({
+                        gse_enrich <- c(); Sys.sleep(2)
+                        gse_enrich <- suppressMessages(gseGO(geneList=b,
+                                        OrgDb        = orgDB,
+                                        ont          = "BP",
+                                        keyType  = "SYMBOL",
+                                        pvalueCutoff = 1,
+                                        pAdjustMethod = padjustmethod,
+                                        verbose      = FALSE,
+                                        by="DOSE",
+                                        nPerm = 100))
+                        df <- gse_enrich@result
+                        df$summary_LogFC <- unlist(lapply(lapply(df$core_enrichment, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,"/"))]}),function(y){paste(y,collapse=",")}))
+                        df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
+                        df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
+                        df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
+                        write.table(df,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_BP.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                        suppressMessages(ggsave(goplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_BP.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(dotplot(gse_enrich, showCategory=20), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_BP_dotplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(cnetplot(gse_enrich,foldChange=sort(eval(parse(text=f)),decreasing = T)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_BP_cnetplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(heatplot(gse_enrich, showCategory=20,foldChange=sort(eval(parse(text=f)),decreasing = T)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_BP_heatplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(treeplot(pairwise_termsim(gse_enrich)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_BP_treeplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(emapplot(pairwise_termsim(gse_enrich)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_BP_emapplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(upsetplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_BP_upsetplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(pmcplot(gse_enrich@result$Description[1:10], 2010:paste0("20",unlist(lapply(strsplit(date(),"20"),function(x){x[2]})))), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_BP_pmcplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(ridgeplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_BP_ridgeplot.pdf"),width=30, height=30))
+                        if(cluster_enrich=="yes"){
+                          p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+                          ggsave(p, filename = paste0("GO_GSEA_",f,"_",i,"_DOSE_BP_aPEAR.pdf"),width=30, height=30)
+                          suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_GSEA_",f,"_",i,"_DOSE_BP_aPEAR.html"),selfcontained = TRUE))
+                          clusters <- findPathClusters(df)
+                          write.table(clusters$clusters,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_BP_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                          write.table(clusters$similarity,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_BP_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                        }
+              }, error = function(e) {
+                        writeLines(as.character(e), paste0("GO_GSEA_",f,"_",i,"_DOSE_BP_err.txt"))
+              })
+              tryCatch({
+                        gse_enrich <- c(); Sys.sleep(2)
+                        gse_enrich <- suppressMessages(gseGO(geneList=b,
+                                        OrgDb        = orgDB,
+                                        ont          = "MF",
+                                        keyType  = "SYMBOL",
+                                        pvalueCutoff = 1,
+                                        pAdjustMethod = i,
+                                        verbose      = FALSE,
+                                        by="DOSE",
+                                        nPerm = 100))
+                        df <- gse_enrich@result
+                        df$summary_LogFC <- unlist(lapply(lapply(df$core_enrichment, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,"/"))]}),function(y){paste(y,collapse=",")}))
+                        df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
+                        df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
+                        df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
+                        write.table(df,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_MF.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                        suppressMessages(ggsave(goplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_MF.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(dotplot(gse_enrich, showCategory=20), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_MF_dotplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(cnetplot(gse_enrich,foldChange=sort(eval(parse(text=f)),decreasing = T)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_MF_cnetplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(heatplot(gse_enrich, showCategory=20,foldChange=sort(eval(parse(text=f)),decreasing = T)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_MF_heatplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(treeplot(pairwise_termsim(gse_enrich)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_MF_treeplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(emapplot(pairwise_termsim(gse_enrich)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_MF_emapplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(upsetplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_MF_upsetplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(pmcplot(gse_enrich@result$Description[1:10], 2010:paste0("20",unlist(lapply(strsplit(date(),"20"),function(x){x[2]})))), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_MF_pmcplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(ridgeplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_MF_ridgeplot.pdf"),width=30, height=30))
+                        if(cluster_enrich=="yes"){
+                          p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+                          ggsave(p, filename = paste0("GO_GSEA_",f,"_",i,"_DOSE_MF_aPEAR.pdf"),width=30, height=30)
+                          suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_GSEA_",f,"_",i,"_DOSE_MF_aPEAR.html"),selfcontained = TRUE))
+                          clusters <- findPathClusters(df)
+                          write.table(clusters$clusters,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_MF_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                          write.table(clusters$similarity,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_MF_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                        }
+              }, error = function(e) {
+                        writeLines(as.character(e), paste0("GO_GSEA_",f,"_",i,"_DOSE_MF_err.txt"))
+              })
+              tryCatch({
+                        gse_enrich <- c(); Sys.sleep(2)
+                        gse_enrich <- suppressMessages(gseGO(geneList=b,
+                                        OrgDb        = orgDB,
+                                        ont          = "CC",
+                                        keyType  = "SYMBOL",
+                                        pvalueCutoff = 1,
+                                        pAdjustMethod = i,
+                                        verbose      = FALSE,
+                                        by="DOSE",
+                                        nPerm = 100))
+                        df <- gse_enrich@result
+                        df$summary_LogFC <- unlist(lapply(lapply(df$core_enrichment, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,"/"))]}),function(y){paste(y,collapse=",")}))
+                        df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
+                        df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
+                        df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
+                        write.table(df,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_CC.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                        suppressMessages(ggsave(goplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_CC.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(dotplot(gse_enrich, showCategory=20), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_CC_dotplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(cnetplot(gse_enrich,foldChange=sort(eval(parse(text=f)),decreasing = T)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_CC_cnetplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(heatplot(gse_enrich, showCategory=20,foldChange=sort(eval(parse(text=f)),decreasing = T)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_CC_heatplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(treeplot(pairwise_termsim(gse_enrich)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_CC_treeplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(emapplot(pairwise_termsim(gse_enrich)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_CC_emapplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(upsetplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_CC_upsetplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(pmcplot(gse_enrich@result$Description[1:10], 2010:paste0("20",unlist(lapply(strsplit(date(),"20"),function(x){x[2]})))), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_CC_pmcplot.pdf"),width=30, height=30))
+                        suppressMessages(ggsave(ridgeplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_CC_ridgeplot.pdf"),width=30, height=30))
+                        if(cluster_enrich=="yes"){
+                          p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+                          ggsave(p, filename = paste0("GO_GSEA_",f,"_",i,"_DOSE_CC_aPEAR.pdf"),width=30, height=30)
+                          suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_GSEA_",f,"_",i,"_DOSE_CC_aPEAR.html"),selfcontained = TRUE))
+                          clusters <- findPathClusters(df)
+                          write.table(clusters$clusters,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_CC_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                          write.table(clusters$similarity,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_CC_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                        }
+              }, error = function(e) {
+                        writeLines(as.character(e), paste0("GO_GSEA_",f,"_",i,"_DOSE_CC_err.txt"))
+              })
+          }  
+        print(paste0("Processing ",file,"_",name_internal,"... KEGG over-representation"))
+        
+        ###### 4. KEGG over-representation:    
           tryCatch({
-                    gse_enrich <- c(); Sys.sleep(2)
-                    gse_enrich <- suppressMessages(gseGO(geneList= b,
-                                       OrgDb        = orgDB,
-                                       ont          = "ALL",
-                                       keyType  = "SYMBOL",
-                                       pvalueCutoff = 1,
-                                       pAdjustMethod = i,
-                                       verbose      = FALSE,
-                                       by="fgsea"))
-                    df <- gse_enrich@result
-                    df$summary_LogFC <- unlist(lapply(lapply(df$core_enrichment, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,"/"))]}),function(y){paste(y,collapse=",")}))
-                    df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
-                    df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
-                    df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
-                    write.table(df,file=paste0("GO_GSEA_",f,"_",i,"_fgsea.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                    p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
-                    ggsave(p, filename = paste0("GO_GSEA_",f,"_",i,"_fgsea_aPEAR.pdf"),width=30, height=30)
-                    suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_GSEA_",f,"_",i,"_fgsea_aPEAR.html"),selfcontained = TRUE))
-                    clusters <- findPathClusters(df)
-                    write.table(clusters$clusters,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                    write.table(clusters$similarity,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+              kk <- suppressMessages(enrichKEGG(gene= entrez_ids,
+                               organism     = org,
+                               universe = entrez_ids_backg,
+                               pAdjustMethod = i,
+                               pvalueCutoff = 1,
+                               qvalueCutoff = 1))
+              suppressMessages(ggsave(barplot(kk, showCategory=20), filename = paste0(getwd(),"/kegg_paths_snapshots/","KEGG_overrepresentation_test",i,"_",geneset,"_barplot.pdf"),width=30, height=30))
+              suppressMessages(ggsave(dotplot(kk, showCategory=20), filename = paste0(getwd(),"/kegg_paths_snapshots/","KEGG_overrepresentation_test",i,"_",geneset,"_dotplot.pdf"),width=30, height=30))
+              suppressMessages(ggsave(cnetplot(kk), filename = paste0(getwd(),"/kegg_paths_snapshots/","KEGG_overrepresentation_test",i,"_",geneset,"_cnetplot.pdf"),width=30, height=30))
+              suppressMessages(ggsave(heatplot(kk, showCategory=20), filename = paste0(getwd(),"/kegg_paths_snapshots/","KEGG_overrepresentation_test",i,"_",geneset,"_heatplot.pdf"),width=30, height=30))
+              suppressMessages(ggsave(emapplot(pairwise_termsim(kk)), filename = paste0(getwd(),"/kegg_paths_snapshots/","KEGG_overrepresentation_test",i,"_",geneset,"_emapplot.pdf"),width=30, height=30))
+              suppressMessages(ggsave(upsetplot(kk), filename = paste0(getwd(),"/kegg_paths_snapshots/","KEGG_overrepresentation_test",i,"_",geneset,"_upsetplot.pdf"),width=30, height=30))
+              kk_write <- kk@result
+              kk_write$Gene_ID <-  unlist(lapply(strsplit(kk_write$geneID,"/"),function(x){paste(unique(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
+              kk_write$Custom_id <- unlist(lapply(strsplit(kk_write$geneID,"/"),function(x){paste(unique(entrez_ids_keys$Custom_ID[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
+              kk_write$summary_LogFC <- unlist(lapply(lapply(kk_write$Gene_ID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,","))]}),function(y){paste(y,collapse=",")}))
+              kk_write$summary_LogFC_2 <- unlist(lapply(strsplit(kk_write$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); kk_write$summary_LogFC <- unlist(lapply(strsplit(kk_write$Gene_ID,","),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
+              kk_write$summary_up <- unlist(lapply(strsplit(kk_write$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
+              kk_write$summary_down <- unlist(lapply(strsplit(kk_write$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
+              write.table(kk_write,file=paste0("KEGG_enrich_",i,"_",geneset,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
+              if(cluster_enrich=="yes"){
+                p <- enrichmentNetwork(kk_write, repelLabels = TRUE, drawEllipses = TRUE)
+                ggsave(p, filename = paste0("KEGG_enrich_",i,"_",geneset,"_aPEAR.pdf"),width=30, height=30)
+                suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("KEGG_enrich_",i,"_",geneset,"_aPEAR.html"),selfcontained = TRUE))
+                clusters <- findPathClusters(kk_write)
+                write.table(clusters$clusters,file=paste0("KEGG_enrich_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                write.table(clusters$similarity,file=paste0("KEGG_enrich_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+              }
           }, error = function(e) {
-                    writeLines(as.character(e), paste0("GO_GSEA_",f,"_",i,"_fgsea_err.txt"))
+              writeLines(as.character(e), paste0("KEGG_enrich_",i,"_",geneset,"_err.txt"))
           })
-          tryCatch({
-                    gse_enrich <- c(); Sys.sleep(2)
-                    gse_enrich <- suppressMessages(gseGO(geneList=b,
-                                     OrgDb        = orgDB,
-                                     ont          = "BP",
-                                     keyType  = "SYMBOL",
-                                     pvalueCutoff = 1,
-                                     pAdjustMethod = i,
-                                     verbose      = FALSE,
-                                     by="fgsea"))
-                    df <- gse_enrich@result
-                    df$summary_LogFC <- unlist(lapply(lapply(df$core_enrichment, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,"/"))]}),function(y){paste(y,collapse=",")}))
-                    df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
-                    df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
-                    df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
-                    write.table(df,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_BP.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                    suppressMessages(ggsave(goplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_BP.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(dotplot(gse_enrich, showCategory=20), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_BP_dotplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(cnetplot(gse_enrich,foldChange=sort(eval(parse(text=f)),decreasing = T)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_BP_cnetplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(heatplot(gse_enrich, showCategory=20,foldChange=sort(eval(parse(text=f)),decreasing = T)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_BP_heatplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(treeplot(pairwise_termsim(gse_enrich)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_BP_treeplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(emapplot(pairwise_termsim(gse_enrich)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_BP_emapplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(upsetplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_BP_upsetplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(pmcplot(gse_enrich@result$Description[1:10], 2010:paste0("20",unlist(lapply(strsplit(date(),"20"),function(x){x[2]})))), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_BP_pmcplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(ridgeplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_BP_ridgeplot.pdf"),width=30, height=30))
-                    p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
-                    ggsave(p, filename = paste0("GO_GSEA_",f,"_",i,"_fgsea_BP_aPEAR.pdf"),width=30, height=30)
-                    suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_GSEA_",f,"_",i,"_fgsea_BP_aPEAR.html"),selfcontained = TRUE))
-                    clusters <- findPathClusters(df)
-                    write.table(clusters$clusters,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_BP_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                    write.table(clusters$similarity,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_BP_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-          }, error = function(e) {
-                    writeLines(as.character(e), paste0("GO_GSEA_",f,"_",i,"_fgsea_BP_err.txt"))
-          })
-          tryCatch({
-                    gse_enrich <- c(); Sys.sleep(2)
-                    gse_enrich <- suppressMessages(gseGO(geneList=b,
-                                     OrgDb        = orgDB,
-                                     ont          = "MF",
-                                     keyType  = "SYMBOL",
-                                     pvalueCutoff = 1,
-                                     pAdjustMethod = i,
-                                     verbose      = FALSE,
-                                     by="fgsea"))
-                    df <- gse_enrich@result
-                    df$summary_LogFC <- unlist(lapply(lapply(df$core_enrichment, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,"/"))]}),function(y){paste(y,collapse=",")}))
-                    df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
-                    df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
-                    df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
-                    write.table(df,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_MF.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                    suppressMessages(ggsave(goplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_MF.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(dotplot(gse_enrich, showCategory=20), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_MF_dotplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(cnetplot(gse_enrich,foldChange=sort(eval(parse(text=f)),decreasing = T)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_MF_cnetplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(heatplot(gse_enrich, showCategory=20,foldChange=sort(eval(parse(text=f)),decreasing = T)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_MF_heatplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(treeplot(pairwise_termsim(gse_enrich)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_MF_treeplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(emapplot(pairwise_termsim(gse_enrich)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_MF_emapplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(upsetplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_MF_upsetplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(pmcplot(gse_enrich@result$Description[1:10], 2010:paste0("20",unlist(lapply(strsplit(date(),"20"),function(x){x[2]})))), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_MF_pmcplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(ridgeplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_MF_ridgeplot.pdf"),width=30, height=30))
-                    p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
-                    ggsave(p, filename = paste0("GO_GSEA_",f,"_",i,"_fgsea_MF_aPEAR.pdf"),width=30, height=30)
-                    suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_GSEA_",f,"_",i,"_fgsea_MF_aPEAR.html"),selfcontained = TRUE))
-                    clusters <- findPathClusters(df)
-                    write.table(clusters$clusters,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_MF_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                    write.table(clusters$similarity,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_MF_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-          }, error = function(e) {
-                    writeLines(as.character(e), paste0("GO_GSEA_",f,"_",i,"_fgsea_MF_err.txt"))
-          })
-          tryCatch({
-                    gse_enrich <- c(); Sys.sleep(2)
-                    gse_enrich <- suppressMessages(gseGO(geneList=b,
-                                     OrgDb        = orgDB,
-                                     ont          = "CC",
-                                     keyType  = "SYMBOL",
-                                     pvalueCutoff = 1,
-                                     pAdjustMethod = i,
-                                     verbose      = FALSE,
-                                     by="fgsea"))
-                    df <- gse_enrich@result
-                    df$summary_LogFC <- unlist(lapply(lapply(df$core_enrichment, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,"/"))]}),function(y){paste(y,collapse=",")}))
-                    df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
-                    df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
-                    df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
-                    write.table(df,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_CC.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                    suppressMessages(ggsave(goplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_CC.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(dotplot(gse_enrich, showCategory=20), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_CC_dotplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(cnetplot(gse_enrich,foldChange=sort(eval(parse(text=f)),decreasing = T)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_CC_cnetplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(heatplot(gse_enrich, showCategory=20,foldChange=sort(eval(parse(text=f)),decreasing = T)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_CC_heatplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(treeplot(pairwise_termsim(gse_enrich)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_CC_treeplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(emapplot(pairwise_termsim(gse_enrich)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_CC_emapplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(upsetplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_CC_upsetplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(pmcplot(gse_enrich@result$Description[1:10], 2010:paste0("20",unlist(lapply(strsplit(date(),"20"),function(x){x[2]})))), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_CC_pmcplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(ridgeplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_CC_ridgeplot.pdf"),width=30, height=30))
-                    p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
-                    ggsave(p, filename = paste0("GO_GSEA_",f,"_",i,"_fgsea_CC_aPEAR.pdf"),width=30, height=30)
-                    suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_GSEA_",f,"_",i,"_fgsea_CC_aPEAR.html"),selfcontained = TRUE))
-                    clusters <- findPathClusters(df)
-                    write.table(clusters$clusters,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_CC_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                    write.table(clusters$similarity,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_CC_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-          }, error = function(e) {
-                    writeLines(as.character(e), paste0("GO_GSEA_",f,"_",i,"_fgsea_CC_err.txt"))
-          })
-          tryCatch({
-                    gse_enrich <- c(); Sys.sleep(2)
-                    gse_enrich <- suppressMessages(gseGO(geneList=b,
-                                     OrgDb        = orgDB,
-                                     ont          = "ALL",
-                                     keyType  = "SYMBOL",
-                                     pvalueCutoff = 1,
-                                     pAdjustMethod = i,
-                                     verbose      = FALSE,
-                                     by="DOSE",
-                                     nPerm = 100))
-                    df <- gse_enrich@result
-                    df$summary_LogFC <- unlist(lapply(lapply(df$core_enrichment, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,"/"))]}),function(y){paste(y,collapse=",")}))
-                    df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
-                    df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
-                    df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
-                    write.table(df,file=paste0("GO_GSEA_",f,"_",i,"_DOSE.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                    p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
-                    ggsave(p, filename = paste0("GO_GSEA_",f,"_",i,"_DOSE_aPEAR.pdf"),width=30, height=30)
-                    suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_GSEA_",f,"_",i,"_DOSE_aPEAR.html"),selfcontained = TRUE))
-                    clusters <- findPathClusters(df)
-                    write.table(clusters$clusters,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                    write.table(clusters$similarity,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-          }, error = function(e) {
-                    writeLines(as.character(e), paste0("GO_GSEA_",f,"_",i,"_DOSE_err.txt"))
-          })
-          tryCatch({
-                    gse_enrich <- c(); Sys.sleep(2)
-                    gse_enrich <- suppressMessages(gseGO(geneList=b,
-                                    OrgDb        = orgDB,
-                                    ont          = "BP",
-                                    keyType  = "SYMBOL",
-                                    pvalueCutoff = 1,
-                                    pAdjustMethod = padjustmethod,
-                                    verbose      = FALSE,
-                                    by="DOSE",
-                                    nPerm = 100))
-                    df <- gse_enrich@result
-                    df$summary_LogFC <- unlist(lapply(lapply(df$core_enrichment, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,"/"))]}),function(y){paste(y,collapse=",")}))
-                    df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
-                    df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
-                    df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
-                    write.table(df,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_BP.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                    suppressMessages(ggsave(goplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_BP.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(dotplot(gse_enrich, showCategory=20), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_BP_dotplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(cnetplot(gse_enrich,foldChange=sort(eval(parse(text=f)),decreasing = T)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_BP_cnetplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(heatplot(gse_enrich, showCategory=20,foldChange=sort(eval(parse(text=f)),decreasing = T)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_BP_heatplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(treeplot(pairwise_termsim(gse_enrich)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_BP_treeplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(emapplot(pairwise_termsim(gse_enrich)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_BP_emapplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(upsetplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_BP_upsetplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(pmcplot(gse_enrich@result$Description[1:10], 2010:paste0("20",unlist(lapply(strsplit(date(),"20"),function(x){x[2]})))), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_BP_pmcplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(ridgeplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_BP_ridgeplot.pdf"),width=30, height=30))
-                    p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
-                    ggsave(p, filename = paste0("GO_GSEA_",f,"_",i,"_DOSE_BP_aPEAR.pdf"),width=30, height=30)
-                    suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_GSEA_",f,"_",i,"_DOSE_BP_aPEAR.html"),selfcontained = TRUE))
-                    clusters <- findPathClusters(df)
-                    write.table(clusters$clusters,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_BP_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                    write.table(clusters$similarity,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_BP_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-          }, error = function(e) {
-                    writeLines(as.character(e), paste0("GO_GSEA_",f,"_",i,"_DOSE_BP_err.txt"))
-          })
-          tryCatch({
-                    gse_enrich <- c(); Sys.sleep(2)
-                    gse_enrich <- suppressMessages(gseGO(geneList=b,
-                                    OrgDb        = orgDB,
-                                    ont          = "MF",
-                                    keyType  = "SYMBOL",
-                                    pvalueCutoff = 1,
-                                    pAdjustMethod = i,
-                                    verbose      = FALSE,
-                                    by="DOSE",
-                                    nPerm = 100))
-                    df <- gse_enrich@result
-                    df$summary_LogFC <- unlist(lapply(lapply(df$core_enrichment, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,"/"))]}),function(y){paste(y,collapse=",")}))
-                    df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
-                    df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
-                    df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
-                    write.table(df,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_MF.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                    suppressMessages(ggsave(goplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_MF.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(dotplot(gse_enrich, showCategory=20), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_MF_dotplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(cnetplot(gse_enrich,foldChange=sort(eval(parse(text=f)),decreasing = T)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_MF_cnetplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(heatplot(gse_enrich, showCategory=20,foldChange=sort(eval(parse(text=f)),decreasing = T)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_MF_heatplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(treeplot(pairwise_termsim(gse_enrich)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_MF_treeplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(emapplot(pairwise_termsim(gse_enrich)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_MF_emapplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(upsetplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_MF_upsetplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(pmcplot(gse_enrich@result$Description[1:10], 2010:paste0("20",unlist(lapply(strsplit(date(),"20"),function(x){x[2]})))), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_MF_pmcplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(ridgeplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_MF_ridgeplot.pdf"),width=30, height=30))
-                    p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
-                    ggsave(p, filename = paste0("GO_GSEA_",f,"_",i,"_DOSE_MF_aPEAR.pdf"),width=30, height=30)
-                    suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_GSEA_",f,"_",i,"_DOSE_MF_aPEAR.html"),selfcontained = TRUE))
-                    clusters <- findPathClusters(df)
-                    write.table(clusters$clusters,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_MF_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                    write.table(clusters$similarity,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_MF_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-          }, error = function(e) {
-                    writeLines(as.character(e), paste0("GO_GSEA_",f,"_",i,"_DOSE_MF_err.txt"))
-          })
-          tryCatch({
-                    gse_enrich <- c(); Sys.sleep(2)
-                    gse_enrich <- suppressMessages(gseGO(geneList=b,
-                                    OrgDb        = orgDB,
-                                    ont          = "CC",
-                                    keyType  = "SYMBOL",
-                                    pvalueCutoff = 1,
-                                    pAdjustMethod = i,
-                                    verbose      = FALSE,
-                                    by="DOSE",
-                                    nPerm = 100))
-                    df <- gse_enrich@result
-                    df$summary_LogFC <- unlist(lapply(lapply(df$core_enrichment, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,"/"))]}),function(y){paste(y,collapse=",")}))
-                    df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
-                    df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
-                    df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
-                    write.table(df,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_CC.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                    suppressMessages(ggsave(goplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_CC.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(dotplot(gse_enrich, showCategory=20), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_CC_dotplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(cnetplot(gse_enrich,foldChange=sort(eval(parse(text=f)),decreasing = T)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_CC_cnetplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(heatplot(gse_enrich, showCategory=20,foldChange=sort(eval(parse(text=f)),decreasing = T)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_CC_heatplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(treeplot(pairwise_termsim(gse_enrich)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_CC_treeplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(emapplot(pairwise_termsim(gse_enrich)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_CC_emapplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(upsetplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_CC_upsetplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(pmcplot(gse_enrich@result$Description[1:10], 2010:paste0("20",unlist(lapply(strsplit(date(),"20"),function(x){x[2]})))), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_CC_pmcplot.pdf"),width=30, height=30))
-                    suppressMessages(ggsave(ridgeplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_CC_ridgeplot.pdf"),width=30, height=30))
-                    p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
-                    ggsave(p, filename = paste0("GO_GSEA_",f,"_",i,"_DOSE_CC_aPEAR.pdf"),width=30, height=30)
-                    suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_GSEA_",f,"_",i,"_DOSE_CC_aPEAR.html"),selfcontained = TRUE))
-                    clusters <- findPathClusters(df)
-                    write.table(clusters$clusters,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_CC_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                    write.table(clusters$similarity,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_CC_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-          }, error = function(e) {
-                    writeLines(as.character(e), paste0("GO_GSEA_",f,"_",i,"_DOSE_CC_err.txt"))
-          })
-      }  
-    print(paste0("Processing ",file,"_",name_internal,"... KEGG over-representation"))
-    
-    ###### 4. KEGG over-representation:    
-      tryCatch({
-          kk <- suppressMessages(enrichKEGG(gene= entrez_ids,
-                           organism     = org,
-                           universe = entrez_ids_backg,
-                           pAdjustMethod = i,
-                           pvalueCutoff = 1,
-                           qvalueCutoff = 1))
-          suppressMessages(ggsave(barplot(kk, showCategory=20), filename = paste0(getwd(),"/kegg_paths_snapshots/","KEGG_overrepresentation_test",i,"_",geneset,"_barplot.pdf"),width=30, height=30))
-          suppressMessages(ggsave(dotplot(kk, showCategory=20), filename = paste0(getwd(),"/kegg_paths_snapshots/","KEGG_overrepresentation_test",i,"_",geneset,"_dotplot.pdf"),width=30, height=30))
-          suppressMessages(ggsave(cnetplot(kk), filename = paste0(getwd(),"/kegg_paths_snapshots/","KEGG_overrepresentation_test",i,"_",geneset,"_cnetplot.pdf"),width=30, height=30))
-          suppressMessages(ggsave(heatplot(kk, showCategory=20), filename = paste0(getwd(),"/kegg_paths_snapshots/","KEGG_overrepresentation_test",i,"_",geneset,"_heatplot.pdf"),width=30, height=30))
-          suppressMessages(ggsave(emapplot(pairwise_termsim(kk)), filename = paste0(getwd(),"/kegg_paths_snapshots/","KEGG_overrepresentation_test",i,"_",geneset,"_emapplot.pdf"),width=30, height=30))
-          suppressMessages(ggsave(upsetplot(kk), filename = paste0(getwd(),"/kegg_paths_snapshots/","KEGG_overrepresentation_test",i,"_",geneset,"_upsetplot.pdf"),width=30, height=30))
-          kk_write <- kk@result
-          kk_write$Gene_ID <-  unlist(lapply(strsplit(kk_write$geneID,"/"),function(x){paste(unique(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
-          kk_write$Custom_id <- unlist(lapply(strsplit(kk_write$geneID,"/"),function(x){paste(unique(entrez_ids_keys$Custom_ID[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
-          kk_write$summary_LogFC <- unlist(lapply(lapply(kk_write$Gene_ID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,","))]}),function(y){paste(y,collapse=",")}))
-          kk_write$summary_LogFC_2 <- unlist(lapply(strsplit(kk_write$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); kk_write$summary_LogFC <- unlist(lapply(strsplit(kk_write$Gene_ID,","),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
-          kk_write$summary_up <- unlist(lapply(strsplit(kk_write$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
-          kk_write$summary_down <- unlist(lapply(strsplit(kk_write$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
-          write.table(kk_write,file=paste0("KEGG_enrich_",i,"_",geneset,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
-          p <- enrichmentNetwork(kk_write, repelLabels = TRUE, drawEllipses = TRUE)
-          ggsave(p, filename = paste0("KEGG_enrich_",i,"_",geneset,"_aPEAR.pdf"),width=30, height=30)
-          suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("KEGG_enrich_",i,"_",geneset,"_aPEAR.html"),selfcontained = TRUE))
-          clusters <- findPathClusters(kk_write)
-          write.table(clusters$clusters,file=paste0("KEGG_enrich_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-          write.table(clusters$similarity,file=paste0("KEGG_enrich_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-      }, error = function(e) {
-          writeLines(as.character(e), paste0("KEGG_enrich_",i,"_",geneset,"_err.txt"))
-      })
-    print(paste0("Processing ",file,"_",name_internal,"... KEGG pathways visualization"))
-    
-    ###### 5. KEGG pathways visualization:
-          paths_list <- unique(unlist(lapply(list.files(path = getwd(), pattern = "^KEGG", full.names = TRUE), function(x){
-            data <- read.delim(x)
-            data_filtered <- data$ID[data$pvalue < 0.05]
-          })))
-          for (f in paths_list){
-            tryCatch({
-              suppressMessages(pathview(gene.data=kk@result,pathway.id=f,species=org,kegg.dir=paste0(getwd(),"/kegg_paths_snapshots")))
-            }, error = function(e) {
-              writeLines(as.character(e), paste0(getwd(),"/kegg_paths_snapshots/err.txt"))
-            })
-          }
-          invisible(file.remove(list.files(path=getwd(),pattern="*.pathview.png",full.names = T)))
-    print(paste0("Processing ",file,"_",name_internal,"... Gene Set Enrichment Analysis of KEGG"))
-    
-    ###### 6. Gene Set Enrichment Analysis of KEGG:
-      if(geneset=="fdr_05" || geneset=="fdr_01"){
-          f <- paste0("readlist_fc_",geneset)
-          b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- convert_ids(gsub(paste0(f,"."),"",names(b)),mode)
-          b <- b[names(b) %in% entrez_ids_keys$SYMBOL]; names(b) <- entrez_ids_keys$ENTREZID[match(names(b),entrez_ids_keys$SYMBOL)]
-          tryCatch({
-                  gse_enrich <- c(); Sys.sleep(2)
-                  gse_enrich <- suppressMessages(gseKEGG(geneList= b,
-                                                         organism = org,
-                                                         pvalueCutoff = 1,
-                                                         pAdjustMethod = i,
-                                                         verbose      = FALSE,
-                                                         by="fgsea"))
-                  df <- gse_enrich@result
-                  df$Gene_ID <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(unique(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
-                  df$Custom_ID <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(unique(entrez_ids_keys$Custom_ID[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
-                  df$summary_LogFC <- unlist(lapply(lapply(df$Gene_ID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,","))]}),function(y){paste(y,collapse=",")}))
-                  df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$Gene_ID,","),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
-                  df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
-                  df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
-                  write.table(df,file=paste0("KEGG_GSEA_",f,"_",i,"_fgsea.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                  for (k in gse_enrich@result$ID[gse_enrich@result$pvalue < 0.05]){
-                    suppressMessages(pathview(gene.data=b,
-                                              pathway.id=k,species=org))
-                    invisible(file.remove(grep("pathview",list.files(path=getwd(),pattern=paste0(k,".*"),full.names = T),invert=T,val=T)))
-                    invisible(file.rename(grep("pathview",list.files(path=getwd(),pattern=paste0(k,".*"),full.names = T),val=T),paste0(getwd(),"/kegg_paths_snapshots/",k,"_","KEGG_GSEA_",f,"_",i,"_fgsea.png")))
-                  }
-                  p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
-                  ggsave(p, filename = paste0("KEGG_GSEA_",f,"_",i,"_fgsea_aPEAR.pdf"),width=30, height=30)
-                  suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("KEGG_GSEA_",f,"_",i,"_fgsea_aPEAR.html"),selfcontained = TRUE))
-                  clusters <- findPathClusters(df)
-                  write.table(clusters$clusters,file=paste0("KEGG_GSEA_",f,"_",i,"_fgsea_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                  write.table(clusters$similarity,file=paste0("KEGG_GSEA_",f,"_",i,"_fgsea_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-          }, error = function(e) {
-              writeLines(as.character(e), paste0("KEGG_GSEA_",f,"_",i,"_fgsea_err.txt"))
-          })
-          tryCatch({
-                  gse_enrich <- c(); Sys.sleep(2)
-                  gse_enrich <- suppressMessages(gseKEGG(geneList= b,
-                                                         organism = org,
-                                                         pvalueCutoff = 1,
-                                                         pAdjustMethod = i,
-                                                         verbose      = FALSE,
-                                                         by="DOSE"))
-                  df <- gse_enrich@result
-                  df$Gene_ID <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(unique(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
-                  df$Custom_ID <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(unique(entrez_ids_keys$Custom_ID[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
-                  df$summary_LogFC <- unlist(lapply(lapply(df$Gene_ID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,","))]}),function(y){paste(y,collapse=",")}))
-                  df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$Gene_ID,","),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
-                  df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
-                  df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
-                  write.table(df,file=paste0("KEGG_DOSE_",f,"_",i,"_DOSE.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                  for (k in gse_enrich@result$ID[gse_enrich@result$pvalue < 0.05]){
-                    suppressMessages(pathview(gene.data=b,
-                                              pathway.id=k,species=org))
-                    invisible(file.remove(grep("pathview",list.files(path=getwd(),pattern=paste0(k,".*"),full.names = T),invert=T,val=T)))
-                    invisible(file.rename(grep("pathview",list.files(path=getwd(),pattern=paste0(k,".*"),full.names = T),val=T),paste0(getwd(),"/kegg_paths_snapshots/",k,"_","KEGG_DOSE_",f,"_",i,"_DOSE.png")))
-                  }
-                  p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
-                  ggsave(p, filename = paste0("KEGG_GSEA_",f,"_",i,"_DOSE_aPEAR.pdf"),width=30, height=30)
-                  suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("KEGG_GSEA_",f,"_",i,"_DOSE_aPEAR.html"),selfcontained = TRUE))
-                  clusters <- findPathClusters(df)
-                  write.table(clusters$clusters,file=paste0("KEGG_GSEA_",f,"_",i,"_DOSE_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                  write.table(clusters$similarity,file=paste0("KEGG_GSEA_",f,"_",i,"_DOSE_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-          }, error = function(e) {
-              writeLines(as.character(e), paste0("KEGG_DOSE_",f,"_",i,"_DOSE_err.txt"))
-          })
-      }
-    print(paste0("Processing ",file,"_",name_internal,"... KEGG Module over-representation"))
-    
-    ###### 7. KEGG Module over-representation:
-      tryCatch({
-            gse_enrich <- c(); Sys.sleep(2)
-            gse_enrich <- suppressMessages(enrichMKEGG(gene= entrez_ids,
-                                                       universe = entrez_ids_backg,
-                                                       organism = org,
-                                                       pvalueCutoff = 1,
-                                                       qvalueCutoff = 1,
-                                                       pAdjustMethod = i))
-            kk_write <- gse_enrich@result
-            kk_write$Gene_ID <-  unlist(lapply(strsplit(kk_write$geneID,"/"),function(x){paste(unique(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
-            kk_write$Custom_id <- unlist(lapply(strsplit(kk_write$geneID,"/"),function(x){paste(unique(entrez_ids_keys$Custom_ID[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
-            kk_write$summary_LogFC <- unlist(lapply(lapply(kk_write$Gene_ID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,","))]}),function(y){paste(y,collapse=",")}))
-            kk_write$summary_LogFC_2 <- unlist(lapply(strsplit(kk_write$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); kk_write$summary_LogFC <- unlist(lapply(strsplit(kk_write$Gene_ID,","),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
-            kk_write$summary_up <- unlist(lapply(strsplit(kk_write$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
-            kk_write$summary_down <- unlist(lapply(strsplit(kk_write$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
-            write.table(kk_write,file=paste0("MKEGG_",i,"_",geneset,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
-            p <- enrichmentNetwork(kk_write, repelLabels = TRUE, drawEllipses = TRUE)
-            ggsave(p, filename = paste0("MKEGG_",i,"_",geneset,"_aPEAR.pdf"),width=30, height=30)
-            suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("MKEGG_",i,"_",geneset,"_aPEAR.html"),selfcontained = TRUE))
-            clusters <- findPathClusters(kk_write)
-            write.table(clusters$clusters,file=paste0("MKEGG_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-            write.table(clusters$similarity,file=paste0("MKEGG_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-      }, error = function(e) {
-              writeLines(as.character(e), paste0("MKEGG_",i,"_",geneset,"_err.txt"))
-      })
-    print(paste0("Processing ",file,"_",name_internal,"... Gene Set Enrichment Analysis of KEGG modules"))
-    
-    ###### 8. Gene Set Enrichment Analysis of KEGG modules:
-      if(geneset=="fdr_05" || geneset=="fdr_01"){
-            f <- paste0("readlist_fc_",geneset)
-            b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- convert_ids(gsub(paste0(f,"."),"",names(b)),mode)
-            b <- b[names(b) %in% entrez_ids_keys$SYMBOL]; names(b) <- entrez_ids_keys$ENTREZID[match(names(b),entrez_ids_keys$SYMBOL)]
-            tryCatch({
-                  gse_enrich <- c(); Sys.sleep(2)
-                  gse_enrich <- suppressMessages(gseMKEGG(geneList= b,
-                                                          organism = org,
-                                                          pvalueCutoff = 1,
-                                                          pAdjustMethod = i,
-                                                          verbose      = FALSE,
-                                                          by="fgsea"))
-                  df <- gse_enrich@result
-                  df$Gene_ID <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(unique(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
-                  df$Custom_ID <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(unique(entrez_ids_keys$Custom_ID[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
-                  df$summary_LogFC <- unlist(lapply(lapply(df$Gene_ID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,","))]}),function(y){paste(y,collapse=",")}))
-                  df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$Gene_ID,","),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
-                  df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
-                  df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
-                  write.table(df,file=paste0("MKEGG_GSEA_",f,"_",i,"_fgsea.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                  p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
-                  ggsave(p, filename = paste0("MKEGG_GSEA_",f,"_",i,"_fgsea_aPEAR.pdf"),width=30, height=30)
-                  suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("MKEGG_GSEA_",f,"_",i,"_fgsea_aPEAR.html"),selfcontained = TRUE))
-                  clusters <- findPathClusters(df)
-                  write.table(clusters$clusters,file=paste0("MKEGG_GSEA_",f,"_",i,"_fgsea_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                  write.table(clusters$similarity,file=paste0("MKEGG_GSEA_",f,"_",i,"_fgsea_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-            }, error = function(e) {
-              writeLines(as.character(e), paste0("MKEGG_GSEA_",f,"_",i,"_fgsea_err.txt"))
-            })
-            tryCatch({
-                  gse_enrich <- c(); Sys.sleep(2)
-                  gse_enrich <- suppressMessages(gseMKEGG(geneList= b,
-                                                          organism = org,
-                                                          pvalueCutoff = 1,
-                                                          pAdjustMethod = i,
-                                                          verbose      = FALSE,
-                                                          by="DOSE",
-                                                          nPerm = 100))
-                  df <- gse_enrich@result
-                  df$Gene_ID <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(unique(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
-                  df$Custom_ID <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(unique(entrez_ids_keys$Custom_ID[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
-                  df$summary_LogFC <- unlist(lapply(lapply(df$Gene_ID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,","))]}),function(y){paste(y,collapse=",")}))
-                  df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$Gene_ID,","),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
-                  df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
-                  df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
-                  write.table(df,file=paste0("MKEGG_GSEA_",f,"_",i,"_DOSE.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                  p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
-                  ggsave(p, filename = paste0("MKEGG_GSEA_",f,"_",i,"_DOSE_aPEAR.pdf"),width=30, height=30)
-                  suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("MKEGG_GSEA_",f,"_",i,"_DOSE_aPEAR.html"),selfcontained = TRUE))
-                  clusters <- findPathClusters(df)
-                  write.table(clusters$clusters,file=paste0("MKEGG_GSEA_",f,"_",i,"_DOSE_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                  write.table(clusters$similarity,file=paste0("MKEGG_GSEA_",f,"_",i,"_DOSE_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-            }, error = function(e) {
-              writeLines(as.character(e), paste0("MKEGG_GSEA_",f,"_",i,"_DOSE_err.txt"))
-            })
-      }    
-    print(paste0("Processing ",file,"_",name_internal,"... WikiPathways over-representation"))
-    
-    ###### 9. WikiPathways over-representation:
-      tryCatch({
-        gse_enrich <- c(); Sys.sleep(2)
-        gse_enrich <- suppressMessages(enrichWP(gene= entrez_ids,
-                                                   organism = organism_cp,
-                                                   universe = entrez_ids_backg,
-                                                   pvalueCutoff = 1,
-                                                   qvalueCutoff = 1,
-                                                   pAdjustMethod = i))
-        df <- gse_enrich@result
-        df$Gene_ID <- unlist(lapply(strsplit(df$geneID,"/"),function(x){paste(unique(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
-        df$Custom_ID <- unlist(lapply(strsplit(df$geneID,"/"),function(x){paste(unique(entrez_ids_keys$Custom_ID[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
-        df$summary_LogFC <- unlist(lapply(lapply(df$Gene_ID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,","))]}),function(y){paste(y,collapse=",")}))
-        df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$Gene_ID,","),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
-        df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
-        df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
-        write.table(df,file=paste0("WP_",i,"_",geneset,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
-        p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
-        ggsave(p, filename = paste0("WP_",i,"_",geneset,"_aPEAR.pdf"),width=30, height=30)
-        suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("WP_",i,"_",geneset,"_aPEAR.html"),selfcontained = TRUE))
-        clusters <- findPathClusters(df)
-        write.table(clusters$clusters,file=paste0("WP_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-        write.table(clusters$similarity,file=paste0("WP_",i,"_",geneset,"_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-      }, error = function(e) {
-              writeLines(as.character(e), paste0("WP_",i,"_",geneset,"_err.txt"))
-      })            
-    print(paste0("Processing ",file,"_",name_internal,"... Gene set enrichment analyses of WikiPathways"))
-    
-    ###### 10. Gene set enrichment analyses of WikiPathways: 
-      if(geneset=="fdr_05" || geneset=="fdr_01"){
-        f <- paste0("readlist_fc_",geneset)
-        b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- convert_ids(gsub(paste0(f,"."),"",names(b)),mode)
-        b <- b[names(b) %in% entrez_ids_keys$SYMBOL]; names(b) <- entrez_ids_keys$ENTREZID[match(names(b),entrez_ids_keys$SYMBOL)]
-        tryCatch({
-                gse_enrich <- c(); Sys.sleep(2)
-                gse_enrich <- suppressMessages(gseWP(geneList= b,
-                                                        organism = organism_cp,
-                                                        pvalueCutoff = 1,
-                                                        pAdjustMethod = i,
-                                                        verbose      = FALSE,
-                                                        by="fgsea"))
-                df <- gse_enrich@result
-                df$Gene_ID <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(unique(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
-                df$Custom_ID <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(unique(entrez_ids_keys$Custom_ID[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
-                df$summary_LogFC <- unlist(lapply(lapply(df$Gene_ID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,","))]}),function(y){paste(y,collapse=",")}))
-                df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$Gene_ID,","),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
-                df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
-                df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
-                write.table(df,file=paste0("WP_GSEA_",f,"_",i,"_fgsea.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
-                ggsave(p, filename = paste0("WP_GSEA_",i,"_",geneset,"_fgsea_aPEAR.pdf"),width=30, height=30)
-                suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("WP_GSEA",i,"_",geneset,"_fgsea_aPEAR.html"),selfcontained = TRUE))
-                clusters <- findPathClusters(df)
-                write.table(clusters$clusters,file=paste0("WP_GSEA_",i,"_",geneset,"_fgsea_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                write.table(clusters$similarity,file=paste0("WP_GSEA_",i,"_",geneset,"_fgsea_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-        }, error = function(e) {
-              writeLines(as.character(e), paste0("WP_GSEA_",f,"_",i,"_fgsea_err.txt"))
-        })
-        tryCatch({
-                gse_enrich <- c(); Sys.sleep(2)
-                gse_enrich <- suppressMessages(gseWP(geneList= b,
-                                                        organism = organism_cp,
-                                                        pvalueCutoff = 1,
-                                                        pAdjustMethod = i,
-                                                        verbose      = FALSE,
-                                                        by="DOSE",
-                                                        nPerm = 100))
-                df <- gse_enrich@result
-                df$Gene_ID <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(unique(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
-                df$Custom_ID <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(unique(entrez_ids_keys$Custom_ID[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
-                df$summary_LogFC <- unlist(lapply(lapply(df$Gene_ID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,","))]}),function(y){paste(y,collapse=",")}))
-                df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$Gene_ID,","),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
-                df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
-                df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
-                write.table(df,file=paste0("WP_GSEA_",f,"_",i,"_DOSE.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
-                ggsave(p, filename = paste0("WP_GSEA_",i,"_",geneset,"_DOSE_aPEAR.pdf"),width=30, height=30)
-                suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("WP_GSEA",i,"_",geneset,"_DOSE_aPEAR.html"),selfcontained = TRUE))
-                clusters <- findPathClusters(df)
-                write.table(clusters$clusters,file=paste0("WP_GSEA_",i,"_",geneset,"_DOSE_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                write.table(clusters$similarity,file=paste0("WP_GSEA_",i,"_",geneset,"_DOSE_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-        }, error = function(e) {
-              writeLines(as.character(e), paste0("WP_GSEA_",f,"_",i,"_DOSE_err.txt"))
-        })
-      }
-    print(paste0("Processing ",file,"_",name_internal,"... Reactome over-representation"))
-    
-    ###### 11. Reactome over-representation:      
-      tryCatch({
-        gse_enrich <- c(); Sys.sleep(2)
-        gse_enrich <- suppressMessages(enrichPathway(gene= entrez_ids,
-                                                organism = organism_cp_react,
-                                                universe = entrez_ids_backg,
-                                                pvalueCutoff = 1,
-                                                qvalueCutoff = 1,
-                                                pAdjustMethod = i))
-        df <- gse_enrich@result
-        df$Gene_ID <- unlist(lapply(strsplit(df$geneID,"/"),function(x){paste(unique(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
-        df$Custom_ID <- unlist(lapply(strsplit(df$geneID,"/"),function(x){paste(unique(entrez_ids_keys$Custom_ID[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
-        df$summary_LogFC <- unlist(lapply(lapply(df$Gene_ID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,","))]}),function(y){paste(y,collapse=",")}))
-        df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$Gene_ID,","),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
-        df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
-        df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
-        write.table(df,file=paste0("REACT_",i,"_",geneset,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
-        p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
-        ggsave(p, filename = paste0("REACT_",i,"_",geneset,"_aPEAR.pdf"),width=30, height=30)
-        suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("REACT_",i,"_",geneset,"_aPEAR.html"),selfcontained = TRUE))
-        clusters <- findPathClusters(df)
-        write.table(clusters$clusters,file=paste0("REACT_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-        write.table(clusters$similarity,file=paste0("REACT_",i,"_",geneset,"_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-      }, error = function(e) {
-              writeLines(as.character(e), paste0("REACT_",i,"_",geneset,"_err.txt"))
-      })
-    print(paste0("Processing ",file,"_",name_internal,"... Gene set enrichment analyses of Reactome"))
-    
-    ###### 12. Gene set enrichment analyses of Reactome: 
-      if(geneset=="fdr_05" || geneset=="fdr_01"){
+        print(paste0("Processing ",file,"_",name_internal,"... KEGG pathways visualization"))
+        
+        ###### 5. KEGG pathways visualization:
+              paths_list <- unique(unlist(lapply(list.files(path = getwd(), pattern = "^KEGG", full.names = TRUE), function(x){
+                data <- read.delim(x)
+                data_filtered <- data$ID[data$pvalue < 0.05]
+              })))
+              for (f in paths_list){
+                tryCatch({
+                  suppressMessages(pathview(gene.data=kk@result,pathway.id=f,species=org,kegg.dir=paste0(getwd(),"/kegg_paths_snapshots")))
+                }, error = function(e) {
+                  writeLines(as.character(e), paste0(getwd(),"/kegg_paths_snapshots/err.txt"))
+                })
+              }
+              invisible(file.remove(list.files(path=getwd(),pattern="*.pathview.png",full.names = T)))
+        print(paste0("Processing ",file,"_",name_internal,"... Gene Set Enrichment Analysis of KEGG"))
+        
+        ###### 6. Gene Set Enrichment Analysis of KEGG:
+          if(geneset=="fdr_05" || geneset=="fdr_01"){
               f <- paste0("readlist_fc_",geneset)
               b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- convert_ids(gsub(paste0(f,"."),"",names(b)),mode)
               b <- b[names(b) %in% entrez_ids_keys$SYMBOL]; names(b) <- entrez_ids_keys$ENTREZID[match(names(b),entrez_ids_keys$SYMBOL)]
               tryCatch({
-                gse_enrich <- c(); Sys.sleep(2)
-                gse_enrich <- suppressMessages(gsePathway(geneList=b,
-                                                     organism = organism_cp_react,
-                                                     pvalueCutoff = 1,
-                                                     pAdjustMethod = i,
-                                                     verbose      = FALSE,
-                                                     by="fgsea"))
-                df <- gse_enrich@result
-                df$Gene_ID <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(unique(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
-                df$Custom_ID <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(unique(entrez_ids_keys$Custom_ID[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
-                df$summary_LogFC <- unlist(lapply(lapply(df$Gene_ID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,","))]}),function(y){paste(y,collapse=",")}))
-                df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$Gene_ID,","),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
-                df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
-                df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
-                write.table(df,file=paste0("REACT_GSEA_",f,"_",i,"_fgsea.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
-                ggsave(p, filename = paste0("REACT_GSEA_",i,"_",geneset,"_fgsea_aPEAR.pdf"),width=30, height=30)
-                suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("REACT_GSEA",i,"_",geneset,"_fgsea_aPEAR.html"),selfcontained = TRUE))
-                clusters <- findPathClusters(df)
-                write.table(clusters$clusters,file=paste0("REACT_GSEA_",i,"_",geneset,"_fgsea_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                write.table(clusters$similarity,file=paste0("REACT_GSEA_",i,"_",geneset,"_fgsea_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                      gse_enrich <- c(); Sys.sleep(2)
+                      gse_enrich <- suppressMessages(gseKEGG(geneList= b,
+                                                             organism = org,
+                                                             pvalueCutoff = 1,
+                                                             pAdjustMethod = i,
+                                                             verbose      = FALSE,
+                                                             by="fgsea"))
+                      df <- gse_enrich@result
+                      df$Gene_ID <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(unique(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
+                      df$Custom_ID <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(unique(entrez_ids_keys$Custom_ID[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
+                      df$summary_LogFC <- unlist(lapply(lapply(df$Gene_ID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,","))]}),function(y){paste(y,collapse=",")}))
+                      df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$Gene_ID,","),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
+                      df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
+                      df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
+                      write.table(df,file=paste0("KEGG_GSEA_",f,"_",i,"_fgsea.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                      for (k in gse_enrich@result$ID[gse_enrich@result$pvalue < 0.05]){
+                        suppressMessages(pathview(gene.data=b,
+                                                  pathway.id=k,species=org))
+                        invisible(file.remove(grep("pathview",list.files(path=getwd(),pattern=paste0(k,".*"),full.names = T),invert=T,val=T)))
+                        invisible(file.rename(grep("pathview",list.files(path=getwd(),pattern=paste0(k,".*"),full.names = T),val=T),paste0(getwd(),"/kegg_paths_snapshots/",k,"_","KEGG_GSEA_",f,"_",i,"_fgsea.png")))
+                      }
+                      if(cluster_enrich=="yes"){
+                        p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+                        ggsave(p, filename = paste0("KEGG_GSEA_",f,"_",i,"_fgsea_aPEAR.pdf"),width=30, height=30)
+                        suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("KEGG_GSEA_",f,"_",i,"_fgsea_aPEAR.html"),selfcontained = TRUE))
+                        clusters <- findPathClusters(df)
+                        write.table(clusters$clusters,file=paste0("KEGG_GSEA_",f,"_",i,"_fgsea_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                        write.table(clusters$similarity,file=paste0("KEGG_GSEA_",f,"_",i,"_fgsea_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                      }
               }, error = function(e) {
-                writeLines(as.character(e), paste0("REACT_GSEA_",f,"_",i,"_fgsea_err.txt"))
+                  writeLines(as.character(e), paste0("KEGG_GSEA_",f,"_",i,"_fgsea_err.txt"))
               })
               tryCatch({
-                gse_enrich <- c(); Sys.sleep(2)
-                gse_enrich <- suppressMessages(gsePathway(geneList=b,
-                                                     organism = organism_cp_react,
-                                                     pvalueCutoff = 1,
-                                                     pAdjustMethod = i,
-                                                     verbose      = FALSE,
-                                                     by="DOSE",
-                                                     nPerm = 100))
-                df <- gse_enrich@result
-                df$Gene_ID <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(unique(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
-                df$Custom_ID <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(unique(entrez_ids_keys$Custom_ID[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
-                df$summary_LogFC <- unlist(lapply(lapply(df$Gene_ID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,","))]}),function(y){paste(y,collapse=",")}))
-                df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$Gene_ID,","),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
-                df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
-                df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
-                write.table(df,file=paste0("REACT_GSEA_",f,"_",i,"_DOSE.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
-                ggsave(p, filename = paste0("REACT_GSEA_",i,"_",geneset,"_DOSE_aPEAR.pdf"),width=30, height=30)
-                suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("REACT_GSEA",i,"_",geneset,"_DOSE_aPEAR.html"),selfcontained = TRUE))
-                clusters <- findPathClusters(df)
-                write.table(clusters$clusters,file=paste0("REACT_GSEA_",i,"_",geneset,"_DOSE_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                write.table(clusters$similarity,file=paste0("REACT_GSEA_",i,"_",geneset,"_DOSE_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                      gse_enrich <- c(); Sys.sleep(2)
+                      gse_enrich <- suppressMessages(gseKEGG(geneList= b,
+                                                             organism = org,
+                                                             pvalueCutoff = 1,
+                                                             pAdjustMethod = i,
+                                                             verbose      = FALSE,
+                                                             by="DOSE"))
+                      df <- gse_enrich@result
+                      df$Gene_ID <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(unique(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
+                      df$Custom_ID <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(unique(entrez_ids_keys$Custom_ID[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
+                      df$summary_LogFC <- unlist(lapply(lapply(df$Gene_ID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,","))]}),function(y){paste(y,collapse=",")}))
+                      df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$Gene_ID,","),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
+                      df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
+                      df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
+                      write.table(df,file=paste0("KEGG_DOSE_",f,"_",i,"_DOSE.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                      for (k in gse_enrich@result$ID[gse_enrich@result$pvalue < 0.05]){
+                        suppressMessages(pathview(gene.data=b,
+                                                  pathway.id=k,species=org))
+                        invisible(file.remove(grep("pathview",list.files(path=getwd(),pattern=paste0(k,".*"),full.names = T),invert=T,val=T)))
+                        invisible(file.rename(grep("pathview",list.files(path=getwd(),pattern=paste0(k,".*"),full.names = T),val=T),paste0(getwd(),"/kegg_paths_snapshots/",k,"_","KEGG_DOSE_",f,"_",i,"_DOSE.png")))
+                      }
+                      if(cluster_enrich=="yes"){
+                        p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+                        ggsave(p, filename = paste0("KEGG_GSEA_",f,"_",i,"_DOSE_aPEAR.pdf"),width=30, height=30)
+                        suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("KEGG_GSEA_",f,"_",i,"_DOSE_aPEAR.html"),selfcontained = TRUE))
+                        clusters <- findPathClusters(df)
+                        write.table(clusters$clusters,file=paste0("KEGG_GSEA_",f,"_",i,"_DOSE_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                        write.table(clusters$similarity,file=paste0("KEGG_GSEA_",f,"_",i,"_DOSE_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                      }
               }, error = function(e) {
-                writeLines(as.character(e), paste0("REACT_GSEA_",f,"_",i,"_DOSE_err.txt"))
+                  writeLines(as.character(e), paste0("KEGG_DOSE_",f,"_",i,"_DOSE_err.txt"))
               })
-      }
-    print(paste0("Processing ",file,"_",name_internal,"... Reactome pathways visualization"))
-    
-    ###### 13. Reactome pathways visualization:
-      paths_list <- unique(unlist(lapply(list.files(path = getwd(), pattern = "^REACT", full.names = TRUE), function(x){
-          data <- read.delim(x)
-          data_filtered <- data$Description[data$pvalue < 0.05]
-      })))
-      for (f in paths_list){
-        tryCatch({
-          suppressMessages(ggsave(viewPathway(f,readable = TRUE,organism = organism_cp_react),filename = paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome.pdf"),width=30, height=30))
-        }, error = function(e) {
-          writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
-        })
-      }
-    print(paste0("Processing ",file,"_",name_internal,"... Over-representation analyses for human databases (DO, NCG and DGN)"))
+          }
+        print(paste0("Processing ",file,"_",name_internal,"... KEGG Module over-representation"))
         
-    ###### 14. Over-representation analyses for human databases (DO, NCG and DGN):
-      if(organism_cp=="Homo sapiens"){
-              tryCatch({
-                ego <- c(); Sys.sleep(2)
-                ego <- enrichDO(gene          = entrez_ids,
-                                ont           = "DO",
-                                universe = entrez_ids_backg,
-                                pAdjustMethod = i,
-                                pvalueCutoff  = 1,
-                                qvalueCutoff  = 1,
-                                readable      = TRUE)
-                # head(ego)
-                write.table(ego,file=paste0("DO_overrepresentation_test_",i,"_",geneset,"_DO.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-              }, error = function(e) {
-                writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
-              })
-              tryCatch({
-                ego <- c(); Sys.sleep(2)
-                ego <- enrichDO(gene          = entrez_ids,
-                                ont           = "DOLite",
-                                universe = entrez_ids_backg,
-                                pAdjustMethod = i,
-                                pvalueCutoff  = 1,
-                                qvalueCutoff  = 1,
-                                readable      = TRUE)
-                # head(ego)
-                write.table(ego,file=paste0("DO_overrepresentation_test_",i,"_",geneset,"_DOLite.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-              }, error = function(e) {
-                writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
-              })
-              tryCatch({
-                  ego <- c(); Sys.sleep(2)  
-                  ego <- enrichNCG(gene          = entrez_ids,
-                                   pAdjustMethod = i,
-                                   universe = entrez_ids_backg,
-                                   pvalueCutoff  = 1,
-                                   qvalueCutoff  = 1,
-                                   readable      = TRUE)
-                  # head(ego)
-                  write.table(ego,file=paste0("NGC_overrepresentation_test_",i,"_",geneset,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
-              }, error = function(e) {
-                writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
-              })
-              tryCatch({
-                  ego <- c(); Sys.sleep(2)  
-                  ego <- enrichDGN(gene          = entrez_ids,
-                                   pAdjustMethod = i,
-                                   universe = entrez_ids_backg,
-                                   pvalueCutoff  = 1,
-                                   qvalueCutoff  = 1,
-                                   readable      = TRUE)
-                  # head(ego)
-                  write.table(ego,file=paste0("DGN_overrepresentation_test_",i,"_",geneset,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
-              }, error = function(e) {
-                writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
-              })
-                   
-            
-              if(geneset=="fdr_05" || geneset=="fdr_01"){
+        ###### 7. KEGG Module over-representation:
+          tryCatch({
+                gse_enrich <- c(); Sys.sleep(2)
+                gse_enrich <- suppressMessages(enrichMKEGG(gene= entrez_ids,
+                                                           universe = entrez_ids_backg,
+                                                           organism = org,
+                                                           pvalueCutoff = 1,
+                                                           qvalueCutoff = 1,
+                                                           pAdjustMethod = i))
+                kk_write <- gse_enrich@result
+                kk_write$Gene_ID <-  unlist(lapply(strsplit(kk_write$geneID,"/"),function(x){paste(unique(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
+                kk_write$Custom_id <- unlist(lapply(strsplit(kk_write$geneID,"/"),function(x){paste(unique(entrez_ids_keys$Custom_ID[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
+                kk_write$summary_LogFC <- unlist(lapply(lapply(kk_write$Gene_ID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,","))]}),function(y){paste(y,collapse=",")}))
+                kk_write$summary_LogFC_2 <- unlist(lapply(strsplit(kk_write$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); kk_write$summary_LogFC <- unlist(lapply(strsplit(kk_write$Gene_ID,","),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
+                kk_write$summary_up <- unlist(lapply(strsplit(kk_write$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
+                kk_write$summary_down <- unlist(lapply(strsplit(kk_write$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
+                write.table(kk_write,file=paste0("MKEGG_",i,"_",geneset,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                if(cluster_enrich=="yes"){
+                  p <- enrichmentNetwork(kk_write, repelLabels = TRUE, drawEllipses = TRUE)
+                  ggsave(p, filename = paste0("MKEGG_",i,"_",geneset,"_aPEAR.pdf"),width=30, height=30)
+                  suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("MKEGG_",i,"_",geneset,"_aPEAR.html"),selfcontained = TRUE))
+                  clusters <- findPathClusters(kk_write)
+                  write.table(clusters$clusters,file=paste0("MKEGG_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                  write.table(clusters$similarity,file=paste0("MKEGG_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                }
+          }, error = function(e) {
+                  writeLines(as.character(e), paste0("MKEGG_",i,"_",geneset,"_err.txt"))
+          })
+        print(paste0("Processing ",file,"_",name_internal,"... Gene Set Enrichment Analysis of KEGG modules"))
+        
+        ###### 8. Gene Set Enrichment Analysis of KEGG modules:
+          if(geneset=="fdr_05" || geneset=="fdr_01"){
                 f <- paste0("readlist_fc_",geneset)
                 b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- convert_ids(gsub(paste0(f,"."),"",names(b)),mode)
                 b <- b[names(b) %in% entrez_ids_keys$SYMBOL]; names(b) <- entrez_ids_keys$ENTREZID[match(names(b),entrez_ids_keys$SYMBOL)]
                 tryCatch({
                       gse_enrich <- c(); Sys.sleep(2)
-                      gse_enrich <- suppressMessages(gseDO(geneList= sort(eval(parse(text=f)),decreasing=T)[!is.na(names(sort(eval(parse(text=f)),decreasing=T)))],
-                                                                pvalueCutoff = 1,
-                                                                pAdjustMethod = i,
-                                                                verbose      = FALSE,
-                                                                by="fgsea"))
-                      write.table(gse_enrich@result,file=paste0("DO_GSEA_",f,"_",i,"_fgsea.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                      gse_enrich <- suppressMessages(gseMKEGG(geneList= b,
+                                                              organism = org,
+                                                              pvalueCutoff = 1,
+                                                              pAdjustMethod = i,
+                                                              verbose      = FALSE,
+                                                              by="fgsea"))
+                      df <- gse_enrich@result
+                      df$Gene_ID <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(unique(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
+                      df$Custom_ID <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(unique(entrez_ids_keys$Custom_ID[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
+                      df$summary_LogFC <- unlist(lapply(lapply(df$Gene_ID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,","))]}),function(y){paste(y,collapse=",")}))
+                      df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$Gene_ID,","),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
+                      df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
+                      df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
+                      write.table(df,file=paste0("MKEGG_GSEA_",f,"_",i,"_fgsea.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                      if(cluster_enrich=="yes"){
+                        p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+                        ggsave(p, filename = paste0("MKEGG_GSEA_",f,"_",i,"_fgsea_aPEAR.pdf"),width=30, height=30)
+                        suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("MKEGG_GSEA_",f,"_",i,"_fgsea_aPEAR.html"),selfcontained = TRUE))
+                        clusters <- findPathClusters(df)
+                        write.table(clusters$clusters,file=paste0("MKEGG_GSEA_",f,"_",i,"_fgsea_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                        write.table(clusters$similarity,file=paste0("MKEGG_GSEA_",f,"_",i,"_fgsea_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                      }
                 }, error = function(e) {
-                  writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
+                  writeLines(as.character(e), paste0("MKEGG_GSEA_",f,"_",i,"_fgsea_err.txt"))
                 })
                 tryCatch({
-                      gse_enrich <- c(); Sys.sleep(2)  
-                      gse_enrich <- suppressMessages(gseDO(geneList= sort(eval(parse(text=f)),decreasing=T)[!is.na(names(sort(eval(parse(text=f)),decreasing=T)))],
-                                                                pvalueCutoff = 1,
-                                                                pAdjustMethod = i,
-                                                                verbose      = FALSE,
-                                                                by="DOSE",
-                                                                nPerm = 100))
-                      write.table(gse_enrich@result,file=paste0("DO_GSEA_",f,"_",i,"_DOSE.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                      gse_enrich <- c(); Sys.sleep(2)
+                      gse_enrich <- suppressMessages(gseMKEGG(geneList= b,
+                                                              organism = org,
+                                                              pvalueCutoff = 1,
+                                                              pAdjustMethod = i,
+                                                              verbose      = FALSE,
+                                                              by="DOSE",
+                                                              nPerm = 100))
+                      df <- gse_enrich@result
+                      df$Gene_ID <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(unique(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
+                      df$Custom_ID <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(unique(entrez_ids_keys$Custom_ID[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
+                      df$summary_LogFC <- unlist(lapply(lapply(df$Gene_ID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,","))]}),function(y){paste(y,collapse=",")}))
+                      df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$Gene_ID,","),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
+                      df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
+                      df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
+                      write.table(df,file=paste0("MKEGG_GSEA_",f,"_",i,"_DOSE.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                      if(cluster_enrich=="yes"){
+                        p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+                        ggsave(p, filename = paste0("MKEGG_GSEA_",f,"_",i,"_DOSE_aPEAR.pdf"),width=30, height=30)
+                        suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("MKEGG_GSEA_",f,"_",i,"_DOSE_aPEAR.html"),selfcontained = TRUE))
+                        clusters <- findPathClusters(df)
+                        write.table(clusters$clusters,file=paste0("MKEGG_GSEA_",f,"_",i,"_DOSE_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                        write.table(clusters$similarity,file=paste0("MKEGG_GSEA_",f,"_",i,"_DOSE_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                      }
                 }, error = function(e) {
-                  writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
+                  writeLines(as.character(e), paste0("MKEGG_GSEA_",f,"_",i,"_DOSE_err.txt"))
                 })
-                
-                tryCatch({
-                      gse_enrich <- c(); Sys.sleep(2)  
-                      gse_enrich <- suppressMessages(gseNCG(geneList= sort(eval(parse(text=f)),decreasing=T)[!is.na(names(sort(eval(parse(text=f)),decreasing=T)))],
-                                                           pvalueCutoff = 1,
-                                                           pAdjustMethod = i,
-                                                           verbose      = FALSE,
-                                                           by="fgsea"))
-                      write.table(gse_enrich@result,file=paste0("NCG_GSEA_",f,"_",i,"_fgsea.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                }, error = function(e) {
-                  writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
-                })
-                tryCatch({
-                      gse_enrich <- c(); Sys.sleep(2)  
-                      gse_enrich <- suppressMessages(gseNCG(geneList= sort(eval(parse(text=f)),decreasing=T)[!is.na(names(sort(eval(parse(text=f)),decreasing=T)))],
-                                                           pvalueCutoff = 1,
-                                                           pAdjustMethod = i,
-                                                           verbose      = FALSE,
-                                                           by="DOSE",
-                                                           nPerm = 100))
-                      write.table(gse_enrich@result,file=paste0("NCG_GSEA_",f,"_",i,"_DOSE.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                }, error = function(e) {
-                  writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
-                })
-                
-                tryCatch({
-                      gse_enrich <- c(); Sys.sleep(2)  
-                      gse_enrich <- suppressMessages(gseDGN(geneList= sort(eval(parse(text=f)),decreasing=T)[!is.na(names(sort(eval(parse(text=f)),decreasing=T)))],
+          }    
+        print(paste0("Processing ",file,"_",name_internal,"... WikiPathways over-representation"))
+        
+        ###### 9. WikiPathways over-representation:
+          tryCatch({
+            gse_enrich <- c(); Sys.sleep(2)
+            gse_enrich <- suppressMessages(enrichWP(gene= entrez_ids,
+                                                       organism = organism_cp,
+                                                       universe = entrez_ids_backg,
+                                                       pvalueCutoff = 1,
+                                                       qvalueCutoff = 1,
+                                                       pAdjustMethod = i))
+            df <- gse_enrich@result
+            df$Gene_ID <- unlist(lapply(strsplit(df$geneID,"/"),function(x){paste(unique(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
+            df$Custom_ID <- unlist(lapply(strsplit(df$geneID,"/"),function(x){paste(unique(entrez_ids_keys$Custom_ID[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
+            df$summary_LogFC <- unlist(lapply(lapply(df$Gene_ID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,","))]}),function(y){paste(y,collapse=",")}))
+            df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$Gene_ID,","),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
+            df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
+            df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
+            write.table(df,file=paste0("WP_",i,"_",geneset,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
+            if(cluster_enrich=="yes"){
+              p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+              ggsave(p, filename = paste0("WP_",i,"_",geneset,"_aPEAR.pdf"),width=30, height=30)
+              suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("WP_",i,"_",geneset,"_aPEAR.html"),selfcontained = TRUE))
+              clusters <- findPathClusters(df)
+              write.table(clusters$clusters,file=paste0("WP_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+              write.table(clusters$similarity,file=paste0("WP_",i,"_",geneset,"_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+            }
+          }, error = function(e) {
+                  writeLines(as.character(e), paste0("WP_",i,"_",geneset,"_err.txt"))
+          })            
+        print(paste0("Processing ",file,"_",name_internal,"... Gene set enrichment analyses of WikiPathways"))
+        
+        ###### 10. Gene set enrichment analyses of WikiPathways: 
+          if(geneset=="fdr_05" || geneset=="fdr_01"){
+            f <- paste0("readlist_fc_",geneset)
+            b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- convert_ids(gsub(paste0(f,"."),"",names(b)),mode)
+            b <- b[names(b) %in% entrez_ids_keys$SYMBOL]; names(b) <- entrez_ids_keys$ENTREZID[match(names(b),entrez_ids_keys$SYMBOL)]
+            tryCatch({
+                    gse_enrich <- c(); Sys.sleep(2)
+                    gse_enrich <- suppressMessages(gseWP(geneList= b,
+                                                            organism = organism_cp,
                                                             pvalueCutoff = 1,
                                                             pAdjustMethod = i,
                                                             verbose      = FALSE,
                                                             by="fgsea"))
-                      write.table(gse_enrich@result,file=paste0("DGN_GSEA_",f,"_",i,"_fgsea.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                }, error = function(e) {
-                  writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
-                })
-                tryCatch({
-                      gse_enrich <- c(); Sys.sleep(2)  
-                      gse_enrich <- suppressMessages(gseDGN(geneList= sort(eval(parse(text=f)),decreasing=T)[!is.na(names(sort(eval(parse(text=f)),decreasing=T)))],
+                    df <- gse_enrich@result
+                    df$Gene_ID <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(unique(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
+                    df$Custom_ID <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(unique(entrez_ids_keys$Custom_ID[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
+                    df$summary_LogFC <- unlist(lapply(lapply(df$Gene_ID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,","))]}),function(y){paste(y,collapse=",")}))
+                    df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$Gene_ID,","),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
+                    df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
+                    df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
+                    write.table(df,file=paste0("WP_GSEA_",f,"_",i,"_fgsea.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                    if(cluster_enrich=="yes"){
+                      p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+                      ggsave(p, filename = paste0("WP_GSEA_",i,"_",geneset,"_fgsea_aPEAR.pdf"),width=30, height=30)
+                      suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("WP_GSEA",i,"_",geneset,"_fgsea_aPEAR.html"),selfcontained = TRUE))
+                      clusters <- findPathClusters(df)
+                      write.table(clusters$clusters,file=paste0("WP_GSEA_",i,"_",geneset,"_fgsea_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                      write.table(clusters$similarity,file=paste0("WP_GSEA_",i,"_",geneset,"_fgsea_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                    }
+            }, error = function(e) {
+                  writeLines(as.character(e), paste0("WP_GSEA_",f,"_",i,"_fgsea_err.txt"))
+            })
+            tryCatch({
+                    gse_enrich <- c(); Sys.sleep(2)
+                    gse_enrich <- suppressMessages(gseWP(geneList= b,
+                                                            organism = organism_cp,
                                                             pvalueCutoff = 1,
                                                             pAdjustMethod = i,
                                                             verbose      = FALSE,
                                                             by="DOSE",
                                                             nPerm = 100))
-                      write.table(gse_enrich@result,file=paste0("DGN_GSEA_",f,"_",i,"_DOSE.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                }, error = function(e) {
-                  writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
-                })
-              }
-      }
+                    df <- gse_enrich@result
+                    df$Gene_ID <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(unique(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
+                    df$Custom_ID <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(unique(entrez_ids_keys$Custom_ID[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
+                    df$summary_LogFC <- unlist(lapply(lapply(df$Gene_ID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,","))]}),function(y){paste(y,collapse=",")}))
+                    df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$Gene_ID,","),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
+                    df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
+                    df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
+                    write.table(df,file=paste0("WP_GSEA_",f,"_",i,"_DOSE.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                    if(cluster_enrich=="yes"){
+                      p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+                      ggsave(p, filename = paste0("WP_GSEA_",i,"_",geneset,"_DOSE_aPEAR.pdf"),width=30, height=30)
+                      suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("WP_GSEA",i,"_",geneset,"_DOSE_aPEAR.html"),selfcontained = TRUE))
+                      clusters <- findPathClusters(df)
+                      write.table(clusters$clusters,file=paste0("WP_GSEA_",i,"_",geneset,"_DOSE_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                      write.table(clusters$similarity,file=paste0("WP_GSEA_",i,"_",geneset,"_DOSE_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                    }
+            }, error = function(e) {
+                  writeLines(as.character(e), paste0("WP_GSEA_",f,"_",i,"_DOSE_err.txt"))
+            })
+          }
+        print(paste0("Processing ",file,"_",name_internal,"... Reactome over-representation"))
+        
+        ###### 11. Reactome over-representation:      
+          tryCatch({
+            gse_enrich <- c(); Sys.sleep(2)
+            gse_enrich <- suppressMessages(enrichPathway(gene= entrez_ids,
+                                                    organism = organism_cp_react,
+                                                    universe = entrez_ids_backg,
+                                                    pvalueCutoff = 1,
+                                                    qvalueCutoff = 1,
+                                                    pAdjustMethod = i))
+            df <- gse_enrich@result
+            df$Gene_ID <- unlist(lapply(strsplit(df$geneID,"/"),function(x){paste(unique(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
+            df$Custom_ID <- unlist(lapply(strsplit(df$geneID,"/"),function(x){paste(unique(entrez_ids_keys$Custom_ID[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
+            df$summary_LogFC <- unlist(lapply(lapply(df$Gene_ID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,","))]}),function(y){paste(y,collapse=",")}))
+            df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$Gene_ID,","),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
+            df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
+            df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
+            write.table(df,file=paste0("REACT_",i,"_",geneset,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
+            if(cluster_enrich=="yes"){
+              p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+              ggsave(p, filename = paste0("REACT_",i,"_",geneset,"_aPEAR.pdf"),width=30, height=30)
+              suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("REACT_",i,"_",geneset,"_aPEAR.html"),selfcontained = TRUE))
+              clusters <- findPathClusters(df)
+              write.table(clusters$clusters,file=paste0("REACT_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+              write.table(clusters$similarity,file=paste0("REACT_",i,"_",geneset,"_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+            }
+          }, error = function(e) {
+                  writeLines(as.character(e), paste0("REACT_",i,"_",geneset,"_err.txt"))
+          })
+        print(paste0("Processing ",file,"_",name_internal,"... Gene set enrichment analyses of Reactome"))
+        
+        ###### 12. Gene set enrichment analyses of Reactome: 
+          if(geneset=="fdr_05" || geneset=="fdr_01"){
+                  f <- paste0("readlist_fc_",geneset)
+                  b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- convert_ids(gsub(paste0(f,"."),"",names(b)),mode)
+                  b <- b[names(b) %in% entrez_ids_keys$SYMBOL]; names(b) <- entrez_ids_keys$ENTREZID[match(names(b),entrez_ids_keys$SYMBOL)]
+                  tryCatch({
+                    gse_enrich <- c(); Sys.sleep(2)
+                    gse_enrich <- suppressMessages(gsePathway(geneList=b,
+                                                         organism = organism_cp_react,
+                                                         pvalueCutoff = 1,
+                                                         pAdjustMethod = i,
+                                                         verbose      = FALSE,
+                                                         by="fgsea"))
+                    df <- gse_enrich@result
+                    df$Gene_ID <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(unique(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
+                    df$Custom_ID <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(unique(entrez_ids_keys$Custom_ID[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
+                    df$summary_LogFC <- unlist(lapply(lapply(df$Gene_ID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,","))]}),function(y){paste(y,collapse=",")}))
+                    df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$Gene_ID,","),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
+                    df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
+                    df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
+                    write.table(df,file=paste0("REACT_GSEA_",f,"_",i,"_fgsea.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                    if(cluster_enrich=="yes"){
+                      p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+                      ggsave(p, filename = paste0("REACT_GSEA_",i,"_",geneset,"_fgsea_aPEAR.pdf"),width=30, height=30)
+                      suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("REACT_GSEA",i,"_",geneset,"_fgsea_aPEAR.html"),selfcontained = TRUE))
+                      clusters <- findPathClusters(df)
+                      write.table(clusters$clusters,file=paste0("REACT_GSEA_",i,"_",geneset,"_fgsea_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                      write.table(clusters$similarity,file=paste0("REACT_GSEA_",i,"_",geneset,"_fgsea_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                    }
+                  }, error = function(e) {
+                    writeLines(as.character(e), paste0("REACT_GSEA_",f,"_",i,"_fgsea_err.txt"))
+                  })
+                  tryCatch({
+                    gse_enrich <- c(); Sys.sleep(2)
+                    gse_enrich <- suppressMessages(gsePathway(geneList=b,
+                                                         organism = organism_cp_react,
+                                                         pvalueCutoff = 1,
+                                                         pAdjustMethod = i,
+                                                         verbose      = FALSE,
+                                                         by="DOSE",
+                                                         nPerm = 100))
+                    df <- gse_enrich@result
+                    df$Gene_ID <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(unique(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
+                    df$Custom_ID <- unlist(lapply(strsplit(df$core_enrichment,"/"),function(x){paste(unique(entrez_ids_keys$Custom_ID[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
+                    df$summary_LogFC <- unlist(lapply(lapply(df$Gene_ID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,","))]}),function(y){paste(y,collapse=",")}))
+                    df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$Gene_ID,","),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
+                    df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
+                    df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
+                    write.table(df,file=paste0("REACT_GSEA_",f,"_",i,"_DOSE.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                    if(cluster_enrich=="yes"){
+                      p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+                      ggsave(p, filename = paste0("REACT_GSEA_",i,"_",geneset,"_DOSE_aPEAR.pdf"),width=30, height=30)
+                      suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("REACT_GSEA",i,"_",geneset,"_DOSE_aPEAR.html"),selfcontained = TRUE))
+                      clusters <- findPathClusters(df)
+                      write.table(clusters$clusters,file=paste0("REACT_GSEA_",i,"_",geneset,"_DOSE_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                      write.table(clusters$similarity,file=paste0("REACT_GSEA_",i,"_",geneset,"_DOSE_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                    }
+                  }, error = function(e) {
+                    writeLines(as.character(e), paste0("REACT_GSEA_",f,"_",i,"_DOSE_err.txt"))
+                  })
+          }
+        print(paste0("Processing ",file,"_",name_internal,"... Reactome pathways visualization"))
+        
+        ###### 13. Reactome pathways visualization:
+          paths_list <- unique(unlist(lapply(list.files(path = getwd(), pattern = "^REACT", full.names = TRUE), function(x){
+              data <- read.delim(x)
+              data_filtered <- data$Description[data$pvalue < 0.05]
+          })))
+          for (f in paths_list){
+            tryCatch({
+              suppressMessages(ggsave(viewPathway(f,readable = TRUE,organism = organism_cp_react),filename = paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome.pdf"),width=30, height=30))
+            }, error = function(e) {
+              writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
+            })
+          }
+        print(paste0("Processing ",file,"_",name_internal,"... Over-representation analyses for human databases (DO, NCG and DGN)"))
+            
+        ###### 14. Over-representation analyses for human databases (DO, NCG and DGN):
+          if(organism_cp=="Homo sapiens"){
+                  tryCatch({
+                    ego <- c(); Sys.sleep(2)
+                    ego <- enrichDO(gene          = entrez_ids,
+                                    ont           = "DO",
+                                    universe = entrez_ids_backg,
+                                    pAdjustMethod = i,
+                                    pvalueCutoff  = 1,
+                                    qvalueCutoff  = 1,
+                                    readable      = TRUE)
+                    # head(ego)
+                    write.table(ego,file=paste0("DO_overrepresentation_test_",i,"_",geneset,"_DO.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                  }, error = function(e) {
+                    writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
+                  })
+                  tryCatch({
+                    ego <- c(); Sys.sleep(2)
+                    ego <- enrichDO(gene          = entrez_ids,
+                                    ont           = "DOLite",
+                                    universe = entrez_ids_backg,
+                                    pAdjustMethod = i,
+                                    pvalueCutoff  = 1,
+                                    qvalueCutoff  = 1,
+                                    readable      = TRUE)
+                    # head(ego)
+                    write.table(ego,file=paste0("DO_overrepresentation_test_",i,"_",geneset,"_DOLite.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                  }, error = function(e) {
+                    writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
+                  })
+                  tryCatch({
+                      ego <- c(); Sys.sleep(2)  
+                      ego <- enrichNCG(gene          = entrez_ids,
+                                       pAdjustMethod = i,
+                                       universe = entrez_ids_backg,
+                                       pvalueCutoff  = 1,
+                                       qvalueCutoff  = 1,
+                                       readable      = TRUE)
+                      # head(ego)
+                      write.table(ego,file=paste0("NGC_overrepresentation_test_",i,"_",geneset,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                  }, error = function(e) {
+                    writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
+                  })
+                  tryCatch({
+                      ego <- c(); Sys.sleep(2)  
+                      ego <- enrichDGN(gene          = entrez_ids,
+                                       pAdjustMethod = i,
+                                       universe = entrez_ids_backg,
+                                       pvalueCutoff  = 1,
+                                       qvalueCutoff  = 1,
+                                       readable      = TRUE)
+                      # head(ego)
+                      write.table(ego,file=paste0("DGN_overrepresentation_test_",i,"_",geneset,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                  }, error = function(e) {
+                    writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
+                  })
+                       
+                
+                  if(geneset=="fdr_05" || geneset=="fdr_01"){
+                    f <- paste0("readlist_fc_",geneset)
+                    b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- convert_ids(gsub(paste0(f,"."),"",names(b)),mode)
+                    b <- b[names(b) %in% entrez_ids_keys$SYMBOL]; names(b) <- entrez_ids_keys$ENTREZID[match(names(b),entrez_ids_keys$SYMBOL)]
+                    tryCatch({
+                          gse_enrich <- c(); Sys.sleep(2)
+                          gse_enrich <- suppressMessages(gseDO(geneList= sort(eval(parse(text=f)),decreasing=T)[!is.na(names(sort(eval(parse(text=f)),decreasing=T)))],
+                                                                    pvalueCutoff = 1,
+                                                                    pAdjustMethod = i,
+                                                                    verbose      = FALSE,
+                                                                    by="fgsea"))
+                          write.table(gse_enrich@result,file=paste0("DO_GSEA_",f,"_",i,"_fgsea.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                    }, error = function(e) {
+                      writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
+                    })
+                    tryCatch({
+                          gse_enrich <- c(); Sys.sleep(2)  
+                          gse_enrich <- suppressMessages(gseDO(geneList= sort(eval(parse(text=f)),decreasing=T)[!is.na(names(sort(eval(parse(text=f)),decreasing=T)))],
+                                                                    pvalueCutoff = 1,
+                                                                    pAdjustMethod = i,
+                                                                    verbose      = FALSE,
+                                                                    by="DOSE",
+                                                                    nPerm = 100))
+                          write.table(gse_enrich@result,file=paste0("DO_GSEA_",f,"_",i,"_DOSE.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                    }, error = function(e) {
+                      writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
+                    })
+                    
+                    tryCatch({
+                          gse_enrich <- c(); Sys.sleep(2)  
+                          gse_enrich <- suppressMessages(gseNCG(geneList= sort(eval(parse(text=f)),decreasing=T)[!is.na(names(sort(eval(parse(text=f)),decreasing=T)))],
+                                                               pvalueCutoff = 1,
+                                                               pAdjustMethod = i,
+                                                               verbose      = FALSE,
+                                                               by="fgsea"))
+                          write.table(gse_enrich@result,file=paste0("NCG_GSEA_",f,"_",i,"_fgsea.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                    }, error = function(e) {
+                      writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
+                    })
+                    tryCatch({
+                          gse_enrich <- c(); Sys.sleep(2)  
+                          gse_enrich <- suppressMessages(gseNCG(geneList= sort(eval(parse(text=f)),decreasing=T)[!is.na(names(sort(eval(parse(text=f)),decreasing=T)))],
+                                                               pvalueCutoff = 1,
+                                                               pAdjustMethod = i,
+                                                               verbose      = FALSE,
+                                                               by="DOSE",
+                                                               nPerm = 100))
+                          write.table(gse_enrich@result,file=paste0("NCG_GSEA_",f,"_",i,"_DOSE.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                    }, error = function(e) {
+                      writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
+                    })
+                    
+                    tryCatch({
+                          gse_enrich <- c(); Sys.sleep(2)  
+                          gse_enrich <- suppressMessages(gseDGN(geneList= sort(eval(parse(text=f)),decreasing=T)[!is.na(names(sort(eval(parse(text=f)),decreasing=T)))],
+                                                                pvalueCutoff = 1,
+                                                                pAdjustMethod = i,
+                                                                verbose      = FALSE,
+                                                                by="fgsea"))
+                          write.table(gse_enrich@result,file=paste0("DGN_GSEA_",f,"_",i,"_fgsea.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                    }, error = function(e) {
+                      writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
+                    })
+                    tryCatch({
+                          gse_enrich <- c(); Sys.sleep(2)  
+                          gse_enrich <- suppressMessages(gseDGN(geneList= sort(eval(parse(text=f)),decreasing=T)[!is.na(names(sort(eval(parse(text=f)),decreasing=T)))],
+                                                                pvalueCutoff = 1,
+                                                                pAdjustMethod = i,
+                                                                verbose      = FALSE,
+                                                                by="DOSE",
+                                                                nPerm = 100))
+                          write.table(gse_enrich@result,file=paste0("DGN_GSEA_",f,"_",i,"_DOSE.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                    }, error = function(e) {
+                      writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
+                    })
+                  }
+          }
+        }
     }
     if(cores==1){cores_2=1} else {cores_2=6}
     mclapply(
