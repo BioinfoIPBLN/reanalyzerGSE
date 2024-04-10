@@ -60,7 +60,7 @@ for argument in $options; do
 		-iG | -input_GEO_reads # If you want to combine downloading metadata from GEO with reads from GEO or any database already downloaded, maybe from a previous attempt, please provide an absolute path
 		-cG | -compression_level # Specify the compression level to gzip the downloaded fastq files from GEO (numeric '0' to '9', default '9')
 		-fe | -functional_enrichment_analyses # Whether to perform functional enrichment analyses ('no' or 'yes', by default)
-		-cP | -clusterProfiler_full # Whether to perform additional functional enrichment analyses with multiple databases using ClusterProfiler, by default only overrepresentation analyses GO BP, GO MF and GO CC will be performed, additional analyses may be slow if many significant DEGs or multiple number of comparisons ('yes' or 'no', by default)
+		-cPa | -clusterProfiler_all # Whether to perform additional functional enrichment analyses with multiple databases using ClusterProfiler, by default only overrepresentation analyses GO BP, GO MF and GO CC will be performed, additional analyses may be slow if many significant DEGs or multiple number of comparisons ('yes' or 'no', by default)
 		-aP | -aPEAR_execution # Whether to simplify pathway enrichment analysis results by detecting clusters of similar pathways and visualizing enrichment networks by aPEAR package, which may be slow ('yes' or 'no', by default)
 		-cPm | -clusterProfiler_method # Method for adjusting p.value in clusterprofiler iterations (one of 'holm','hochberg','hommel','bonferroni','BH','BY,'none', or 'fdr', by default)
 		-Pm | -panther_method # Method for adjusting p.value in panther analyses via rbioapi (one of 'NONE','BONFERRONI', or 'FDR', by default)
@@ -109,7 +109,7 @@ for argument in $options; do
 		-Dm) debug_step=${arguments[index]} ;;
 		-Dec) differential_expr_comparisons=${arguments[index]} ;;
 		-Dc) deconvolution=${arguments[index]} ;;
-		-cP) clusterProfiler_full=${arguments[index]} ;;
+		-cPa) clusterProfiler_full=${arguments[index]} ;;
 		-fe) functional_enrichment_analyses=${arguments[index]} ;;
 		-aP) aPEAR_execution=${arguments[index]} ;;
 		-Of) optionsFeatureCounts_feat=${arguments[index]} ;;
@@ -994,27 +994,27 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 				echo -e "\nPerforming network analyses...\n"
 				R_network_analyses.R $output_folder/$name/final_results_reanalysis$index/DGE/ $output_folder/$name/final_results_reanalysis$index/RPKM_counts_genes.txt "^DGE_analysis_comp[0-9]+.txt$" $taxonid &> network_analyses_funct_enrichment.log
 			fi
-			if [[ "$functional_enrichment_analyses" == "no" ]]; then #######################################################
-				echo -e "\nSkipping final clusterProfiler execution\n"
+			if [[ "$functional_enrichment_analyses" == "no" ]]; then
+				echo -e "\nSkipping functional enrichment analyses\n"
 			else
-				echo -e "\nPerforming clusterProfiler execution for DEGs. The results up to this point are ready to use (including DEGs and expression, even if not annotated), this and the may take long if many significant DEGs or comparisons, but check out the final steps of annotating and tyding and you may not need to wait...\n"
+				echo -e "\nPerforming functional enrichment analyses for DEGs. The results up to this point are ready to use (including DEGs and expression, that are only lacking annotation). This step of funtional enrichment analyses may take long if many significant DEGs, comparisons, or analyses...\n"
 				cd $output_folder/$name/final_results_reanalysis$index/DGE/
-				R_clusterProfiler_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index/DGE/ $organism $cores $clusterProfiler_method "^DGE_analysis_comp[0-9]+.txt$" &> clusterProfiler_funct_enrichment.log
+				R_clusterProfiler_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index/DGE/ $organism $cores $clusterProfiler_method $clusterProfiler_full $aPEAR_execution "^DGE_analysis_comp[0-9]+.txt$" &> clusterProfiler_funct_enrichment.log
 				if [[ "$time_course" == "yes" ]]; then 
 					cd $output_folder/$name/final_results_reanalysis$index/time_course_analyses
-					R_clusterProfiler_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index/time_course_analyses $organism $cores $clusterProfiler_method "^DGE_limma_timecourse.*.txt$" &> clusterProfiler_funct_enrichment.log
+					R_clusterProfiler_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index/time_course_analyses $organism $cores $clusterProfiler_method $clusterProfiler_full $aPEAR_execution "^DGE_limma_timecourse.*.txt$" &> clusterProfiler_funct_enrichment.log
 				fi
 				cd $output_folder/$name/final_results_reanalysis$index
 				if [ $(find . -name clusterProfiler_funct_enrichment.log | xargs cat | grep -c "Ensembl site unresponsive") -gt 0 ] || [ $(find . -name clusterProfiler_funct_enrichment.log | xargs cat | grep -c "Error in curl") -gt 0 ] || [ $(find . -name funct_enrichment_analyses.tar.gz -exec tar -tzvf {} \; | grep -c _clusterProfiler/) -eq 0 ]; then
-					echo "Apparently at least part of the parallel execution of clusterProfiler failed. Restarting and attempting serial execution. Please note it may be very slow..."
+					echo "Apparently at least part of the parallel execution of clusterProfiler failed. Restarting and attempting serial execution. Please note this may be very slow or not work at all due to ensembl site responses or network connection..."
 					cd $output_folder/$name/final_results_reanalysis$index/DGE; rm -rf $(ls | grep _clusterProfiler)
-					R_clusterProfiler_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index/DGE/ $organism "1" $clusterProfiler_method "^DGE_analysis_comp[0-9]+.txt$" &> clusterProfiler_funct_enrichment_serial.log
+					R_clusterProfiler_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index/DGE/ $organism "1" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution "^DGE_analysis_comp[0-9]+.txt$" &> clusterProfiler_funct_enrichment_serial.log
 					if [[ "$time_course" == "yes" ]]; then 
 						cd $output_folder/$name/final_results_reanalysis$index/time_course_analyses; rm -rf $(ls | grep _clusterProfiler)
-						R_clusterProfiler_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index/time_course_analyses $organism "1" $clusterProfiler_method "^DGE_limma_timecourse.*.txt$" &> clusterProfiler_funct_enrichment_serial.log
+						R_clusterProfiler_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index/time_course_analyses $organism "1" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution "^DGE_limma_timecourse.*.txt$" &> clusterProfiler_funct_enrichment_serial.log
 					fi
 				fi			
-				echo -e "\nPerforming autoGO and Panther execution for the rest of relevant datasets. The rest of the results are ready, this may take long if many genes or comparisons...\n"		
+				echo -e "\nPerforming autoGO and Panther execution... this may take long if many genes or comparisons...\n"		
 				R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism $cores $databases_function "^DGE_analysis_comp.*\\.txt$|^DGE_limma_timecourse.*.txt$" $panther_method &> autoGO_panther_funct_enrichment.log
 			fi
 		else
@@ -1027,6 +1027,7 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 				sed -i '1s/^/source_id Computed_GO_Process_IDs\n/' $annotation_go
 				if [ -s "$annotation_go" ]; then
 					R_clusterProfiler_enrichr.R $annotation_go $output_folder/$name/final_results_reanalysis$index/RPKM_counts_genes.txt $output_folder/$name/final_results_reanalysis$index/DGE "^DGE_analysis_comp[0-9]+.txt$" &> clusterProfiler_enrichr_funct_enrichment.log
+					echo "DONE. Please double check the attempt of executing enrichr with automatically detected GO terms from the annotation"
 				fi
 			else
 				echo "For $organism and the annotation $annotation_file, it does not seem there's GO or functional information available..."
@@ -1035,7 +1036,7 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 		
 		# Add to the tables of functional enrichment the number of genes up/down:
 		cd $output_folder/$name/final_results_reanalysis$index/
-		echo "Processing results of functional enrichment analyses..."
+		echo "Processing results of functional enrichment analyses if any, for example executing Revigo..."
 		find . \( -name "*.txt" -o -name "*.tsv" -o -name "*.csv" \) | grep funct | parallel -j $cores "file={}; R_enrich_format.R \"\$file\" \$(echo \"\$file\" | sed 's,DGE/.*,DGE/,g')\$(echo \"\$file\" | sed 's,.*DGE_analysis_comp,DGE_analysis_comp,g;s,_pval.*,,g;s,_fdr.*,,g;s,_funct.*,,g;s,_cluster.*,,g' | sed 's,.txt,,g').txt $organism $rev_thr" &> $PWD/enrichment_format.log
 	done
 	export debug_step="all"
@@ -1046,6 +1047,7 @@ fi
 ### STEP 7. Annotation: Tables of DEGs, lists of genes, etc
 if [[ $debug_step == "all" || $debug_step == "step7" ]]; then
 	echo -e "\n\nSTEP 7: Starting...\nCurrent date/time: $(date)\n\n"
+	echo -e "\n\nAnnotating list of genes...\n\n"
 	for index in "${!array[@]}"; do
 		# All the tables that contain list of genes, annotate them:
 		R_annotate_genes.R $output_folder/$name/final_results_reanalysis$index/ "^DGE_analysis_comp\\d+\\.txt$|^DGE_limma_timecourse_T\\d+_vs_T\\d+\\.txt$|mfuzz_elements_clusters|counts|WGCNA_all_modules_|STRINGdb_all_modules_" $organism
@@ -1066,6 +1068,7 @@ fi
 # Compress the folders
 if [[ $debug_step == "all" || $debug_step == "step8" ]]; then
 	echo -e "\n\nSTEP 8: Starting...\nCurrent date/time: $(date)\n\n"
+	echo -e "\n\nTidying up, removing folders, temp files, compressing...\n\n"
 	for index in "${!array[@]}"; do
 	 	cd $output_folder/$name/final_results_reanalysis$index/DGE/
 		folders_funct=$(find . -type d \( -name "*_autoGO" -o -name "*_clusterProfiler" -o -name "*_panther" \))
