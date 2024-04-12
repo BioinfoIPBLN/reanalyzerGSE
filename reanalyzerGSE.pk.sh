@@ -999,21 +999,13 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 			else
 				echo -e "\nPerforming functional enrichment analyses for DEGs. The results up to this point are ready to use (including DEGs and expression, that are only lacking annotation). This step of funtional enrichment analyses may take long if many significant DEGs, comparisons, or analyses...\n"
 				cd $output_folder/$name/final_results_reanalysis$index/DGE/
-				R_clusterProfiler_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index/DGE/ $organism $cores $clusterProfiler_method $clusterProfiler_full $aPEAR_execution "^DGE_analysis_comp[0-9]+.txt$" &> clusterProfiler_funct_enrichment.log
+				R_clusterProfiler_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index/DGE/ $organism "1" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution "^DGE_analysis_comp[0-9]+.txt$" &> clusterProfiler_funct_enrichment.log
 				if [[ "$time_course" == "yes" ]]; then 
 					cd $output_folder/$name/final_results_reanalysis$index/time_course_analyses
-					R_clusterProfiler_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index/time_course_analyses $organism $cores $clusterProfiler_method $clusterProfiler_full $aPEAR_execution "^DGE_limma_timecourse.*.txt$" &> clusterProfiler_funct_enrichment.log
+					R_clusterProfiler_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index/time_course_analyses $organism "1" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution "^DGE_limma_timecourse.*.txt$" &> clusterProfiler_funct_enrichment.log
 				fi
 				cd $output_folder/$name/final_results_reanalysis$index
-				if [ $(find . -name clusterProfiler_funct_enrichment.log | xargs cat | grep -c "Ensembl site unresponsive") -gt 0 ] || [ $(find . -name clusterProfiler_funct_enrichment.log | xargs cat | grep -c "Error in curl") -gt 0 ] || [ $(find . -name funct_enrichment_analyses.tar.gz -exec tar -tzvf {} \; | grep -c _clusterProfiler/) -eq 0 ]; then
-					echo "Apparently at least part of the parallel execution of clusterProfiler failed. Restarting and attempting serial execution. Please note this may be very slow or not work at all due to ensembl site responses or network connection..."
-					cd $output_folder/$name/final_results_reanalysis$index/DGE; rm -rf $(ls | grep _clusterProfiler)
-					R_clusterProfiler_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index/DGE/ $organism "1" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution "^DGE_analysis_comp[0-9]+.txt$" &> clusterProfiler_funct_enrichment_serial.log
-					if [[ "$time_course" == "yes" ]]; then 
-						cd $output_folder/$name/final_results_reanalysis$index/time_course_analyses; rm -rf $(ls | grep _clusterProfiler)
-						R_clusterProfiler_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index/time_course_analyses $organism "1" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution "^DGE_limma_timecourse.*.txt$" &> clusterProfiler_funct_enrichment_serial.log
-					fi
-				fi			
+				
 				echo -e "\nPerforming autoGO and Panther execution... this may take long if many genes or comparisons...\n"		
 				R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism $cores $databases_function "^DGE_analysis_comp.*\\.txt$|^DGE_limma_timecourse.*.txt$" $panther_method &> autoGO_panther_funct_enrichment.log
 			fi
