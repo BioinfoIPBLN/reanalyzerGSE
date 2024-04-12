@@ -167,8 +167,8 @@ process_file <- function(file){
     setwd(path2)
     suppressMessages(library(orgDB, character.only = TRUE,quiet = T,warn.conflicts = F)) # Crucial apparently, so the functions using the orgDB object can be done in parallel
 
-    print(paste0("Processing ",file,"_",name_internal,"... Gene classification based on GO distribution at a specific level (2-6)"))
     if(all_analyses=="yes"){
+      print(paste0("Processing ",file,"_",name_internal,"... Gene classification based on GO distribution at a specific level (2-6)"))
       ###### 1. Gene classification based on GO distribution at a specific level:
         for (levelgo in 2:6){
           # print(paste0("groupGO_level_",levelgo))
@@ -248,9 +248,10 @@ process_file <- function(file){
         }, error = function(e) {
             writeLines(as.character(e), paste0("GO_description_all_",geneset,"_CC_err.txt"))
         })
-      print(paste0("Processing ",file,"_",name_internal,"... GO over-representation analyses"))
+      
     }
     ###### 2. GO over-representation analyses:
+      print(paste0("Processing ",file,"_",name_internal,"... GO over-representation analyses"))
       tryCatch({
                   ego <- c(); Sys.sleep(2)
                   ego <- enrichGO(gene          = convert_ids(genes_of_interest[[geneset]],mode),
@@ -396,9 +397,10 @@ process_file <- function(file){
       }, error = function(e) {
           writeLines(as.character(e), paste0("GO_overrepresentation_test_CC_",i,"_",geneset,"_err.txt"))
       })
-    print(paste0("Processing ",file,"_",name_internal,"... Gene Set Enrichment Analysis of Gene Ontology"))
+    
 
     if(all_analyses=="yes"){
+      print(paste0("Processing ",file,"_",name_internal,"... Gene Set Enrichment Analysis of Gene Ontology"))
         ###### 3. Gene Set Enrichment Analysis of Gene Ontology:        
           if(geneset=="fdr_05" || geneset=="fdr_01"){
               f <- paste0("readlist_fc_",geneset)
@@ -678,9 +680,10 @@ process_file <- function(file){
                         writeLines(as.character(e), paste0("GO_GSEA_",f,"_",i,"_DOSE_CC_err.txt"))
               })
           }  
-        print(paste0("Processing ",file,"_",name_internal,"... KEGG over-representation"))
+        
         
         ###### 4. KEGG over-representation:    
+          print(paste0("Processing ",file,"_",name_internal,"... KEGG over-representation"))
           tryCatch({
               kk <- suppressMessages(enrichKEGG(gene= entrez_ids,
                                organism     = org,
@@ -713,9 +716,10 @@ process_file <- function(file){
           }, error = function(e) {
               writeLines(as.character(e), paste0("KEGG_enrich_",i,"_",geneset,"_err.txt"))
           })
-        print(paste0("Processing ",file,"_",name_internal,"... KEGG pathways visualization"))
+        
         
         ###### 5. KEGG pathways visualization:
+              print(paste0("Processing ",file,"_",name_internal,"... KEGG pathways visualization"))
               paths_list <- unique(unlist(lapply(list.files(path = getwd(), pattern = "^KEGG", full.names = TRUE), function(x){
                 data <- read.delim(x)
                 data_filtered <- data$ID[data$pvalue < 0.05]
@@ -728,10 +732,10 @@ process_file <- function(file){
                 })
               }
               invisible(file.remove(list.files(path=getwd(),pattern="*.pathview.png",full.names = T)))
-        print(paste0("Processing ",file,"_",name_internal,"... Gene Set Enrichment Analysis of KEGG"))
-        
+                
         ###### 6. Gene Set Enrichment Analysis of KEGG:
           if(geneset=="fdr_05" || geneset=="fdr_01"){
+              print(paste0("Processing ",file,"_",name_internal,"... Gene Set Enrichment Analysis of KEGG"))
               f <- paste0("readlist_fc_",geneset)
               b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- convert_ids(gsub(paste0(f,"."),"",names(b)),mode)
               b <- b[names(b) %in% entrez_ids_keys$SYMBOL]; names(b) <- entrez_ids_keys$ENTREZID[match(names(b),entrez_ids_keys$SYMBOL)]
@@ -802,9 +806,10 @@ process_file <- function(file){
                   writeLines(as.character(e), paste0("KEGG_DOSE_",f,"_",i,"_DOSE_err.txt"))
               })
           }
-        print(paste0("Processing ",file,"_",name_internal,"... KEGG Module over-representation"))
+        
         
         ###### 7. KEGG Module over-representation:
+          print(paste0("Processing ",file,"_",name_internal,"... KEGG Module over-representation"))
           tryCatch({
                 gse_enrich <- c(); Sys.sleep(2)
                 gse_enrich <- suppressMessages(enrichMKEGG(gene= entrez_ids,
@@ -832,10 +837,11 @@ process_file <- function(file){
           }, error = function(e) {
                   writeLines(as.character(e), paste0("MKEGG_",i,"_",geneset,"_err.txt"))
           })
-        print(paste0("Processing ",file,"_",name_internal,"... Gene Set Enrichment Analysis of KEGG modules"))
         
-        ###### 8. Gene Set Enrichment Analysis of KEGG modules:
+        
+        ###### 8. Gene Set Enrichment Analysis of KEGG modules:      
           if(geneset=="fdr_05" || geneset=="fdr_01"){
+                print(paste0("Processing ",file,"_",name_internal,"... Gene Set Enrichment Analysis of KEGG modules"))
                 f <- paste0("readlist_fc_",geneset)
                 b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- convert_ids(gsub(paste0(f,"."),"",names(b)),mode)
                 b <- b[names(b) %in% entrez_ids_keys$SYMBOL]; names(b) <- entrez_ids_keys$ENTREZID[match(names(b),entrez_ids_keys$SYMBOL)]
@@ -895,9 +901,10 @@ process_file <- function(file){
                   writeLines(as.character(e), paste0("MKEGG_GSEA_",f,"_",i,"_DOSE_err.txt"))
                 })
           }    
-        print(paste0("Processing ",file,"_",name_internal,"... WikiPathways over-representation"))
+        
         
         ###### 9. WikiPathways over-representation:
+          print(paste0("Processing ",file,"_",name_internal,"... WikiPathways over-representation"))
           tryCatch({
             gse_enrich <- c(); Sys.sleep(2)
             gse_enrich <- suppressMessages(enrichWP(gene= entrez_ids,
@@ -925,10 +932,11 @@ process_file <- function(file){
           }, error = function(e) {
                   writeLines(as.character(e), paste0("WP_",i,"_",geneset,"_err.txt"))
           })            
-        print(paste0("Processing ",file,"_",name_internal,"... Gene set enrichment analyses of WikiPathways"))
+        
         
         ###### 10. Gene set enrichment analyses of WikiPathways: 
           if(geneset=="fdr_05" || geneset=="fdr_01"){
+            print(paste0("Processing ",file,"_",name_internal,"... Gene set enrichment analyses of WikiPathways"))
             f <- paste0("readlist_fc_",geneset)
             b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- convert_ids(gsub(paste0(f,"."),"",names(b)),mode)
             b <- b[names(b) %in% entrez_ids_keys$SYMBOL]; names(b) <- entrez_ids_keys$ENTREZID[match(names(b),entrez_ids_keys$SYMBOL)]
@@ -988,9 +996,10 @@ process_file <- function(file){
                   writeLines(as.character(e), paste0("WP_GSEA_",f,"_",i,"_DOSE_err.txt"))
             })
           }
-        print(paste0("Processing ",file,"_",name_internal,"... Reactome over-representation"))
+        
         
         ###### 11. Reactome over-representation:      
+          print(paste0("Processing ",file,"_",name_internal,"... Reactome over-representation"))
           tryCatch({
             gse_enrich <- c(); Sys.sleep(2)
             gse_enrich <- suppressMessages(enrichPathway(gene= entrez_ids,
@@ -1018,10 +1027,11 @@ process_file <- function(file){
           }, error = function(e) {
                   writeLines(as.character(e), paste0("REACT_",i,"_",geneset,"_err.txt"))
           })
-        print(paste0("Processing ",file,"_",name_internal,"... Gene set enrichment analyses of Reactome"))
         
-        ###### 12. Gene set enrichment analyses of Reactome: 
+        
+        ###### 12. Gene set enrichment analyses of Reactome:
           if(geneset=="fdr_05" || geneset=="fdr_01"){
+                  print(paste0("Processing ",file,"_",name_internal,"... Gene set enrichment analyses of Reactome"))
                   f <- paste0("readlist_fc_",geneset)
                   b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- convert_ids(gsub(paste0(f,"."),"",names(b)),mode)
                   b <- b[names(b) %in% entrez_ids_keys$SYMBOL]; names(b) <- entrez_ids_keys$ENTREZID[match(names(b),entrez_ids_keys$SYMBOL)]
@@ -1080,10 +1090,10 @@ process_file <- function(file){
                   }, error = function(e) {
                     writeLines(as.character(e), paste0("REACT_GSEA_",f,"_",i,"_DOSE_err.txt"))
                   })
-          }
-        print(paste0("Processing ",file,"_",name_internal,"... Reactome pathways visualization"))
+          }        
         
         ###### 13. Reactome pathways visualization:
+          print(paste0("Processing ",file,"_",name_internal,"... Reactome pathways visualization"))
           paths_list <- unique(unlist(lapply(list.files(path = getwd(), pattern = "^REACT", full.names = TRUE), function(x){
               data <- read.delim(x)
               data_filtered <- data$Description[data$pvalue < 0.05]
@@ -1094,11 +1104,11 @@ process_file <- function(file){
             }, error = function(e) {
               writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
             })
-          }
-        print(paste0("Processing ",file,"_",name_internal,"... Over-representation analyses for human databases (DO, NCG and DGN)"))
+          }        
             
         ###### 14. Over-representation analyses for human databases (DO, NCG and DGN):
           if(organism_cp=="Homo sapiens"){
+                  print(paste0("Processing ",file,"_",name_internal,"... Over-representation analyses for human databases (DO, NCG and DGN)"))
                   tryCatch({
                     ego <- c(); Sys.sleep(2)
                     ego <- enrichDO(gene          = entrez_ids,
