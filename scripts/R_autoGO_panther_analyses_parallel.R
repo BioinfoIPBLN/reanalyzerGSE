@@ -245,15 +245,15 @@ methods <- rba_panther_info(what = "datasets")$id
 #[224] "WikiPathway_2023_Human"                            
 #[225] "SynGO_2024"#
 
-# Ensure that IDs are correct for each organism...
+# Deduce the naming convention in the orgDB package:
 check_naming <- function(names) {
   names <- grep("[[:punct:]]|orf|p43|p45",names,val=T,invert=T)  
   print(paste0("Looking at the annotation of ",length(names)," genes..."))
-  all_upper <- all(grepl("^[A-Z0-9]+$", names))
-  all_lower <- all(grepl("^[a-z0-9]+$", names))
+  all_upper <- grepl("^[A-Z0-9]+$", names)
+  all_lower <- grepl("^[a-z0-9]+$", names)
   
   # Checks if the first letter is uppercase followed by lowercase letters or numbers, for names with at least one letter
-  first_upper_rest_lower <- all(sapply(names, function(name) {
+  first_upper_rest_lower <- sapply(names, function(name) {
     if (grepl("[A-Za-z]", name)) { # Check if the name contains at least one letter
       # Extract the first letter and the rest of the string separately
       first_letter <- substr(name, regexpr("[A-Za-z]", name), regexpr("[A-Za-z]", name))
@@ -263,9 +263,21 @@ check_naming <- function(names) {
     } else {
       return(TRUE) # If the name doesn't contain letters, it trivially satisfies the condition
     }
-  }))
+  })
+
+  if(!all(all_upper) && !all(all_lower) && !all(first_upper_rest_lower)){
+    pattern_results <- which.max(c(sum(all_upper),sum(all_lower),sum(first_upper_rest_lower)))
+    num_genes <- c(sum(all_upper),sum(all_lower),sum(first_upper_rest_lower))[pattern_results]
+    pattern_result_final <- c("all_upper","all_lower","first_upper_rest_lower")[pattern_results]
+    print(paste0("Identified pattern for gene naming is ",pattern_result_final, ", accounting for ",num_genes," genes"))
+  } else {
+    pattern_result_final <- c("all_upper","all_lower","first_upper_rest_lower")[c(all_upper,all_lower,first_upper_rest_lower)]
+    print(paste0("Identified pattern for gene naming is ",pattern_result_final, ", accounting for all annotated genes"))
+  }
   
-  return(c("all_upper","all_lower","first_upper_rest_lower")[c(all_upper,all_lower,first_upper_rest_lower)])
+  return(pattern_result_final)
+
+  
 }
 convert_ids <- function(ids,mode) {
   if(mode=="all_upper"){
