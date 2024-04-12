@@ -1007,7 +1007,7 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 				cd $output_folder/$name/final_results_reanalysis$index
 				
 				echo -e "\nPerforming autoGO and Panther execution... this may take long if many genes or comparisons...\n"		
-				R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism $cores $databases_function "^DGE_analysis_comp.*\\.txt$|^DGE_limma_timecourse.*.txt$" $panther_method &> autoGO_panther_funct_enrichment.log
+				R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism "1" $databases_function "^DGE_analysis_comp.*\\.txt$|^DGE_limma_timecourse.*.txt$" $panther_method &> autoGO_panther_funct_enrichment.log
 			fi
 		else
 			echo "Organism is $organism... Functional analyses apart from human/mouse is not fully supported yet"
