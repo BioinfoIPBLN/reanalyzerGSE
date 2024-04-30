@@ -271,7 +271,7 @@ check_naming <- function(names) {
     pattern_result_final <- c("all_upper","all_lower","first_upper_rest_lower")[pattern_results]
     print(paste0("Identified pattern for gene naming is ",pattern_result_final, ", accounting for ",num_genes," genes"))
   } else {
-    pattern_result_final <- c("all_upper","all_lower","first_upper_rest_lower")[c(all_upper,all_lower,first_upper_rest_lower)]
+    pattern_result_final <- c("all_upper","all_lower","first_upper_rest_lower")[c(all(all_upper),all(all_lower),all(first_upper_rest_lower))]
     print(paste0("Identified pattern for gene naming is ",pattern_result_final, ", accounting for all annotated genes"))
   }
   
