@@ -397,11 +397,61 @@ process_file <- function(file){
       }, error = function(e) {
           writeLines(as.character(e), paste0("GO_overrepresentation_test_CC_",i,"_",geneset,"_err.txt"))
       })
-    
+
+      ###### 3. KEGG over-representation:    
+          print(paste0("Processing ",file,"_",name_internal,"... KEGG over-representation"))
+          tryCatch({
+              kk <- suppressMessages(enrichKEGG(gene= entrez_ids,
+                               organism     = org,
+                               universe = entrez_ids_backg,
+                               pAdjustMethod = i,
+                               pvalueCutoff = 1,
+                               qvalueCutoff = 1))
+              suppressMessages(ggsave(barplot(kk, showCategory=20), filename = paste0(getwd(),"/kegg_paths_snapshots/","KEGG_overrepresentation_test",i,"_",geneset,"_barplot.pdf"),width=30, height=30))
+              suppressMessages(ggsave(dotplot(kk, showCategory=20), filename = paste0(getwd(),"/kegg_paths_snapshots/","KEGG_overrepresentation_test",i,"_",geneset,"_dotplot.pdf"),width=30, height=30))
+              suppressMessages(ggsave(cnetplot(kk), filename = paste0(getwd(),"/kegg_paths_snapshots/","KEGG_overrepresentation_test",i,"_",geneset,"_cnetplot.pdf"),width=30, height=30))
+              suppressMessages(ggsave(heatplot(kk, showCategory=20), filename = paste0(getwd(),"/kegg_paths_snapshots/","KEGG_overrepresentation_test",i,"_",geneset,"_heatplot.pdf"),width=30, height=30))
+              suppressMessages(ggsave(emapplot(pairwise_termsim(kk)), filename = paste0(getwd(),"/kegg_paths_snapshots/","KEGG_overrepresentation_test",i,"_",geneset,"_emapplot.pdf"),width=30, height=30))
+              suppressMessages(ggsave(upsetplot(kk), filename = paste0(getwd(),"/kegg_paths_snapshots/","KEGG_overrepresentation_test",i,"_",geneset,"_upsetplot.pdf"),width=30, height=30))
+              kk_write <- kk@result
+              kk_write$Gene_ID <-  unlist(lapply(strsplit(kk_write$geneID,"/"),function(x){paste(unique(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
+              kk_write$Custom_id <- unlist(lapply(strsplit(kk_write$geneID,"/"),function(x){paste(unique(entrez_ids_keys$Custom_ID[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
+              kk_write$summary_LogFC <- unlist(lapply(lapply(kk_write$Gene_ID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,","))]}),function(y){paste(y,collapse=",")}))
+              kk_write$summary_LogFC_2 <- unlist(lapply(strsplit(kk_write$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); kk_write$summary_LogFC <- unlist(lapply(strsplit(kk_write$Gene_ID,","),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
+              kk_write$summary_up <- unlist(lapply(strsplit(kk_write$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
+              kk_write$summary_down <- unlist(lapply(strsplit(kk_write$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
+              write.table(kk_write,file=paste0("KEGG_enrich_",i,"_",geneset,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
+              if(cluster_enrich=="yes"){
+                p <- enrichmentNetwork(kk_write, repelLabels = TRUE, drawEllipses = TRUE)
+                ggsave(p, filename = paste0("KEGG_enrich_",i,"_",geneset,"_aPEAR.pdf"),width=30, height=30)
+                suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("KEGG_enrich_",i,"_",geneset,"_aPEAR.html"),selfcontained = TRUE))
+                clusters <- findPathClusters(kk_write)
+                write.table(clusters$clusters,file=paste0("KEGG_enrich_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                write.table(clusters$similarity,file=paste0("KEGG_enrich_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+              }
+          }, error = function(e) {
+              writeLines(as.character(e), paste0("KEGG_enrich_",i,"_",geneset,"_err.txt"))
+          })
+        
+        
+      ###### 4. KEGG pathways visualization:
+              print(paste0("Processing ",file,"_",name_internal,"... KEGG pathways visualization"))
+              paths_list <- unique(unlist(lapply(list.files(path = getwd(), pattern = "^KEGG", full.names = TRUE), function(x){
+                data <- read.delim(x)
+                data_filtered <- data$ID[data$pvalue < 0.05]
+              })))
+              for (f in paths_list){
+                tryCatch({
+                  suppressMessages(pathview(gene.data=kk@result,pathway.id=f,species=org,kegg.dir=paste0(getwd(),"/kegg_paths_snapshots")))
+                }, error = function(e) {
+                  writeLines(as.character(e), paste0(getwd(),"/kegg_paths_snapshots/err.txt"))
+                })
+              }
+              invisible(file.remove(list.files(path=getwd(),pattern="*.pathview.png",full.names = T)))
 
     if(all_analyses=="yes"){
-      print(paste0("Processing ",file,"_",name_internal,"... Gene Set Enrichment Analysis of Gene Ontology"))
-        ###### 3. Gene Set Enrichment Analysis of Gene Ontology:        
+        print(paste0("Processing ",file,"_",name_internal,"... Gene Set Enrichment Analysis of Gene Ontology"))
+        ###### 5. Gene Set Enrichment Analysis of Gene Ontology:        
           if(geneset=="fdr_05" || geneset=="fdr_01"){
               f <- paste0("readlist_fc_",geneset)
               b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- convert_ids(gsub(paste0(f,"."),"",names(b)),mode)
@@ -679,59 +729,7 @@ process_file <- function(file){
               }, error = function(e) {
                         writeLines(as.character(e), paste0("GO_GSEA_",f,"_",i,"_DOSE_CC_err.txt"))
               })
-          }  
-        
-        
-        ###### 4. KEGG over-representation:    
-          print(paste0("Processing ",file,"_",name_internal,"... KEGG over-representation"))
-          tryCatch({
-              kk <- suppressMessages(enrichKEGG(gene= entrez_ids,
-                               organism     = org,
-                               universe = entrez_ids_backg,
-                               pAdjustMethod = i,
-                               pvalueCutoff = 1,
-                               qvalueCutoff = 1))
-              suppressMessages(ggsave(barplot(kk, showCategory=20), filename = paste0(getwd(),"/kegg_paths_snapshots/","KEGG_overrepresentation_test",i,"_",geneset,"_barplot.pdf"),width=30, height=30))
-              suppressMessages(ggsave(dotplot(kk, showCategory=20), filename = paste0(getwd(),"/kegg_paths_snapshots/","KEGG_overrepresentation_test",i,"_",geneset,"_dotplot.pdf"),width=30, height=30))
-              suppressMessages(ggsave(cnetplot(kk), filename = paste0(getwd(),"/kegg_paths_snapshots/","KEGG_overrepresentation_test",i,"_",geneset,"_cnetplot.pdf"),width=30, height=30))
-              suppressMessages(ggsave(heatplot(kk, showCategory=20), filename = paste0(getwd(),"/kegg_paths_snapshots/","KEGG_overrepresentation_test",i,"_",geneset,"_heatplot.pdf"),width=30, height=30))
-              suppressMessages(ggsave(emapplot(pairwise_termsim(kk)), filename = paste0(getwd(),"/kegg_paths_snapshots/","KEGG_overrepresentation_test",i,"_",geneset,"_emapplot.pdf"),width=30, height=30))
-              suppressMessages(ggsave(upsetplot(kk), filename = paste0(getwd(),"/kegg_paths_snapshots/","KEGG_overrepresentation_test",i,"_",geneset,"_upsetplot.pdf"),width=30, height=30))
-              kk_write <- kk@result
-              kk_write$Gene_ID <-  unlist(lapply(strsplit(kk_write$geneID,"/"),function(x){paste(unique(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
-              kk_write$Custom_id <- unlist(lapply(strsplit(kk_write$geneID,"/"),function(x){paste(unique(entrez_ids_keys$Custom_ID[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
-              kk_write$summary_LogFC <- unlist(lapply(lapply(kk_write$Gene_ID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,","))]}),function(y){paste(y,collapse=",")}))
-              kk_write$summary_LogFC_2 <- unlist(lapply(strsplit(kk_write$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); kk_write$summary_LogFC <- unlist(lapply(strsplit(kk_write$Gene_ID,","),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
-              kk_write$summary_up <- unlist(lapply(strsplit(kk_write$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
-              kk_write$summary_down <- unlist(lapply(strsplit(kk_write$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
-              write.table(kk_write,file=paste0("KEGG_enrich_",i,"_",geneset,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
-              if(cluster_enrich=="yes"){
-                p <- enrichmentNetwork(kk_write, repelLabels = TRUE, drawEllipses = TRUE)
-                ggsave(p, filename = paste0("KEGG_enrich_",i,"_",geneset,"_aPEAR.pdf"),width=30, height=30)
-                suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("KEGG_enrich_",i,"_",geneset,"_aPEAR.html"),selfcontained = TRUE))
-                clusters <- findPathClusters(kk_write)
-                write.table(clusters$clusters,file=paste0("KEGG_enrich_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                write.table(clusters$similarity,file=paste0("KEGG_enrich_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-              }
-          }, error = function(e) {
-              writeLines(as.character(e), paste0("KEGG_enrich_",i,"_",geneset,"_err.txt"))
-          })
-        
-        
-        ###### 5. KEGG pathways visualization:
-              print(paste0("Processing ",file,"_",name_internal,"... KEGG pathways visualization"))
-              paths_list <- unique(unlist(lapply(list.files(path = getwd(), pattern = "^KEGG", full.names = TRUE), function(x){
-                data <- read.delim(x)
-                data_filtered <- data$ID[data$pvalue < 0.05]
-              })))
-              for (f in paths_list){
-                tryCatch({
-                  suppressMessages(pathview(gene.data=kk@result,pathway.id=f,species=org,kegg.dir=paste0(getwd(),"/kegg_paths_snapshots")))
-                }, error = function(e) {
-                  writeLines(as.character(e), paste0(getwd(),"/kegg_paths_snapshots/err.txt"))
-                })
-              }
-              invisible(file.remove(list.files(path=getwd(),pattern="*.pathview.png",full.names = T)))
+          }         
                 
         ###### 6. Gene Set Enrichment Analysis of KEGG:
           if(geneset=="fdr_05" || geneset=="fdr_01"){
