@@ -323,7 +323,7 @@ if (grepl("sapiens", organism, fixed=TRUE)){
 
 # Write sets of genes of interest
 key_files <- data.frame()
-for (f in grep("05|_annotation|Gene_ID",list.files(pattern = pattern_search,path=path,recursive=T, full.names=T),invert=T,val=T)){
+for (f in grep("05|_annotation|Gene_ID",list.files(pattern = pattern_search,path=path,recursive=T, full.names=T),invert=T,val=T)){  
   try({
     a <- data.table::fread(f,head=T,fill=T)
     b <- a[a$FDR < 0.05,1]
@@ -367,6 +367,7 @@ for (f in grep("05|_annotation|Gene_ID",list.files(pattern = pattern_search,path
 # Main function to apply in parallel
 process_file <- function(file){
   # Copy file to a subfolder:
+  while(dev.cur() > 1) dev.off()
   file2=sub("\\..+$", "", basename(file))
   path2=paste0(dirname(file),"/",file2,"_funct_enrichment/")
   dir.create(path2, showWarnings = FALSE);setwd(path2);invisible(file.copy(file,paste0(path2,basename(file))))
