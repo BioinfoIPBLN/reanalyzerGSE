@@ -60,7 +60,7 @@ for argument in $options; do
 		-iG | -input_GEO_reads # If you want to combine downloading metadata from GEO with reads from GEO or any database already downloaded, maybe from a previous attempt, please provide an absolute path
 		-cG | -compression_level # Specify the compression level to gzip the downloaded fastq files from GEO (numeric '0' to '9', default '9')
 		-fe | -functional_enrichment_analyses # Whether to perform functional enrichment analyses ('no' or 'yes', by default)
-		-cPa | -clusterProfiler_all # Whether to perform additional functional enrichment analyses with multiple databases using ClusterProfiler, by default only overrepresentation analyses GO BP, GO MF and GO CC will be performed, additional analyses may be slow if many significant DEGs or multiple number of comparisons ('yes' or 'no', by default)
+		-cPa | -clusterProfiler_all # Whether to perform additional functional enrichment analyses with multiple databases using ClusterProfiler, by default only ORA for GO BP, GO MF and GO CC, and KEGG enrichment, will be performed, additional analyses may be slow if many significant DEGs or multiple number of comparisons ('yes' or 'no', by default)
 		-aP | -aPEAR_execution # Whether to simplify pathway enrichment analysis results by detecting clusters of similar pathways and visualizing enrichment networks by aPEAR package, which may be slow ('yes' or 'no', by default)
 		-cPm | -clusterProfiler_method # Method for adjusting p.value in clusterprofiler iterations (one of 'holm','hochberg','hommel','bonferroni','BH','BY,'none', or 'fdr', by default)
 		-Pm | -panther_method # Method for adjusting p.value in panther analyses via rbioapi (one of 'NONE','BONFERRONI', or 'FDR', by default)
