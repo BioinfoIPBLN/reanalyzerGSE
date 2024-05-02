@@ -434,8 +434,7 @@ process_file <- function(file){
               }
           }, error = function(e) {
               writeLines(as.character(e), paste0("KEGG_enrich_",i,"_",geneset,"_err.txt"))
-          })
-        
+          })        
         
       ###### 4. KEGG pathways visualization:
               while(dev.cur() > 1) dev.off()
@@ -453,9 +452,41 @@ process_file <- function(file){
               }
               invisible(file.remove(list.files(path=getwd(),pattern="*.pathview.png",full.names = T)))
 
+      ###### 5. Reactome over-representation:      
+          while(dev.cur() > 1) dev.off()
+          print(paste0("Processing ",file,"_",name_internal,"... Reactome over-representation"))
+          tryCatch({
+            gse_enrich <- c(); Sys.sleep(2)
+            gse_enrich <- suppressMessages(enrichPathway(gene= entrez_ids,
+                                                    organism = organism_cp_react,
+                                                    universe = entrez_ids_backg,
+                                                    pvalueCutoff = 1,
+                                                    qvalueCutoff = 1,
+                                                    pAdjustMethod = i))
+            df <- gse_enrich@result
+            df$Gene_ID <- unlist(lapply(strsplit(df$geneID,"/"),function(x){paste(unique(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
+            df$Custom_ID <- unlist(lapply(strsplit(df$geneID,"/"),function(x){paste(unique(entrez_ids_keys$Custom_ID[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
+            df$summary_LogFC <- unlist(lapply(lapply(df$Gene_ID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,","))]}),function(y){paste(y,collapse=",")}))
+            df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$Gene_ID,","),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
+            df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
+            df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
+            write.table(df,file=paste0("REACT_",i,"_",geneset,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
+            if(cluster_enrich=="yes"){
+              p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+              ggsave(p, filename = paste0("REACT_",i,"_",geneset,"_aPEAR.pdf"),width=30, height=30)
+              suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("REACT_",i,"_",geneset,"_aPEAR.html"),selfcontained = TRUE))
+              clusters <- findPathClusters(df)
+              write.table(clusters$clusters,file=paste0("REACT_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+              write.table(clusters$similarity,file=paste0("REACT_",i,"_",geneset,"_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+            }
+          }, error = function(e) {
+                  writeLines(as.character(e), paste0("REACT_",i,"_",geneset,"_err.txt"))
+          })
+
     if(all_analyses=="yes"){
         print(paste0("Processing ",file,"_",name_internal,"... Gene Set Enrichment Analysis of Gene Ontology"))
-        ###### 5. Gene Set Enrichment Analysis of Gene Ontology:
+      
+      ###### 6. Gene Set Enrichment Analysis of Gene Ontology:
           while(dev.cur() > 1) dev.off()
           if(geneset=="fdr_05" || geneset=="fdr_01"){
               f <- paste0("readlist_fc_",geneset)
@@ -736,7 +767,7 @@ process_file <- function(file){
               })
           }         
                 
-        ###### 6. Gene Set Enrichment Analysis of KEGG:
+        ###### 7. Gene Set Enrichment Analysis of KEGG:
           while(dev.cur() > 1) dev.off()
           if(geneset=="fdr_05" || geneset=="fdr_01"){
               print(paste0("Processing ",file,"_",name_internal,"... Gene Set Enrichment Analysis of KEGG"))
@@ -812,7 +843,7 @@ process_file <- function(file){
           }
         
         
-        ###### 7. KEGG Module over-representation:
+        ###### 8. KEGG Module over-representation:
           while(dev.cur() > 1) dev.off()
           print(paste0("Processing ",file,"_",name_internal,"... KEGG Module over-representation"))
           tryCatch({
@@ -844,7 +875,7 @@ process_file <- function(file){
           })
         
         
-        ###### 8. Gene Set Enrichment Analysis of KEGG modules:
+        ###### 9. Gene Set Enrichment Analysis of KEGG modules:
           while(dev.cur() > 1) dev.off()
           if(geneset=="fdr_05" || geneset=="fdr_01"){
                 print(paste0("Processing ",file,"_",name_internal,"... Gene Set Enrichment Analysis of KEGG modules"))
@@ -909,7 +940,7 @@ process_file <- function(file){
           }    
         
         
-        ###### 9. WikiPathways over-representation:
+        ###### 10. WikiPathways over-representation:
           while(dev.cur() > 1) dev.off()
           print(paste0("Processing ",file,"_",name_internal,"... WikiPathways over-representation"))
           tryCatch({
@@ -941,7 +972,7 @@ process_file <- function(file){
           })            
         
         
-        ###### 10. Gene set enrichment analyses of WikiPathways:
+        ###### 11. Gene set enrichment analyses of WikiPathways:
           while(dev.cur() > 1) dev.off()
           if(geneset=="fdr_05" || geneset=="fdr_01"){
             print(paste0("Processing ",file,"_",name_internal,"... Gene set enrichment analyses of WikiPathways"))
@@ -1003,40 +1034,7 @@ process_file <- function(file){
             }, error = function(e) {
                   writeLines(as.character(e), paste0("WP_GSEA_",f,"_",i,"_DOSE_err.txt"))
             })
-          }
-        
-        
-        ###### 11. Reactome over-representation:      
-          while(dev.cur() > 1) dev.off()
-          print(paste0("Processing ",file,"_",name_internal,"... Reactome over-representation"))
-          tryCatch({
-            gse_enrich <- c(); Sys.sleep(2)
-            gse_enrich <- suppressMessages(enrichPathway(gene= entrez_ids,
-                                                    organism = organism_cp_react,
-                                                    universe = entrez_ids_backg,
-                                                    pvalueCutoff = 1,
-                                                    qvalueCutoff = 1,
-                                                    pAdjustMethod = i))
-            df <- gse_enrich@result
-            df$Gene_ID <- unlist(lapply(strsplit(df$geneID,"/"),function(x){paste(unique(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
-            df$Custom_ID <- unlist(lapply(strsplit(df$geneID,"/"),function(x){paste(unique(entrez_ids_keys$Custom_ID[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
-            df$summary_LogFC <- unlist(lapply(lapply(df$Gene_ID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,","))]}),function(y){paste(y,collapse=",")}))
-            df$summary_LogFC_2 <- unlist(lapply(strsplit(df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")})); df$summary_LogFC <- unlist(lapply(strsplit(df$Gene_ID,","),function(x){paste(x,a$logFC_sense[a$Gene_ID %in% x],sep="_",collapse="/")}))
-            df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
-            df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
-            write.table(df,file=paste0("REACT_",i,"_",geneset,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
-            if(cluster_enrich=="yes"){
-              p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
-              ggsave(p, filename = paste0("REACT_",i,"_",geneset,"_aPEAR.pdf"),width=30, height=30)
-              suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("REACT_",i,"_",geneset,"_aPEAR.html"),selfcontained = TRUE))
-              clusters <- findPathClusters(df)
-              write.table(clusters$clusters,file=paste0("REACT_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-              write.table(clusters$similarity,file=paste0("REACT_",i,"_",geneset,"_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-            }
-          }, error = function(e) {
-                  writeLines(as.character(e), paste0("REACT_",i,"_",geneset,"_err.txt"))
-          })
-        
+          }       
         
         ###### 12. Gene set enrichment analyses of Reactome:
           while(dev.cur() > 1) dev.off()
