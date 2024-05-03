@@ -483,10 +483,25 @@ process_file <- function(file){
                   writeLines(as.character(e), paste0("REACT_",i,"_",geneset,"_err.txt"))
           })
 
+      ###### 6. Reactome pathways visualization:
+          while(dev.cur() > 1) dev.off()
+          print(paste0("Processing ",file,"_",name_internal,"... Reactome pathways visualization"))
+          paths_list <- unique(unlist(lapply(list.files(path = getwd(), pattern = "^REACT", full.names = TRUE), function(x){
+              data <- read.delim(x)
+              data_filtered <- data$Description[data$pvalue < 0.05]
+          })))
+          for (f in paths_list){
+            tryCatch({
+              suppressMessages(ggsave(viewPathway(f,readable = TRUE,organism = organism_cp_react),filename = paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome.pdf"),width=30, height=30))
+            }, error = function(e) {
+              writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
+            })
+          }        
+
     if(all_analyses=="yes"){
         print(paste0("Processing ",file,"_",name_internal,"... Gene Set Enrichment Analysis of Gene Ontology"))
       
-      ###### 6. Gene Set Enrichment Analysis of Gene Ontology:
+      ###### 7. Gene Set Enrichment Analysis of Gene Ontology:
           while(dev.cur() > 1) dev.off()
           if(geneset=="fdr_05" || geneset=="fdr_01"){
               f <- paste0("readlist_fc_",geneset)
@@ -767,7 +782,7 @@ process_file <- function(file){
               })
           }         
                 
-        ###### 7. Gene Set Enrichment Analysis of KEGG:
+        ###### 8. Gene Set Enrichment Analysis of KEGG:
           while(dev.cur() > 1) dev.off()
           if(geneset=="fdr_05" || geneset=="fdr_01"){
               print(paste0("Processing ",file,"_",name_internal,"... Gene Set Enrichment Analysis of KEGG"))
@@ -843,7 +858,7 @@ process_file <- function(file){
           }
         
         
-        ###### 8. KEGG Module over-representation:
+        ###### 9. KEGG Module over-representation:
           while(dev.cur() > 1) dev.off()
           print(paste0("Processing ",file,"_",name_internal,"... KEGG Module over-representation"))
           tryCatch({
@@ -875,7 +890,7 @@ process_file <- function(file){
           })
         
         
-        ###### 9. Gene Set Enrichment Analysis of KEGG modules:
+        ###### 10. Gene Set Enrichment Analysis of KEGG modules:
           while(dev.cur() > 1) dev.off()
           if(geneset=="fdr_05" || geneset=="fdr_01"){
                 print(paste0("Processing ",file,"_",name_internal,"... Gene Set Enrichment Analysis of KEGG modules"))
@@ -940,7 +955,7 @@ process_file <- function(file){
           }    
         
         
-        ###### 10. WikiPathways over-representation:
+        ###### 11. WikiPathways over-representation:
           while(dev.cur() > 1) dev.off()
           print(paste0("Processing ",file,"_",name_internal,"... WikiPathways over-representation"))
           tryCatch({
@@ -972,7 +987,7 @@ process_file <- function(file){
           })            
         
         
-        ###### 11. Gene set enrichment analyses of WikiPathways:
+        ###### 12. Gene set enrichment analyses of WikiPathways:
           while(dev.cur() > 1) dev.off()
           if(geneset=="fdr_05" || geneset=="fdr_01"){
             print(paste0("Processing ",file,"_",name_internal,"... Gene set enrichment analyses of WikiPathways"))
@@ -1036,7 +1051,7 @@ process_file <- function(file){
             })
           }       
         
-        ###### 12. Gene set enrichment analyses of Reactome:
+        ###### 13. Gene set enrichment analyses of Reactome:
           while(dev.cur() > 1) dev.off()
           if(geneset=="fdr_05" || geneset=="fdr_01"){
                   print(paste0("Processing ",file,"_",name_internal,"... Gene set enrichment analyses of Reactome"))
@@ -1100,21 +1115,7 @@ process_file <- function(file){
                   })
           }        
         
-        ###### 13. Reactome pathways visualization:
-          while(dev.cur() > 1) dev.off()
-          print(paste0("Processing ",file,"_",name_internal,"... Reactome pathways visualization"))
-          paths_list <- unique(unlist(lapply(list.files(path = getwd(), pattern = "^REACT", full.names = TRUE), function(x){
-              data <- read.delim(x)
-              data_filtered <- data$Description[data$pvalue < 0.05]
-          })))
-          for (f in paths_list){
-            tryCatch({
-              suppressMessages(ggsave(viewPathway(f,readable = TRUE,organism = organism_cp_react),filename = paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome.pdf"),width=30, height=30))
-            }, error = function(e) {
-              writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
-            })
-          }        
-            
+                   
         ###### 14. Over-representation analyses for human databases (DO, NCG and DGN):
           while(dev.cur() > 1) dev.off()
           if(organism_cp=="Homo sapiens"){
