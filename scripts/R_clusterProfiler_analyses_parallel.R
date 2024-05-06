@@ -492,9 +492,9 @@ process_file <- function(file){
           })))
           for (f in paths_list){
             tryCatch({
-              suppressMessages(ggsave(viewPathway(f,readable = TRUE,organism = organism_cp_react),filename = paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome.pdf"),width=30, height=30))
+              suppressMessages(ggsave(viewPathway(f,readable = TRUE,organism = organism_cp_react),filename = paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome.pdf"),width=30, height=30, create.dir=T))
             }, error = function(e) {
-              writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
+              writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.txt"))
             })
           }        
 
@@ -1132,7 +1132,7 @@ process_file <- function(file){
                     # head(ego)
                     write.table(ego,file=paste0("DO_overrepresentation_test_",i,"_",geneset,"_DO.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                   }, error = function(e) {
-                    writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
+                    writeLines(as.character(e), paste0("DO_overrepresentation_test_",i,"_",geneset,"_DO_err.txt"))
                   })
                   tryCatch({
                     ego <- c(); Sys.sleep(2)
@@ -1146,7 +1146,7 @@ process_file <- function(file){
                     # head(ego)
                     write.table(ego,file=paste0("DO_overrepresentation_test_",i,"_",geneset,"_DOLite.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                   }, error = function(e) {
-                    writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
+                    writeLines(as.character(e), paste0("DO_overrepresentation_test_",i,"_",geneset,"_DOLite_err.txt"))
                   })
                   tryCatch({
                       ego <- c(); Sys.sleep(2)  
@@ -1159,7 +1159,7 @@ process_file <- function(file){
                       # head(ego)
                       write.table(ego,file=paste0("NGC_overrepresentation_test_",i,"_",geneset,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
                   }, error = function(e) {
-                    writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
+                    writeLines(as.character(e), paste0("NGC_overrepresentation_test_",i,"_",geneset,"_err.txt"))
                   })
                   tryCatch({
                       ego <- c(); Sys.sleep(2)  
@@ -1172,7 +1172,7 @@ process_file <- function(file){
                       # head(ego)
                       write.table(ego,file=paste0("DGN_overrepresentation_test_",i,"_",geneset,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
                   }, error = function(e) {
-                    writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
+                    writeLines(as.character(e), paste0("DGN_overrepresentation_test_",i,"_",geneset,"_err.txt"))
                   })
                        
                 
@@ -1189,7 +1189,7 @@ process_file <- function(file){
                                                                     by="fgsea"))
                           write.table(gse_enrich@result,file=paste0("DO_GSEA_",f,"_",i,"_fgsea.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                     }, error = function(e) {
-                      writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
+                      writeLines(as.character(e), paste0("DO_GSEA_",f,"_",i,"_fgsea_err.txt"))
                     })
                     tryCatch({
                           gse_enrich <- c(); Sys.sleep(2)  
@@ -1201,7 +1201,7 @@ process_file <- function(file){
                                                                     nPerm = 100))
                           write.table(gse_enrich@result,file=paste0("DO_GSEA_",f,"_",i,"_DOSE.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                     }, error = function(e) {
-                      writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
+                      writeLines(as.character(e), paste0("DO_GSEA_",f,"_",i,"_DOSE_err.txt"))
                     })
                     
                     tryCatch({
@@ -1213,7 +1213,7 @@ process_file <- function(file){
                                                                by="fgsea"))
                           write.table(gse_enrich@result,file=paste0("NCG_GSEA_",f,"_",i,"_fgsea.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                     }, error = function(e) {
-                      writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
+                      writeLines(as.character(e), paste0("NCG_GSEA_",f,"_",i,"_fgsea_err.txt"))
                     })
                     tryCatch({
                           gse_enrich <- c(); Sys.sleep(2)  
@@ -1225,7 +1225,7 @@ process_file <- function(file){
                                                                nPerm = 100))
                           write.table(gse_enrich@result,file=paste0("NCG_GSEA_",f,"_",i,"_DOSE.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                     }, error = function(e) {
-                      writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
+                      writeLines(as.character(e), paste0("NCG_GSEA_",f,"_",i,"_DOSE_err.txt"))
                     })
                     
                     tryCatch({
@@ -1237,7 +1237,7 @@ process_file <- function(file){
                                                                 by="fgsea"))
                           write.table(gse_enrich@result,file=paste0("DGN_GSEA_",f,"_",i,"_fgsea.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                     }, error = function(e) {
-                      writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
+                      writeLines(as.character(e), paste0("DGN_GSEA_",f,"_",i,"_fgsea.txt"))
                     })
                     tryCatch({
                           gse_enrich <- c(); Sys.sleep(2)  
@@ -1249,7 +1249,7 @@ process_file <- function(file){
                                                                 nPerm = 100))
                           write.table(gse_enrich@result,file=paste0("DGN_GSEA_",f,"_",i,"_DOSE.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                     }, error = function(e) {
-                      writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.pdf"))
+                      writeLines(as.character(e), paste0("DGN_GSEA_",f,"_",i,"_DOSE_err.txt"))
                     })
                   }
           }
