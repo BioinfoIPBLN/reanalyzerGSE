@@ -42,7 +42,7 @@ entrez_ids_keys$Custom_ID <- paste(entrez_ids_keys$SYMBOL,entrez_ids_keys$ENTREZ
 
 ### Create objects of interest to iterate later:
 print(paste0("Creating subsets of genes of interest..."))
-files <- list.files(path=path,pattern=pattern_search)
+files <- list.files(path=path,pattern=pattern_search) # If you are at any time using this script outside the main pipeline be aware of these input files... there may be confounding...
 for (f in files){
   a <- read.table(paste0(path,"/",f),head=T)
   #readlist_cpm_fdr_05 <- a$logCP[a$FDR<0.05]
