@@ -482,7 +482,7 @@ process_file <- function(file){
 
 mclapply(
     mc.cores = cores,
-    X = list.files(path = path, pattern = "_Gene_IDs\\.txt$",recursive=T,full=T),
+    X = list.files(path = path, pattern = "_Gene_IDs\\.txt$",recursive=T,full=T), # If you are at any time using this script outside the main pipeline be aware of these input files... there may be confounding...
     FUN = process_file
 )
 
