@@ -60,9 +60,12 @@ for argument in $options; do
 		-iG | -input_GEO_reads # If you want to combine downloading metadata from GEO with reads from GEO or any database already downloaded, maybe from a previous attempt, please provide an absolute path
 		-cG | -compression_level # Specify the compression level to gzip the downloaded fastq files from GEO (numeric '0' to '9', default '9')
 		-fe | -functional_enrichment_analyses # Whether to perform functional enrichment analyses ('no' or 'yes', by default)
-		-cPa | -clusterProfiler_all # Whether to perform additional functional enrichment analyses with multiple databases using ClusterProfiler, by default only ORA for GO BP, GO MF and GO CC, and KEGG and REACTOME enrichment, will be performed, as additional analyses may be slow if many significant DEGs or multiple number of comparisons ('yes' or 'no', by default)
+		-cPa | -clusterProfiler_all # Whether to perform additional functional enrichment analyses with multiple databases using clusterProfiler, by default only ORA for GO BP, GO MF and GO CC, and KEGG and REACTOME enrichment, will be performed, as additional analyses may be slow if many significant DEGs or multiple number of comparisons ('yes' or 'no', by default)
 		-aP | -aPEAR_execution # Whether to simplify pathway enrichment analysis results by detecting clusters of similar pathways and visualizing enrichment networks by aPEAR package, which may be slow ('yes' or 'no', by default)
-		-cPm | -clusterProfiler_method # Method for adjusting p.value in clusterprofiler iterations (one of 'holm','hochberg','hommel','bonferroni','BH','BY,'none', or 'fdr', by default)
+		-cPm | -clusterProfiler_method # Method for adjusting p.value in clusterProfiler iterations (one of 'holm','hochberg','hommel','bonferroni','BH','BY,'none', or 'fdr', by default)
+		-cPu | -clusterProfiler_universe # Universe to use  in clusterProfiler iterations ('all' or 'detected', by default)
+		-mGS | -clusterProfiler_minGSSize # minGSSize parameter to use  in clusterProfiler iterations (a number, '10' by default)
+		-MGS | -clusterProfiler_maxGSSize # maxGSSize parameter to use  in clusterProfiler iterations (a number, '500' by default)
 		-Pm | -panther_method # Method for adjusting p.value in panther analyses via rbioapi (one of 'NONE','BONFERRONI', or 'FDR', by default)
 		-Tc | -time_course_analyses # Whether to perform additional time-course analyses as a last step ('yes' or 'no', by default)
 		-Tcsd | -time_course_std # Standard deviation threshold to filter in time course analyses (numeric, 1 by default)
@@ -126,6 +129,9 @@ for argument in $options; do
 		-TMP) TMPDIR_arg=${arguments[index]} ;;
 		-q) qc_raw_reads=${arguments[index]} ;;
 		-cPm) clusterProfiler_method=${arguments[index]} ;;
+		-cPu) clusterProfiler_universe=${arguments[index]} ;;
+		-mGS) clusterProfiler_minGSSize=${arguments[index]} ;;
+		-MGS) clusterProfiler_maxGSSize=${arguments[index]} ;;
   		-Pm) panther_method=${arguments[index]} ;;
 		-Na) network_analyses=${arguments[index]} ;;
 	esac
@@ -268,8 +274,17 @@ fi
 if [ -z "$tidy_tmp_files" ]; then
 	tidy_tmp_files="no"
 fi
-if [ -z "$tidy_tmp_files" ]; then
+if [ -z "$network_analyses" ]; then
 	network_analyses="no"
+fi
+if [ -z "$clusterProfiler_universe" ]; then
+	clusterProfiler_universe="detected"
+fi
+if [ -z "$clusterProfiler_minGSSize" ]; then
+	clusterProfiler_minGSSize=10
+fi
+if [ -z "$clusterProfiler_maxGSSize" ]; then
+	clusterProfiler_maxGSSize=500
 fi
 if [ -z "$debug_step" ]; then
 	debug_step="all"
@@ -999,10 +1014,10 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 			else
 				echo -e "\nPerforming functional enrichment analyses for DEGs. The results up to this point are ready to use (including DEGs and expression, that are only lacking annotation). This step of funtional enrichment analyses may take long if many significant DEGs, comparisons, or analyses...\n"
 				cd $output_folder/$name/final_results_reanalysis$index/DGE/
-				R_clusterProfiler_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index/DGE/ $organism "1" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution "^DGE_analysis_comp[0-9]+.txt$" &> clusterProfiler_funct_enrichment.log
+				R_clusterProfiler_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index/DGE/ $organism "1" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution "^DGE_analysis_comp[0-9]+.txt$" $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_funct_enrichment.log
 				if [[ "$time_course" == "yes" ]]; then 
 					cd $output_folder/$name/final_results_reanalysis$index/time_course_analyses
-					R_clusterProfiler_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index/time_course_analyses $organism "1" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution "^DGE_limma_timecourse.*.txt$" &> clusterProfiler_funct_enrichment.log
+					R_clusterProfiler_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index/time_course_analyses $organism "1" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution "^DGE_limma_timecourse.*.txt$" $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_funct_enrichment.log
 				fi
 				cd $output_folder/$name/final_results_reanalysis$index
 				
