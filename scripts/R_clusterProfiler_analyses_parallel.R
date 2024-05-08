@@ -8,8 +8,8 @@ all_analyses <- args[5] # if not provided, "no"
 cluster_enrich <- args[6] # if not provided, "no"
 pattern_search <- args[7]
 uni <- args[8] # if not provided, "detected"
-minGS <- args[9] # if not provided, 10
-maxGS <- args[10] # if not provided, 500
+minGS <- as.numeric(args[9]) # if not provided, 10
+maxGS <- as.numeric(args[10]) # if not provided, 500
 
 ### Preparing:
 print(paste0("Current date: ",date()))
