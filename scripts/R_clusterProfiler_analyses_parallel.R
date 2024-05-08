@@ -7,7 +7,9 @@ padjustmethod <- args[4]
 all_analyses <- args[5] # if not provided, "no"
 cluster_enrich <- args[6] # if not provided, "no"
 pattern_search <- args[7]
-
+uni <- args[8] # if not provided, "detected"
+minGS <- args[9] # if not provided, 10
+maxGS <- args[10] # if not provided, 500
 
 ### Preparing:
 print(paste0("Current date: ",date()))
@@ -140,7 +142,7 @@ convert_ids <- function(ids,mode) {
 }
 mode <- check_naming(keys(eval(parse(text=orgDB)), keytype = "SYMBOL"))
 
-
+save.image(file.path(path,"funct_enrich_clusterProfiler_globalenvir1.RData"))
 process_file <- function(file){
   invisible(biomaRt::biomartCacheClear())
   # file="DGE_analysis_comp1.txt"
@@ -166,6 +168,14 @@ process_file <- function(file){
     dir.create(paste0(path2,"/kegg_paths_snapshots"),recursive=T,showWarnings=F); dir.create(paste0(path2,"/reactome_paths_snapshots"),recursive=T,showWarnings=F);dir.create(paste0(path2,"/go_figs/"),recursive=T,showWarnings=F)
     setwd(path2)
     suppressMessages(library(orgDB, character.only = TRUE,quiet = T,warn.conflicts = F)) # Crucial apparently, so the functions using the orgDB object can be done in parallel
+
+    if(uni=="detected"){
+      universe <- convert_ids(genes_of_interest[[geneset]],mode)
+      universe_2 <- entrez_ids_backg      
+    } else if (uni=="all"){
+      universe <- unname(as.character(eval(parse(text=paste0(gsub(".db","",orgDB),"SYMBOL")))))
+      universe_2 <- entrez_ids_keys$ENTREZID
+    }  
 
     if(all_analyses=="yes"){
       print(paste0("Processing ",file,"_",name_internal,"... Gene classification based on GO distribution at a specific level (2-6)"))
@@ -256,9 +266,10 @@ process_file <- function(file){
       print(paste0("Processing ",file,"_",name_internal,"... GO over-representation analyses"))
       tryCatch({
                   ego <- c(); Sys.sleep(2)
-                  ego <- enrichGO(gene          = convert_ids(genes_of_interest[[geneset]],mode),
-                                # universe      = unname(as.character(eval(parse(text=paste0(gsub(".db","",orgDB),"SYMBOL"))))), # It's the same than default
-                                universe = convert_ids(genes_of_interest[["genes_backg"]],mode),
+                  ego <- enrichGO(gene          = convert_ids(genes_of_interest[[geneset]],mode),                                
+                                universe = universe,
+                                minGSSize = minGS,
+                                maxGSSize = maxGS,
                                 OrgDb         = orgDB,
                                 keyType  = "SYMBOL",
                                 ont           = "ALL",
@@ -287,8 +298,9 @@ process_file <- function(file){
       tryCatch({
                   ego <- c(); Sys.sleep(2)
                   ego <- enrichGO(gene          = convert_ids(genes_of_interest[[geneset]],mode),
-                                # universe      = unname(as.character(eval(parse(text=paste0(gsub(".db","",orgDB),"SYMBOL"))))),
-                                universe = convert_ids(genes_of_interest[["genes_backg"]],mode),
+                                universe = universe,
+                                minGSSize = minGS,
+                                maxGSSize = maxGS,
                                 OrgDb         = orgDB,
                                 keyType  = "SYMBOL",
                                 ont           = "BP",
@@ -325,8 +337,9 @@ process_file <- function(file){
       tryCatch({
                   ego <- c(); Sys.sleep(2)
                   ego <- enrichGO(gene          = convert_ids(genes_of_interest[[geneset]],mode),
-                                # universe      = unname(as.character(eval(parse(text=paste0(gsub(".db","",orgDB),"SYMBOL"))))),
-                                universe = convert_ids(genes_of_interest[["genes_backg"]],mode),
+                                universe = universe,
+                                minGSSize = minGS,
+                                maxGSSize = maxGS,
                                 OrgDb         = orgDB,
                                 keyType  = "SYMBOL",
                                 ont           = "MF",
@@ -364,8 +377,9 @@ process_file <- function(file){
       tryCatch({
                   ego <- c(); Sys.sleep(2)
                   ego <- enrichGO(gene          = convert_ids(genes_of_interest[[geneset]],mode),
-                              #universe      = unname(as.character(eval(parse(text=paste0(gsub(".db","",orgDB),"SYMBOL"))))),
-                              universe = convert_ids(genes_of_interest[["genes_backg"]],mode),
+                              universe = universe,
+                              minGSSize = minGS,
+                              maxGSSize = maxGS,
                               OrgDb         = orgDB,
                               keyType  = "SYMBOL",
                               ont           = "CC",
@@ -406,7 +420,9 @@ process_file <- function(file){
           tryCatch({
               kk <- suppressMessages(enrichKEGG(gene= entrez_ids,
                                organism     = org,
-                               universe = entrez_ids_backg,
+                               universe = universe_2,
+                               minGSSize = minGS,
+                               maxGSSize = maxGS,
                                pAdjustMethod = i,
                                pvalueCutoff = 1,
                                qvalueCutoff = 1))
@@ -459,7 +475,9 @@ process_file <- function(file){
             gse_enrich <- c(); Sys.sleep(2)
             gse_enrich <- suppressMessages(enrichPathway(gene= entrez_ids,
                                                     organism = organism_cp_react,
-                                                    universe = entrez_ids_backg,
+                                                    universe = universe_2,
+                                                    minGSSize = minGS,
+                                                    maxGSSize = maxGS,
                                                     pvalueCutoff = 1,
                                                     qvalueCutoff = 1,
                                                     pAdjustMethod = i))
@@ -508,7 +526,9 @@ process_file <- function(file){
               b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- convert_ids(gsub(paste0(f,"."),"",names(b)),mode)
               tryCatch({
                         gse_enrich <- c(); Sys.sleep(2)
-                        gse_enrich <- suppressMessages(gseGO(geneList= b,
+                        gse_enrich <- suppressMessages(gseGO(geneList= b,                                           
+                                           minGSSize = minGS,
+                                           maxGSSize = maxGS,
                                            OrgDb        = orgDB,
                                            ont          = "ALL",
                                            keyType  = "SYMBOL",
@@ -536,6 +556,8 @@ process_file <- function(file){
               tryCatch({
                         gse_enrich <- c(); Sys.sleep(2)
                         gse_enrich <- suppressMessages(gseGO(geneList=b,
+                                         minGSSize = minGS,
+                                         maxGSSize = maxGS,
                                          OrgDb        = orgDB,
                                          ont          = "BP",
                                          keyType  = "SYMBOL",
@@ -572,6 +594,8 @@ process_file <- function(file){
               tryCatch({
                         gse_enrich <- c(); Sys.sleep(2)
                         gse_enrich <- suppressMessages(gseGO(geneList=b,
+                                         minGSSize = minGS,
+                                         maxGSSize = maxGS,
                                          OrgDb        = orgDB,
                                          ont          = "MF",
                                          keyType  = "SYMBOL",
@@ -608,6 +632,8 @@ process_file <- function(file){
               tryCatch({
                         gse_enrich <- c(); Sys.sleep(2)
                         gse_enrich <- suppressMessages(gseGO(geneList=b,
+                                         minGSSize = minGS,
+                                         maxGSSize = maxGS,
                                          OrgDb        = orgDB,
                                          ont          = "CC",
                                          keyType  = "SYMBOL",
@@ -644,6 +670,8 @@ process_file <- function(file){
               tryCatch({
                         gse_enrich <- c(); Sys.sleep(2)
                         gse_enrich <- suppressMessages(gseGO(geneList=b,
+                                         minGSSize = minGS,
+                                         maxGSSize = maxGS,
                                          OrgDb        = orgDB,
                                          ont          = "ALL",
                                          keyType  = "SYMBOL",
@@ -672,6 +700,8 @@ process_file <- function(file){
               tryCatch({
                         gse_enrich <- c(); Sys.sleep(2)
                         gse_enrich <- suppressMessages(gseGO(geneList=b,
+                                        minGSSize = minGS,
+                                        maxGSSize = maxGS,
                                         OrgDb        = orgDB,
                                         ont          = "BP",
                                         keyType  = "SYMBOL",
@@ -709,6 +739,8 @@ process_file <- function(file){
               tryCatch({
                         gse_enrich <- c(); Sys.sleep(2)
                         gse_enrich <- suppressMessages(gseGO(geneList=b,
+                                        minGSSize = minGS,
+                                        maxGSSize = maxGS,
                                         OrgDb        = orgDB,
                                         ont          = "MF",
                                         keyType  = "SYMBOL",
@@ -746,6 +778,8 @@ process_file <- function(file){
               tryCatch({
                         gse_enrich <- c(); Sys.sleep(2)
                         gse_enrich <- suppressMessages(gseGO(geneList=b,
+                                        minGSSize = minGS,
+                                        maxGSSize = maxGS,
                                         OrgDb        = orgDB,
                                         ont          = "CC",
                                         keyType  = "SYMBOL",
@@ -792,6 +826,8 @@ process_file <- function(file){
               tryCatch({
                       gse_enrich <- c(); Sys.sleep(2)
                       gse_enrich <- suppressMessages(gseKEGG(geneList= b,
+                                                             minGSSize = minGS,
+                                                             maxGSSize = maxGS,
                                                              organism = org,
                                                              pvalueCutoff = 1,
                                                              pAdjustMethod = i,
@@ -825,6 +861,8 @@ process_file <- function(file){
               tryCatch({
                       gse_enrich <- c(); Sys.sleep(2)
                       gse_enrich <- suppressMessages(gseKEGG(geneList= b,
+                                                             minGSSize = minGS,
+                                                             maxGSSize = maxGS,
                                                              organism = org,
                                                              pvalueCutoff = 1,
                                                              pAdjustMethod = i,
@@ -864,7 +902,9 @@ process_file <- function(file){
           tryCatch({
                 gse_enrich <- c(); Sys.sleep(2)
                 gse_enrich <- suppressMessages(enrichMKEGG(gene= entrez_ids,
-                                                           universe = entrez_ids_backg,
+                                                           universe = universe_2,
+                                                           minGSSize = minGS,
+                                                           maxGSSize = maxGS,
                                                            organism = org,
                                                            pvalueCutoff = 1,
                                                            qvalueCutoff = 1,
@@ -900,6 +940,8 @@ process_file <- function(file){
                 tryCatch({
                       gse_enrich <- c(); Sys.sleep(2)
                       gse_enrich <- suppressMessages(gseMKEGG(geneList= b,
+                                                              minGSSize = minGS,
+                                                              maxGSSize = maxGS,
                                                               organism = org,
                                                               pvalueCutoff = 1,
                                                               pAdjustMethod = i,
@@ -927,6 +969,8 @@ process_file <- function(file){
                 tryCatch({
                       gse_enrich <- c(); Sys.sleep(2)
                       gse_enrich <- suppressMessages(gseMKEGG(geneList= b,
+                                                              minGSSize = minGS,
+                                                              maxGSSize = maxGS,
                                                               organism = org,
                                                               pvalueCutoff = 1,
                                                               pAdjustMethod = i,
@@ -961,8 +1005,10 @@ process_file <- function(file){
           tryCatch({
             gse_enrich <- c(); Sys.sleep(2)
             gse_enrich <- suppressMessages(enrichWP(gene= entrez_ids,
-                                                       organism = organism_cp,
-                                                       universe = entrez_ids_backg,
+                                                       universe = universe_2,
+                                                       minGSSize = minGS,
+                                                       maxGSSize = maxGS,
+                                                       organism = organism_cp,                                                       
                                                        pvalueCutoff = 1,
                                                        qvalueCutoff = 1,
                                                        pAdjustMethod = i))
@@ -996,7 +1042,9 @@ process_file <- function(file){
             b <- b[names(b) %in% entrez_ids_keys$SYMBOL]; names(b) <- entrez_ids_keys$ENTREZID[match(names(b),entrez_ids_keys$SYMBOL)]
             tryCatch({
                     gse_enrich <- c(); Sys.sleep(2)
-                    gse_enrich <- suppressMessages(gseWP(geneList= b,
+                    gse_enrich <- suppressMessages(gseWP(geneList= b,                                                            
+                                                            minGSSize = minGS,
+                                                            maxGSSize = maxGS,
                                                             organism = organism_cp,
                                                             pvalueCutoff = 1,
                                                             pAdjustMethod = i,
@@ -1023,7 +1071,9 @@ process_file <- function(file){
             })
             tryCatch({
                     gse_enrich <- c(); Sys.sleep(2)
-                    gse_enrich <- suppressMessages(gseWP(geneList= b,
+                    gse_enrich <- suppressMessages(gseWP(geneList= b,                                                            
+                                                            minGSSize = minGS,
+                                                            maxGSSize = maxGS,
                                                             organism = organism_cp,
                                                             pvalueCutoff = 1,
                                                             pAdjustMethod = i,
@@ -1060,7 +1110,9 @@ process_file <- function(file){
                   b <- b[names(b) %in% entrez_ids_keys$SYMBOL]; names(b) <- entrez_ids_keys$ENTREZID[match(names(b),entrez_ids_keys$SYMBOL)]
                   tryCatch({
                     gse_enrich <- c(); Sys.sleep(2)
-                    gse_enrich <- suppressMessages(gsePathway(geneList=b,
+                    gse_enrich <- suppressMessages(gsePathway(geneList=b,                                                         
+                                                         minGSSize = minGS,
+                                                         maxGSSize = maxGS,
                                                          organism = organism_cp_react,
                                                          pvalueCutoff = 1,
                                                          pAdjustMethod = i,
@@ -1088,6 +1140,8 @@ process_file <- function(file){
                   tryCatch({
                     gse_enrich <- c(); Sys.sleep(2)
                     gse_enrich <- suppressMessages(gsePathway(geneList=b,
+                                                         minGSSize = minGS,
+                                                         maxGSSize = maxGS,
                                                          organism = organism_cp_react,
                                                          pvalueCutoff = 1,
                                                          pAdjustMethod = i,
@@ -1124,7 +1178,9 @@ process_file <- function(file){
                     ego <- c(); Sys.sleep(2)
                     ego <- enrichDO(gene          = entrez_ids,
                                     ont           = "DO",
-                                    universe = entrez_ids_backg,
+                                    universe = universe_2,
+                                    minGSSize = minGS,
+                                    maxGSSize = maxGS,
                                     pAdjustMethod = i,
                                     pvalueCutoff  = 1,
                                     qvalueCutoff  = 1,
@@ -1138,7 +1194,9 @@ process_file <- function(file){
                     ego <- c(); Sys.sleep(2)
                     ego <- enrichDO(gene          = entrez_ids,
                                     ont           = "DOLite",
-                                    universe = entrez_ids_backg,
+                                    universe = universe_2,
+                                    minGSSize = minGS,
+                                    maxGSSize = maxGS,
                                     pAdjustMethod = i,
                                     pvalueCutoff  = 1,
                                     qvalueCutoff  = 1,
@@ -1152,7 +1210,9 @@ process_file <- function(file){
                       ego <- c(); Sys.sleep(2)  
                       ego <- enrichNCG(gene          = entrez_ids,
                                        pAdjustMethod = i,
-                                       universe = entrez_ids_backg,
+                                       universe = universe_2,
+                                       minGSSize = minGS,
+                                       maxGSSize = maxGS,
                                        pvalueCutoff  = 1,
                                        qvalueCutoff  = 1,
                                        readable      = TRUE)
@@ -1165,7 +1225,9 @@ process_file <- function(file){
                       ego <- c(); Sys.sleep(2)  
                       ego <- enrichDGN(gene          = entrez_ids,
                                        pAdjustMethod = i,
-                                       universe = entrez_ids_backg,
+                                       universe = universe_2,
+                                       minGSSize = minGS,
+                                       maxGSSize = maxGS,
                                        pvalueCutoff  = 1,
                                        qvalueCutoff  = 1,
                                        readable      = TRUE)
@@ -1183,6 +1245,8 @@ process_file <- function(file){
                     tryCatch({
                           gse_enrich <- c(); Sys.sleep(2)
                           gse_enrich <- suppressMessages(gseDO(geneList= sort(eval(parse(text=f)),decreasing=T)[!is.na(names(sort(eval(parse(text=f)),decreasing=T)))],
+                                                                    minGSSize = minGS,
+                                                                    maxGSSize = maxGS,
                                                                     pvalueCutoff = 1,
                                                                     pAdjustMethod = i,
                                                                     verbose      = FALSE,
@@ -1194,6 +1258,8 @@ process_file <- function(file){
                     tryCatch({
                           gse_enrich <- c(); Sys.sleep(2)  
                           gse_enrich <- suppressMessages(gseDO(geneList= sort(eval(parse(text=f)),decreasing=T)[!is.na(names(sort(eval(parse(text=f)),decreasing=T)))],
+                                                                    minGSSize = minGS,
+                                                                    maxGSSize = maxGS,
                                                                     pvalueCutoff = 1,
                                                                     pAdjustMethod = i,
                                                                     verbose      = FALSE,
@@ -1207,6 +1273,8 @@ process_file <- function(file){
                     tryCatch({
                           gse_enrich <- c(); Sys.sleep(2)  
                           gse_enrich <- suppressMessages(gseNCG(geneList= sort(eval(parse(text=f)),decreasing=T)[!is.na(names(sort(eval(parse(text=f)),decreasing=T)))],
+                                                               minGSSize = minGS,
+                                                               maxGSSize = maxGS,
                                                                pvalueCutoff = 1,
                                                                pAdjustMethod = i,
                                                                verbose      = FALSE,
@@ -1218,6 +1286,8 @@ process_file <- function(file){
                     tryCatch({
                           gse_enrich <- c(); Sys.sleep(2)  
                           gse_enrich <- suppressMessages(gseNCG(geneList= sort(eval(parse(text=f)),decreasing=T)[!is.na(names(sort(eval(parse(text=f)),decreasing=T)))],
+                                                               minGSSize = minGS,
+                                                               maxGSSize = maxGS,
                                                                pvalueCutoff = 1,
                                                                pAdjustMethod = i,
                                                                verbose      = FALSE,
@@ -1231,6 +1301,8 @@ process_file <- function(file){
                     tryCatch({
                           gse_enrich <- c(); Sys.sleep(2)  
                           gse_enrich <- suppressMessages(gseDGN(geneList= sort(eval(parse(text=f)),decreasing=T)[!is.na(names(sort(eval(parse(text=f)),decreasing=T)))],
+                                                                minGSSize = minGS,
+                                                                maxGSSize = maxGS,
                                                                 pvalueCutoff = 1,
                                                                 pAdjustMethod = i,
                                                                 verbose      = FALSE,
@@ -1242,6 +1314,8 @@ process_file <- function(file){
                     tryCatch({
                           gse_enrich <- c(); Sys.sleep(2)  
                           gse_enrich <- suppressMessages(gseDGN(geneList= sort(eval(parse(text=f)),decreasing=T)[!is.na(names(sort(eval(parse(text=f)),decreasing=T)))],
+                                                                minGSSize = minGS,
+                                                                maxGSSize = maxGS,
                                                                 pvalueCutoff = 1,
                                                                 pAdjustMethod = i,
                                                                 verbose      = FALSE,
@@ -1303,6 +1377,6 @@ removeEmptyDirs <- function(directory) {
 }
 removeEmptyDirs(path)
 
-save.image(file.path(path,"funct_enrich_clusterProfiler_globalenvir.RData"))
+save.image(file.path(path,"funct_enrich_clusterProfiler_globalenvir2.RData"))
 print("ALL DONE clusterProfiler")
 print(paste0("Current date: ",date()))
