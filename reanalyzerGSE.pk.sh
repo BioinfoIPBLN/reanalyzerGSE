@@ -820,7 +820,7 @@ if [[ $debug_step == "all" || $debug_step == "step3a" ]]; then
 			echo "Salmon prediction 1: $salmon_strand" > $output_folder/$name/strand_info.txt
 			echo "Salmon prediction 2: $strand" >> $output_folder/$name/strand_info.txt
 			echo -e "how_are_we_stranded_here prediction: $strand_second_opinion" >> $output_folder/$name/strand_info.txt		
-			if [ $(grep -c "Data " $output_folder/$name/strand_info.txt) -gt 0 ]; then		
+			if [ $(egrep -c "reverse|yes|no" $output_folder/$name/strand_info.txt) -gt 0 ]; then		
 	  			echo "Please double check carefully, based on the kit used in the library preparation, the paper, the GEO entry... because this is crucial for quantification. Please rerun with the argument '-s' in the unlikely case that the prediction by salmon is not correct, or if the second opinion by how_are_we_stranded_here is different (if transcripts from GENCODE or any particular format are used, the latter option may fail to identify the data type though)"
 	    			cat $output_folder/$name/strand_info.txt
 				rm $(find $output_folder/$name/strand_prediction/how_are_we_stranded_here_out -type f -name "*.bam")
