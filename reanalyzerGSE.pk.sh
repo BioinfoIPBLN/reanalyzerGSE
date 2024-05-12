@@ -825,7 +825,7 @@ if [[ $debug_step == "all" || $debug_step == "step3a" ]]; then
 	    			cat $output_folder/$name/strand_info.txt
 				rm $(find $output_folder/$name/strand_prediction/how_are_we_stranded_here_out -type f -name "*.bam")
 			else
-	  			echo "Salmon or how_are_we_stranded_here seem to have failed. This is not acceptable, plese double check. Exiting..."
+	  			echo "Salmon to detect strandedness seems to have failed. This is not acceptable, plese double check or provide the parameter -s. Exiting..."
 				exit 1
 			fi
 		fi
