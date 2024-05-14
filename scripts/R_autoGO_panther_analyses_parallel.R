@@ -480,32 +480,33 @@ process_file <- function(file){
   invisible(file.rename(path2,sub("_funct_enrichment/","_funct_enrichment_panther",path2)))
 }
 
+final_files_list <- grep(tools::file_path_sans_ext(pattern_search),list.files(path = path, pattern = "_Gene_IDs\\.txt$",recursive=T,full=T),val=T)
 mclapply(
     mc.cores = cores,
-    X = list.files(path = path, pattern = "_Gene_IDs\\.txt$",recursive=T,full=T), # If you are at any time using this script outside the main pipeline be aware of these input files... there may be confounding...
+    X = final_files_list[which(!(duplicated(basename(final_files_list))))], # If you are at any time using this script outside the main pipeline be aware of these input files... there may be confounding...
     FUN = process_file
 )
 
 # Tidying...
-setwd(path)
-save.image("autoGO_panther_globalenvir.RData")
-print("Tidying...")
-removeEmptyDirs <- function(directory) {
+#setwd(path)
+#save.image("autoGO_panther_globalenvir.RData")
+#print("Tidying...")
+#removeEmptyDirs <- function(directory) {
   # List all directories
-  dirs <- list.dirs(directory, recursive = TRUE)
-  dirs <- dirs[grep("funct",dirs)]
+  #dirs <- list.dirs(directory, recursive = TRUE)
+  #dirs <- dirs[grep("funct",dirs)]
   
   # Check each directory
-  for (fold in dirs) {
+  #for (fold in dirs) {
     # If the directory is empty
-    if (length(dir(fold)) < 3 && fold!=path) {
+    #if (length(dir(fold)) < 3 && fold!=path) {
       # Remove the directory
-      invisible(unlink(fold, recursive = TRUE))
-      print(paste0("Removing ",fold))
-    }
-  }
-}
-removeEmptyDirs(path)
+      #invisible(unlink(fold, recursive = TRUE))
+      #print(paste0("Removing ",fold))
+    #}
+  #}
+#}
+#removeEmptyDirs(path)
 print("ALL DONE autoGO and Panther")
 print(paste0("Current date: ",date()))
 

@@ -19,6 +19,54 @@ if(organism_cp=="Homo sapiens"){
   suppressMessages(library("org.Mm.eg.db",quiet = T,warn.conflicts = F))
 }
 
+
+# Deduce the naming convention in the orgDB package:
+check_naming <- function(names) {
+  names <- grep("[[:punct:]]|orf|p43|p45",names,val=T,invert=T)  
+  print(paste0("Looking at the annotation of ",length(names)," genes..."))
+  all_upper <- grepl("^[A-Z0-9]+$", names)
+  all_lower <- grepl("^[a-z0-9]+$", names)
+  
+  # Checks if the first letter is uppercase followed by lowercase letters or numbers, for names with at least one letter
+  first_upper_rest_lower <- sapply(names, function(name) {
+    if (grepl("[A-Za-z]", name)) { # Check if the name contains at least one letter
+      # Extract the first letter and the rest of the string separately
+      first_letter <- substr(name, regexpr("[A-Za-z]", name), regexpr("[A-Za-z]", name))
+      rest <- substr(name, regexpr("[A-Za-z]", name) + 1, nchar(name))
+      # Check if the first letter is uppercase and the rest of the string is lowercase or numeric (ignoring leading numbers)
+      return(grepl("^[A-Z]$", first_letter) && grepl("^[a-z0-9]*$", rest))
+    } else {
+      return(TRUE) # If the name doesn't contain letters, it trivially satisfies the condition
+    }
+  })
+
+  if(!all(all_upper) && !all(all_lower) && !all(first_upper_rest_lower)){
+    pattern_results <- which.max(c(sum(all_upper),sum(all_lower),sum(first_upper_rest_lower)))
+    num_genes <- c(sum(all_upper),sum(all_lower),sum(first_upper_rest_lower))[pattern_results]
+    pattern_result_final <- c("all_upper","all_lower","first_upper_rest_lower")[pattern_results]
+    print(paste0("Identified pattern for gene naming is ",pattern_result_final, ", accounting for ",num_genes," genes"))
+  } else {
+    pattern_result_final <- c("all_upper","all_lower","first_upper_rest_lower")[c(all(all_upper),all(all_lower),all(first_upper_rest_lower))]
+    print(paste0("Identified pattern for gene naming is ",pattern_result_final, ", accounting for all annotated genes"))
+  }
+  
+  return(pattern_result_final)
+
+  
+}
+convert_ids <- function(ids,mode) {
+  if(mode=="all_upper"){
+    ids2 <- toupper(ids)
+  } else if (mode=="all_lower") {
+    ids2 <- tolower(ids)
+  } else if (mode=="first_upper_rest_lower") {
+    ids2 <- stringr::str_to_title(ids)
+  }
+  return(ids2)
+}
+mode <- check_naming(keys(eval(parse(text=orgDB)), keytype = "SYMBOL"))
+
+
 if (exists("orgDB")){
   print(paste0("Loaded ",orgDB," annotation to add information to all list of genes in the current analyses..."))
   # To choose columns with the type of annotation:
@@ -28,7 +76,7 @@ if (exists("orgDB")){
 
   ### Build a master table for all the genes with quantified normalized expression in the project:
   annot <- suppressMessages(suppressWarnings(AnnotationDbi::select(eval(parse(text=orgDB)),
-    keys = read.delim(list.files(path=path,recursive=T, include.dirs=T, full.names=T,pattern="^RPKM_count")[1])$Gene_ID,
+    keys = read.delim(list.files(path=path,recursive=T, include.dirs=T, full.names=T,pattern="^RPKM_counts_genes.txt")[1])$Gene_ID,
     columns = c("ALIAS","GENENAME","GOALL"),
     keytype = 'SYMBOL')))
 
@@ -48,12 +96,14 @@ if (exists("orgDB")){
   for (file in grep("annotation",list.files(path=path,recursive=T, include.dirs=T, full.names=T,pattern=pattern_to_match),invert=T,val=T)){
   	a <- as.data.frame(data.table::fread(file))
     if("Gene_ID" %in% colnames(a)){
+      a$Gene_ID <- convert_ids(a$Gene_ID,mode)
+      annot_summary_final$SYMBOL <- convert_ids(annot_summary_final$SYMBOL,mode)
       b <- merge(a,annot_summary_final,by.x="Gene_ID",by.y="SYMBOL",all.x=T)
   	  write.table(b,file=gsub(".txt$","_annotation.txt",file),col.names = T,row.names = F,quote = F,sep="\t")	
       print(paste0("Annotating ",basename(file)," ..."))
     }
   }
 } else {
-  print("For now the only organism supported for annotating gene IDs are human and mouse. There are plans to add more in the future, including the already available orgDB or support via annotationForge to build custom databases...")
+  print("For now the only organism supported for annotating gene IDs are human and mouse. There are plans to add more in the future, including both the already available orgDB and support via annotationForge to build custom databases...")
   print(paste0(organism," is currently not supported..."))
 }
