@@ -28,7 +28,7 @@ for argument in $options; do
 		-P | -parallel_number # Number of files to be processed in parallel (10 by default)
 		-r | -reference_genome # Reference genome to be used (.fasta file or .gz, absolute pathway)
 		-ri | -reference_genome_index # If the reference genome to be used already has an index that would like to reuse, please provide full pathway here (by default the provided genome is indexed)
-		-q  | -qc_raw_reads # Whether to perform quality control on the raw reads ('yes' by default, or 'no')
+		-q | -qc_raw_reads # Whether to perform quality control on the raw reads ('yes' by default, or 'no')
 		-a | -annotation # Reference annotation to be used (.gtf file, absolute pathway). If hisat2 is used, a gff file (make sure format is '.gff' and not '.gff3') is accepted (some QC steps like 'qualimap rnaseqqc' may be skipped though). You can provide a comma-separated list of the pathways to different annotation, and multiple/independent quantification/outputs from the same alignments will be generated.
 		-A | -aligner # Aligner software to use ('hisat2' or 'star', by default)
 		-Ac | -aligner_index_cache # Whether to try and keep the genome index on the cache/loaded RAM so concurrent jobs do not have to reload it and can use it more easily ('no', which will empty cache at the end, or 'yes', by default)
@@ -41,6 +41,7 @@ for argument in $options; do
 		-b | -batch # Batch effect present? (no by default, yes if correction through Combat-seq and model is to be performed, and info is going to be required in other arguments or prompts)
 		-bv | -batch_vector # Comma-separated list of numbers for use as batch vector with Combat-seq
 		-bc | -batch_biological_covariable # Comma-separated list of numbers for use as batch vector of covariables of biological interest with Combat-seq
+		-B | -bed_mode # Whether to convert list of files to bed format so they can be visualized in genome browsers ('yes' or 'no', by default)
 		-d | -design_custom # Manually specifying the experimental design for GEO download ('no' by default and if 'yes', please expect an interactive prompt after data download from GEO, and please enter the assignment to groups when asked in the terminal, with a comma-separated list of the same length than the number of samples)
 		-D | -design_custom_local # Specifying here the experimental design for the local dataset (by default an interactive prompt will ask for a comma-separated list of the same length than the number of samples, if you want to avoid that manual input please provide the list in this argument. If more than one design to provide, please input comma-separated list separed by a '/', without spaces)
 		-O | -organism # Specifying here the scientific name of the organism for the local dataset (by default an interactive prompt will ask for it, if you want to avoid that manual input please provide the full organism name in this argument, please use underline instead of space)
@@ -63,9 +64,9 @@ for argument in $options; do
 		-cPa | -clusterProfiler_all # Whether to perform additional functional enrichment analyses with multiple databases using clusterProfiler, by default only ORA for GO BP, GO MF and GO CC, and KEGG and REACTOME enrichment, will be performed, as additional analyses may be slow if many significant DEGs or multiple number of comparisons ('yes' or 'no', by default)
 		-aP | -aPEAR_execution # Whether to simplify pathway enrichment analysis results by detecting clusters of similar pathways and visualizing enrichment networks by aPEAR package, which may be slow ('yes' or 'no', by default)
 		-cPm | -clusterProfiler_method # Method for adjusting p.value in clusterProfiler iterations (one of 'holm','hochberg','hommel','bonferroni','BH','BY,'none', or 'fdr', by default)
-		-cPu | -clusterProfiler_universe # Universe to use  in clusterProfiler iterations ('all' or 'detected', by default)
-		-mGS | -clusterProfiler_minGSSize # minGSSize parameter to use  in clusterProfiler iterations (a number, '10' by default)
-		-MGS | -clusterProfiler_maxGSSize # maxGSSize parameter to use  in clusterProfiler iterations (a number, '500' by default)
+		-cPu | -clusterProfiler_universe # Universe to use in clusterProfiler iterations ('all' or 'detected', by default)
+		-mGS | -clusterProfiler_minGSSize # minGSSize parameter to use in clusterProfiler iterations (a number, '10' by default)
+		-MGS | -clusterProfiler_maxGSSize # maxGSSize parameter to use in clusterProfiler iterations (a number, '500' by default)
 		-Pm | -panther_method # Method for adjusting p.value in panther analyses via rbioapi (one of 'NONE','BONFERRONI', or 'FDR', by default)
 		-Tc | -time_course_analyses # Whether to perform additional time-course analyses as a last step ('yes' or 'no', by default)
 		-Tcsd | -time_course_std # Standard deviation threshold to filter in time course analyses (numeric, 1 by default)
@@ -97,6 +98,7 @@ for argument in $options; do
 		-b) batch=${arguments[index]} ;;
 		-bv) batch_vector=${arguments[index]} ;;
 		-bc) batch_biological_covariates=${arguments[index]} ;;
+		-B) bed_mode=${arguments[index]} ;;
 		-C) covariables=${arguments[index]} ;;
 		-S) stop=${arguments[index]} ;;
 		-P) number_parallel=${arguments[index]} ;;
@@ -132,7 +134,7 @@ for argument in $options; do
 		-cPu) clusterProfiler_universe=${arguments[index]} ;;
 		-mGS) clusterProfiler_minGSSize=${arguments[index]} ;;
 		-MGS) clusterProfiler_maxGSSize=${arguments[index]} ;;
-  		-Pm) panther_method=${arguments[index]} ;;
+		-Pm) panther_method=${arguments[index]} ;;
 		-Na) network_analyses=${arguments[index]} ;;
 	esac
 done
@@ -189,7 +191,7 @@ if [ -z "$filter" ]; then
 fi
 echo -e "\nfilter=$filter\n"
 if [ -z "$batch" ]; then
-	batch=no
+	batch="no"
 fi
 echo -e "\nbatch=$batch\n"
 if [ -z "$covariables" ]; then
@@ -197,14 +199,14 @@ if [ -z "$covariables" ]; then
 fi
 echo -e "\ncovariables=$covariables\n"
 if [ -z "$deconvolution" ]; then
-	deconvolution=no
+	deconvolution="no"
 fi
 if [ -z "$design_custom" ]; then
-	design_custom=no
+	design_custom="no"
 fi
 echo -e "\ndesign_custom=$design_custom\n"
 if [ -z "$stop" ]; then
-	stop=no
+	stop="no"
 fi
 echo -e "\nstop=$stop\n"
 if [ -z "$memory_max" ]; then
@@ -285,6 +287,9 @@ if [ -z "$clusterProfiler_minGSSize" ]; then
 fi
 if [ -z "$clusterProfiler_maxGSSize" ]; then
 	clusterProfiler_maxGSSize=500
+fi
+if [ -z "$bed_mode" ]; then
+	bed_mode="no"
 fi
 if [ -z "$debug_step" ]; then
 	debug_step="all"
@@ -438,7 +443,7 @@ if [[ $debug_step == "all" || $debug_step == "step1" ]]; then
 	
 	### Stop and continue with other script if it's a single-cell:
 		if [ $(zcat $output_folder/$name/GEO_info/*_series_matrix.txt.gz | egrep -e 'single nuclei|single cell|single-cell|snRNA|scRNA' | wc -l) -gt 0 ] || [ $(zcat $(find . -name "*_series_matrix.txt.gz") | egrep -i -e 'single nuclei|single cell|single-cell|snRNA|scRNA' | wc -l) -gt 0 ]; then
-		  	echo -e "\n\nDetected this could be a single-cell RNA-seq study... I can try to do stuff automatically (i.e. try and normalize the raw counts or give an estimated bulk expression taking the average), but errors are expected. \nThe script 'R_process_reanalyzer_GSE_single_cell.R' is a template built from the case example GSE118257, and valid to other GEO entries where pheno data and matrix counts are supplementary files clearly named.\nHowever, manual changes are most likely required to work with other studies... These changes should be possible, so please open an issue or go for it if you have the expertise and this one fails!. For example, it's likely that it's just required to point to the directory of the matrix counts, or to manually specify the columns/names of the conditions/cells\n\n"
+			echo -e "\n\nDetected this could be a single-cell RNA-seq study... I can try to do stuff automatically (i.e. try and normalize the raw counts or give an estimated bulk expression taking the average), but errors are expected. \nThe script 'R_process_reanalyzer_GSE_single_cell.R' is a template built from the case example GSE118257, and valid to other GEO entries where pheno data and matrix counts are supplementary files clearly named.\nHowever, manual changes are most likely required to work with other studies... These changes should be possible, so please open an issue or go for it if you have the expertise and this one fails!. For example, it's likely that it's just required to point to the directory of the matrix counts, or to manually specify the columns/names of the conditions/cells\n\n"
 			# Print the results to review:
 			echo -e "This text in the metadata is what made the pipeline to suggest this could be single-cell:"
 			zcat $output_folder/$name/GEO_info/*_series_matrix.txt.gz | egrep -e 'single nuclei|single cell|single-cell|snRNA|scRNA'
@@ -455,12 +460,12 @@ if [[ $debug_step == "all" || $debug_step == "step1" ]]; then
 	
 	### Stop and continue with other script if it's a microarrays:
 		if [ $(zcat $output_folder/$name/GEO_info/*_series_matrix.txt.gz | egrep -i -e 'Expression profiling by array|microarray' | wc -l) -gt 0 ] || [ $(zcat $(find . -name "*_series_matrix.txt.gz") | egrep -i -e 'Expression profiling by array|microarray' | wc -l) -gt 0 ]; then
-		  	echo -e "\n\nDetected this could be a microarrays study... trying to do analyze automatically, but errors in this log are expected. The script 'R_process_reanalyzer_GSE_microarrays.R' is already supporting the most frequent arrays and platforms, but it could require to be extended in order to work with other studies... These changes should be possible though, so please open an issue or go for it if you have the expertise and this one fails!\n\n"
+			echo -e "\n\nDetected this could be a microarrays study... trying to do analyze automatically, but errors in this log are expected. The script 'R_process_reanalyzer_GSE_microarrays.R' is already supporting the most frequent arrays and platforms, but it could require to be extended in order to work with other studies... These changes should be possible though, so please open an issue or go for it if you have the expertise and this one fails!\n\n"
 			# Choice:
 			echo -e "\nWrite 'yes' to continue with microarrays analyses, or 'no' to continue with normal analyses after reviewing the entry pointing to microarrays..."
 			read -r microarrays_choice
 			if [ "$microarrays_choice" == "yes" ]; then
-			  	R_process_reanalyzer_GSE_microarrays.R $input $output_folder $genes; exit 1
+				R_process_reanalyzer_GSE_microarrays.R $input $output_folder $genes; exit 1
 			elif [ "$microarrays_choice" == "no" ]; then
 				echo -e "\nContinuing with bulk RNA-seq analyses...\n"
 			fi
@@ -505,7 +510,7 @@ if [[ $debug_step == "all" || $debug_step == "step1a" ]]; then
 				download_sra_fq.sh $output_folder/$name/GEO_info/srr_ids.txt $seqs_location $(( number_parallel*2 )) $cores $compression_level		
 	### Rename the fastq files (max length name 140 characters)	and handle already downloaded datasets if provided:		
 				cd $seqs_location
-	   			if [[ "$(cat $output_folder/$name/GEO_info/library_layout_info.txt)" == "SINGLE" ]]; then
+				if [[ "$(cat $output_folder/$name/GEO_info/library_layout_info.txt)" == "SINGLE" ]]; then
 					for i in $(cat $output_folder/$name/GEO_info/srr_ids.txt); do echo "mv $(ls | egrep ^$i | head -1) $(cat $output_folder/$name/GEO_info/samples_info.txt | grep $i | cut -f 2 | sed -e 's,%,,g;s,(,,g;s,),,g;s/[_]1/1/g;s/[_]2/2/g;s/replicate_/replicate/g' | awk -F '_GSM' '{ gsub(/-/,"",$1); print substr($1, 1, 140) "_GSM" $2 }')""_1.fastq.gz" && mv $(ls | egrep ^$i | head -1) $(cat $output_folder/$name/GEO_info/samples_info.txt | grep $i | cut -f 2 | sed -e 's,%,,g;s,(,,g;s,),,g;s/[_]1/1/g;s/[_]2/2/g;s/replicate_/replicate/g' | awk -F '_GSM' '{ gsub(/-/,"",$1); print substr($1, 1, 140) "_GSM" $2 }')"_1.fastq.gz"; done
 				elif [[ "$(cat $output_folder/$name/GEO_info/library_layout_info.txt)" == "PAIRED" ]]; then
 					for i in $(cat $output_folder/$name/GEO_info/srr_ids.txt); do echo "mv $(ls | egrep ^$i | head -1) $(cat $output_folder/$name/GEO_info/samples_info.txt | grep $i | cut -f 2 | sed -e 's,%,,g;s,(,,g;s,),,g;s/[_]1/1/g;s/[_]2/2/g;s/replicate_/replicate/g' | awk -F '_GSM' '{ gsub(/-/,"",$1); print substr($1, 1, 140) "_GSM" $2 }')""_1.fastq.gz" && echo "mv $(ls | egrep ^$i | tail -1) $(cat $output_folder/$name/GEO_info/samples_info.txt | grep $i | cut -f 2 | sed -e 's,%,,g;s,(,,g;s,),,g;s/[_]1/1/g;s/[_]2/2/g;s/replicate_/replicate/g' | awk -F '_GSM' '{ gsub(/-/,"",$1); print substr($1, 1, 140) "_GSM" $2 }')""_2.fastq.gz" && mv $(ls | egrep ^$i | head -1) $(cat $output_folder/$name/GEO_info/samples_info.txt | grep $i | cut -f 2 | sed -e 's,%,,g;s,(,,g;s,),,g;s/[_]1/1/g;s/[_]2/2/g;s/replicate_/replicate/g' | awk -F '_GSM' '{ gsub(/-/,"",$1); print substr($1, 1, 140) "_GSM" $2 }')"_1.fastq.gz" && mv $(ls | egrep ^$i | tail -1) $(cat $output_folder/$name/GEO_info/samples_info.txt | grep $i | cut -f 2 | sed -e 's,%,,g;s,(,,g;s,),,g;s/[_]1/1/g;s/[_]2/2/g;s/replicate_/replicate/g' | awk -F '_GSM' '{ gsub(/-/,"",$1); print substr($1, 1, 140) "_GSM" $2 }')"_2.fastq.gz"; done
@@ -541,12 +546,12 @@ if [[ $debug_step == "all" || $debug_step == "step1a" ]]; then
 			fi
 			cd $seqs_location; rm -rf *
 			echo $input | tr ',' '\n' | parallel --joblog $output_folder/$name/fastq_dl_log_parallel.txt -j $number_parallel --max-args 1 'if [ $(echo {} | egrep -c "PRJEB|PRJNA|PRJDB|ERX|DRX|SRX|ERP|DRP|SRP") -eq 1 ]; then fastq-dl --cpus $cores_parallel --accession {}; fi && 
-		 																		   if [ $(echo {} | egrep -c "ERS|DRS|SRS|SAMD|SAME|SAMN|ERR|DRR|SRR") -eq 1 ]; then fastq-dl --provider sra --cpus $cores_parallel --accession {}; fi'
+																																		   if [ $(echo {} | egrep -c "ERS|DRS|SRS|SAMD|SAME|SAMN|ERR|DRR|SRR") -eq 1 ]; then fastq-dl --provider sra --cpus $cores_parallel --accession {}; fi'
 		 	if [ "$num_gz_files" -eq "$(($num_samples * 2))" ] || [ "$num_gz_files" -eq "$num_samples" ]; then
 		 		echo "It seems the download has been sucessful, but please double check"
 		 	else
 		 		echo "Download still failed. Please double check manually, exiting..."; exit 1
-		 	fi	 																		   	
+		 	fi
 		fi		
 			
 		if [ -z "$number_reads" ]; then
@@ -618,8 +623,8 @@ if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
 				if [[ "$(cat $output_folder/$name/library_layout_info.txt)" == "PAIRED" ]]; then
 					export SEQKIT_THREADS=$((cores / 2)); ls | egrep .fastq.gz$ | grep ${arr2[index]} | parallel --verbose -j 2 "seqtk sample -s 123 {} $number_reads_rand | pigz -p $((cores / 2)) -c --fast > {}_subsamp"
 				else
-	  				export SEQKIT_THREADS=$cores; seqtk sample -s 123 $(ls | egrep .fastq.gz$ | grep ${arr2[index]}) $number_reads_rand | pigz -p $cores -c --fast > $(ls | egrep .fastq.gz$ | grep ${arr2[index]})_subsamp
-	  			fi
+					export SEQKIT_THREADS=$cores; seqtk sample -s 123 $(ls | egrep .fastq.gz$ | grep ${arr2[index]}) $number_reads_rand | pigz -p $cores -c --fast > $(ls | egrep .fastq.gz$ | grep ${arr2[index]})_subsamp
+				fi
 			done
 			rm $(ls | grep -v subsamp); for file in $(ls); do mv $file $(echo $file | sed 's,_subsamp,,g'); done
 			echo -e "\nAll raw data downloaded and info prepared, subsampling (+-10%) completed. Proceeding with reanalyses...\n"
@@ -661,7 +666,7 @@ fi
 ### STEP 1c. Process if required to download from manually provided ids from databases
 if [[ $debug_step == "all" || $debug_step == "step1c" ]]; then
 	echo -e "\n\nSTEP 1c: Starting...\nCurrent date/time: $(date)\n\n"
-	if [[ $input == P*  || $input == E* || $input == D* || $input == S* ]]; then
+	if [[ $input == P* || $input == E* || $input == D* || $input == S* ]]; then
 		seqs_location=$output_folder/$name/raw_reads
 		number_ids=$(echo $input | tr ',' '\n' | wc -l)
 		if [ $number_ids -le $number_parallel ]; then
@@ -809,11 +814,11 @@ if [[ $debug_step == "all" || $debug_step == "step3a" ]]; then
 			cd $output_folder/$name/strand_prediction/salmon_out/
 			salmon_strand=$(grep -r "Automatically detected most likely library type as " | sed 's,.*Automatically detected most likely library type as ,,g' | sort | uniq)
 			if [[ "$salmon_strand" == "SR" || "$salmon_strand" == "ISR" ]]; then
-				strand=reverse
+				strand="reverse"
 			elif [[ "$salmon_strand" == "SF" || "$salmon_strand" == "ISF" ]]; then
-				strand=yes
+				strand="yes"
 			elif [[ "$salmon_strand" == "U" || "$salmon_strand" == "IU" ]]; then
-				strand=no
+				strand="no"
 			fi
 			strand_second_opinion=$(cat $output_folder/$name/strand_prediction/how_are_we_stranded_here_out/check_strandedness_out.log | egrep "Data is likely |Data does not fall into" | sed 's,*Data is likely ,,g;s/([^)]*)//g')
 			cd $output_folder/$name	
@@ -821,11 +826,11 @@ if [[ $debug_step == "all" || $debug_step == "step3a" ]]; then
 			echo "Salmon prediction 2: $strand" >> $output_folder/$name/strand_info.txt
 			echo -e "how_are_we_stranded_here prediction: $strand_second_opinion" >> $output_folder/$name/strand_info.txt		
 			if [ $(egrep -c "reverse|yes|no" $output_folder/$name/strand_info.txt) -gt 0 ]; then		
-	  			echo "Please double check carefully, based on the kit used in the library preparation, the paper, the GEO entry... because this is crucial for quantification. Please rerun with the argument '-s' in the unlikely case that the prediction by salmon is not correct, or if the second opinion by how_are_we_stranded_here is different (if transcripts from GENCODE or any particular format are used, the latter option may fail to identify the data type though)"
-	    			cat $output_folder/$name/strand_info.txt
+				echo "Please double check carefully, based on the kit used in the library preparation, the paper, the GEO entry... because this is crucial for quantification. Please rerun with the argument '-s' in the unlikely case that the prediction by salmon is not correct, or if the second opinion by how_are_we_stranded_here is different (if transcripts from GENCODE or any particular format are used, the latter option may fail to identify the data type though)"
+				cat $output_folder/$name/strand_info.txt
 				rm $(find $output_folder/$name/strand_prediction/how_are_we_stranded_here_out -type f -name "*.bam")
 			else
-	  			echo "Salmon to detect strandedness seems to have failed. This is not acceptable, plese double check or provide the parameter -s. Exiting..."
+				echo "Salmon to detect strandedness seems to have failed. This is not acceptable, plese double check or provide the parameter -s. Exiting..."
 				exit 1
 			fi
 		fi
@@ -968,7 +973,7 @@ fi
 if [[ $debug_step == "all" || $debug_step == "step5" ]]; then
 	echo -e "\n\nSTEP 5: Starting...\nCurrent date/time: $(date)\n\n"
 	for index in "${!array[@]}"; do
-		if [[ "$time_course" == "yes" ]]; then 
+		if [[ "$time_course" == "yes" ]]; then
 			echo -e "\nPerforming time course analyses."
 			R_process_time_course.R $output_folder/$name/final_results_reanalysis$index/ DGE_analysis_comp1.RData edgeR_object_norm $minstd $mestimate
 		fi
@@ -989,7 +994,7 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 		if [ -z "$taxonid" ]; then
 			cd $TMPDIR
 			mkdir -p taxdump && cd taxdump && rm -rf * && wget -q https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/taxdmp.zip && unzip -qq taxdmp.zip && rm taxdmp.zip
-  			taxonid=$(echo $organism | sed 's/_\+/ /g' | taxonkit name2taxid --data-dir $PWD | head -1 | cut -f2)
+			taxonid=$(echo $organism | sed 's/_\+/ /g' | taxonkit name2taxid --data-dir $PWD | head -1 | cut -f2)
 		fi
 	fi
 	if [ -z "${!array[@]}" ]; then
@@ -1014,15 +1019,14 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 			else
 				echo -e "\nPerforming functional enrichment analyses for DEGs. The results up to this point are ready to use (including DEGs and expression, that are only lacking annotation). This step of funtional enrichment analyses may take long if many significant DEGs, comparisons, or analyses...\n"
 				cd $output_folder/$name/final_results_reanalysis$index/DGE/
-				R_clusterProfiler_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index/DGE/ $organism "1" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution "^DGE_analysis_comp[0-9]+.txt$" $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_funct_enrichment.log
+				ls | egrep "^DGE_analysis_comp[0-9]+.txt$" | parallel --joblog R_clusterProfiler_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_clusterProfiler_analyses_parallel.R $PWD $organism "1" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution '^{}$' $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_{}_funct_enrichment.log"
+				echo -e "\nPerforming autoGO and Panther execution... this may take long if many genes or comparisons...\n"
+				ls | egrep "^DGE_analysis_comp[0-9]+.txt$" | parallel --joblog R_autoGO_panther_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism "1" $databases_function {} $panther_method &> autoGO_panther_{}_funct_enrichment.log"
 				if [[ "$time_course" == "yes" ]]; then 
 					cd $output_folder/$name/final_results_reanalysis$index/time_course_analyses
-					R_clusterProfiler_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index/time_course_analyses $organism "1" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution "^DGE_limma_timecourse.*.txt$" $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_funct_enrichment.log
-				fi
-				cd $output_folder/$name/final_results_reanalysis$index
-				
-				echo -e "\nPerforming autoGO and Panther execution... this may take long if many genes or comparisons...\n"		
-				R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism "1" $databases_function "^DGE_analysis_comp.*\\.txt$|^DGE_limma_timecourse.*.txt$" $panther_method &> autoGO_panther_funct_enrichment.log
+					ls | egrep "^DGE_limma_timecourse.*.txt$" | parallel --joblog R_clusterProfiler_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_clusterProfiler_analyses_parallel.R $PWD $organism "1" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution '^{}$' $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_{}_funct_enrichment.log"
+					ls | egrep "^DGE_limma_timecourse.*.txt$" | parallel --joblog R_autoGO_panther_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism "1" $databases_function {} $panther_method &> autoGO_panther_{}_funct_enrichment.log"
+				fi				
 			fi
 		else
 			echo "Organism is $organism... Functional analyses apart from human/mouse is not fully supported yet"
@@ -1040,11 +1044,14 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 				echo "For $organism and the annotation $annotation_file, it does not seem there's GO or functional information available..."
 			fi
 		fi
+		cd $output_folder/$name/final_results_reanalysis$index/DGE/
+		echo -e "\nFunctional enrichment analyses done!\nYou may want to check out the following logs, which seem to contain some errors:\n"
+		grep Err* $(ls | egrep _funct_enrichment.log) | cut -d":" -f1 | sed 's,.txt_funct_enrichment.log,,g' | sort | uniq
 		
 		# Add to the tables of functional enrichment the number of genes up/down:
 		cd $output_folder/$name/final_results_reanalysis$index/
 		echo "Processing results of functional enrichment analyses if any, for example executing Revigo..."
-		find . \( -name "*.txt" -o -name "*.tsv" -o -name "*.csv" \) | grep funct | parallel -j $cores "file={}; R_enrich_format.R \"\$file\" \$(echo \"\$file\" | sed 's,DGE/.*,DGE/,g')\$(echo \"\$file\" | sed 's,.*DGE_analysis_comp,DGE_analysis_comp,g;s,_pval.*,,g;s,_fdr.*,,g;s,_funct.*,,g;s,_cluster.*,,g' | sed 's,.txt,,g').txt $organism $rev_thr" &> $PWD/enrichment_format.log
+		find . \( -name "*.txt" -o -name "*.tsv" -o -name "*.csv" \) | grep funct | grep -v _err.txt | parallel --joblog R_enrich_format_analyses_parallel_log_parallel.txt -j $cores "file={}; R_enrich_format.R \"\$file\" \$(echo \"\$file\" | sed 's,DGE/.*,DGE/,g')\$(echo \"\$file\" | sed 's,.*DGE_analysis_comp,DGE_analysis_comp,g;s,_pval.*,,g;s,_fdr.*,,g;s,_funct.*,,g;s,_cluster.*,,g' | sed 's,.txt,,g').txt $organism $rev_thr" &> $PWD/enrichment_format.log
 	done
 	export debug_step="all"
 	echo -e "\n\nSTEP 6: DONE\nCurrent date/time: $(date)\n\n"
@@ -1057,14 +1064,16 @@ if [[ $debug_step == "all" || $debug_step == "step7" ]]; then
 	echo -e "\n\nAnnotating list of genes...\n\n"
 	for index in "${!array[@]}"; do
 		# All the tables that contain list of genes, annotate them:
-		R_annotate_genes.R $output_folder/$name/final_results_reanalysis$index/ "^DGE_analysis_comp\\d+\\.txt$|^DGE_limma_timecourse_T\\d+_vs_T\\d+\\.txt$|mfuzz_elements_clusters|counts|WGCNA_all_modules_|STRINGdb_all_modules_" $organism
-	
-		# All the tables of DEGs, provide bed files for direct upload in genome browser
-		cd $output_folder/$name/final_results_reanalysis$index/
-		for file in $(find . -name "DGE_analysis_comp*" | egrep "_fdr_05.txt$|_pval_05.txt$"); do
-			cut -f1 "$file" | parallel -j $((cores*2)) "gene={}; foldchange=\$(grep -i \"\$gene\" \"$file\" | cut -f3 | sed -n 's/\(.*[.,][0-9]\{2\}\).*/\1/p'); \
-																   grep -i \"=\$gene\" \"$annotation_file\" | head -1 | awk -v id=\"\$gene\" -v fc=\"\$foldchange\" '{ print \$1\"\\t\"\$4\"\\t\"\$5\"\\t\"id\"_\"fc\"\\t.\t\"\$7 }' >> \"$file.bed\""
-		done
+		R_annotate_genes.R $output_folder/$name/final_results_reanalysis$index/ "^DGE_analysis_comp\\d+\\.txt$|^DGE_limma_timecourse_T\\d+_vs_T\\d+\\.txt$|mfuzz_elements_clusters|counts|WGCNA_all_modules_|STRINGdb_all_modules_" $organism			
+		
+		if [[ "$bed_mode" == "yes" ]]; then
+			# All the tables of DEGs, provide bed files for direct upload in genome browser
+			cd $output_folder/$name/final_results_reanalysis$index/
+			for file in $(find . -name "DGE_analysis_comp*" | egrep "_fdr_05.txt$|_pval_05.txt$"); do
+				cut -f1 "$file" | parallel -j $((cores*3)) "gene={}; foldchange=\$(grep -i \"\$gene\" \"$file\" | cut -f3 | sed -n 's/\(.*[.,][0-9]\{2\}\).*/\1/p'); \
+															grep -i \"=\$gene\" \"$annotation_file\" | head -1 | awk -v id=\"\$gene\" -v fc=\"\$foldchange\" '{ print \$1\"\\t\"\$4\"\\t\"\$5\"\\t\"id\"_\"fc\"\\t.\t\"\$7 }' >> \"$file.bed\""
+			done
+		fi
 	done
 	export debug_step="all"
 	echo -e "\n\nSTEP 7: DONE\nCurrent date/time: $(date)\n\n"
@@ -1075,10 +1084,11 @@ fi
 # Compress the folders
 if [[ $debug_step == "all" || $debug_step == "step8" ]]; then
 	echo -e "\n\nSTEP 8: Starting...\nCurrent date/time: $(date)\n\n"
-	echo -e "\n\nTidying up, removing folders, temp files, compressing...\n\n"
+	echo -e "\n\nTidying up, removing empty folders, temp files, compressing...\n\n"
 	for index in "${!array[@]}"; do
 	 	cd $output_folder/$name/final_results_reanalysis$index/DGE/
-		folders_funct=$(find . -type d \( -name "*_autoGO" -o -name "*_clusterProfiler" -o -name "*_panther" \))
+		find . -type d -empty -delete
+		folders_funct=$(find . -type d \( -name "*_autoGO" -o -name "*_clusterProfiler" -o -name "*_panther" \) -o -type f \( -name "*_funct_enrichment.log" -o -name "funct_enrich_*" \))
 		if [ -n "$folders_funct" ]; then
 			tar -cf - $folders_funct | pigz --best -p $cores > funct_enrichment_analyses.tar.gz; rm -rf $folders_funct
 		fi
