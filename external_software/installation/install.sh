@@ -115,6 +115,7 @@ ln -sf $conda_envs_path/reanalyzerGSE_3/bin/qualimap .
 ln -sf $conda_envs_path/reanalyzerGSE_3/bin/multiqc .
 ln -sf $conda_envs_path/reanalyzerGSE_3/bin/pandoc .
 ln -sf $conda_envs_path/reanalyzerGSE_3/bin/rcf .
+ln -sf $conda_envs_path/reanalyzerGSE_3/bin/perl .
 ln -sf $conda_envs_path/reanalyzerGSE_4/bin/check_strandedness .
 ln -sf $conda_envs_path/reanalyzerGSE_4/bin/gff32gtf .
 ln -sf $conda_envs_path/reanalyzerGSE_4/bin/gtf2bed .
@@ -126,13 +127,14 @@ cd $(dirname $(find $conda_envs_path/reanalyzerGSE_4 -name check_strandedness.py
 rm check_strandedness.py; wget -q https://github.com/signalbash/how_are_we_stranded_here/raw/master/how_are_we_stranded_here/check_strandedness.py; chmod 775 check_strandedness.py
 
 echo -e "\n\nInstalling the perl modules required for miARma-Seq via cpanm...\n\n"
-cd $conda_envs_path/reanalyzerGSE/bin
-export PATH=$conda_envs_path/reanalyzerGSE/bin/:$PATH
-curl -s -L https://cpanmin.us/ -o cpanm; chmod +x cpanm
-./cpanm -q -f Config::IniFiles DateTime Strict::Perl LWP Cwd less Statistics::R
-
+cd $conda_envs_path/reanalyzerGSE_3/bin
+export PATH=$conda_envs_path/reanalyzerGSE_3/bin/:$PATH
+# curl -s -L https://cpanmin.us/ -o cpanm; chmod +x cpanm
+# ./cpanm -q -f Config::IniFiles DateTime Strict::Perl LWP Cwd less Statistics::R
+export PERL_MM_OPT="" && export PERL_MB_OPT="" && export PERL5_CPANISITES=$PWD/cpanm && export PERL_MM_USE_DEFAULT=1
+perl -MCPAN -e 'CPAN::Shell->install("Config::IniFiles"); CPAN::Shell->install("DateTime"); CPAN::Shell->install("Strict::Perl"); CPAN::Shell->install("Cwd"); CPAN::Shell->install("less"); CPAN::Shell->install("Statistics::R")' > /dev/null 2>&1
+# LWP is problematic, WIP because the modules that are depending on it from miARma, i.e. miRNAs analyses, are not active for now
 echo -e "\n\nInstalling the CRAN's package 'autoGO' and some other dependencies, not available through conda as of yet... This manual installation implies that the version of the installed R packages are not frozen. So, not likely, but please do keep in mind that this may be a source of errors in the mid-term if newer versions of the R packages are installed...\n\n"
-export PATH=$conda_envs_path/reanalyzerGSE_3/bin:$PATH
 $conda_envs_path/reanalyzerGSE_3/bin/Rscript -e 'suppressMessages({install.packages(c("jpeg","autoGO","GOxploreR","aPEAR", "rbioapi"),repos="https://cloud.r-project.org",quiet=T)})' &> /dev/null # Avoid the very extensive logs being printed out, please remove suppressMessages and "&> /dev/null" to double check if installation fails...
 $conda_envs_path/reanalyzerGSE_3/bin/Rscript -e 'install.packages("https://cran.r-project.org/src/contrib/Archive/nVennR/nVennR_0.2.3.tar.gz", repos = NULL, type = "source")' &> /dev/null # Avoid the very extensive logs being printed out, please remove suppressMessages and "&> /dev/null" to double check if installation fails...
 $conda_envs_path/reanalyzerGSE_3/bin/Rscript -e 'packages <- c("nVennR","autoGO", "GOxploreR", "aPEAR", "rbioapi"); for (pkg in packages) { if(requireNamespace(pkg, quietly=TRUE)){cat(pkg,"is installed...\n")} else {cat("\n",pkg, "is NOT installed.\n")}}'
