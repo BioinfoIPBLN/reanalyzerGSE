@@ -79,6 +79,8 @@ if [[ $manager == "mamba" ]]; then
 	mamba env create -q --file $CURRENT_DIR/reanalyzerGSE3.yml
  	echo -e "\n\nInstalling reanalyzerGSE4...\n\n"
 	mamba env create -q --file $CURRENT_DIR/reanalyzerGSE4.yml
+ 	echo -e "\n\nInstalling reanalyzerGSE5...\n\n"
+	mamba env create -q --file $CURRENT_DIR/reanalyzerGSE5.yml
 else
 	echo -e "The manager chosen is 'conda', populating the environments based on the yml files (keep in mind, this is frozen versions of the software)...\n\n\n"
  	echo -e "\n\nInstalling reanalyzerGSE1...\n\n"
@@ -89,7 +91,7 @@ else
 	conda env create -q --file $CURRENT_DIR/reanalyzerGSE3.yml
  	echo -e "\n\nInstalling reanalyzerGSE4...\n\n"
 	conda env create -q --file $CURRENT_DIR/reanalyzerGSE4.yml
-	echo -e "\n\nInstalling reanalyzerGSE4...\n\n"
+	echo -e "\n\nInstalling reanalyzerGSE5...\n\n"
 	conda env create -q --file $CURRENT_DIR/reanalyzerGSE5.yml
 fi
 
