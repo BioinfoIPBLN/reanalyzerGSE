@@ -171,7 +171,7 @@ process_file <- function(file){
     suppressMessages(library(orgDB, character.only = TRUE,quiet = T,warn.conflicts = F)) # Crucial apparently, so the functions using the orgDB object can be done in parallel
 
     if(uni=="detected"){
-      universe <- convert_ids(genes_of_interest[[geneset]],mode)
+      universe <- convert_ids(genes_of_interest[["genes_backg"]],mode)
       universe_2 <- entrez_ids_backg      
     } else if (uni=="all"){
       universe <- unname(as.character(eval(parse(text=paste0(gsub(".db","",orgDB),"SYMBOL")))))
