@@ -11,6 +11,7 @@ diff_soft <- args[8] # if not provided, "edgeR"
 covariab <- args[9] # if not provided, "none"
 cdseq_exec <- args[10] # if not provided, "no"
 restrict_comparisons <- args[11] # if not provided, "no"
+full_analyses <- args[11] # if not provided, "yes"
 
 ###### Load read counts, format, filter, start differential expression analyses, get RPKM, save...:
   cat("\nProcessing counts and getting figures...\n")
@@ -592,111 +593,116 @@ restrict_comparisons <- args[11] # if not provided, "no"
               file=paste0(output_dir,"/DGE/list_comp.txt"),quote = F,row.names = F, col.names = F,sep = "\n", append=T)
 
       # Perform DGE:
-      if(covariab == "none"){
-        edgeR_results <- DGE(comp=list_combinations[[i]],object=edgeR_object_norm_temp_to_process)
-        colnames(edgeR_results$table)[3] <- paste0(colnames(edgeR_results$table)[3],list_combinations[[i]][1],"_VS_",list_combinations[[i]][2])
-      } else {
-        fit <- glmQLFit(edgeR_object_norm_temp_to_process, design, robust=TRUE)
-        contrast <- rep(0,dim(design)[2])
-        contrast[grep(paste(gsub("__|_seq1|_seq2","",list_combinations[[i]]),collapse="|"),colnames(design))] <- c(-1,1)
-        qlf <- glmQLFTest(fit,contrast=contrast)
-        edgeR_results <- topTags(qlf,n=nrow(qlf),adjust.method="BH",sort.by="PValue")
-        print(summary(decideTests(qlf)))
-        print(nrow(edgeR_results$table[edgeR_results$table$FDR<=0.05 & abs(edgeR_results$table$logFC)>= 0,]))
-        print(list_combinations[[i]]); print("Top results:")
-        print(head(edgeR_results$table,10)[,c(-1,-2)])
-        myLabel1=paste(list_combinations[[i]], collapse = '_vs_')
-        myLabel1=gsub("^_","",gsub("_+","_",gsub("[^[:alnum:]_]+", "_", myLabel1)))
-        Volcano(edgeR_results,paste(output_dir,"/DGE/Volcano_plot_",myLabel1,".pdf", sep=""),myLabel1)
+      if (full_analyses!="no"){
+        if(covariab == "none"){
+          edgeR_results <- DGE(comp=list_combinations[[i]],object=edgeR_object_norm_temp_to_process)
+          colnames(edgeR_results$table)[3] <- paste0(colnames(edgeR_results$table)[3],list_combinations[[i]][1],"_VS_",list_combinations[[i]][2])
+        } else {
+          fit <- glmQLFit(edgeR_object_norm_temp_to_process, design, robust=TRUE)
+          contrast <- rep(0,dim(design)[2])
+          contrast[grep(paste(gsub("__|_seq1|_seq2","",list_combinations[[i]]),collapse="|"),colnames(design))] <- c(-1,1)
+          qlf <- glmQLFTest(fit,contrast=contrast)
+          edgeR_results <- topTags(qlf,n=nrow(qlf),adjust.method="BH",sort.by="PValue")
+          print(summary(decideTests(qlf)))
+          print(nrow(edgeR_results$table[edgeR_results$table$FDR<=0.05 & abs(edgeR_results$table$logFC)>= 0,]))
+          print(list_combinations[[i]]); print("Top results:")
+          print(head(edgeR_results$table,10)[,c(-1,-2)])
+          myLabel1=paste(list_combinations[[i]], collapse = '_vs_')
+          myLabel1=gsub("^_","",gsub("_+","_",gsub("[^[:alnum:]_]+", "_", myLabel1)))
+          Volcano(edgeR_results,paste(output_dir,"/DGE/Volcano_plot_",myLabel1,".pdf", sep=""),myLabel1)
+        }
+        save.image(file=paste0(output_dir,"/DGE/DGE_analysis_comp",i+existing,".RData"))
+        write.table(edgeR_results$table,
+                file=paste0(output_dir,"/DGE/DGE_analysis_comp",i+existing,".txt"),quote = F,row.names = F, col.names = T,sep = "\t")
       }
-      save.image(file=paste0(output_dir,"/DGE/DGE_analysis_comp",i+existing,".RData"))
-      write.table(edgeR_results$table,
-              file=paste0(output_dir,"/DGE/DGE_analysis_comp",i+existing,".txt"),quote = F,row.names = F, col.names = T,sep = "\t")
     }
     }
     print("Done")
     print(paste0("Differential gene expression analyses done. Current date: ",date()))
   
   ## Computing house-keeping/hallmark genes:
-    print("Obtaining house-keeping genes...")
-    suppressMessages(library(NormqPCR,quiet = T,warn.conflicts = F))
-    suppressMessages(library(limma,quiet = T,warn.conflicts = F))
-    setwd(paste0(output_dir,"/DGE"))
-      tryCatch({
-        RPKM <- gene_counts_rpkm_to_write[,-grep("Gene_ID",colnames(gene_counts_rpkm_to_write))]
-        a <- data.frame(Type=sub("_Rep.*","",sub("(.*)_.*", "\\1",colnames(RPKM))))
-        rownames(a) <- colnames(RPKM)
-        print("Obtaining targets from colum names removing everything after the last underline... This is the result, please double check as it may be the source of errors...")
-        print(a)
-        write.table(a,
-                    file="temp_targets.txt",quote = F,row.names = T, col.names = T,sep = "\t")
-  
-        #sink("HK_genes.log")
-        target <- readTargets("temp_targets.txt")
-        matriz_obj<-new("qPCRBatch", exprs=as.matrix(RPKM))
-        
-        ### Get a number of HK genes: 10 by default
-        hk_genes_number_input <- 10
-        #max_number_degs <- max(unname(sapply(list.files(path=output_dir,pattern="DGE_analysis_comp*",recursive=T,full=T),function(x){length(unique(read.delim(x)$Gene_ID[read.delim(x)$FDR<0.05]))})))
-        #for (hk_genes_number in c(hk_genes_number_input,100,max_number_degs)){
-        for (hk_genes_number in c(hk_genes_number_input,100)){
-          #1
-          pData(matriz_obj)<-data.frame(Name=colnames(RPKM),Type=target$Type)
-          Class <- as.factor(pData(matriz_obj)[,"Type"])
-          HK_normPCR_normfinder <- selectHKs(matriz_obj,Symbols=featureNames(matriz_obj),method="NormFinder",group=Class,minNrHKs=hk_genes_number,trace=F)
-          ranking_NormFinder <- data.frame(
-            rank=c(1:hk_genes_number),
-            Name=as.character(HK_normPCR_normfinder$ranking)[1:hk_genes_number],
-            Rho=as.numeric(HK_normPCR_normfinder$rho)[1:hk_genes_number],
-            AveExp=as.numeric(rowMeans(RPKM[as.character(HK_normPCR_normfinder$ranking)[1:hk_genes_number],])),
-            MedianExp=as.numeric(rowMedians(as.matrix(RPKM[as.character(HK_normPCR_normfinder$ranking)[1:hk_genes_number],])))
-          )
-          #2
-          matriz_rho <- stabMeasureRho(matriz_obj, group = Class)
-          matriz_rho <- sort(matriz_rho)
-          ranking_Rho <- data.frame(
-            rank=c(1:hk_genes_number),
-            Name=names(matriz_rho)[1:hk_genes_number],
-            Rho=as.numeric(matriz_rho)[1:hk_genes_number],
-            AveExp=as.numeric(rowMeans(RPKM[names(matriz_rho)[1:hk_genes_number],])),
-            MedianExp=as.numeric(rowMedians(as.matrix(RPKM[names(matriz_rho)[1:hk_genes_number],])))
-          )
-          #3
-          #print(paste0("Top ",hk_genes_number," hallmark/house-keeping genes according to NormFinder and Rho methods, respectively:"))
-          #print(ranking_NormFinder)
-          #print(ranking_Rho)          
-          
-          write.table(ranking_NormFinder,file=paste0("HK_genes_normfinder_",hk_genes_number,".txt"),row.names = F,sep="\t",quote = F)
-          write.table(ranking_Rho,file=paste0("HK_genes_rho_",hk_genes_number,".txt"),row.names = F,sep="\t",quote = F)
+    if (full_analyses!="no"){
+      print("Obtaining house-keeping genes...")
+      suppressMessages(library(NormqPCR,quiet = T,warn.conflicts = F))
+      suppressMessages(library(limma,quiet = T,warn.conflicts = F))
+      setwd(paste0(output_dir,"/DGE"))
+        tryCatch({
+          RPKM <- gene_counts_rpkm_to_write[,-grep("Gene_ID",colnames(gene_counts_rpkm_to_write))]
+          a <- data.frame(Type=sub("_Rep.*","",sub("(.*)_.*", "\\1",colnames(RPKM))))
+          rownames(a) <- colnames(RPKM)
+          print("Obtaining targets from colum names removing everything after the last underline... This is the result, please double check as it may be the source of errors...")
+          print(a)
+          write.table(a,
+                      file="temp_targets.txt",quote = F,row.names = T, col.names = T,sep = "\t")
     
-          #print("Hallmark/house-keeping genes NormFinder and Rho methods combined:")
-          hallmarks_comb <- intersect(ranking_NormFinder$Name,ranking_Rho$Name)
-          #print(hallmarks_comb)
-          write.table(hallmarks_comb,file=paste0("HK_genes_combined_",hk_genes_number,".txt"),row.names = F,sep="\t",quote = F,col.names=F)
-          print(paste0("Computed ",hk_genes_number," HK genes!"))
-        }
-        #sink()
-
-        
-      #Make barplots:
-      #for (i in hallmarks_comb){
-      #a <- RPKM[rownames(RPKM)==i,]
-      #df <- data.frame(sample=names(a),
-            #expr_RPKM=as.numeric(unname(a)))
-      #suppressMessages(library(ggpubr,quiet = T,warn.conflicts = F))
-      #p <- ggbarplot(df, x = "sample", y = "expr_RPKM",
-        #add = "mean_se", label=T,lab.vjust = 4,
-        #position = ggplot2::position_dodge()) +
-        #theme_classic() + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size=9)) +
-        #labs(x="", title=paste0("GENE SHOWN: ", i))
-      #ggsave(p, filename = paste0("KOvsWT12m_hallmark_bars_",i,".pdf"),width=30, height=30)
-      #}
-      # qpdf::pdf_combine(input = list.files(pattern="KOvsWT12m_hallmark_bars_"),output="KOvsWT12m_hallmark_bars.pdf")
-      # file.remove(list.files(pattern="KOvsWT12m_hallmark_bars_"))
-      file.remove(list.files(pattern="temp_targets.txt"))
-      }, error = function(e) {
-          writeLines(as.character(e), paste0("Housekeeping_err.txt"))
-      })
+          #sink("HK_genes.log")
+          target <- readTargets("temp_targets.txt")
+          matriz_obj<-new("qPCRBatch", exprs=as.matrix(RPKM))
+          
+          ### Get a number of HK genes: 10 by default
+          hk_genes_number_input <- 10
+          #max_number_degs <- max(unname(sapply(list.files(path=output_dir,pattern="DGE_analysis_comp*",recursive=T,full=T),function(x){length(unique(read.delim(x)$Gene_ID[read.delim(x)$FDR<0.05]))})))
+          #for (hk_genes_number in c(hk_genes_number_input,100,max_number_degs)){
+          for (hk_genes_number in c(hk_genes_number_input,100)){
+            #1
+            pData(matriz_obj)<-data.frame(Name=colnames(RPKM),Type=target$Type)
+            Class <- as.factor(pData(matriz_obj)[,"Type"])
+            HK_normPCR_normfinder <- selectHKs(matriz_obj,Symbols=featureNames(matriz_obj),method="NormFinder",group=Class,minNrHKs=hk_genes_number,trace=F)
+            ranking_NormFinder <- data.frame(
+              rank=c(1:hk_genes_number),
+              Name=as.character(HK_normPCR_normfinder$ranking)[1:hk_genes_number],
+              Rho=as.numeric(HK_normPCR_normfinder$rho)[1:hk_genes_number],
+              AveExp=as.numeric(rowMeans(RPKM[as.character(HK_normPCR_normfinder$ranking)[1:hk_genes_number],])),
+              MedianExp=as.numeric(rowMedians(as.matrix(RPKM[as.character(HK_normPCR_normfinder$ranking)[1:hk_genes_number],])))
+            )
+            #2
+            matriz_rho <- stabMeasureRho(matriz_obj, group = Class)
+            matriz_rho <- sort(matriz_rho)
+            ranking_Rho <- data.frame(
+              rank=c(1:hk_genes_number),
+              Name=names(matriz_rho)[1:hk_genes_number],
+              Rho=as.numeric(matriz_rho)[1:hk_genes_number],
+              AveExp=as.numeric(rowMeans(RPKM[names(matriz_rho)[1:hk_genes_number],])),
+              MedianExp=as.numeric(rowMedians(as.matrix(RPKM[names(matriz_rho)[1:hk_genes_number],])))
+            )
+            #3
+            #print(paste0("Top ",hk_genes_number," hallmark/house-keeping genes according to NormFinder and Rho methods, respectively:"))
+            #print(ranking_NormFinder)
+            #print(ranking_Rho)          
+            
+            write.table(ranking_NormFinder,file=paste0("HK_genes_normfinder_",hk_genes_number,".txt"),row.names = F,sep="\t",quote = F)
+            write.table(ranking_Rho,file=paste0("HK_genes_rho_",hk_genes_number,".txt"),row.names = F,sep="\t",quote = F)
+      
+            #print("Hallmark/house-keeping genes NormFinder and Rho methods combined:")
+            hallmarks_comb <- intersect(ranking_NormFinder$Name,ranking_Rho$Name)
+            #print(hallmarks_comb)
+            write.table(hallmarks_comb,file=paste0("HK_genes_combined_",hk_genes_number,".txt"),row.names = F,sep="\t",quote = F,col.names=F)
+            print(paste0("Computed ",hk_genes_number," HK genes!"))
+          }
+          
+          #sink()
+  
+          
+        #Make barplots:
+        #for (i in hallmarks_comb){
+        #a <- RPKM[rownames(RPKM)==i,]
+        #df <- data.frame(sample=names(a),
+              #expr_RPKM=as.numeric(unname(a)))
+        #suppressMessages(library(ggpubr,quiet = T,warn.conflicts = F))
+        #p <- ggbarplot(df, x = "sample", y = "expr_RPKM",
+          #add = "mean_se", label=T,lab.vjust = 4,
+          #position = ggplot2::position_dodge()) +
+          #theme_classic() + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size=9)) +
+          #labs(x="", title=paste0("GENE SHOWN: ", i))
+        #ggsave(p, filename = paste0("KOvsWT12m_hallmark_bars_",i,".pdf"),width=30, height=30)
+        #}
+        # qpdf::pdf_combine(input = list.files(pattern="KOvsWT12m_hallmark_bars_"),output="KOvsWT12m_hallmark_bars.pdf")
+        # file.remove(list.files(pattern="KOvsWT12m_hallmark_bars_"))
+        file.remove(list.files(pattern="temp_targets.txt"))
+        }, error = function(e) {
+            writeLines(as.character(e), paste0("Housekeeping_err.txt"))
+        })
+      }
     
 
 
@@ -770,13 +776,14 @@ Venn_funct <- function(files){
   }
 }
 
-if(length(list.files(path=paste0(output_dir,"/DGE"),full.names=T,pattern="^DGE_analysis_comp\\d+\\.txt$"))>1){
-  print("Attempting to perform Venn diagrams for DGE analyses...")
-  Venn_funct(list.files(path=paste0(output_dir,"/DGE"),full.names=T,pattern="^DGE_analysis_comp\\d+\\.txt$"))
+if (full_analyses!="no"){
+  if(length(list.files(path=paste0(output_dir,"/DGE"),full.names=T,pattern="^DGE_analysis_comp\\d+\\.txt$"))>1){
+    print("Attempting to perform Venn diagrams for DGE analyses...")
+    Venn_funct(list.files(path=paste0(output_dir,"/DGE"),full.names=T,pattern="^DGE_analysis_comp\\d+\\.txt$"))
+  }
+  
+  try(system("tar cf venn_diagrams.tar Venn_diagram*; rm Venn_diagram*"))
 }
-
-try(system("tar cf venn_diagrams.tar Venn_diagram*; rm Venn_diagram*"))
-
 save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
 ###### QC PDF from Bioinfo and Laura:
   cat("\nPerforming QC_PDF...\n");print(paste0("Current date: ",date()))
