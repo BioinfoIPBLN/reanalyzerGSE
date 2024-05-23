@@ -60,7 +60,7 @@ reanalyzerGSE.pk.sh -h
 		-s | -strandness # Strandness of the library ('yes, 'no', 'reverse'). If not provided and '-t' used, this would be predicted by salmon. Please use this parameter if prediction not correct, see explanations in for example in bit.ly/strandness0 and bit.ly/strandness
 		-g | -genes # Genes to highlight their expression in plots (one or several, separated by comma and no space)
 		-G | -GSM_filter # GSM ids (one or several, separated by comma and no space) within the GSE entry to restrict the analysis to. An alternative to requesting a stop with -S to reorganize the downloaded files manually
-		-R | -reads_to_subsample # Number of reads to subsample to the sequences before the analyses (none by default, a comma-separated list with one number per fastq file/pair of files if paired-end must be provided)
+		-R | -reads_to_subsample # Number of reads to subsample to the sequences before the analyses (none by default, a number must be provided and all samples will be scaled to approximately, +- 10%, that number)
 		-f | -filter # Threshold of gene counts to use ('bin' to capture the lower expressed genes, or 'standard', by default). Please provide a comma separated list with the filters to use at each quantification if multiple annotation are provided
 		-b | -batch # Batch effect present? (no by default, yes if correction through Combat-seq and model is to be performed, and info is going to be required in other arguments or prompts)
 		-bv | -batch_vector # Comma-separated list of numbers for use as batch vector with Combat-seq
@@ -85,7 +85,7 @@ reanalyzerGSE.pk.sh -h
 		-iG | -input_GEO_reads # If you want to combine downloading metadata from GEO with reads from GEO or any database already downloaded, maybe from a previous attempt, please provide an absolute path
 		-cG | -compression_level # Specify the compression level to gzip the downloaded fastq files from GEO (numeric '0' to '9', default '9')
 		-fe | -functional_enrichment_analyses # Whether to perform functional enrichment analyses ('no' or 'yes', by default)
-  		-fd | -functional_differential_analyses # Whether to perform full differential enrichment analyses (for example including computation of DEGs or Venn diagrams, 'no' or 'yes', by default)
+  		-fd | -full_differential_analyses # Whether to perform full differential enrichment analyses (for example including computation of DEGs or Venn diagrams, 'no' or 'yes', by default)
 		-cPa | -clusterProfiler_all # Whether to perform additional functional enrichment analyses with multiple databases using clusterProfiler, by default only ORA for GO BP, GO MF and GO CC, and KEGG and REACTOME enrichment, will be performed, as additional analyses may be slow if many significant DEGs or multiple number of comparisons ('yes' or 'no', by default)
 		-aP | -aPEAR_execution # Whether to simplify pathway enrichment analysis results by detecting clusters of similar pathways and visualizing enrichment networks by aPEAR package, which may be slow ('yes' or 'no', by default)
 		-cPm | -clusterProfiler_method # Method for adjusting p.value in clusterProfiler iterations (one of 'holm','hochberg','hommel','bonferroni','BH','BY,'none', or 'fdr', by default)
