@@ -36,7 +36,7 @@ for argument in $options; do
 		-s | -strandness # Strandness of the library ('yes, 'no', 'reverse'). If not provided and '-t' used, this would be predicted by salmon. Please use this parameter if prediction not correct, see explanations in for example in bit.ly/strandness0 and bit.ly/strandness
 		-g | -genes # Genes to highlight their expression in plots (one or several, separated by comma and no space)
 		-G | -GSM_filter # GSM ids (one or several, separated by comma and no space) within the GSE entry to restrict the analysis to. An alternative to requesting a stop with -S to reorganize the downloaded files manually
-		-R | -reads_to_subsample # Number of reads to subsample to the sequences before the analyses (none by default, a number must be provided and all samples will be scaled to approximately, +- 10%, that number)
+		-R | -reads_to_subsample # Information and number of reads to subsample to the sequences before the analyses (none by default, a path to the 'reads_numbers.txt' file from a previous execution and a number of reads must be provided, separated with comma, and proportions will be computed, with all samples being scaled to approximately, +- 10% of that number)
 		-f | -filter # Threshold of gene counts to use ('bin' to capture the lower expressed genes, or 'standard', by default). Please provide a comma separated list with the filters to use at each quantification if multiple annotation are provided
 		-b | -batch # Batch effect present? (no by default, yes if correction through Combat-seq and model is to be performed, and info is going to be required in other arguments or prompts)
 		-bv | -batch_vector # Comma-separated list of numbers for use as batch vector with Combat-seq
@@ -566,16 +566,22 @@ if [[ $debug_step == "all" || $debug_step == "step1a" ]]; then
 			# From the input parameter by the user, obtain a random number allowing a +- 10% window:
 			IFS=', ' read -r -a arr <<< "$number_reads"
 			IFS=', ' read -r -a arr2 <<< "$(ls | egrep .fastq.gz$ | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq | tr '\n' ',')"
+			desired_number=${arr[1]}
+			desired_numbers=$(while IFS=$'\t' read -r col1 col2 col3; do			    
+			    result=$((col2 * desired_number / col3))			    
+			    echo "$result"
+			done < <(sed '1d' ${arr[0]}))
+			readarray -t arr <<< "$(echo $desired_numbers)"
 			export -f subsample_reads
 			subsample_reads() {
-								file=$1
-								number=$2							
-								ten_percent=$(( number * 10 / 100 ))
-								random_shift=$((RANDOM % (2 * ten_percent + 1) - ten_percent))
-								number_reads_rand=$((number + random_shift))
-								echo "$file to $number +- 10%... to $number_reads_rand"
-								seqtk sample -s 123 "$file" "$number_reads_rand" | pigz -p $((cores / 4)) -c --best > "${file}_subsamp"
-							  }		
+				file=$1
+				number=$2							
+				ten_percent=$(( number * 10 / 100 ))
+				random_shift=$((RANDOM % (2 * ten_percent + 1) - ten_percent))
+				number_reads_rand=$((number + random_shift))
+				echo "$file to $number +- 10%... to $number_reads_rand"
+				seqtk sample -s 123 "$file" "$number_reads_rand" | pigz -p $((cores / 4)) -c --best > "${file}_subsamp"
+				}
 			parallel --verbose -j $cores subsample_reads {} ::: "${arr2[@]}" ::: "${arr[@]}"		
 			rm $(ls | grep -v subsamp); for file in $(ls); do mv $file $(echo $file | sed 's,_subsamp,,g'); done
 			echo -e "\nAll raw data downloaded and info prepared, subsampling (+-10%) completed. Proceeding with reanalyses...\n"
@@ -618,18 +624,33 @@ if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
 			# From the input parameter by the user, obtain a random number allowing a +- 10% window:
 			IFS=', ' read -r -a arr <<< "$number_reads"
 			IFS=', ' read -r -a arr2 <<< "$(ls | egrep .fastq.gz$ | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq | tr '\n' ',')"
-			for index in "${!arr[@]}"; do		
-				number=${arr[index]}
-				echo "To $number +- 10%..."
-				ten_percent=$(( number * 10 / 100 ))
-				random_shift=$((RANDOM % (2 * ten_percent + 1) - ten_percent))
-				number_reads_rand=$((number + random_shift))
-				echo "... to $number_reads_rand"
-				if [[ "$(cat $output_folder/$name/library_layout_info.txt)" == "PAIRED" ]]; then
-					export SEQKIT_THREADS=$((cores / 2)); ls | egrep .fastq.gz$ | grep ${arr2[index]} | parallel --verbose -j 2 "seqtk sample -s 123 {} $number_reads_rand | pigz -p $((cores / 2)) -c --fast > {}_subsamp"
-				else
-					export SEQKIT_THREADS=$cores; seqtk sample -s 123 $(ls | egrep .fastq.gz$ | grep ${arr2[index]}) $number_reads_rand | pigz -p $cores -c --fast > $(ls | egrep .fastq.gz$ | grep ${arr2[index]})_subsamp
-				fi
+			desired_number=${arr[1]}
+			apply_random_shift() {
+			    local number=$1
+			    local ten_percent=$(( number / 10 ))
+			    local random_shift=$(( RANDOM % (2 * ten_percent + 1) - ten_percent ))
+			    local new_number=$(( number + random_shift ))
+			    echo $new_number
+			}
+			desired_numbers=$(while IFS=$'\t' read -r col1 col2 col3; do
+						desired_number_rand=$(apply_random_shift $desired_number)
+						result=$((col2 * desired_number_rand / col3))                
+						echo "$result"
+			    		  done < <(sed '1d' ${arr[0]}))
+			IFS=$'\n' read -d '' -r -a arr <<< "$desired_numbers"
+			for index in "${!arr[@]}"; do
+			  number=${arr[index]}
+			  pattern=${arr2[index]}
+			  files=$(ls | grep $pattern)
+			  num_files=$(ls | grep $pattern | wc -l)
+			  echo "Subsampling:"
+			  echo $files
+			  echo -e "\nto $number\n"
+			  if [ $num_files -eq 2 ]; then
+			    export SEQKIT_THREADS=$((cores / 2)); echo $files | sed 's, ,\n,g' | parallel --verbose -j 2 "seqtk sample -s 123 {} $number | pigz -p $((cores / 2)) -c --fast > {}_subsamp"
+			  else
+			    export SEQKIT_THREADS=$cores; seqtk sample -s 123 $files $number | pigz -p $cores -c --fast > {}_subsamp
+			  fi
 			done
 			rm $(ls | grep -v subsamp); for file in $(ls); do mv $file $(echo $file | sed 's,_subsamp,,g'); done
 			echo -e "\nAll raw data downloaded and info prepared, subsampling (+-10%) completed. Proceeding with reanalyses...\n"
