@@ -1061,6 +1061,8 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 		if [ -n "$files_to_process" ]; then
 			cd $output_folder/$name/final_results_reanalysis$index/DGE/
 			echo $files_to_process | parallel --joblog R_enrich_format_analyses_parallel_log_parallel.txt -j $cores "file={}; R_enrich_format.R \"\$file\" \$(echo \"\$file\" | sed 's,DGE/.*,DGE/,g')\$(echo \"\$file\" | sed 's,.*DGE_analysis_comp,DGE_analysis_comp,g;s,_pval.*,,g;s,_fdr.*,,g;s,_funct.*,,g;s,_cluster.*,,g' | sed 's,.txt,,g').txt $organism $rev_thr" &> $PWD/enrichment_format.log
+		else
+			exit 1		
 		fi
 	done
 	export debug_step="all"
