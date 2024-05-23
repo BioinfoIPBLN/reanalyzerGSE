@@ -947,6 +947,10 @@ save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
     bar_plot + 
        geom_text(aes(label = paste0(reads," (bam/fastq: ",perc, " %)"), angle=45), vjust = -0.5, color = "black", size=2) + labs(title="bam_reads") + guides(color = "none") + theme(legend.position = "none")
   }
+  reads_info <- fastq_reads_2[,1:2]
+  reads_info$library_size <- x$samples$lib.size
+  write.table(reads_info,file=paste0(output_dir,"/QC_and_others/reads_numbers.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+
   ### 4. Corrplot no log
   tmp <- lcpm_no_log; colnames(tmp) <- gsub("_t|m_Rep|_seq|_KO|_WT","",colnames(tmp))
   colnames(tmp) <- targets$Name[match(colnames(tmp),targets$Name)]
