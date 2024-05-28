@@ -117,7 +117,7 @@ for argument in $options; do
 		-Dc) deconvolution=${arguments[index]} ;;
 		-cPa) clusterProfiler_full=${arguments[index]} ;;
 		-fe) functional_enrichment_analyses=${arguments[index]} ;;
-		-fd) functional_differential_analyses=${arguments[index]} ;;
+		-fd) perform_differential_analyses=${arguments[index]} ;;
 		-aP) aPEAR_execution=${arguments[index]} ;;
 		-Of) optionsFeatureCounts_feat=${arguments[index]} ;;
 		-O) organism_argument=${arguments[index]} ;;
@@ -245,8 +245,8 @@ fi
 if [ -z "$functional_enrichment_analyses" ]; then
 	functional_enrichment_analyses="yes"
 fi
-if [ -z "$functional_differential_analyses" ]; then
-	functional_differential_analyses="yes"
+if [ -z "$perform_differential_analyses" ]; then
+	perform_differential_analyses="yes"
 fi
 if [ -z "$aPEAR_execution" ]; then
 	aPEAR_execution="no"
@@ -987,12 +987,15 @@ if [[ $debug_step == "all" || $debug_step == "step4" ]]; then
 	IFS=', ' read -r -a array2 <<< "$filter"
 	for index in "${!array[@]}"; do
 		annotation_file=${array[index]}
-		R_process_reanalyzer_GSE.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index $genes ${array2[index]} $organism $target $differential_expr_soft $covariables $deconvolution $differential_expr_comparisons $functional_differential_analyses
+		R_process_reanalyzer_GSE.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index $genes ${array2[index]} $organism $target $differential_expr_soft $covariables $deconvolution $differential_expr_comparisons $perform_differential_analyses
 		cd $output_folder/$name/final_results_reanalysis$index/DGE/
 		tar -cf - $(ls | egrep ".RData$") | pigz -p $cores > allRData.tar.gz; rm -rf $(ls | egrep ".RData$")
 	done
 	export debug_step="all"
 	echo -e "\n\nSTEP 4: DONE\nCurrent date/time: $(date)\n\n"
+	if [[ "$perform_differential_analyses" == "no" ]]; then
+		echo "Differential analyses not requested, exiting the pipeline..."; exit 1
+	fi
 fi
 
 
@@ -1083,8 +1086,7 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 			cd $output_folder/$name/final_results_reanalysis$index/DGE/
 			echo $files_to_process | parallel --joblog R_enrich_format_analyses_parallel_log_parallel.txt -j $cores "file={}; R_enrich_format.R \"\$file\" \$(echo \"\$file\" | sed 's,DGE/.*,DGE/,g')\$(echo \"\$file\" | sed 's,.*DGE_analysis_comp,DGE_analysis_comp,g;s,_pval.*,,g;s,_fdr.*,,g;s,_funct.*,,g;s,_cluster.*,,g' | sed 's,.txt,,g').txt $organism $rev_thr" &> $PWD/enrichment_format.log
 		else
-			echo "No functional enrichment results found, exiting the pipeline..."
-			exit 1		
+			echo "No functional enrichment results found, exiting the pipeline..."; exit 1
 		fi
 	done
 	export debug_step="all"
