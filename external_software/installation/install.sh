@@ -125,6 +125,7 @@ ln -sf $conda_envs_path/reanalyzerGSE_4/bin/gtf2bed .
 ln -sf $conda_envs_path/reanalyzerGSE_4/bin/infer_experiment.py .
 ln -sf $conda_envs_path/reanalyzerGSE_4/bin/kallisto .
 ln -sf $conda_envs_path/reanalyzerGSE_5/bin/perl .
+ln -sf $conda_envs_path/reanalyzerGSE_5/bin/fastp .
 
 echo -e "\nSmall fix on check_strandedness...\n"
 cd $(dirname $(find $conda_envs_path/reanalyzerGSE_4 -name check_strandedness.py))
