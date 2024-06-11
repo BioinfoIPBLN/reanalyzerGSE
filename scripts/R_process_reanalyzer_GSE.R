@@ -11,7 +11,7 @@ diff_soft <- args[8] # if not provided, "edgeR"
 covariab <- args[9] # if not provided, "none"
 cdseq_exec <- args[10] # if not provided, "no"
 restrict_comparisons <- args[11] # if not provided, "no"
-full_analyses <- args[11] # if not provided, "yes"
+full_analyses <- args[12] # if not provided, "yes"
 
 ###### Load read counts, format, filter, start differential expression analyses, get RPKM, save...:
   cat("\nProcessing counts and getting figures...\n")
@@ -147,17 +147,24 @@ full_analyses <- args[11] # if not provided, "yes"
 ###### Filter counts:
   filter <- function(filter="standard",data,min_group=3){
     if(filter == "standard"){
+      print("Applying standard filtering...")
       keep <- rowSums(cpm(data)>1) >= min_group
       data <- data[keep,]
-      data$samples$lib.size  <- colSums(data$counts)
+      data$samples$lib.size <- colSums(data$counts)
     }
     else if(filter == "bin"){
+      print("Applying bin filtering...")
       keep <- rowSums(data$counts)>0
       data <- data[keep,]
-      data$samples$lib.size  <- colSums(data$counts)
+      data$samples$lib.size <- colSums(data$counts)
+    }
+    else if(filter == "filterbyexpr"){
+      print("Applying filterByExpr by edgeR together with the grouping...")
+      keep <- filterByExpr(y,group=data$samples$group)
+      data <- data[keep,]
     }
     else{
-      stop("At the moment only bin/standard are supported")
+      stop("At the moment only bin/standard/filterByExpr, are supported")
     }
     return(data)
   }
@@ -178,11 +185,22 @@ full_analyses <- args[11] # if not provided, "yes"
     }
     #edgeR_object_norm <- estimateTagwiseDisp(edgeR_object_norm)
   } else { 
-    Treat <- edgeR_object$samples$group
-    Time <- as.factor(unlist(strsplit(as.character(covariab),",")))
-    design <- model.matrix(~0+Treat+Time)
-    rownames(design) <- colnames(edgeR_object_norm)
-    edgeR_object_norm <- estimateDisp(edgeR_object_norm, design, robust=TRUE) # Preparing for one covariable following edgeR vignette new methods Nov2023
+    if(filter_option == "filterbyexpr"){
+      print("Applying filterByExpr by edgeR together with the covariables in the model...Overwriting previous application...")
+      edgeR_object <- edgeR_object_prefilter
+      Treat <- edgeR_object$samples$group
+      Time <- as.factor(unlist(strsplit(as.character(covariab),",")))
+      design <- model.matrix(~0+Treat+Time)
+      keep <- filterByExpr(edgeR_object,design)
+      edgeR_object <- edgeR_object[keep,,keep.lib.sizes=FALSE]
+      edgeR_object_norm <- normLibSizes(edgeR_object)
+    } else {
+      Treat <- edgeR_object$samples$group
+      Time <- as.factor(unlist(strsplit(as.character(covariab),",")))
+      design <- model.matrix(~0+Treat+Time)
+      rownames(design) <- colnames(edgeR_object_norm)
+      edgeR_object_norm <- estimateDisp(edgeR_object_norm, design, robust=TRUE) # Preparing for one covariable following edgeR vignette new methods Nov2023
+    }
   }
 
   gene_counts_rpkm <- as.data.frame(rpkm(edgeR_object_norm,normalized.lib.sizes=TRUE))
@@ -1041,6 +1059,7 @@ save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
 if (exists("adjusted_counts")){
   cat("\n\nRemember that batch effect correction/covariables have been only provided to Combat-Seq for visualization purposes, if you need to include covariables in the DGE model after checking the visualization, please rerun the main program using the argument -C\n\n")
   cat("\nQC_PDF ComBat-seq counts\n")
+  cat("\nRemember that you have requested batch effect correction, so you have to mind the figures in this QC_PDF from ComBat-seq counts...\n")
   label <- basename(path)
 
   x_prefilter <- edgeR_object_prefilter_combat
