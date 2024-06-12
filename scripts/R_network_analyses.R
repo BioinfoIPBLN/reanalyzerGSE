@@ -13,11 +13,12 @@ suppressMessages(library(ggplot2,quiet = T,warn.conflicts = F))
 
 
 for (genes_interest in list.files(pattern = pattern_search,path=path)){
-	## Computing WGCNA:
-		cat(paste0("Processing WGCNA of ",genes_interest,"...\n"))
+#### Computing WGCNA:
+		cat(paste0("Processing WGCNA of ",genes_interest,"...\n\n"))
 		setwd(path)
 		a <- as.data.frame(data.table::fread(expr))
 		b <- as.data.frame(data.table::fread(genes_interest))
+		if("FDR" %in% colnames(b)){b <- b[b$FDR < 0.05,]}
 		a <- a[a$Gene_ID %in% b$Gene_ID,]
 		nexpr_mat <- as.matrix(a[,-grep("Gene_ID",colnames(a))])
 		rownames(nexpr_mat) <- a$Gene_ID
@@ -164,16 +165,16 @@ for (genes_interest in list.files(pattern = pattern_search,path=path)){
 		}
 
 	  
-	## Computing STRINGdb:    
-	    cat(paste0("Processing STRINGdb with threshold FDR 0.05 of ",genes_interest,"...\n"))
+#### Computing STRINGdb:
+	    cat(paste0("\n\nProcessing STRINGdb with threshold FDR 0.05 of ",genes_interest,"...\n\n"))
 	    setwd(path)
 	    new_path=paste0(path,"/STRINGdb/"); system(paste("mkdir -p ", new_path,sep=""))
 	    b <- as.data.frame(data.table::fread(genes_interest))
-	    b <- b[b$FDR<0.05,]
-
+	    if("FDR" %in% colnames(b)){b <- b[b$FDR < 0.05,]}
+	    if(!"Gene_ID" %in% colnames(b)){print("Are you using a properly named DEG file? Trying to amend but double check manually if errors"; colnames(b)[1] <- "Gene_ID"}
 	    if (length(b$Gene_ID)<2000){
 		    label=sub("\\..*","",basename(genes_interest))
-		    string_db <- STRINGdb$new( version="11.5", species=organism,score_threshold=200, network_type="full", input_directory="")
+		    string_db <- STRINGdb$new( version="12.0", species=organism,score_threshold=200, network_type="full", input_directory="")
 		    example1_mapped <- string_db$map( b, "Gene_ID", removeUnmappedRows = TRUE )
 		    hits <- example1_mapped$STRING_id
 		    pdf(file =  paste(new_path,"String_network_",label,".pdf",sep=""),paper="a4")
@@ -218,5 +219,20 @@ for (genes_interest in list.files(pattern = pattern_search,path=path)){
 		} else {
 			print("STRINGdb cannot be executed for sets of more than 2000 genes... Skipping...")
 		}
+
+						  
+#### Computing BONOBO:
+		cat(paste0("Processing BONOBO of ",genes_interest,"...\n\n"))
+		setwd(path)
+		a <- as.data.frame(data.table::fread(expr))
+		b <- as.data.frame(data.table::fread(genes_interest))
+		if("FDR" %in% colnames(b)){b <- b[b$FDR < 0.05,]}
+		a <- a[a$Gene_ID %in% b$Gene_ID,]
+		nexpr_mat <- as.matrix(a[,-grep("Gene_ID",colnames(a))])
+		rownames(nexpr_mat) <- a$Gene_ID
+		write.table(nexpr_mat, file = paste0(expr,"_expr_degs_no_header.txt"),sep="\t",row.names = T, col.names=F,quote=F)
+		system(paste0("netzoopy bonobo --expression_file ",paste0(expr,'_expr_degs_no_header.txt')," --output_folder 'BONOBO/' --output_format '.csv' --sparsify --save_pvals"))						  
 }
+
+						  
 save.image(file=paste0(new_path,"network_analyses_envir.RData"))
