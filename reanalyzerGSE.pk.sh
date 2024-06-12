@@ -18,7 +18,7 @@ for argument in $options; do
 
 ### Gather the parameters, default values, exit if essential not provided...
 	case $argument in
-		-h*) echo "reanalyzerGSE v2.7.3 - usage: reanalyzerGSE.pk.sh [options]
+		-h*) echo "reanalyzerGSE v2.8.0 - usage: reanalyzerGSE.pk.sh [options]
 		-h | -help # Type this to get help
 		-i | -input # GEO_ID (GSEXXXXXX, separated by comma if more than one), or folder containing raw reads (please provide full absolute path, e.g. /path/folder_name/, containing only fastq.gz files and not folders, links or any other item), or almost any accession from ENA/SRA to download .fastq from (any of the ids with the prefixes PRJEB,PRJNA,PRJDB,ERP,DRP,SRP,SAMD,SAME,SAMN,ERS,DRS,SRS,ERX,DRX,SRX,ERR,DRR,SRR, please separated by commas if more than one id as input)
 		-n | -name # Name of the project/folder to create and store results
@@ -37,7 +37,7 @@ for argument in $options; do
 		-g | -genes # Genes to highlight their expression in plots (one or several, separated by comma and no space)
 		-G | -GSM_filter # GSM ids (one or several, separated by comma and no space) within the GSE entry to restrict the analysis to. An alternative to requesting a stop with -S to reorganize the downloaded files manually
 		-R | -reads_to_subsample # Information and number of reads to subsample to the sequences before the analyses (none by default, a path to the 'reads_numbers.txt' file from a previous execution and a number of reads must be provided, separated with comma, and proportions will be computed, with all samples being scaled to approximately, +- 10% of that number)
-		-f | -filter # Threshold of gene counts to use ('bin' to capture the lower expressed genes, or 'standard', by default). Please provide a comma separated list with the filters to use at each quantification if multiple annotation are provided
+		-f | -filter # Threshold of gene counts to use ('bin' to capture the lower expressed genes, 'filterbyexpr' to use the edgeR solution, 'or 'standard', by default). Please provide a comma separated list with the filters to use at each quantification if multiple annotation are provided
 		-b | -batch # Batch effect present? (no by default, yes if correction through Combat-seq and model is to be performed, and info is going to be required in other arguments or prompts)
 		-bv | -batch_vector # Comma-separated list of numbers for use as batch vector with Combat-seq
 		-bc | -batch_biological_covariable # Comma-separated list of numbers for use as batch vector of covariables of biological interest with Combat-seq
@@ -61,7 +61,10 @@ for argument in $options; do
 		-iG | -input_GEO_reads # If you want to combine downloading metadata from GEO with reads from GEO or any database already downloaded, maybe from a previous attempt, please provide an absolute path
 		-cG | -compression_level # Specify the compression level to gzip the downloaded fastq files from GEO (numeric '0' to '9', default '9')
 		-fe | -functional_enrichment_analyses # Whether to perform functional enrichment analyses ('no' or 'yes', by default)
-  		-fd | -full_differential_analyses # Whether to perform full differential enrichment analyses (for example including computation of DEGs or Venn diagrams, 'no' or 'yes', by default)
+		-fd | -full_differential_analyses # Whether to perform full differential enrichment analyses (for example including computation of DEGs or Venn diagrams, 'no' or 'yes', by default)
+		-fp | -fastp_mode # Whether to perform fastp analyses over the raw reads in default modem, except for adapter trimming and end trimming ('yes' or 'no', by default)
+		-fpa | -fastp_mode_adapter # Whether to perform adapter trimming on the raw reads by fastp ('yes' or 'no', by default, to perform automatic trimming, or a path to a fasta file to perform trimming of its sequences)
+		-fpt | -fastp_mode_trimming # Whether to trim the raw reads by fastp ('none' by default, if two numbers separated by comma, the indicated number of bases will be trimmed from the front and tail, respectively)
 		-cPa | -clusterProfiler_all # Whether to perform additional functional enrichment analyses with multiple databases using clusterProfiler, by default only ORA for GO BP, GO MF and GO CC, and KEGG and REACTOME enrichment, will be performed, as additional analyses may be slow if many significant DEGs or multiple number of comparisons ('yes' or 'no', by default)
 		-aP | -aPEAR_execution # Whether to simplify pathway enrichment analysis results by detecting clusters of similar pathways and visualizing enrichment networks by aPEAR package, which may be slow ('yes' or 'no', by default)
 		-cPm | -clusterProfiler_method # Method for adjusting p.value in clusterProfiler iterations (one of 'holm','hochberg','hommel','bonferroni','BH','BY,'none', or 'fdr', by default)
@@ -138,6 +141,9 @@ for argument in $options; do
 		-MGS) clusterProfiler_maxGSSize=${arguments[index]} ;;
 		-Pm) panther_method=${arguments[index]} ;;
 		-Na) network_analyses=${arguments[index]} ;;
+		-fp) fastp_mode=${arguments[index]} ;;
+		-fpa) fastp_adapter=${arguments[index]} ;;
+		-fpt) fastp_trimmnig=${arguments[index]} ;;
 	esac
 done
 
@@ -220,7 +226,7 @@ if [ -z "$miarma_path" ]; then
 fi
 if [ -d "$output_folder/$name" ]; then
 	echo -e "Please note that $output_folder/$name already exists... reanalyzerGSE is going to attempt a new run or resume running, but you may want to remove the folder, change the destination folder with '-o' or '-n', use downloaded raw data from an external software... etc. Sleeping for a while to give you time to exit if you want, and then continuing..."
-	secs=$((1 * 30))	
+	secs=$((1 * 15))	
 	while [ $secs -gt 0 ]; do
 		echo -ne "$secs\033[0K\r"
 		sleep 1
@@ -310,6 +316,16 @@ fi
 if [ -z "$rev_thr" ]; then
 	rev_thr=0.7
 fi
+if [ -z "$fastp_mode" ]; then
+	fastp_mode="no"
+fi
+if [ -z "$fastp_adapter" ]; then
+	fastp_adapter="no"
+fi
+if [ -z "$fastp_trimmnig" ]; then
+	fastp_trimmnig="none"
+fi
+
 echo -e "\nCompression_level raw reads=$compression_level\n"
 seqs_location=$output_folder/$name/raw_reads
 
@@ -497,7 +513,7 @@ if [[ $debug_step == "all" || $debug_step == "step1" ]]; then
 fi
 
 
-###### STEP 1a. Download fastq files from the GEO ID provided:
+###### STEP 1a. Download and process fastq files from the GEO ID provided:
 if [[ $debug_step == "all" || $debug_step == "step1a" ]]; then
 	echo -e "\n\nSTEP 1a: Starting...\nCurrent date/time: $(date)\n\n"
 	if [[ $input == G* ]]; then		
@@ -532,7 +548,7 @@ if [[ $debug_step == "all" || $debug_step == "step1a" ]]; then
 		fi
 		echo -e "\nDONE. Current date/time: $(date)"; time1=`date +%s`; echo -e "Elapsed time (secs): $((time1-start))"; echo -e "Elapsed time (hours): $(echo "scale=2; $((time1-start))/3600" | bc -l)\n"
 	
-	### Process if any download was not successful or subsampling if required:
+	### Process if any download was not successful or subsampling was required:
 		cd $seqs_location
 		num_gz_files=$(find . -name "*.gz" | wc -l)
 		num_samples=$(cat $output_folder/$name/GEO_info/sample_names.txt | wc -l)
@@ -559,9 +575,7 @@ if [[ $debug_step == "all" || $debug_step == "step1a" ]]; then
 		 	fi
 		fi		
 			
-		if [ -z "$number_reads" ]; then
-			echo -e "\nAll raw data downloaded and info prepared, proceeding with reanalyses...\n"
-		else
+		if [ ! -z "$number_reads" ]; then
 			echo -e "\nSubsampling...\n"
 			# From the input parameter by the user, obtain a random number allowing a +- 10% window:
 			IFS=', ' read -r -a arr <<< "$number_reads"
@@ -584,7 +598,7 @@ if [[ $debug_step == "all" || $debug_step == "step1a" ]]; then
 				}
 			parallel --verbose -j $cores subsample_reads {} ::: "${arr2[@]}" ::: "${arr[@]}"		
 			rm $(ls | grep -v subsamp); for file in $(ls); do mv $file $(echo $file | sed 's,_subsamp,,g'); done
-			echo -e "\nAll raw data downloaded and info prepared, subsampling (+-10%) completed. Proceeding with reanalyses...\n"
+			echo -e "\nSubsampling (+-10%) completed...\n"
 		fi
 	fi
 	export debug_step="all"
@@ -734,6 +748,47 @@ if [[ $debug_step == "all" ]]; then
 	Rscript -e "genomes <- rentrez::entrez_summary(db='genome', id=rentrez::entrez_search(db='genome', term='${organism}[orgn]')\$ids);cat(paste(paste0('\n\nNCBI current genome info: ', date()),genomes\$assembly_name,genomes\$assembly_accession,genomes\$create_date,'\n',sep='\n'))"
 	organism=$(cat $output_folder/$name/GEO_info/organism.txt | sed 's/ \+/_/g;s/__*/_/g') # Get again the organism in case it has been manually modified... and without spaces...
 	export debug_step="all"
+fi
+
+
+### Deal with fastp if required:
+if [ "$fastp_mode" == "yes" ]; then
+	mkdir -p $output_folder/$name/fastp_out
+	cd $output_folder/$name/fastp_out
+	if [[ "$(cat $output_folder/$name/GEO_info/library_layout_info.txt)" == "SINGLE" ]]; then
+		for f in $(ls -d $seqs_location/*); do fastp --in1 $f --out1 $f\_fastp --dont_overwrite --dont_eval_duplication --disable_adapter_trimming --thread $cores; done
+	elif [[ "$(cat $output_folder/$name/GEO_info/library_layout_info.txt)" == "PAIRED" ]]; then
+		for f in $(ls -d $seqs_location/* | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq); do fastp --in1 $f\_1.fastq.gz --in2 $f\_2.fastq.gz --out1 $f\_1.fastq.gz_fastp --out2 $f\_1.fastq.gz_fastp --dont_overwrite --dont_eval_duplication --disable_adapter_trimming --thread $cores; done
+	fi
+fi
+
+if [ "$fastp_adapter" == "yes" ]; then
+	mkdir -p $output_folder/$name/fastp_out
+	cd $output_folder/$name/fastp_out
+	if [[ "$(cat $output_folder/$name/GEO_info/library_layout_info.txt)" == "SINGLE" ]]; then
+		for f in $(ls -d $seqs_location/*); do fastp --in1 $f --out1 $f\_fastp --dont_overwrite --dont_eval_duplication --thread $cores; done
+	elif [[ "$(cat $output_folder/$name/GEO_info/library_layout_info.txt)" == "PAIRED" ]]; then
+		for f in $(ls -d $seqs_location/* | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq); do fastp --in1 $f\_1.fastq.gz --in2 $f\_2.fastq.gz --out1 $f\_1.fastq.gz_fastp --out2 $f\_1.fastq.gz_fastp --dont_overwrite --dont_eval_duplication --detect_adapter_for_pe --thread $cores; done
+	fi
+elif [[ $fastp_adapter == /* ]]; then
+	mkdir -p $output_folder/$name/fastp_out
+	cd $output_folder/$name/fastp_out
+	if [[ "$(cat $output_folder/$name/GEO_info/library_layout_info.txt)" == "SINGLE" ]]; then
+		for f in $(ls -d $seqs_location/*); do fastp --in1 $f --out1 $f\_fastp --dont_overwrite --dont_eval_duplication --adapter_fasta $fastp_adapter --thread $cores; done
+	elif [[ "$(cat $output_folder/$name/GEO_info/library_layout_info.txt)" == "PAIRED" ]]; then
+		for f in $(ls -d $seqs_location/* | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq); do fastp --in1 $f\_1.fastq.gz --in2 $f\_2.fastq.gz --out1 $f\_1.fastq.gz_fastp --out2 $f\_1.fastq.gz_fastp --dont_overwrite --dont_eval_duplication --adapter_fasta $fastp_adapter --thread $cores; done
+	fi
+fi
+
+if [ "$fastp_trimmnig" != "none" ]; then
+	mkdir -p $output_folder/$name/fastp_out
+	cd $output_folder/$name/fastp_out
+	IFS=', ' read -r -a arrfastp <<< "$fastp_trimmnig"  
+	if [[ "$(cat $output_folder/$name/GEO_info/library_layout_info.txt)" == "SINGLE" ]]; then
+		for f in $(ls -d $seqs_location/*); do fastp --in1 $f --out1 $f\_fastp --dont_overwrite --dont_eval_duplication  --trim_front1 "${arrfastp[0]}" --trim_tail1 "${arrfastp[1]}" --thread $cores; done
+	elif [[ "$(cat $output_folder/$name/GEO_info/library_layout_info.txt)" == "PAIRED" ]]; then
+		for f in $(ls -d $seqs_location/* | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq); do fastp --in1 $f\_1.fastq.gz --in2 $f\_2.fastq.gz --out1 $f\_1.fastq.gz_fastp --out2 $f\_1.fastq.gz_fastp --dont_overwrite --dont_eval_duplication  --trim_front1 "${arrfastp[0]}" --trim_tail1 "${arrfastp[1]}" --thread $cores; done
+	fi
 fi
 
 
@@ -944,7 +999,7 @@ fi
 if [[ $debug_step == "all" || $debug_step == "step3b" ]]; then
 	echo -e "\n\nSTEP 3b: Starting...\nCurrent date/time: $(date)\n\n"
 	echo "Please double check all the parameters above, in particular the stranded or the reference genome files and annotation used. Proceeding with miARma execution in..."
-	secs=$((1 * 30))
+	secs=$((1 * 15))
 	dir=$output_folder/$name/miARma_out0
 	while [ $secs -gt 0 ]; do
 		echo -ne "$secs\033[0K\r"
