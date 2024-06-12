@@ -4,13 +4,15 @@ export EXTERNAL_SOFTWARE_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/nu
 echo -e "\n\n"
 type conda >/dev/null 2>&1 || { echo >&2 "Conda is required to be installed... and is not being found in the PATH. I'm assuming conda has been installed within reanalyzerGSE/external_software folder and adding to the path. Otherwise, please double check manually or install conda beforehand..."; export conda_within_reanalyzer="yes"; }
 
-if [ "$conda_within_reanalyzer" == "yes" ]; then
+if [ "$conda_within_reanalyzer" == "yes" ]; then	
 	conda_dir=$EXTERNAL_SOFTWARE_DIR/miniconda3/bin
 else	
-	conda_dir=$(dirname $(which conda))
+	conda_exec=$(conda env list | grep -v "#" | head -1 | sed 's,.* ,,g;s,/envs.*,,g')/bin
+	conda_dir=$(echo $conda_exec | sed 's,/bin$,,g;s,/condabin$,,g')
+	
 fi
 
-conda_envs_path=$(echo $conda_dir | sed 's,/bin$,/envs,g' | sed 's,/condabin$,/envs,g')
+conda_envs_path=$(echo $conda_exec | sed 's,/bin$,/envs,g;s,/condabin$,/envs,g')
 
 echo -e "\nDetected conda environments path: $conda_envs_path\n"
 
