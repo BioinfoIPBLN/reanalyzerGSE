@@ -231,7 +231,7 @@ for (genes_interest in list.files(pattern = pattern_search,path=path)){
 		nexpr_mat <- as.matrix(a[,-grep("Gene_ID",colnames(a))])
 		rownames(nexpr_mat) <- a$Gene_ID
 		write.table(nexpr_mat, file = paste0(expr,"_expr_degs_no_header.txt"),sep="\t",row.names = T, col.names=F,quote=F)
-		system(paste0("netzoopy bonobo --expression_file ",paste0(expr,'_expr_degs_no_header.txt')," --output_folder 'BONOBO/' --output_format '.csv' --sparsify --save_pvals"))						  
+		system(paste0("netzoopy bonobo --expression_file ",paste0(expr,'_expr_degs_no_header.txt')," --output_folder 'BONOBO/results_",tools::file_path_sans_ext(genes_interest),"/' --output_format '.csv' --sparsify --save_pvals"))
 }
 
 						  
