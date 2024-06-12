@@ -21,4 +21,4 @@ echo -e "\nPlease run and export manually the following suggested PATH and befor
 echo -e "\n\nPlease behave and be mindful with any queueing system, the resources you are using, the versions of the software that are in the PATH and are being used... etc\n\n"
 
 #### Set PERL5LIB:
-export PERL5LIB=$PERL5LIB:$(find $conda_envs_path/reanalyzerGSE_5/lib/perl* -type d -print | egrep "\.[0-9]$|x86_64-linux-thread-multi$|x86_64-linux$" | tr '\n' ':' | sed 's,:$,,g')
+export PERL5LIB=$(find $conda_envs_path/reanalyzerGSE_5/lib/perl* -type d -print | egrep "\.[0-9]$|x86_64-linux-thread-multi$|x86_64-linux$" | tr '\n' ':' | sed 's,:$,,g')
