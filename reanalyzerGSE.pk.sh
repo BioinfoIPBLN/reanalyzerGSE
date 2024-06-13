@@ -668,7 +668,7 @@ if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
 			  pattern=${arr2[index]}
 			  files=$(ls | grep $pattern)
 			  num_files=$(ls | grep $pattern | wc -l)
-			  echo "Subsampling:"
+			  echo -e "\nSubsampling:"
 			  echo $files
 			  echo -e "\nto $number\n"
 			  if [ $num_files -eq 2 ]; then
