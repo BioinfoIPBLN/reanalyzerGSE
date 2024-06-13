@@ -602,11 +602,7 @@ if [[ $debug_step == "all" || $debug_step == "step1a" ]]; then
 			subsample_reads() {
 				file=$1
 				number=$2							
-				ten_percent=$(( number * 10 / 100 ))
-				random_shift=$((RANDOM % (2 * ten_percent + 1) - ten_percent))
-				number_reads_rand=$((number + random_shift))
-				echo "$file to $number +- 10%... to $number_reads_rand"
-				seqtk sample -s 123 "$file" "$number_reads_rand" | pigz -p $((cores / 4)) -c --best > "${file}_subsamp"
+				seqtk sample -s 123 "$file" "$number" | pigz -p $((cores / 4)) -c --best > "${file}_subsamp"
 			}
 			export -f subsample_reads
 			parallel --verbose -j $cores subsample_reads {} ::: "${arr2[@]}" ::: "${arr[@]}"		
@@ -671,11 +667,7 @@ if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
 			subsample_reads() {
 				file=$1
 				number=$2							
-				ten_percent=$(( number * 10 / 100 ))
-				random_shift=$((RANDOM % (2 * ten_percent + 1) - ten_percent))
-				number_reads_rand=$((number + random_shift))
-				echo "$file to $number +- 10%... to $number_reads_rand"
-				seqtk sample -s 123 "$file" "$number_reads_rand" | pigz -p $((cores / 4)) -c --best > "${file}_subsamp"
+				seqtk sample -s 123 "$file" "$number" | pigz -p $((cores / 4)) -c --best > "${file}_subsamp"
 			}
 			export -f subsample_reads
 			parallel --verbose -j $cores subsample_reads {} ::: "${arr2[@]}" ::: "${arr[@]}"		
