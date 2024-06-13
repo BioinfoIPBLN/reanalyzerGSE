@@ -579,7 +579,7 @@ if [[ $debug_step == "all" || $debug_step == "step1a" ]]; then
 			echo -e "\nSubsampling...\n"
 			# From the input parameter by the user, obtain a random number allowing a +- 10% window:
 			IFS=', ' read -r -a arr <<< "$number_reads"
-			IFS=', ' read -r -a arr2 <<< "$(ls | egrep .fastq.gz$ | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq | tr '\n' ',')"
+			IFS=', ' read -r -a arr2 <<< "$(ls | egrep .fastq.gz$ | sed 's,1.fastq.gz,,g;s,2.fastq.gz,,g' | sort | uniq | tr '\n' ',')"
 			desired_number=${arr[1]}
 			apply_random_shift() {
 		                local number=$1
@@ -600,12 +600,12 @@ if [[ $debug_step == "all" || $debug_step == "step1a" ]]; then
 					 done < <(sed '1d' ${arr[0]}))
 			readarray -t arr <<< "$(echo $desired_numbers)"
 			subsample_reads() {
-				file=$1
+				files=$(ls | grep $1)
 				number=$2							
-				seqtk sample -s 123 "$file" "$number" | pigz -p $((cores / 4)) -c --best > "${file}_subsamp"
+				for file in $files; do seqtk sample -s 123 "$file" "$number" | pigz -p $((cores / 4)) -c --best > "${file}_subsamp"; done
 			}
 			export -f subsample_reads
-			parallel --verbose -j $cores subsample_reads {} ::: "${arr2[@]}" ::: "${arr[@]}"		
+			parallel --verbose -j $cores subsample_reads {} ::: "${arr2[@]}" :::+ "${arr[@]}"		
 			rm $(ls | grep -v subsamp); for file in $(ls); do mv $file $(echo $file | sed 's,_subsamp,,g'); done
 			echo -e "\nSubsampling (+-10%) completed...\n"
 		fi
@@ -644,7 +644,7 @@ if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
 			echo -e "\nSubsampling...\n"
 			# From the input parameter by the user, obtain a random number allowing a +- 10% window:
 			IFS=', ' read -r -a arr <<< "$number_reads"
-			IFS=', ' read -r -a arr2 <<< "$(ls | egrep .fastq.gz$ | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq | tr '\n' ',')"
+			IFS=', ' read -r -a arr2 <<< "$(ls | egrep .fastq.gz$ | sed 's,1.fastq.gz,,g;s,2.fastq.gz,,g' | sort | uniq | tr '\n' ',')"
 			desired_number=${arr[1]}
 			apply_random_shift() {
 		                local number=$1
@@ -665,12 +665,12 @@ if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
 					 done < <(sed '1d' ${arr[0]}))
 			readarray -t arr <<< "$(echo $desired_numbers)"
 			subsample_reads() {
-				file=$1
+				files=$(ls | grep $1)
 				number=$2							
-				seqtk sample -s 123 "$file" "$number" | pigz -p $((cores / 4)) -c --best > "${file}_subsamp"
+				for file in $files; do seqtk sample -s 123 "$file" "$number" | pigz -p $((cores / 4)) -c --best > "${file}_subsamp"; done
 			}
 			export -f subsample_reads
-			parallel --verbose -j $cores subsample_reads {} ::: "${arr2[@]}" ::: "${arr[@]}"		
+			parallel --verbose -j $cores subsample_reads {} ::: "${arr2[@]}" :::+ "${arr[@]}"
 			rm $(ls | grep -v subsamp); for file in $(ls); do mv $file $(echo $file | sed 's,_subsamp,,g'); done
 			echo -e "\nSubsampling (+-10%) completed...\n"
 		fi
