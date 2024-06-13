@@ -18,7 +18,7 @@ for argument in $options; do
 
 ### Gather the parameters, default values, exit if essential not provided...
 	case $argument in
-		-h*) echo "reanalyzerGSE v2.8.0 - usage: reanalyzerGSE.pk.sh [options]
+		-h*) echo "reanalyzerGSE v2.8.1 - usage: reanalyzerGSE.pk.sh [options]
 		-h | -help # Type this to get help
 		-i | -input # GEO_ID (GSEXXXXXX, separated by comma if more than one), or folder containing raw reads (please provide full absolute path, e.g. /path/folder_name/, containing only fastq.gz files and not folders, links or any other item), or almost any accession from ENA/SRA to download .fastq from (any of the ids with the prefixes PRJEB,PRJNA,PRJDB,ERP,DRP,SRP,SAMD,SAME,SAMN,ERS,DRS,SRS,ERX,DRX,SRX,ERR,DRR,SRR, please separated by commas if more than one id as input)
 		-n | -name # Name of the project/folder to create and store results
@@ -582,11 +582,15 @@ if [[ $debug_step == "all" || $debug_step == "step1a" ]]; then
 			IFS=', ' read -r -a arr2 <<< "$(ls | egrep .fastq.gz$ | sed 's,1.fastq.gz,,g;s,2.fastq.gz,,g' | sort | uniq | tr '\n' ',')"
 			desired_number=${arr[1]}
 			apply_random_shift() {
-		                local number=$1
-		                local ten_percent=$(( number / 10 ))
-		                local random_shift=$(( RANDOM % (2 * ten_percent + 1) - ten_percent ))
-		                local new_number=$(( number + random_shift ))
-		                echo $new_number
+				Rscript -e '
+				  modify_number <- function(number) {
+				    percentage <- runif(1, 0, 10)  # Random % between 0 and 10
+				    change <- ifelse(runif(1) < 0.5, -1, 1)  # Randomly add or subtract
+				    change_amount <- number * (percentage / 100) * change
+				    return(number + change_amount)
+				  }
+				  cat(modify_number('"$1"'), "\n")
+				'
 			}
    			desired_numbers=$(while IFS=$'\t' read -r col1 col2 col3; do
 					    desired_number_rand=$(apply_random_shift $desired_number)
@@ -601,11 +605,12 @@ if [[ $debug_step == "all" || $debug_step == "step1a" ]]; then
    			subsample_reads() {
 				files=$(ls | grep $1)
 				number=$2							
-				for file in $files; do seqtk sample -s 123 "$file" "$number" | pigz -p $((cores / 4)) -c --best > "${file}_subsamp"; done
+				for file in $files; do seqtk sample -s 123 "$file" "$number" > "${file}_subsamp"; done
 			}
 			export -f subsample_reads
-			parallel --verbose -j $cores subsample_reads {} ::: "${arr2[@]}" :::+ "${arr3[@]}"
-			rm $(ls | grep -v subsamp); for file in $(ls); do mv $file $(echo $file | sed 's,_subsamp,,g'); done
+			parallel --verbose -j 10 subsample_reads {} ::: "${arr2[@]}" :::+ "${arr3[@]}" # 10 only because of RAM
+			rm $(ls | grep -v subsamp); for file in $(ls); do mv $file $(echo $file | sed 's,_subsamp,,g;s,.gz,,g'); done
+			pigz --best -p $cores * # gz was lost with seqtk sample
 			echo -e "\nSubsampling (+-10%) completed...\n"
 		fi
 	fi
@@ -646,11 +651,15 @@ if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
 			IFS=', ' read -r -a arr2 <<< "$(ls | egrep .fastq.gz$ | sed 's,1.fastq.gz,,g;s,2.fastq.gz,,g' | sort | uniq | tr '\n' ',')"
 			desired_number=${arr[1]}
 			apply_random_shift() {
-		                local number=$1
-		                local ten_percent=$(( number / 10 ))
-		                local random_shift=$(( RANDOM % (2 * ten_percent + 1) - ten_percent ))
-		                local new_number=$(( number + random_shift ))
-		                echo $new_number
+				Rscript -e '
+				  modify_number <- function(number) {
+				    percentage <- runif(1, 0, 10)  # Random % between 0 and 10
+				    change <- ifelse(runif(1) < 0.5, -1, 1)  # Randomly add or subtract
+				    change_amount <- number * (percentage / 100) * change
+				    return(number + change_amount)
+				  }
+				  cat(modify_number('"$1"'), "\n")
+				'
 			}
    			desired_numbers=$(while IFS=$'\t' read -r col1 col2 col3; do
 					    desired_number_rand=$(apply_random_shift $desired_number)
@@ -666,11 +675,12 @@ if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
    			subsample_reads() {
 				files=$(ls | grep $1)
 				number=$2							
-				for file in $files; do seqtk sample -s 123 "$file" "$number" | pigz -p $((cores / 4)) -c --best > "${file}_subsamp"; done
+				for file in $files; do seqtk sample -s 123 "$file" "$number" > "${file}_subsamp"; done
 			}
 			export -f subsample_reads
-			parallel --verbose -j $cores subsample_reads {} ::: "${arr2[@]}" :::+ "${arr3[@]}"
-			rm $(ls | grep -v subsamp); for file in $(ls); do mv $file $(echo $file | sed 's,_subsamp,,g'); done
+			parallel --verbose -j 10 subsample_reads {} ::: "${arr2[@]}" :::+ "${arr3[@]}" # 10 only because of RAM
+			rm $(ls | grep -v subsamp); for file in $(ls); do mv $file $(echo $file | sed 's,_subsamp,,g;s,.gz,,g'); done
+			pigz --best -p $cores * # gz was lost with seqtk sample
 			echo -e "\nSubsampling (+-10%) completed...\n"
 		fi
 	 	echo -e "This is the content of $seqs_location:\n$(ls -l $seqs_location | awk '{ print $9 }' | tail -n +2)\n"
