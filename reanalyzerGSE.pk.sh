@@ -581,10 +581,16 @@ if [[ $debug_step == "all" || $debug_step == "step1a" ]]; then
 			IFS=', ' read -r -a arr <<< "$number_reads"
 			IFS=', ' read -r -a arr2 <<< "$(ls | egrep .fastq.gz$ | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq | tr '\n' ',')"
 			desired_number=${arr[1]}
-			desired_numbers=$(while IFS=$'\t' read -r col1 col2 col3; do			    
-			    result=$((col2 * desired_number / col3))			    
-			    echo "$result"
-			done < <(sed '1d' ${arr[0]}))
+			desired_numbers=$(while IFS=$'\t' read -r col1 col2 col3; do
+					    desired_number_rand=$(apply_random_shift $desired_number)
+					    if (( col3 < desired_number_rand )); then
+					        result=$col2
+					    else
+					        result=$((col2 * desired_number_rand / col3))
+					    fi
+					    #echo "desired_rand is $desired_number_rand"
+					    echo $result
+					 done < <(sed '1d' ${arr[0]}))
 			readarray -t arr <<< "$(echo $desired_numbers)"
 			export -f subsample_reads
 			subsample_reads() {
@@ -647,10 +653,15 @@ if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
 			    echo $new_number
 			}
 			desired_numbers=$(while IFS=$'\t' read -r col1 col2 col3; do
-						desired_number_rand=$(apply_random_shift $desired_number)
-						result=$((col2 * desired_number_rand / col3))                
-						echo "$result"
-			    		  done < <(sed '1d' ${arr[0]}))
+					    desired_number_rand=$(apply_random_shift $desired_number)
+					    if (( col3 < desired_number_rand )); then
+					        result=$col2
+					    else
+					        result=$((col2 * desired_number_rand / col3))
+					    fi
+					    #echo "desired_rand is $desired_number_rand"
+					    echo $result
+					 done < <(sed '1d' ${arr[0]}))
 			IFS=$'\n' read -d '' -r -a arr <<< "$desired_numbers"
 			for index in "${!arr[@]}"; do
 			  number=${arr[index]}
