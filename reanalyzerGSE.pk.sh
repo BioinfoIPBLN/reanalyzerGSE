@@ -581,7 +581,14 @@ if [[ $debug_step == "all" || $debug_step == "step1a" ]]; then
 			IFS=', ' read -r -a arr <<< "$number_reads"
 			IFS=', ' read -r -a arr2 <<< "$(ls | egrep .fastq.gz$ | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq | tr '\n' ',')"
 			desired_number=${arr[1]}
-			desired_numbers=$(while IFS=$'\t' read -r col1 col2 col3; do
+			apply_random_shift() {
+		                local number=$1
+		                local ten_percent=$(( number / 10 ))
+		                local random_shift=$(( RANDOM % (2 * ten_percent + 1) - ten_percent ))
+		                local new_number=$(( number + random_shift ))
+		                echo $new_number
+			}
+   			desired_numbers=$(while IFS=$'\t' read -r col1 col2 col3; do
 					    desired_number_rand=$(apply_random_shift $desired_number)
 					    if (( col3 < desired_number_rand )); then
 					        result=$col2
@@ -643,7 +650,14 @@ if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
 			IFS=', ' read -r -a arr <<< "$number_reads"
 			IFS=', ' read -r -a arr2 <<< "$(ls | egrep .fastq.gz$ | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq | tr '\n' ',')"
 			desired_number=${arr[1]}
-			desired_numbers=$(while IFS=$'\t' read -r col1 col2 col3; do
+			apply_random_shift() {
+		                local number=$1
+		                local ten_percent=$(( number / 10 ))
+		                local random_shift=$(( RANDOM % (2 * ten_percent + 1) - ten_percent ))
+		                local new_number=$(( number + random_shift ))
+		                echo $new_number
+			}
+   			desired_numbers=$(while IFS=$'\t' read -r col1 col2 col3; do
 					    desired_number_rand=$(apply_random_shift $desired_number)
 					    if (( col3 < desired_number_rand )); then
 					        result=$col2
