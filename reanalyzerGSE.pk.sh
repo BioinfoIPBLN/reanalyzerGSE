@@ -637,21 +637,12 @@ if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
 				echo "SINGLE" > $output_folder/$name/library_layout_info.txt
 			fi
 		fi
-		if [ -z "$number_reads" ]; then
-			echo -e "\nAll raw data downloaded and info prepared, proceeding with reanalyses...\n"
-		else
+		if [ ! -z "$number_reads" ]; then
 			echo -e "\nSubsampling...\n"
 			# From the input parameter by the user, obtain a random number allowing a +- 10% window:
 			IFS=', ' read -r -a arr <<< "$number_reads"
 			IFS=', ' read -r -a arr2 <<< "$(ls | egrep .fastq.gz$ | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq | tr '\n' ',')"
 			desired_number=${arr[1]}
-			apply_random_shift() {
-			    local number=$1
-			    local ten_percent=$(( number / 10 ))
-			    local random_shift=$(( RANDOM % (2 * ten_percent + 1) - ten_percent ))
-			    local new_number=$(( number + random_shift ))
-			    echo $new_number
-			}
 			desired_numbers=$(while IFS=$'\t' read -r col1 col2 col3; do
 					    desired_number_rand=$(apply_random_shift $desired_number)
 					    if (( col3 < desired_number_rand )); then
@@ -662,23 +653,20 @@ if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
 					    #echo "desired_rand is $desired_number_rand"
 					    echo $result
 					 done < <(sed '1d' ${arr[0]}))
-			IFS=$'\n' read -d '' -r -a arr <<< "$desired_numbers"
-			for index in "${!arr[@]}"; do
-			  number=${arr[index]}
-			  pattern=${arr2[index]}
-			  files=$(ls | grep $pattern)
-			  num_files=$(ls | grep $pattern | wc -l)
-			  echo -e "\nSubsampling:"
-			  echo $files
-			  echo -e "\nto $number\n"
-			  if [ $num_files -eq 2 ]; then
-			    export SEQKIT_THREADS=$((cores / 2)); echo $files | sed 's, ,\n,g' | parallel --verbose -j 2 "seqtk sample -s 123 {} $number | pigz -p $((cores / 2)) -c --fast > {}_subsamp"
-			  else
-			    export SEQKIT_THREADS=$cores; seqtk sample -s 123 $files $number | pigz -p $cores -c --fast > {}_subsamp
-			  fi
-			done
+			readarray -t arr <<< "$(echo $desired_numbers)"
+			export -f subsample_reads
+			subsample_reads() {
+				file=$1
+				number=$2							
+				ten_percent=$(( number * 10 / 100 ))
+				random_shift=$((RANDOM % (2 * ten_percent + 1) - ten_percent))
+				number_reads_rand=$((number + random_shift))
+				echo "$file to $number +- 10%... to $number_reads_rand"
+				seqtk sample -s 123 "$file" "$number_reads_rand" | pigz -p $((cores / 4)) -c --best > "${file}_subsamp"
+				}
+			parallel --verbose -j $cores subsample_reads {} ::: "${arr2[@]}" ::: "${arr[@]}"		
 			rm $(ls | grep -v subsamp); for file in $(ls); do mv $file $(echo $file | sed 's,_subsamp,,g'); done
-			echo -e "\nAll raw data downloaded and info prepared, subsampling (+-10%) completed. Proceeding with reanalyses...\n"
+			echo -e "\nSubsampling (+-10%) completed...\n"
 		fi
 	 	echo -e "This is the content of $seqs_location:\n$(ls -l $seqs_location | awk '{ print $9 }' | tail -n +2)\n"
 		if [ -z "$design_custom_local" ]; then
