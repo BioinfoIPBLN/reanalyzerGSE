@@ -594,18 +594,17 @@ if [[ $debug_step == "all" || $debug_step == "step1a" ]]; then
 					        result=$col2
 					    else
 					        result=$((col2 * desired_number_rand / col3))
-					    fi
-					    #echo "desired_rand is $desired_number_rand"
+					    fi					    
 					    echo $result
 					 done < <(sed '1d' ${arr[0]}))
-			readarray -t arr <<< "$(echo $desired_numbers)"
-			subsample_reads() {
+			IFS=', ' read -r -a arr3 <<< "$(echo $desired_numbers | tr ' ' ',')"
+   			subsample_reads() {
 				files=$(ls | grep $1)
 				number=$2							
 				for file in $files; do seqtk sample -s 123 "$file" "$number" | pigz -p $((cores / 4)) -c --best > "${file}_subsamp"; done
 			}
 			export -f subsample_reads
-			parallel --verbose -j $cores subsample_reads {} ::: "${arr2[@]}" :::+ "${arr[@]}"		
+			parallel --verbose -j $cores subsample_reads {} ::: "${arr2[@]}" :::+ "${arr3[@]}"
 			rm $(ls | grep -v subsamp); for file in $(ls); do mv $file $(echo $file | sed 's,_subsamp,,g'); done
 			echo -e "\nSubsampling (+-10%) completed...\n"
 		fi
@@ -663,14 +662,14 @@ if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
 					    #echo "desired_rand is $desired_number_rand"
 					    echo $result
 					 done < <(sed '1d' ${arr[0]}))
-			readarray -t arr <<< "$(echo $desired_numbers)"
-			subsample_reads() {
+			IFS=', ' read -r -a arr3 <<< "$(echo $desired_numbers | tr ' ' ',')"
+   			subsample_reads() {
 				files=$(ls | grep $1)
 				number=$2							
 				for file in $files; do seqtk sample -s 123 "$file" "$number" | pigz -p $((cores / 4)) -c --best > "${file}_subsamp"; done
 			}
 			export -f subsample_reads
-			parallel --verbose -j $cores subsample_reads {} ::: "${arr2[@]}" :::+ "${arr[@]}"
+			parallel --verbose -j $cores subsample_reads {} ::: "${arr2[@]}" :::+ "${arr3[@]}"
 			rm $(ls | grep -v subsamp); for file in $(ls); do mv $file $(echo $file | sed 's,_subsamp,,g'); done
 			echo -e "\nSubsampling (+-10%) completed...\n"
 		fi
