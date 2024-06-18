@@ -36,6 +36,7 @@ for argument in $options; do
 		-s | -strandness # Strandness of the library ('yes, 'no', 'reverse'). If not provided and '-t' used, this would be predicted by salmon. Please use this parameter if prediction not correct, see explanations in for example in bit.ly/strandness0 and bit.ly/strandness
 		-g | -genes # Genes to highlight their expression in plots (one or several, separated by comma and no space)
 		-G | -GSM_filter # GSM ids (one or several, separated by comma and no space) within the GSE entry to restrict the analysis to. An alternative to requesting a stop with -S to reorganize the downloaded files manually
+		-pR | -pattern_to_remove # A pattern to remove from differential expression analyses and some QC figures
 		-R | -reads_to_subsample # Information and number of reads to subsample to the sequences before the analyses (none by default, a path to the 'reads_numbers.txt' file from a previous execution and a number of reads must be provided, separated with comma, and proportions will be computed, with all samples being scaled to approximately, +- 10% of that number)
 		-cR | -cores_reads_to_subsample # Cores to use in subsampling by seqtk (10 by default)
 		-f | -filter # Threshold of gene counts to use ('bin' to capture the lower expressed genes, 'filterbyexpr' to use the edgeR solution, 'or 'standard', by default). Please provide a comma separated list with the filters to use at each quantification if multiple annotation are provided
@@ -146,6 +147,7 @@ for argument in $options; do
 		-fpa) fastp_adapter=${arguments[index]} ;;
 		-fpt) fastp_trimmnig=${arguments[index]} ;;
 		-cR) cores_reads_to_subsample=${arguments[index]} ;;
+		-pR) pattern_to_remove=${arguments[index]} ;;
 	esac
 done
 
@@ -303,6 +305,9 @@ if [ -z "$clusterProfiler_maxGSSize" ]; then
 fi
 if [ -z "$bed_mode" ]; then
 	bed_mode="no"
+fi
+if [ -z "$pattern_to_remove" ]; then
+	pattern_to_remove="none"
 fi
 if [ -z "$debug_step" ]; then
 	debug_step="all"
@@ -1062,7 +1067,7 @@ if [[ $debug_step == "all" || $debug_step == "step4" ]]; then
 	IFS=', ' read -r -a array2 <<< "$filter"
 	for index in "${!array[@]}"; do
 		annotation_file=${array[index]}
-		R_process_reanalyzer_GSE.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index $genes ${array2[index]} $organism $target $differential_expr_soft $covariables $deconvolution $differential_expr_comparisons $perform_differential_analyses
+		R_process_reanalyzer_GSE.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index $genes ${array2[index]} $organism $target $differential_expr_soft $covariables $deconvolution $differential_expr_comparisons $perform_differential_analyses $pattern_to_remove
 		cd $output_folder/$name/final_results_reanalysis$index/DGE/
 		tar -cf - $(ls | egrep ".RData$") | pigz -p $cores > allRData.tar.gz; rm -rf $(ls | egrep ".RData$")
 	done
