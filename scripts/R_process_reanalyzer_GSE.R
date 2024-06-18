@@ -12,6 +12,7 @@ covariab <- args[9] # if not provided, "none"
 cdseq_exec <- args[10] # if not provided, "no"
 restrict_comparisons <- args[11] # if not provided, "no"
 full_analyses <- args[12] # if not provided, "yes"
+pattern_to_remove <- args[13] # if not provided, "none"
 
 ###### Load read counts, format, filter, start differential expression analyses, get RPKM, save...:
   cat("\nProcessing counts and getting figures...\n")
@@ -1056,7 +1057,7 @@ save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
   dev.off()
 
 ###### Add the figures using the counts corrected by ComBat-seq:
-if (exists("adjusted_counts")){
+if (exists("adjusted_counts")){  
   cat("\n\nRemember that batch effect correction/covariables have been only provided to Combat-Seq for visualization purposes, if you need to include covariables in the DGE model after checking the visualization, please rerun the main program using the argument -C\n\n")
   cat("\nQC_PDF ComBat-seq counts\n")
   cat("\nRemember that you have requested batch effect correction, so you have to mind the figures in this QC_PDF from ComBat-seq counts...\n")
@@ -1156,6 +1157,82 @@ if (exists("adjusted_counts")){
   #a <- tsne(x$counts,seed=100,labels=as.factor(targets$Type), perplex=perplex, legendtitle="Types",text=targets$Type ,dotsize=3, legendtextsize = 8) + ggtitle("Tsne") + theme(plot.title = element_text(face = "bold", size = 12, hjust = 0.5))
   #plot(a)
   dev.off()
+
+if (exists("pattern_to_remove")){    
+  cat("\n\nRepeating figures by Combat Seq removing the samples matching")
+  print(pattern_to_remove)  
+  label <- basename(path)
+  x_prefilter <- edgeR_object_prefilter_combat[,grep(pattern_to_remove,colnames(edgeR_object_prefilter_combat),invert=T,val=T)]
+  lcpm_prefilter <- cpm(x_prefilter, log=TRUE)  # This is log2 and normalized due to the argument normalized.lib.sizes=TRUE by default in cpm...
+
+  x <- edgeR_object_combat[,grep(pattern_to_remove,colnames(edgeR_object_combat),invert=T,val=T)]
+  cpm <- cpm(x) # This is normalized, altough not through edgeR, but the argument normalized.lib.sizes=TRUE by default in cpm...
+  lcpm <- cpm(x, log=TRUE)  # This is log2 and normalized due to the argument normalized.lib.sizes=TRUE by default in cpm...
+  lcpm_no_log <- cpm(x, log=FALSE)
+
+  nsamples <- ncol(x)
+  L <- mean(x$samples$lib.size) * 1e-6
+  M <- median(x$samples$lib.size) * 1e-6
+  # c(L, M)
+  lcpm.cutoff <- log2(10/M + 2/L)
+  
+  x2 <- edgeR_object_norm_combat[,grep(pattern_to_remove,colnames(edgeR_object_norm_combat),invert=T,val=T)]
+  lcpm2 <- cpm(x2, log=TRUE)
+  lcpm2_no_log <- cpm(x2, log=FALSE)
+
+  group <- x$samples$group
+  col.group <- as.factor(group)
+  
+  color = gplots::col2hex(grDevices::colors()[grep('gr(a|e)y', grDevices::colors(), invert = T)])
+  levels(col.group) <- sample(color,nlevels(col.group))
+  col.group <- as.character(col.group)
+
+  suppressMessages(library(ggpmisc,quiet = T,warn.conflicts = F))
+  ### The actual pdf file:
+  pdf(paste0(output_dir,"/QC_and_others/",label,"QC_ComBat-seq_pattern_removed.pdf"),paper="A4")
+  ### 0 Reminder of the samples:
+  ggplot() + theme_void(base_size=1) + coord_flip() +
+    annotate(geom = "table",
+                   x = 0,
+                   y = 0,
+                   size = 1,
+                   label = list(as.data.frame(targets)))
+  
+  ### 5.3. MDS_norm
+  z <- plotMDS(lcpm2_no_log, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise", plot=F)
+  edge <- sd(z$x)
+  plotMDS(lcpm2_no_log, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise",xlim=c(min(z$x)-edge,max(z$x) + edge))
+  title(main="MDS-PCoA Sample Names Norm")
+  ### 5.4. MDS_log_norm
+  par(mfrow=c(1,1))
+  z <- plotMDS(lcpm2, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise", plot=F)
+  edge <- sd(z$x)
+  #cat(edge)
+  plotMDS(lcpm2, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise",xlim=c(min(z$x)-edge,max(z$x) + edge))
+  title(main="MDS-PCoA log2 Sample Names Norm")
+  ### 6. PCA por tipos
+  data_pca <- as.matrix(x)
+  data_pca <- as.data.frame(t(data_pca))
+  rownames(data_pca) <- targets$Name
+  data_pca.PC = prcomp(data_pca)
+  data_pca$Type <- targets$Type
+  data_pca$Filename <- targets$Filename
+  data_pca$Name <- targets$Name
+  data_pca$Sex <- targets$Sex
+  data_pca$Age <- targets$Age
+  data_pca$VAS_Group <- targets$VAS_Group
+  data_pca$TypeII <- targets$TypeII
+  plot(autoplot(data_pca.PC,label=T,data=data_pca,colour='Type',xlim = c(-0.8,0.8),label.size=3,label.repel=T))
+  ### 8.3. Dendogram cluster raw norm
+  par(mfrow=c(1,1), col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
+  pr.hc.c <- hclust(na.omit(dist(t(cpm(x2$counts,log=F)),method = "euclidean")))
+  plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of normalized counts from samples of ", label, sep=""), labels=targets$Filename, cex=0.5)
+  ### 8.3. Dendogram cluster raw norm
+  par(mfrow=c(1,1), col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
+  pr.hc.c <- hclust(na.omit(dist(t(cpm(x2$counts,log=T)),method = "euclidean")))
+  plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of log2 normalized counts from samples of ", label, sep=""), labels=targets$Filename, cex=0.5)
+  dev.off()
+ }
 }
 
 ###### WIP add DESeq2 as a full alternative to edgeR, for now, generate and provide/write independently the counts if the user ask for it:
