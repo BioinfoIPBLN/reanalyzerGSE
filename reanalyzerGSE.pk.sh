@@ -18,7 +18,7 @@ for argument in $options; do
 
 ### Gather the parameters, default values, exit if essential not provided...
 	case $argument in
-		-h*) echo "reanalyzerGSE v2.8.1 - usage: reanalyzerGSE.pk.sh [options]
+		-h*) echo "reanalyzerGSE v2.8.2 - usage: reanalyzerGSE.pk.sh [options]
 		-h | -help # Type this to get help
 		-i | -input # GEO_ID (GSEXXXXXX, separated by comma if more than one), or folder containing raw reads (please provide full absolute path, e.g. /path/folder_name/, containing only fastq.gz files and not folders, links or any other item), or almost any accession from ENA/SRA to download .fastq from (any of the ids with the prefixes PRJEB,PRJNA,PRJDB,ERP,DRP,SRP,SAMD,SAME,SAMN,ERS,DRS,SRS,ERX,DRX,SRX,ERR,DRR,SRR, please separated by commas if more than one id as input)
 		-n | -name # Name of the project/folder to create and store results
@@ -37,6 +37,7 @@ for argument in $options; do
 		-g | -genes # Genes to highlight their expression in plots (one or several, separated by comma and no space)
 		-G | -GSM_filter # GSM ids (one or several, separated by comma and no space) within the GSE entry to restrict the analysis to. An alternative to requesting a stop with -S to reorganize the downloaded files manually
 		-R | -reads_to_subsample # Information and number of reads to subsample to the sequences before the analyses (none by default, a path to the 'reads_numbers.txt' file from a previous execution and a number of reads must be provided, separated with comma, and proportions will be computed, with all samples being scaled to approximately, +- 10% of that number)
+		-cR | -cores_reads_to_subsample # Cores to use in subsampling by seqtk (10 by default)
 		-f | -filter # Threshold of gene counts to use ('bin' to capture the lower expressed genes, 'filterbyexpr' to use the edgeR solution, 'or 'standard', by default). Please provide a comma separated list with the filters to use at each quantification if multiple annotation are provided
 		-b | -batch # Batch effect present? (no by default, yes if correction through Combat-seq and model is to be performed, and info is going to be required in other arguments or prompts)
 		-bv | -batch_vector # Comma-separated list of numbers for use as batch vector with Combat-seq
@@ -144,6 +145,7 @@ for argument in $options; do
 		-fp) fastp_mode=${arguments[index]} ;;
 		-fpa) fastp_adapter=${arguments[index]} ;;
 		-fpt) fastp_trimmnig=${arguments[index]} ;;
+		-cR) cores_reads_to_subsample=${arguments[index]} ;;
 	esac
 done
 
@@ -325,6 +327,10 @@ fi
 if [ -z "$fastp_trimmnig" ]; then
 	fastp_trimmnig="none"
 fi
+if [ -z "$cores_reads_to_subsample" ]; then
+	cores_reads_to_subsample=10
+fi
+
 
 echo -e "\nCompression_level raw reads=$compression_level\n"
 seqs_location=$output_folder/$name/raw_reads
@@ -608,7 +614,7 @@ if [[ $debug_step == "all" || $debug_step == "step1a" ]]; then
 				for file in $files; do seqtk sample -s 123 "$file" "$number" > "${file}_subsamp"; done
 			}
 			export -f subsample_reads
-			parallel --verbose -j 10 subsample_reads {} ::: "${arr2[@]}" :::+ "${arr3[@]}" # 10 only because of RAM
+			parallel --verbose -j $cores_reads_to_subsample subsample_reads {} ::: "${arr2[@]}" :::+ "${arr3[@]}" # 10 only because of RAM
 			rm $(ls | grep -v subsamp); for file in $(ls); do mv $file $(echo $file | sed 's,_subsamp,,g;s,.gz,,g'); done
 			pigz --best -p $cores * # gz was lost with seqtk sample
 			echo -e "\nSubsampling (+-10%) completed...\n"
@@ -678,7 +684,7 @@ if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
 				for file in $files; do seqtk sample -s 123 "$file" "$number" > "${file}_subsamp"; done
 			}
 			export -f subsample_reads
-			parallel --verbose -j 10 subsample_reads {} ::: "${arr2[@]}" :::+ "${arr3[@]}" # 10 only because of RAM
+			parallel --verbose -j $cores_reads_to_subsample subsample_reads {} ::: "${arr2[@]}" :::+ "${arr3[@]}" # 10 only because of RAM
 			rm $(ls | grep -v subsamp); for file in $(ls); do mv $file $(echo $file | sed 's,_subsamp,,g;s,.gz,,g'); done
 			pigz --best -p $cores * # gz was lost with seqtk sample
 			echo -e "\nSubsampling (+-10%) completed...\n"
