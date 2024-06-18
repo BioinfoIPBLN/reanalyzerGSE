@@ -1056,7 +1056,7 @@ save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
   #plot(a)
   dev.off()
 
-if (pattern_to_remove!="none")){    
+if (pattern_to_remove!="none"){    
   cat("\n\nRepeating QC figures removing the samples matching")
   print(pattern_to_remove)
 
@@ -1377,7 +1377,7 @@ if (exists("adjusted_counts")){
   #plot(a)
   dev.off()
 
-if (pattern_to_remove!="none")){
+if (pattern_to_remove!="none"){
   cat("\n\nRepeating figures by Combat Seq removing the samples matching")
   print(pattern_to_remove)
   label <- basename(path)
