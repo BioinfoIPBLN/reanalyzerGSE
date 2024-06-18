@@ -1056,8 +1056,229 @@ save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
   #plot(a)
   dev.off()
 
+if (pattern_to_remove!="none")){    
+  cat("\n\nRepeating QC figures removing the samples matching")
+  print(pattern_to_remove)
+
+  label <- basename(path)
+  x_prefilter <- edgeR_object_prefilter[,grep(pattern_to_remove,colnames(edgeR_object_prefilter),invert=T,val=T)]
+  lcpm_prefilter <- cpm(x_prefilter, log=TRUE)  # This is log2 and normalized due to the argument normalized.lib.sizes=TRUE by default in cpm...
+  x <- edgeR_object[,grep(pattern_to_remove,colnames(edgeR_object),invert=T,val=T)]
+  cpm <- cpm(x) # This is normalized, altough not through edgeR, but the argument normalized.lib.sizes=TRUE by default in cpm...
+  lcpm <- cpm(x, log=TRUE)  # This is log2 and normalized due to the argument normalized.lib.sizes=TRUE by default in cpm...
+  lcpm_no_log <- cpm(x, log=FALSE)
+  nsamples <- ncol(x)
+  
+  L <- mean(x$samples$lib.size) * 1e-6
+  M <- median(x$samples$lib.size) * 1e-6
+  lcpm.cutoff <- log2(10/M + 2/L)
+  
+  x2 <- edgeR_object_norm[,grep(pattern_to_remove,colnames(edgeR_object_norm),invert=T,val=T)]
+  
+  lcpm2 <- cpm(x2, log=TRUE)
+  lcpm2_no_log <- cpm(x2, log=FALSE)
+
+  group <- x$samples$group
+  col.group <- as.factor(group)
+  
+  color = grDevices::colors()[grep('gr(a|e)y', grDevices::colors(), invert = TRUE)] # Get a list of non-gray colors
+  color_rgb <- col2rgb(color)
+  luminance <- 0.299*color_rgb[1,] + 0.587*color_rgb[2,] + 0.114*color_rgb[3,]
+  
+  color <- color[luminance < 400] # You can adjust the threshold value as needed
+  levels(col.group) <- sample(color, nlevels(col.group))
+  col.group <- as.character(col.group)
+
+  ### The actual pdf file:
+  pdf(paste0(output_dir,"/QC_and_others/",label,"_pattern_to_remove_QC.pdf"),paper="A4")
+  ### 0 Reminder of the samples:
+  ggplot() + theme_void(base_size=1) + coord_flip() +
+    annotate(geom = "table",
+                   x = 0,
+                   y = 0,
+                   size = 1,
+                   label = list(as.data.frame(targets)))
+  ### 1.1. Density rawcounts log2, cpm...:
+  col <- RColorBrewer::brewer.pal(nsamples, "Paired")
+  if(sum(duplicated(col))>0){
+    col <- grDevices::rainbow(nsamples)
+    print(paste0("Replacing the palette with ",nsamples," random colors..."))
+  }
+  par(mfrow=c(1,2))
+  plot(density(lcpm_prefilter), col=col[1], lwd=2, las=2, main="", xlab="")
+  title(main="Raw data", xlab="Log-cpm")
+  abline(v=lcpm.cutoff, lty=3)
+  for (i in 2:nsamples){
+    den <- density(lcpm_prefilter[,i])
+    lines(den$x, den$y, col=col[i], lwd=2)
+  }
+  legend("topright",legend=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), text.col=col, bty = "n", cex = 0.5)
+  ### 1.2. Density rawcounts log2, cpm...:
+  # x is the raw counts with the bin or standard filter:
+  plot(density(lcpm[,1]), col=col[1], lwd=2, las=2, main="", xlab="")
+  title(main="Filtered data", xlab="Log-cpm")
+  abline(v=lcpm.cutoff, lty=3)
+  for (i in 2:nsamples){
+    den <- density(lcpm[,i])
+    lines(den$x, den$y, col=col[i], lwd=2)
+  }
+  legend("topright", legend=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), text.col=col, bty="n", cex = 0.5)
+  ### 2.1. Unnormalised:
+  par(mfrow=c(1,2))
+  boxplot(lcpm, las=2, col=col.group, main="", names=targets$Name, cex.axis=0.4)
+  title(main="Unnormalized data",ylab="Log-cpm",xlab="sample_type")
+  ### 2.2. Normalised:
+  boxplot(lcpm2, las=2, col=col.group, main="", names=targets$Name, cex.axis=0.4)
+  title(main="Normalized data",ylab="Log-cpm",xlab="sample_type")
+  ### 3. Library size:
+  par(mfrow=c(1,1))
+  bar_mids <- barplot(x$samples$lib.size,names.arg = gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name),las=2, main="Library Size",col=col.group, ylim=range(pretty(c(0, x$samples$lib.size))))
+  # Loop over the bar midpoints and add the text on top of each bar
+  for(i in 1:length(bar_mids)) {
+    # The y position is slightly above the top of the bar
+    y_pos <- x$samples$lib.size[i] + 0.02 * max(x$samples$lib.size)    
+    # Add the text, centered on the bar midpoint
+    text(bar_mids[i], y_pos, labels = x$samples$lib.size[i], cex = 0.8, pos = 3)
+  }
+  ### Figures with the number of reads
+  reads <- c()
+  files <- grep("_stats.txt",list.files(path=input_dir,full.names=T,recursive=T),val=T)
+  for (f in files){reads <- c(reads,system(paste0("cat ",f," | grep '1st fragments' | sed 's,.*:\t,,g'"),intern=T))}
+  bam_reads_2 <- data.frame(names=as.character(gsub("_nat.*","",basename(files))),reads=as.numeric(reads))
+  # substr <- unlist(strsplit(bam_reads_2$names, "[\\W_]+"))
+  # bam_reads_2$color <- substr[substr %in% names(table(substr)[table(substr)>1])]
+  bam_reads_2$color <- bam_reads_2$names
+
+  cat("Please check ordering and number of bam reads...\n"); print(bam_reads_2)  
+
+  bar_plot <- ggbarplot(
+    bam_reads_2, 
+    x = "names", 
+    y = "reads", 
+    fill = "color",
+    color = "color",
+    stat = "identity"
+  ) + theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+  bar_plot + 
+    geom_text(aes(label = reads), vjust = -0.5, color = "black", size=3) + labs(title="raw_reads") + guides(color = "none") + theme(legend.position = "none")
+
+  reads <- c()
+  files <- grep("_1_fastqc.html",list.files(path=input_dir,full.names=T,recursive=T),val=T)
+  for (f in files){reads <- c(reads,system(paste0("cat ",f," | sed 's,<td>,\\n,g;s,</td>,\\n,g' | grep -A2 'Total Sequences' | tail -1"),intern=T))}
+  if(length(files)!=0){ # Control that sometimes if these are repeated runs, fastqc is not going to be executed    
+    fastq_reads_2 <- data.frame(names=as.character(gsub("_1_fastqc.*","",basename(files))),reads=as.numeric(reads))    
+    # substr <- unlist(strsplit(fastq_reads_2$names, "[\\W_]+"))    
+    # fastq_reads_2$color <- substr[substr %in% names(table(substr)[table(substr)>1])]
+    fastq_reads_2$color <- fastq_reads_2$names
+        
+    cat("Please check ordering and number of fastq reads...\n"); print(fastq_reads_2)
+    
+    bar_plot <- ggbarplot(
+      fastq_reads_2, 
+      x = "names", 
+      y = "reads", 
+      fill = "color",
+      color = "color",
+      stat = "identity"
+    ) + theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+    perc <- c()
+    for (i in 1:length(reads)){perc<-c(perc,round(bam_reads_2$reads[i]*100/fastq_reads_2$reads[i],2))}
+    bar_plot + 
+       geom_text(aes(label = paste0(reads," (bam/fastq: ",perc, " %)"), angle=45), vjust = -0.5, color = "black", size=2) + labs(title="bam_reads") + guides(color = "none") + theme(legend.position = "none")
+  }
+  reads_info <- fastq_reads_2[,1:2]
+  reads_info$library_size <- x$samples$lib.size
+  write.table(reads_info,file=paste0(output_dir,"/QC_and_others/reads_numbers.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+
+  ### 4. Corrplot no log
+  tmp <- lcpm_no_log; colnames(tmp) <- gsub("_t|m_Rep|_seq|_KO|_WT","",colnames(tmp))
+  colnames(tmp) <- targets$Name[match(colnames(tmp),targets$Name)]
+  corrplot(cor(tmp,method="spearman"), method='number',type = 'upper')
+  corrplot(cor(tmp,method="spearman"), order='AOE')
+  ### 5.1. MDS # Commented out because I've checked it's identical to the norm one
+  #z <- plotMDS(lcpm_no_log, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise", plot=F)
+  #edge <- sd(z$x)
+  #plotMDS(lcpm_no_log, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise",xlim=c(min(z$x)-edge,max(z$x) + edge))
+  #title(main="MDS-PCoA Sample Names")
+  ### 5.2. MDS_log # Commented out because I've checked it's almost identical to the norm one
+  # par(mfrow=c(1,1))
+  # z <- plotMDS(lcpm, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise", plot=F)
+  # edge <- sd(z$x)
+  #cat(edge)
+  # plotMDS(lcpm, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise",xlim=c(min(z$x)-edge,max(z$x) + edge))
+  # title(main="MDS-PCoA log2 Sample Names")
+  ### 5.3. MDS_norm
+  z <- plotMDS(lcpm2_no_log, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise", plot=F)
+  edge <- sd(z$x)
+  plotMDS(lcpm2_no_log, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise",xlim=c(min(z$x)-edge,max(z$x) + edge))
+  title(main="MDS-PCoA Sample Names Norm")
+  ### 5.4. MDS_log_norm
+  par(mfrow=c(1,1))
+  z <- plotMDS(lcpm2, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise", plot=F)
+  edge <- sd(z$x)
+  #cat(edge)
+  plotMDS(lcpm2, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise",xlim=c(min(z$x)-edge,max(z$x) + edge))
+  title(main="MDS-PCoA log2 Sample Names Norm")
+  ### 6. PCA por tipos
+  data_pca <- as.matrix(x)
+  data_pca <- as.data.frame(t(data_pca))
+  rownames(data_pca) <- targets$Name
+  data_pca.PC = prcomp(data_pca)
+  data_pca$Type <- targets$Type
+  data_pca$Filename <- targets$Filename
+  data_pca$Name <- targets$Name
+  data_pca$Sex <- targets$Sex
+  data_pca$Age <- targets$Age
+  data_pca$VAS_Group <- targets$VAS_Group
+  data_pca$TypeII <- targets$TypeII
+  plot(autoplot(data_pca.PC,title="PCA_over_edgeR",label=T,data=data_pca,colour='Type',xlim = c(-0.8,0.8),label.size=3,label.repel=T))
+  ### 6. PCA por tipos normalizada (no log2 si no en edgeR)
+  data_pca <- as.matrix(x2)
+  data_pca <- as.data.frame(t(data_pca))
+  rownames(data_pca) <- targets$Name
+  data_pca.PC = prcomp(data_pca)
+  data_pca$Type <- targets$Type
+  data_pca$Filename <- targets$Filename
+  data_pca$Name <- targets$Name
+  data_pca$Sex <- targets$Sex
+  data_pca$Age <- targets$Age
+  data_pca$VAS_Group <- targets$VAS_Group
+  data_pca$TypeII <- targets$TypeII
+  plot(autoplot(data_pca.PC,title="PCA_over_edgeR_norm",label=T,data=data_pca,colour='Type',xlim = c(-0.8,0.8),label.size=3,label.repel=T))
+  ### 7. Heatmap 250 mots differential entities
+  rsd <- rowSds(as.matrix(x))
+  sel <- order(rsd, decreasing=TRUE)[1:250]
+  samplenames <- gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name)
+  heatmap(na.omit(as.matrix(x[sel,])),margins=c(10,8),main="Heatmap 250 most diff entities raw counts",cexRow=0.01,cexCol=0.5,labCol=samplenames)
+  ### 8.1. Dendogram cluster raw  # Commented out because I've checked it's identical to the norm one
+  #par(mfrow=c(1,1), col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
+  #pr.hc.c <- hclust(na.omit(dist(t(data))))
+  #plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of ", label, sep=""), labels=targets$Filemane, cex=0.5)
+  #Normalized clustering analysis plot
+  #pr.hc.c <- hclust(na.omit(dist(t(edgeR_object_norm$counts))))
+  #pr.hc.c <- hclust(na.omit(dist(t(cpm(x$counts,log=F)),method = "euclidean")))
+  #plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of raw counts from samples of ", label, sep=""), labels=targets$Filename, cex=0.5)
+  ### 8.2. Dendogram cluster raw_log # Commented out because I've checked it's identical to the norm one
+  #par(mfrow=c(1,1), col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
+  #pr.hc.c <- hclust(na.omit(dist(t(cpm(x$counts,log=T)),method = "euclidean")))
+  #plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of log2 raw counts from samples of ", label, sep=""), labels=targets$Filename, cex=0.5)
+  ### 8.3. Dendogram cluster raw norm
+  par(mfrow=c(1,1), col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
+  pr.hc.c <- hclust(na.omit(dist(t(cpm(x2$counts,log=F)),method = "euclidean")))
+  plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of normalized counts from samples of ", label, sep=""), labels=targets$Filename, cex=0.5)
+  ### 8.3. Dendogram cluster raw norm
+  par(mfrow=c(1,1), col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
+  pr.hc.c <- hclust(na.omit(dist(t(cpm(x2$counts,log=T)),method = "euclidean")))
+  plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of log2 normalized counts from samples of ", label, sep=""), labels=targets$Filename, cex=0.5)
+
+  #tSNE
+  #a <- tsne(x$counts,seed=100,labels=as.factor(targets$Type), perplex=perplex, legendtitle="Types",text=targets$Type ,dotsize=3, legendtextsize = 8) + ggtitle("Tsne") + theme(plot.title = element_text(face = "bold", size = 12, hjust = 0.5))
+  #plot(a)
+  dev.off()
+}
+
 ###### Add the figures using the counts corrected by ComBat-seq:
-if (exists("adjusted_counts")){  
+if (exists("adjusted_counts")){
   cat("\n\nRemember that batch effect correction/covariables have been only provided to Combat-Seq for visualization purposes, if you need to include covariables in the DGE model after checking the visualization, please rerun the main program using the argument -C\n\n")
   cat("\nQC_PDF ComBat-seq counts\n")
   cat("\nRemember that you have requested batch effect correction, so you have to mind the figures in this QC_PDF from ComBat-seq counts...\n")
@@ -1071,9 +1292,7 @@ if (exists("adjusted_counts")){
   lcpm <- cpm(x, log=TRUE)  # This is log2 and normalized due to the argument normalized.lib.sizes=TRUE by default in cpm...
   lcpm_no_log <- cpm(x, log=FALSE)
 
-  nsamples <- ncol(x)
-
-  
+  nsamples <- ncol(x)  
   if (exists("gsm_manual_filter")){
       idxs_gsm_manual_3 <- which(unlist(lapply(strsplit(targets$Name,"_"),function(x){any(x %in% unlist(strsplit(gsm_manual_filter,",")))})))    
       targets <- targets[idxs_gsm_manual_3,]
@@ -1110,7 +1329,7 @@ if (exists("adjusted_counts")){
 
   suppressMessages(library(ggpmisc,quiet = T,warn.conflicts = F))
   ### The actual pdf file:
-  pdf(paste0(output_dir,"/QC_and_others/",label,"QC_ComBat-seq.pdf"),paper="A4")
+  pdf(paste0(output_dir,"/QC_and_others/",label,"_ComBat-seq_QC.pdf"),paper="A4")
   ### 0 Reminder of the samples:
   ggplot() + theme_void(base_size=1) + coord_flip() +
     annotate(geom = "table",
@@ -1158,9 +1377,9 @@ if (exists("adjusted_counts")){
   #plot(a)
   dev.off()
 
-if (exists("pattern_to_remove")){    
+if (pattern_to_remove!="none")){
   cat("\n\nRepeating figures by Combat Seq removing the samples matching")
-  print(pattern_to_remove)  
+  print(pattern_to_remove)
   label <- basename(path)
   x_prefilter <- edgeR_object_prefilter_combat[,grep(pattern_to_remove,colnames(edgeR_object_prefilter_combat),invert=T,val=T)]
   lcpm_prefilter <- cpm(x_prefilter, log=TRUE)  # This is log2 and normalized due to the argument normalized.lib.sizes=TRUE by default in cpm...
@@ -1189,7 +1408,7 @@ if (exists("pattern_to_remove")){
 
   suppressMessages(library(ggpmisc,quiet = T,warn.conflicts = F))
   ### The actual pdf file:
-  pdf(paste0(output_dir,"/QC_and_others/",label,"QC_ComBat-seq_pattern_removed.pdf"),paper="A4")
+  pdf(paste0(output_dir,"/QC_and_others/",label,"_pattern_removed_ComBat-seq_QC.pdf"),paper="A4")
   ### 0 Reminder of the samples:
   ggplot() + theme_void(base_size=1) + coord_flip() +
     annotate(geom = "table",
