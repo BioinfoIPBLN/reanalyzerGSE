@@ -647,6 +647,9 @@ pattern_to_remove <- args[13] # if not provided, "none"
       setwd(paste0(output_dir,"/DGE"))
         tryCatch({
           RPKM <- gene_counts_rpkm_to_write[,-grep("Gene_ID",colnames(gene_counts_rpkm_to_write))]
+          if (pattern_to_remove!="none"){
+            RPKM <- RPKM[,grep(pattern_to_remove,colnames(RPKM),invert=T)]
+          }
           a <- data.frame(Type=sub("_Rep.*","",sub("(.*)_.*", "\\1",colnames(RPKM))))
           rownames(a) <- colnames(RPKM)
           print("Obtaining targets from colum names removing everything after the last underline... This is the result, please double check as it may be the source of errors...")
@@ -804,7 +807,9 @@ if (full_analyses!="no"){
   try(system("tar cf venn_diagrams.tar Venn_diagram*; rm Venn_diagram*"))
 }
 save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
-###### QC PDF from Bioinfo and Laura:
+
+
+###### QC PDF from Bioinfo:
   cat("\nPerforming QC_PDF...\n");print(paste0("Current date: ",date()))
   suppressMessages(library("edgeR",quiet = T,warn.conflicts = F))
   suppressMessages(library("RColorBrewer",quiet = T,warn.conflicts = F))
@@ -1056,8 +1061,8 @@ save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
   #plot(a)
   dev.off()
 
-if (pattern_to_remove!="none"){    
-  cat("\n\nRepeating QC figures removing the samples matching")
+if (pattern_to_remove!="none"){
+  cat("\n\nRepeating QC figures removing the samples matching: ")
   print(pattern_to_remove)
 
   label <- basename(path)
@@ -1089,6 +1094,8 @@ if (pattern_to_remove!="none"){
   levels(col.group) <- sample(color, nlevels(col.group))
   col.group <- as.character(col.group)
 
+  targets_pattern_to_remove <- targets[grep(pattern_to_remove,targets$Filename,invert=T),]
+
   ### The actual pdf file:
   pdf(paste0(output_dir,"/QC_and_others/",label,"_pattern_to_remove_QC.pdf"),paper="A4")
   ### 0 Reminder of the samples:
@@ -1097,7 +1104,7 @@ if (pattern_to_remove!="none"){
                    x = 0,
                    y = 0,
                    size = 1,
-                   label = list(as.data.frame(targets)))
+                   label = list(as.data.frame(targets_pattern_to_remove)))
   ### 1.1. Density rawcounts log2, cpm...:
   col <- RColorBrewer::brewer.pal(nsamples, "Paired")
   if(sum(duplicated(col))>0){
@@ -1112,7 +1119,7 @@ if (pattern_to_remove!="none"){
     den <- density(lcpm_prefilter[,i])
     lines(den$x, den$y, col=col[i], lwd=2)
   }
-  legend("topright",legend=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), text.col=col, bty = "n", cex = 0.5)
+  legend("topright",legend=gsub("_t|m_Rep|_seq|_KO|_WT","",targets_pattern_to_remove$Name), text.col=col, bty = "n", cex = 0.5)
   ### 1.2. Density rawcounts log2, cpm...:
   # x is the raw counts with the bin or standard filter:
   plot(density(lcpm[,1]), col=col[1], lwd=2, las=2, main="", xlab="")
@@ -1122,17 +1129,17 @@ if (pattern_to_remove!="none"){
     den <- density(lcpm[,i])
     lines(den$x, den$y, col=col[i], lwd=2)
   }
-  legend("topright", legend=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), text.col=col, bty="n", cex = 0.5)
+  legend("topright", legend=gsub("_t|m_Rep|_seq|_KO|_WT","",targets_pattern_to_remove$Name), text.col=col, bty="n", cex = 0.5)
   ### 2.1. Unnormalised:
   par(mfrow=c(1,2))
-  boxplot(lcpm, las=2, col=col.group, main="", names=targets$Name, cex.axis=0.4)
+  boxplot(lcpm, las=2, col=col.group, main="", names=targets_pattern_to_remove$Name, cex.axis=0.4)
   title(main="Unnormalized data",ylab="Log-cpm",xlab="sample_type")
   ### 2.2. Normalised:
-  boxplot(lcpm2, las=2, col=col.group, main="", names=targets$Name, cex.axis=0.4)
+  boxplot(lcpm2, las=2, col=col.group, main="", names=targets_pattern_to_remove$Name, cex.axis=0.4)
   title(main="Normalized data",ylab="Log-cpm",xlab="sample_type")
   ### 3. Library size:
   par(mfrow=c(1,1))
-  bar_mids <- barplot(x$samples$lib.size,names.arg = gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name),las=2, main="Library Size",col=col.group, ylim=range(pretty(c(0, x$samples$lib.size))))
+  bar_mids <- barplot(x$samples$lib.size,names.arg = gsub("_t|m_Rep|_seq|_KO|_WT","",targets_pattern_to_remove$Name),las=2, main="Library Size",col=col.group, ylim=range(pretty(c(0, x$samples$lib.size))))
   # Loop over the bar midpoints and add the text on top of each bar
   for(i in 1:length(bar_mids)) {
     # The y position is slightly above the top of the bar
@@ -1192,88 +1199,61 @@ if (pattern_to_remove!="none"){
 
   ### 4. Corrplot no log
   tmp <- lcpm_no_log; colnames(tmp) <- gsub("_t|m_Rep|_seq|_KO|_WT","",colnames(tmp))
-  colnames(tmp) <- targets$Name[match(colnames(tmp),targets$Name)]
+  colnames(tmp) <- targets_pattern_to_remove$Name[match(colnames(tmp),targets_pattern_to_remove$Name)]
   corrplot(cor(tmp,method="spearman"), method='number',type = 'upper')
   corrplot(cor(tmp,method="spearman"), order='AOE')
-  ### 5.1. MDS # Commented out because I've checked it's identical to the norm one
-  #z <- plotMDS(lcpm_no_log, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise", plot=F)
-  #edge <- sd(z$x)
-  #plotMDS(lcpm_no_log, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise",xlim=c(min(z$x)-edge,max(z$x) + edge))
-  #title(main="MDS-PCoA Sample Names")
-  ### 5.2. MDS_log # Commented out because I've checked it's almost identical to the norm one
-  # par(mfrow=c(1,1))
-  # z <- plotMDS(lcpm, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise", plot=F)
-  # edge <- sd(z$x)
-  #cat(edge)
-  # plotMDS(lcpm, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise",xlim=c(min(z$x)-edge,max(z$x) + edge))
-  # title(main="MDS-PCoA log2 Sample Names")
+  
   ### 5.3. MDS_norm
-  z <- plotMDS(lcpm2_no_log, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise", plot=F)
+  z <- plotMDS(lcpm2_no_log, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets_pattern_to_remove$Name), col=col.group, gene.selection = "pairwise", plot=F)
   edge <- sd(z$x)
-  plotMDS(lcpm2_no_log, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise",xlim=c(min(z$x)-edge,max(z$x) + edge))
+  plotMDS(lcpm2_no_log, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets_pattern_to_remove$Name), col=col.group, gene.selection = "pairwise",xlim=c(min(z$x)-edge,max(z$x) + edge))
   title(main="MDS-PCoA Sample Names Norm")
   ### 5.4. MDS_log_norm
   par(mfrow=c(1,1))
-  z <- plotMDS(lcpm2, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise", plot=F)
+  z <- plotMDS(lcpm2, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets_pattern_to_remove$Name), col=col.group, gene.selection = "pairwise", plot=F)
   edge <- sd(z$x)
   #cat(edge)
-  plotMDS(lcpm2, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise",xlim=c(min(z$x)-edge,max(z$x) + edge))
+  plotMDS(lcpm2, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets_pattern_to_remove$Name), col=col.group, gene.selection = "pairwise",xlim=c(min(z$x)-edge,max(z$x) + edge))
   title(main="MDS-PCoA log2 Sample Names Norm")
   ### 6. PCA por tipos
   data_pca <- as.matrix(x)
   data_pca <- as.data.frame(t(data_pca))
-  rownames(data_pca) <- targets$Name
+  rownames(data_pca) <- targets_pattern_to_remove$Name
   data_pca.PC = prcomp(data_pca)
-  data_pca$Type <- targets$Type
-  data_pca$Filename <- targets$Filename
-  data_pca$Name <- targets$Name
-  data_pca$Sex <- targets$Sex
-  data_pca$Age <- targets$Age
-  data_pca$VAS_Group <- targets$VAS_Group
-  data_pca$TypeII <- targets$TypeII
+  data_pca$Type <- targets_pattern_to_remove$Type
+  data_pca$Filename <- targets_pattern_to_remove$Filename
+  data_pca$Name <- targets_pattern_to_remove$Name
+  data_pca$Sex <- targets_pattern_to_remove$Sex
+  data_pca$Age <- targets_pattern_to_remove$Age
+  data_pca$VAS_Group <- targets_pattern_to_remove$VAS_Group
+  data_pca$TypeII <- targets_pattern_to_remove$TypeII
   plot(autoplot(data_pca.PC,title="PCA_over_edgeR",label=T,data=data_pca,colour='Type',xlim = c(-0.8,0.8),label.size=3,label.repel=T))
   ### 6. PCA por tipos normalizada (no log2 si no en edgeR)
   data_pca <- as.matrix(x2)
   data_pca <- as.data.frame(t(data_pca))
-  rownames(data_pca) <- targets$Name
+  rownames(data_pca) <- targets_pattern_to_remove$Name
   data_pca.PC = prcomp(data_pca)
-  data_pca$Type <- targets$Type
-  data_pca$Filename <- targets$Filename
-  data_pca$Name <- targets$Name
-  data_pca$Sex <- targets$Sex
-  data_pca$Age <- targets$Age
-  data_pca$VAS_Group <- targets$VAS_Group
-  data_pca$TypeII <- targets$TypeII
+  data_pca$Type <- targets_pattern_to_remove$Type
+  data_pca$Filename <- targets_pattern_to_remove$Filename
+  data_pca$Name <- targets_pattern_to_remove$Name
+  data_pca$Sex <- targets_pattern_to_remove$Sex
+  data_pca$Age <- targets_pattern_to_remove$Age
+  data_pca$VAS_Group <- targets_pattern_to_remove$VAS_Group
+  data_pca$TypeII <- targets_pattern_to_remove$TypeII
   plot(autoplot(data_pca.PC,title="PCA_over_edgeR_norm",label=T,data=data_pca,colour='Type',xlim = c(-0.8,0.8),label.size=3,label.repel=T))
   ### 7. Heatmap 250 mots differential entities
   rsd <- rowSds(as.matrix(x))
   sel <- order(rsd, decreasing=TRUE)[1:250]
-  samplenames <- gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name)
+  samplenames <- gsub("_t|m_Rep|_seq|_KO|_WT","",targets_pattern_to_remove$Name)
   heatmap(na.omit(as.matrix(x[sel,])),margins=c(10,8),main="Heatmap 250 most diff entities raw counts",cexRow=0.01,cexCol=0.5,labCol=samplenames)
-  ### 8.1. Dendogram cluster raw  # Commented out because I've checked it's identical to the norm one
-  #par(mfrow=c(1,1), col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
-  #pr.hc.c <- hclust(na.omit(dist(t(data))))
-  #plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of ", label, sep=""), labels=targets$Filemane, cex=0.5)
-  #Normalized clustering analysis plot
-  #pr.hc.c <- hclust(na.omit(dist(t(edgeR_object_norm$counts))))
-  #pr.hc.c <- hclust(na.omit(dist(t(cpm(x$counts,log=F)),method = "euclidean")))
-  #plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of raw counts from samples of ", label, sep=""), labels=targets$Filename, cex=0.5)
-  ### 8.2. Dendogram cluster raw_log # Commented out because I've checked it's identical to the norm one
-  #par(mfrow=c(1,1), col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
-  #pr.hc.c <- hclust(na.omit(dist(t(cpm(x$counts,log=T)),method = "euclidean")))
-  #plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of log2 raw counts from samples of ", label, sep=""), labels=targets$Filename, cex=0.5)
   ### 8.3. Dendogram cluster raw norm
   par(mfrow=c(1,1), col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
   pr.hc.c <- hclust(na.omit(dist(t(cpm(x2$counts,log=F)),method = "euclidean")))
-  plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of normalized counts from samples of ", label, sep=""), labels=targets$Filename, cex=0.5)
+  plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of normalized counts from samples of ", label, sep=""), labels=targets_pattern_to_remove$Filename, cex=0.5)
   ### 8.3. Dendogram cluster raw norm
   par(mfrow=c(1,1), col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
   pr.hc.c <- hclust(na.omit(dist(t(cpm(x2$counts,log=T)),method = "euclidean")))
-  plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of log2 normalized counts from samples of ", label, sep=""), labels=targets$Filename, cex=0.5)
-
-  #tSNE
-  #a <- tsne(x$counts,seed=100,labels=as.factor(targets$Type), perplex=perplex, legendtitle="Types",text=targets$Type ,dotsize=3, legendtextsize = 8) + ggtitle("Tsne") + theme(plot.title = element_text(face = "bold", size = 12, hjust = 0.5))
-  #plot(a)
+  plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of log2 normalized counts from samples of ", label, sep=""), labels=targets_pattern_to_remove$Filename, cex=0.5)
   dev.off()
 }
 
@@ -1406,6 +1386,8 @@ if (pattern_to_remove!="none"){
   levels(col.group) <- sample(color,nlevels(col.group))
   col.group <- as.character(col.group)
 
+  targets_pattern_to_remove <- targets[grep(pattern_to_remove,targets$Filename,invert=T),]
+
   suppressMessages(library(ggpmisc,quiet = T,warn.conflicts = F))
   ### The actual pdf file:
   pdf(paste0(output_dir,"/QC_and_others/",label,"_pattern_removed_ComBat-seq_QC.pdf"),paper="A4")
@@ -1415,41 +1397,41 @@ if (pattern_to_remove!="none"){
                    x = 0,
                    y = 0,
                    size = 1,
-                   label = list(as.data.frame(targets)))
+                   label = list(as.data.frame(targets_pattern_to_remove)))
   
   ### 5.3. MDS_norm
-  z <- plotMDS(lcpm2_no_log, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise", plot=F)
+  z <- plotMDS(lcpm2_no_log, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets_pattern_to_remove$Name), col=col.group, gene.selection = "pairwise", plot=F)
   edge <- sd(z$x)
-  plotMDS(lcpm2_no_log, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise",xlim=c(min(z$x)-edge,max(z$x) + edge))
+  plotMDS(lcpm2_no_log, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets_pattern_to_remove$Name), col=col.group, gene.selection = "pairwise",xlim=c(min(z$x)-edge,max(z$x) + edge))
   title(main="MDS-PCoA Sample Names Norm")
   ### 5.4. MDS_log_norm
   par(mfrow=c(1,1))
-  z <- plotMDS(lcpm2, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise", plot=F)
+  z <- plotMDS(lcpm2, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets_pattern_to_remove$Name), col=col.group, gene.selection = "pairwise", plot=F)
   edge <- sd(z$x)
   #cat(edge)
-  plotMDS(lcpm2, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), col=col.group, gene.selection = "pairwise",xlim=c(min(z$x)-edge,max(z$x) + edge))
+  plotMDS(lcpm2, labels=gsub("_t|m_Rep|_seq|_KO|_WT","",targets_pattern_to_remove$Name), col=col.group, gene.selection = "pairwise",xlim=c(min(z$x)-edge,max(z$x) + edge))
   title(main="MDS-PCoA log2 Sample Names Norm")
   ### 6. PCA por tipos
   data_pca <- as.matrix(x)
   data_pca <- as.data.frame(t(data_pca))
-  rownames(data_pca) <- targets$Name
+  rownames(data_pca) <- targets_pattern_to_remove$Name
   data_pca.PC = prcomp(data_pca)
-  data_pca$Type <- targets$Type
-  data_pca$Filename <- targets$Filename
-  data_pca$Name <- targets$Name
-  data_pca$Sex <- targets$Sex
-  data_pca$Age <- targets$Age
-  data_pca$VAS_Group <- targets$VAS_Group
-  data_pca$TypeII <- targets$TypeII
+  data_pca$Type <- targets_pattern_to_remove$Type
+  data_pca$Filename <- targets_pattern_to_remove$Filename
+  data_pca$Name <- targets_pattern_to_remove$Name
+  data_pca$Sex <- targets_pattern_to_remove$Sex
+  data_pca$Age <- targets_pattern_to_remove$Age
+  data_pca$VAS_Group <- targets_pattern_to_remove$VAS_Group
+  data_pca$TypeII <- targets_pattern_to_remove$TypeII
   plot(autoplot(data_pca.PC,label=T,data=data_pca,colour='Type',xlim = c(-0.8,0.8),label.size=3,label.repel=T))
   ### 8.3. Dendogram cluster raw norm
   par(mfrow=c(1,1), col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
   pr.hc.c <- hclust(na.omit(dist(t(cpm(x2$counts,log=F)),method = "euclidean")))
-  plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of normalized counts from samples of ", label, sep=""), labels=targets$Filename, cex=0.5)
+  plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of normalized counts from samples of ", label, sep=""), labels=targets_pattern_to_remove$Filename, cex=0.5)
   ### 8.3. Dendogram cluster raw norm
   par(mfrow=c(1,1), col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
   pr.hc.c <- hclust(na.omit(dist(t(cpm(x2$counts,log=T)),method = "euclidean")))
-  plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of log2 normalized counts from samples of ", label, sep=""), labels=targets$Filename, cex=0.5)
+  plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of log2 normalized counts from samples of ", label, sep=""), labels=targets_pattern_to_remove$Filename, cex=0.5)
   dev.off()
  }
 }
