@@ -925,55 +925,57 @@ save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
     # Add the text, centered on the bar midpoint
     text(bar_mids[i], y_pos, labels = x$samples$lib.size[i], cex = 0.8, pos = 3)
   }
-  ### Figures with the number of reads
-  reads <- c()
-  files <- grep("_stats.txt",list.files(path=input_dir,full.names=T,recursive=T),val=T)
-  for (f in files){reads <- c(reads,system(paste0("cat ",f," | grep '1st fragments' | sed 's,.*:\t,,g'"),intern=T))}
-  bam_reads_2 <- data.frame(names=as.character(gsub("_nat.*","",basename(files))),reads=as.numeric(reads))
-  # substr <- unlist(strsplit(bam_reads_2$names, "[\\W_]+"))
-  # bam_reads_2$color <- substr[substr %in% names(table(substr)[table(substr)>1])]
-  bam_reads_2$color <- bam_reads_2$names
-
-  cat("Please check ordering and number of bam reads...\n"); print(bam_reads_2)  
-
-  bar_plot <- ggbarplot(
-    bam_reads_2, 
-    x = "names", 
-    y = "reads", 
-    fill = "color",
-    color = "color",
-    stat = "identity"
-  ) + theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
-  bar_plot + 
-    geom_text(aes(label = reads), vjust = -0.5, color = "black", size=3) + labs(title="raw_reads") + guides(color = "none") + theme(legend.position = "none")
-
-  reads <- c()
-  files <- grep("_1_fastqc.html",list.files(path=input_dir,full.names=T,recursive=T),val=T)
-  for (f in files){reads <- c(reads,system(paste0("cat ",f," | sed 's,<td>,\\n,g;s,</td>,\\n,g' | grep -A2 'Total Sequences' | tail -1"),intern=T))}
-  if(length(files)!=0){ # Control that sometimes if these are repeated runs, fastqc is not going to be executed    
-    fastq_reads_2 <- data.frame(names=as.character(gsub("_1_fastqc.*","",basename(files))),reads=as.numeric(reads))    
-    # substr <- unlist(strsplit(fastq_reads_2$names, "[\\W_]+"))    
-    # fastq_reads_2$color <- substr[substr %in% names(table(substr)[table(substr)>1])]
-    fastq_reads_2$color <- fastq_reads_2$names
-        
-    cat("Please check ordering and number of fastq reads...\n"); print(fastq_reads_2)
-    
+  if(length(grep("_skip_",list.files(path=input_dir,full.names=T,recursive=T)))!=0){
+    ### Figures with the number of reads
+    reads <- c()
+    files <- grep("_stats.txt",list.files(path=input_dir,full.names=T,recursive=T),val=T)
+    for (f in files){reads <- c(reads,system(paste0("cat ",f," | grep '1st fragments' | sed 's,.*:\t,,g'"),intern=T))}
+    bam_reads_2 <- data.frame(names=as.character(gsub("_nat.*","",basename(files))),reads=as.numeric(reads))
+    # substr <- unlist(strsplit(bam_reads_2$names, "[\\W_]+"))
+    # bam_reads_2$color <- substr[substr %in% names(table(substr)[table(substr)>1])]
+    bam_reads_2$color <- bam_reads_2$names
+  
+    cat("Please check ordering and number of bam reads...\n"); print(bam_reads_2)  
+  
     bar_plot <- ggbarplot(
-      fastq_reads_2, 
+      bam_reads_2, 
       x = "names", 
       y = "reads", 
       fill = "color",
       color = "color",
       stat = "identity"
     ) + theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
-    perc <- c()
-    for (i in 1:length(reads)){perc<-c(perc,round(bam_reads_2$reads[i]*100/fastq_reads_2$reads[i],2))}
     bar_plot + 
-       geom_text(aes(label = paste0(reads," (bam/fastq: ",perc, " %)"), angle=45), vjust = -0.5, color = "black", size=2) + labs(title="bam_reads") + guides(color = "none") + theme(legend.position = "none")
+      geom_text(aes(label = reads), vjust = -0.5, color = "black", size=3) + labs(title="raw_reads") + guides(color = "none") + theme(legend.position = "none")
+  
+    reads <- c()
+    files <- grep("_1_fastqc.html",list.files(path=input_dir,full.names=T,recursive=T),val=T)
+    for (f in files){reads <- c(reads,system(paste0("cat ",f," | sed 's,<td>,\\n,g;s,</td>,\\n,g' | grep -A2 'Total Sequences' | tail -1"),intern=T))}
+    if(length(files)!=0){ # Control that sometimes if these are repeated runs, fastqc is not going to be executed    
+      fastq_reads_2 <- data.frame(names=as.character(gsub("_1_fastqc.*","",basename(files))),reads=as.numeric(reads))    
+      # substr <- unlist(strsplit(fastq_reads_2$names, "[\\W_]+"))    
+      # fastq_reads_2$color <- substr[substr %in% names(table(substr)[table(substr)>1])]
+      fastq_reads_2$color <- fastq_reads_2$names
+          
+      cat("Please check ordering and number of fastq reads...\n"); print(fastq_reads_2)
+      
+      bar_plot <- ggbarplot(
+        fastq_reads_2, 
+        x = "names", 
+        y = "reads", 
+        fill = "color",
+        color = "color",
+        stat = "identity"
+      ) + theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+      perc <- c()
+      for (i in 1:length(reads)){perc<-c(perc,round(bam_reads_2$reads[i]*100/fastq_reads_2$reads[i],2))}
+      bar_plot + 
+         geom_text(aes(label = paste0(reads," (bam/fastq: ",perc, " %)"), angle=45), vjust = -0.5, color = "black", size=2) + labs(title="bam_reads") + guides(color = "none") + theme(legend.position = "none")
+    }
+    reads_info <- fastq_reads_2[,1:2]
+    reads_info$library_size <- x$samples$lib.size
+    write.table(reads_info,file=paste0(output_dir,"/QC_and_others/reads_numbers.txt"),col.names = T,row.names = F,quote = F,sep="\t")
   }
-  reads_info <- fastq_reads_2[,1:2]
-  reads_info$library_size <- x$samples$lib.size
-  write.table(reads_info,file=paste0(output_dir,"/QC_and_others/reads_numbers.txt"),col.names = T,row.names = F,quote = F,sep="\t")
 
   ### 4. Corrplot no log
   tmp <- lcpm_no_log; colnames(tmp) <- gsub("_t|m_Rep|_seq|_KO|_WT","",colnames(tmp))
@@ -1147,56 +1149,58 @@ if (pattern_to_remove!="none"){
     # Add the text, centered on the bar midpoint
     text(bar_mids[i], y_pos, labels = x$samples$lib.size[i], cex = 0.8, pos = 3)
   }
-  ### Figures with the number of reads
-  reads <- c()
-  files <- grep(pattern_to_remove,grep("_stats.txt",list.files(path=input_dir,full.names=T,recursive=T),val=T),invert=T,val=T)
-  for (f in files){reads <- c(reads,system(paste0("cat ",f," | grep '1st fragments' | sed 's,.*:\t,,g'"),intern=T))}
-  bam_reads_2 <- data.frame(names=as.character(gsub("_nat.*","",basename(files))),reads=as.numeric(reads))
-  # substr <- unlist(strsplit(bam_reads_2$names, "[\\W_]+"))
-  # bam_reads_2$color <- substr[substr %in% names(table(substr)[table(substr)>1])]
-  bam_reads_2$color <- bam_reads_2$names
-
-  cat("Please check ordering and number of bam reads...\n"); print(bam_reads_2)  
-
-  bar_plot <- ggbarplot(
-    bam_reads_2, 
-    x = "names", 
-    y = "reads", 
-    fill = "color",
-    color = "color",
-    stat = "identity"
-  ) + theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
-  bar_plot + 
-    geom_text(aes(label = reads), vjust = -0.5, color = "black", size=3) + labs(title="raw_reads") + guides(color = "none") + theme(legend.position = "none")
-
-  reads <- c()
-  files <- grep(pattern_to_remove,grep("_1_fastqc.html",list.files(path=input_dir,full.names=T,recursive=T),val=T),invert=T,val=T)
-  for (f in files){reads <- c(reads,system(paste0("cat ",f," | sed 's,<td>,\\n,g;s,</td>,\\n,g' | grep -A2 'Total Sequences' | tail -1"),intern=T))}
-  if(length(files)!=0){ # Control that sometimes if these are repeated runs, fastqc is not going to be executed    
-    fastq_reads_2 <- data.frame(names=as.character(gsub("_1_fastqc.*","",basename(files))),reads=as.numeric(reads))    
-    # substr <- unlist(strsplit(fastq_reads_2$names, "[\\W_]+"))    
-    # fastq_reads_2$color <- substr[substr %in% names(table(substr)[table(substr)>1])]
-    fastq_reads_2$color <- fastq_reads_2$names
-        
-    cat("Please check ordering and number of fastq reads...\n"); print(fastq_reads_2)
-    
+  if(length(grep("_skip_",list.files(path=input_dir,full.names=T,recursive=T)))!=0){
+    ### Figures with the number of reads
+    reads <- c()
+    files <- grep(pattern_to_remove,grep("_stats.txt",list.files(path=input_dir,full.names=T,recursive=T),val=T),invert=T,val=T)
+    for (f in files){reads <- c(reads,system(paste0("cat ",f," | grep '1st fragments' | sed 's,.*:\t,,g'"),intern=T))}
+    bam_reads_2 <- data.frame(names=as.character(gsub("_nat.*","",basename(files))),reads=as.numeric(reads))
+    # substr <- unlist(strsplit(bam_reads_2$names, "[\\W_]+"))
+    # bam_reads_2$color <- substr[substr %in% names(table(substr)[table(substr)>1])]
+    bam_reads_2$color <- bam_reads_2$names
+  
+    cat("Please check ordering and number of bam reads...\n"); print(bam_reads_2)  
+  
     bar_plot <- ggbarplot(
-      fastq_reads_2, 
+      bam_reads_2, 
       x = "names", 
       y = "reads", 
       fill = "color",
       color = "color",
       stat = "identity"
     ) + theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
-    perc <- c()
-    for (i in 1:length(reads)){perc<-c(perc,round(bam_reads_2$reads[i]*100/fastq_reads_2$reads[i],2))}
     bar_plot + 
-       geom_text(aes(label = paste0(reads," (bam/fastq: ",perc, " %)"), angle=45), vjust = -0.5, color = "black", size=2) + labs(title="bam_reads") + guides(color = "none") + theme(legend.position = "none")
+      geom_text(aes(label = reads), vjust = -0.5, color = "black", size=3) + labs(title="raw_reads") + guides(color = "none") + theme(legend.position = "none")
+  
+    reads <- c()
+    files <- grep(pattern_to_remove,grep("_1_fastqc.html",list.files(path=input_dir,full.names=T,recursive=T),val=T),invert=T,val=T)
+    for (f in files){reads <- c(reads,system(paste0("cat ",f," | sed 's,<td>,\\n,g;s,</td>,\\n,g' | grep -A2 'Total Sequences' | tail -1"),intern=T))}
+    if(length(files)!=0){ # Control that sometimes if these are repeated runs, fastqc is not going to be executed    
+      fastq_reads_2 <- data.frame(names=as.character(gsub("_1_fastqc.*","",basename(files))),reads=as.numeric(reads))    
+      # substr <- unlist(strsplit(fastq_reads_2$names, "[\\W_]+"))    
+      # fastq_reads_2$color <- substr[substr %in% names(table(substr)[table(substr)>1])]
+      fastq_reads_2$color <- fastq_reads_2$names
+          
+      cat("Please check ordering and number of fastq reads...\n"); print(fastq_reads_2)
+      
+      bar_plot <- ggbarplot(
+        fastq_reads_2, 
+        x = "names", 
+        y = "reads", 
+        fill = "color",
+        color = "color",
+        stat = "identity"
+      ) + theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
+      perc <- c()
+      for (i in 1:length(reads)){perc<-c(perc,round(bam_reads_2$reads[i]*100/fastq_reads_2$reads[i],2))}
+      bar_plot + 
+         geom_text(aes(label = paste0(reads," (bam/fastq: ",perc, " %)"), angle=45), vjust = -0.5, color = "black", size=2) + labs(title="bam_reads") + guides(color = "none") + theme(legend.position = "none")
+    }
+    reads_info <- fastq_reads_2[,1:2]
+    reads_info$library_size <- x$samples$lib.size
+    #write.table(reads_info,file=paste0(output_dir,"/QC_and_others/reads_numbers.txt"),col.names = T,row.names = F,quote = F,sep="\t")
   }
-  reads_info <- fastq_reads_2[,1:2]
-  reads_info$library_size <- x$samples$lib.size
-  #write.table(reads_info,file=paste0(output_dir,"/QC_and_others/reads_numbers.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-
+  
   ### 4. Corrplot no log
   tmp <- lcpm_no_log; colnames(tmp) <- gsub("_t|m_Rep|_seq|_KO|_WT","",colnames(tmp))
   colnames(tmp) <- targets_pattern_to_remove$Name[match(colnames(tmp),targets_pattern_to_remove$Name)]
