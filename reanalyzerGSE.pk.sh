@@ -1221,10 +1221,6 @@ if [[ $debug_step == "all" || $debug_step == "step8" ]]; then
 		mv $f $(echo $f"_"$(basename $output_folder))
 	done
 	
-	for f in $(find $output_folder -name "*_QC*"); do
-		mv $f $(echo $(dirname $f)"/"$(basename $output_folder)$(echo $f | sed 's,.*_QC,_QC,g'))
-	done
-
 	if [ "$tidy_tmp_files" == "yes" ]; then
 		num_raw_files=$(cat $output_folder/$name/miARma_out0/Pre_fastqc_results/list_of_files.txt | grep -c "fastq.gz")
 		for index in "${!array[@]}"; do
