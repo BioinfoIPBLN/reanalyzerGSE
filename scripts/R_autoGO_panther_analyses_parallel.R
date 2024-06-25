@@ -416,14 +416,7 @@ process_file <- function(file){
   expr_back <- convert_ids(read.table(key_files$old_file[grep(file2,key_files$new_files)])$V1,mode)
   
   while(dev.cur() > 1) dev.off()
-  file2=sub("\\..+$", "", basename(file))
-  path2=paste0(dirname(file),"/",file2,"_funct_enrichment/")
-  dir.create(path2, showWarnings = FALSE);setwd(path2);invisible(file.copy(file,paste0(path2,basename(file))))
-  print(paste0("Processing autoGO for ",file2," and ",length(read.table(file,head=F)$V1)," genes..."))
-
-  To continue
-
-  
+    
   tryCatch({
     autoGO(read_gene_lists(gene_lists_path=path2,which_list="everything",from_autoGO=F,files_format=basename(file)),
            databases_autoGO,background=expr_back)
@@ -443,19 +436,19 @@ process_file <- function(file){
           barplotGO(enrich_tables = enrich_tables[[i]],
                     title = c(names(enrich_tables)[i],file2),
                     outfolder = getwd(),
-                    outfile = paste0(file2,"_",names(enrich_tables)[i],"_barplot.png"),
+                    outfile = paste0(file2,"_",names(enrich_tables)[i],"_back_expr_barplot.png"),
                     from_autoGO = F)
           lolliGO(enrich_tables = enrich_tables[[i]],
                   title = c(names(enrich_tables)[i],file2),
                   outfolder = getwd(),
-                  outfile = paste0(file2,"_",names(enrich_tables)[i],"_lolliplot.png"),
+                  outfile = paste0(file2,"_",names(enrich_tables)[i],"_back_expr_lolliplot.png"),
                   from_autoGO = F)
           }
         }, error = function(e) {
           print("autoGO with errors"); print(e)
         })
   }
-  invisible(file.rename(path3,sub("//enrichment_tables","_autoGO",path3)))
+  invisible(file.rename(path3,sub("//enrichment_tables","_back_expr_autoGO",path3)))
   
   # Panther:
   print(paste0("Processing Panther for ",file2," and ",length(read.table(file,head=F)$V1)," genes..."))
