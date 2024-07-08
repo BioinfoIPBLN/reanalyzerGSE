@@ -18,7 +18,7 @@ for argument in $options; do
 
 ### Gather the parameters, default values, exit if essential not provided...
 	case $argument in
-		-h*) echo "reanalyzerGSE v2.8.7 - usage: reanalyzerGSE.pk.sh [options]
+		-h*) echo "reanalyzerGSE v2.8.8 - usage: reanalyzerGSE.pk.sh [options]
 		-h | -help # Type this to get help
 		-i | -input # GEO_ID (GSEXXXXXX, separated by comma if more than one), or folder containing raw reads (please provide full absolute path, e.g. /path/folder_name/, containing only fastq.gz files and not folders, links or any other item), or almost any accession from ENA/SRA to download .fastq from (any of the ids with the prefixes PRJEB,PRJNA,PRJDB,ERP,DRP,SRP,SAMD,SAME,SAMN,ERS,DRS,SRS,ERX,DRX,SRX,ERR,DRR,SRR, please separated by commas if more than one id as input)
 		-n | -name # Name of the project/folder to create and store results
@@ -64,6 +64,7 @@ for argument in $options; do
 		-cG | -compression_level # Specify the compression level to gzip the downloaded fastq files from GEO (numeric '0' to '9', default '9')
 		-fe | -functional_enrichment_analyses # Whether to perform functional enrichment analyses ('no' or 'yes', by default)
 		-fd | -full_differential_analyses # Whether to perform full differential enrichment analyses (for example including computation of DEGs or Venn diagrams, 'no' or 'yes', by default)
+		-vv | -volcano_venn_diagrams # Whether to perform all Volcano plots and Venn diagrams, which may take a long time if many comparisons ('no' or 'yes', by default)
 		-fp | -fastp_mode # Whether to perform fastp analyses over the raw reads in default modem, except for adapter trimming and end trimming ('yes' or 'no', by default)
 		-fpa | -fastp_mode_adapter # Whether to perform adapter trimming on the raw reads by fastp ('yes' or 'no', by default, to perform automatic trimming, or a path to a fasta file to perform trimming of its sequences)
 		-fpt | -fastp_mode_trimming # Whether to trim the raw reads by fastp ('none' by default, if two numbers separated by comma, the indicated number of bases will be trimmed from the front and tail, respectively)
@@ -123,6 +124,7 @@ for argument in $options; do
 		-cPa) clusterProfiler_full=${arguments[index]} ;;
 		-fe) functional_enrichment_analyses=${arguments[index]} ;;
 		-fd) perform_differential_analyses=${arguments[index]} ;;
+		-vv) perform_volcano_venn=${arguments[index]} ;;
 		-aP) aPEAR_execution=${arguments[index]} ;;
 		-Of) optionsFeatureCounts_feat=${arguments[index]} ;;
 		-O) organism_argument=${arguments[index]} ;;
@@ -257,6 +259,9 @@ if [ -z "$functional_enrichment_analyses" ]; then
 fi
 if [ -z "$perform_differential_analyses" ]; then
 	perform_differential_analyses="yes"
+fi
+if [ -z "$perform_volcano_venn" ]; then
+	perform_volcano_venn="yes"
 fi
 if [ -z "$aPEAR_execution" ]; then
 	aPEAR_execution="no"
@@ -1067,7 +1072,7 @@ if [[ $debug_step == "all" || $debug_step == "step4" ]]; then
 	IFS=', ' read -r -a array2 <<< "$filter"
 	for index in "${!array[@]}"; do
 		annotation_file=${array[index]}
-		R_process_reanalyzer_GSE.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index $genes ${array2[index]} $organism $target $differential_expr_soft $covariables $deconvolution $differential_expr_comparisons $perform_differential_analyses $pattern_to_remove
+		R_process_reanalyzer_GSE.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index $genes ${array2[index]} $organism $target $differential_expr_soft $covariables $deconvolution $differential_expr_comparisons $perform_differential_analyses $perform_volcano_venn $pattern_to_remove
 		cd $output_folder/$name/final_results_reanalysis$index/DGE/
 		tar -cf - $(ls | egrep ".RData$") | pigz -p $cores > allRData.tar.gz; rm -rf $(ls | egrep ".RData$")
 	done
