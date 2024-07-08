@@ -12,7 +12,8 @@ covariab <- args[9] # if not provided, "none"
 cdseq_exec <- args[10] # if not provided, "no"
 restrict_comparisons <- args[11] # if not provided, "no"
 full_analyses <- args[12] # if not provided, "yes"
-pattern_to_remove <- args[13] # if not provided, "none"
+venn_volcano <- args[13] # if not provided, "none"
+pattern_to_remove <- args[14] # if not provided, "no"
 
 ###### Load read counts, format, filter, start differential expression analyses, get RPKM, save...:
   cat("\nProcessing counts and getting figures...\n")
@@ -622,7 +623,9 @@ pattern_to_remove <- args[13] # if not provided, "none"
         } else {
           fit <- glmQLFit(edgeR_object_norm_temp_to_process, design, robust=TRUE)
           contrast <- rep(0,dim(design)[2])
-          contrast[grep(paste(gsub("__|_seq1|_seq2","",list_combinations[[i]]),collapse="|"),colnames(design))] <- c(-1,1)
+          idxs_design <- grep(paste(gsub("__|_seq1|_seq2","",list_combinations[[i]]),collapse="|"),colnames(design))
+          if(length(idxs_design)!=2){cat(paste0("\n\nSomething is WRONG as one of your contrasts has been required to compare ",length(idxs_design)," conditions. Probably conflicting naming of biological conditions...\n\n"));stop("Exiting, please review the condition naming...")}
+          contrast[idxs_design] <- c(-1,1)
           qlf <- glmQLFTest(fit,contrast=contrast)
           edgeR_results <- topTags(qlf,n=nrow(qlf),adjust.method="BH",sort.by="PValue")
           print(summary(decideTests(qlf)))
@@ -631,7 +634,9 @@ pattern_to_remove <- args[13] # if not provided, "none"
           print(head(edgeR_results$table,10)[,c(-1,-2)])
           myLabel1=paste(list_combinations[[i]], collapse = '_vs_')
           myLabel1=gsub("^_","",gsub("_+","_",gsub("[^[:alnum:]_]+", "_", myLabel1)))
-          Volcano(edgeR_results,paste(output_dir,"/DGE/Volcano_plot_",myLabel1,".pdf", sep=""),myLabel1)
+          if (venn_volcano!="no"){
+            Volcano(edgeR_results,paste(output_dir,"/DGE/Volcano_plot_",myLabel1,".pdf", sep=""),myLabel1)
+          }
         }
         save.image(file=paste0(output_dir,"/DGE/DGE_analysis_comp",i+existing,".RData"))
         write.table(edgeR_results$table,
@@ -732,82 +737,84 @@ pattern_to_remove <- args[13] # if not provided, "none"
 
 
 ###### Performing Venn diagrams for the DEGs:
-Venn_funct <- function(files){
-  list_of_tables <- lapply(files, read.delim)
-  group <- sub("\\..*$", "",sub("DGE_limma_timecourse_|DGE_analysis_","",basename(files))); col.group <- as.factor(group)
-    color = grDevices::colors()[grep('gr(a|e)y', grDevices::colors(), invert = TRUE)] # Get a list of non-gray colors
-    color_rgb <- col2rgb(color); luminance <- 0.299*color_rgb[1,] + 0.587*color_rgb[2,] + 0.114*color_rgb[3,]
-    # Filter out light colors based on a luminance threshold
-    color <- color[luminance < 400] # You can adjust the threshold value as needed
-    levels(col.group) <- sample(color, nlevels(col.group))
-    col.group <- as.character(col.group)
-    list_of_ids <- lapply(list_of_tables,function(y){y$Gene_ID[y$FDR<0.05]})
-    names(list_of_ids) <- group
-
-    if(length(list_of_ids) < 8){
-      # A more complex Venn diagram with an independent file showing the intersect:
-    tmp_file <- tempfile()
-    sink(tmp_file)
-    hey <- nVennR::plotVenn(list_of_ids,nCycles=14000,showPlot=F)
-    nVennR::showSVG(nVennObj = hey, outFile=paste0(unique(dirname(files)),"/Venn_diagram_complete.svg"),opacity=0.2,borderWidth=0.5)
-    sink(); unlink(tmp_file)
-    hey <- nVennR::listVennRegions(hey);names(hey) <- gsub(".* \\(","(",names(hey));names(hey) <- gsub(", ","-",names(hey));names(hey) <- gsub("\\(|\\)","",names(hey))
-    write.table(data.frame(Combination=names(hey),Shared_genes=unname(unlist(lapply(hey,function(x){paste(x,collapse=",")})))),file=paste0(unique(dirname(files)),"/Venn_diagram_complete.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-  } else {
-    print(paste0("Too many conditions (",length(list_of_ids),"). We decided to only allow up to 7 conditions for the more complex Venn Diagram by nVennR. Otherwise, it would take too much time. You can check all the Venn Diagrams with up to 4 comparisons or perform the more complex one externally..."))
-  }
-
-  # A more typical Venn diagram. If more than 4 sets, all possible iterations
-  if(length(list_of_ids)>=4){
-    list_of_combinations <- combn(1:length(list_of_ids), 4, simplify = FALSE)
-  } else {
-    list_of_combinations <- list(unique_combn=1:length(list_of_ids))
+if (venn_volcano!="no"){  
+  Venn_funct <- function(files){
+    list_of_tables <- lapply(files, read.delim)
+    group <- sub("\\..*$", "",sub("DGE_limma_timecourse_|DGE_analysis_","",basename(files))); col.group <- as.factor(group)
+      color = grDevices::colors()[grep('gr(a|e)y', grDevices::colors(), invert = TRUE)] # Get a list of non-gray colors
+      color_rgb <- col2rgb(color); luminance <- 0.299*color_rgb[1,] + 0.587*color_rgb[2,] + 0.114*color_rgb[3,]
+      # Filter out light colors based on a luminance threshold
+      color <- color[luminance < 400] # You can adjust the threshold value as needed
+      levels(col.group) <- sample(color, nlevels(col.group))
+      col.group <- as.character(col.group)
+      list_of_ids <- lapply(list_of_tables,function(y){y$Gene_ID[y$FDR<0.05]})
+      names(list_of_ids) <- group
+  
+      if(length(list_of_ids) < 8){
+        # A more complex Venn diagram with an independent file showing the intersect:
+      tmp_file <- tempfile()
+      sink(tmp_file)
+      hey <- nVennR::plotVenn(list_of_ids,nCycles=14000,showPlot=F)
+      nVennR::showSVG(nVennObj = hey, outFile=paste0(unique(dirname(files)),"/Venn_diagram_complete.svg"),opacity=0.2,borderWidth=0.5)
+      sink(); unlink(tmp_file)
+      hey <- nVennR::listVennRegions(hey);names(hey) <- gsub(".* \\(","(",names(hey));names(hey) <- gsub(", ","-",names(hey));names(hey) <- gsub("\\(|\\)","",names(hey))
+      write.table(data.frame(Combination=names(hey),Shared_genes=unname(unlist(lapply(hey,function(x){paste(x,collapse=",")})))),file=paste0(unique(dirname(files)),"/Venn_diagram_complete.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+    } else {
+      print(paste0("Too many conditions (",length(list_of_ids),"). We decided to only allow up to 7 conditions for the more complex Venn Diagram by nVennR. Otherwise, it would take too much time. You can check all the Venn Diagrams with up to 4 comparisons or perform the more complex one externally..."))
+    }
+  
+    # A more typical Venn diagram. If more than 4 sets, all possible iterations
+    if(length(list_of_ids)>=4){
+      list_of_combinations <- combn(1:length(list_of_ids), 4, simplify = FALSE)
+    } else {
+      list_of_combinations <- list(unique_combn=1:length(list_of_ids))
+    }
+    
+    for (i in 1:length(list_of_combinations)){
+      write.table(paste0("Comparison number ",i,": ",paste0(names(list_of_ids[list_of_combinations[[i]]]),collapse=" // ")),file=paste0(unique(dirname(files)),"/list_combn.txt"),col.names = F,row.names = F,quote = F,sep="\n",append=T)
+      list_of_ids[list_of_combinations[[i]]]
+      tmp_file <- tempfile();sink(tmp_file)
+        VennDiagram::venn.diagram(
+              x = list_of_ids[list_of_combinations[[i]]],
+              category.names = names(list_of_ids)[list_of_combinations[[i]]],
+              filename = paste0(unique(dirname(files)),"/Venn_diagram_combn_",i,".png"),
+              output=TRUE,
+              disable.logging=T,
+              
+              # Output features
+              imagetype="png" ,
+              height = 480 , 
+              width = 480 , 
+              resolution = 300,
+              compression = "lzw",
+              
+              # Circles
+              lwd = 2,
+              lty = 'blank',
+              fill = col.group[list_of_combinations[[i]]],
+              
+              # Numbers
+              cex = .2,
+              fontface = "bold",
+              fontfamily = "sans",
+              
+              # Set names
+              cat.cex = 0.2,
+              cat.fontface = "bold",
+              cat.default.pos = "outer",
+              cat.fontfamily = "sans")
+      sink(); unlink(tmp_file)
+    }
   }
   
-  for (i in 1:length(list_of_combinations)){
-    write.table(paste0("Comparison number ",i,": ",paste0(names(list_of_ids[list_of_combinations[[i]]]),collapse=" // ")),file=paste0(unique(dirname(files)),"/list_combn.txt"),col.names = F,row.names = F,quote = F,sep="\n",append=T)
-    list_of_ids[list_of_combinations[[i]]]
-    tmp_file <- tempfile();sink(tmp_file)
-      VennDiagram::venn.diagram(
-            x = list_of_ids[list_of_combinations[[i]]],
-            category.names = names(list_of_ids)[list_of_combinations[[i]]],
-            filename = paste0(unique(dirname(files)),"/Venn_diagram_combn_",i,".png"),
-            output=TRUE,
-            disable.logging=T,
-            
-            # Output features
-            imagetype="png" ,
-            height = 480 , 
-            width = 480 , 
-            resolution = 300,
-            compression = "lzw",
-            
-            # Circles
-            lwd = 2,
-            lty = 'blank',
-            fill = col.group[list_of_combinations[[i]]],
-            
-            # Numbers
-            cex = .2,
-            fontface = "bold",
-            fontfamily = "sans",
-            
-            # Set names
-            cat.cex = 0.2,
-            cat.fontface = "bold",
-            cat.default.pos = "outer",
-            cat.fontfamily = "sans")
-    sink(); unlink(tmp_file)
+  if (full_analyses!="no"){
+    if(length(list.files(path=paste0(output_dir,"/DGE"),full.names=T,pattern="^DGE_analysis_comp\\d+\\.txt$"))>1){
+      print("Attempting to perform Venn diagrams for DGE analyses...")
+      Venn_funct(list.files(path=paste0(output_dir,"/DGE"),full.names=T,pattern="^DGE_analysis_comp\\d+\\.txt$"))
+    }
+    
+    try(system("tar cf venn_diagrams.tar Venn_diagram*; rm Venn_diagram*"))
   }
-}
-
-if (full_analyses!="no"){
-  if(length(list.files(path=paste0(output_dir,"/DGE"),full.names=T,pattern="^DGE_analysis_comp\\d+\\.txt$"))>1){
-    print("Attempting to perform Venn diagrams for DGE analyses...")
-    Venn_funct(list.files(path=paste0(output_dir,"/DGE"),full.names=T,pattern="^DGE_analysis_comp\\d+\\.txt$"))
-  }
-  
-  try(system("tar cf venn_diagrams.tar Venn_diagram*; rm Venn_diagram*"))
 }
 save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
 
