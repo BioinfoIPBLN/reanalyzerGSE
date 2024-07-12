@@ -72,31 +72,31 @@ if [[ $manager == "mamba" ]]; then
 	conda install -y -q -c conda-forge mamba
 	conda install -y -q -c anaconda wget 
  	echo -e "\n\nInstalling reanalyzerGSE1...\n\n"
-	mamba env create -q --file $CURRENT_DIR/reanalyzerGSE1.yml
+	mamba env create -q --file $CURRENT_DIR/reanalyzerGSE1.yml && rm -rf $(find $conda_dir -type d -name pkgs) # Remove temp files
  	echo -e "\n\nInstalling reanalyzerGSE2...\n\n"
-	mamba env create -q --file $CURRENT_DIR/reanalyzerGSE2.yml
+	mamba env create -q --file $CURRENT_DIR/reanalyzerGSE2.yml && rm -rf $(find $conda_dir -type d -name pkgs) # Remove temp files
  	echo -e "\n\nInstalling reanalyzerGSE3...\n\n"
-	mamba env create -q --file $CURRENT_DIR/reanalyzerGSE3.yml
+	mamba env create -q --file $CURRENT_DIR/reanalyzerGSE3.yml && rm -rf $(find $conda_dir -type d -name pkgs) # Remove temp files
  	echo -e "\n\nInstalling reanalyzerGSE4...\n\n"
-	mamba env create -q --file $CURRENT_DIR/reanalyzerGSE4.yml
+	mamba env create -q --file $CURRENT_DIR/reanalyzerGSE4.yml && rm -rf $(find $conda_dir -type d -name pkgs) # Remove temp files
  	echo -e "\n\nInstalling reanalyzerGSE5...\n\n"
-	mamba env create -q --file $CURRENT_DIR/reanalyzerGSE5.yml
+	mamba env create -q --file $CURRENT_DIR/reanalyzerGSE5.yml && rm -rf $(find $conda_dir -type d -name pkgs) # Remove temp files
 else
 	echo -e "The manager chosen is 'conda', populating the environments based on the yml files (keep in mind, this is frozen versions of the software)...\n\n\n"
  	echo -e "\n\nInstalling reanalyzerGSE1...\n\n"
-	conda env create -q --file $CURRENT_DIR/reanalyzerGSE1.yml
+	conda env create -q --file $CURRENT_DIR/reanalyzerGSE1.yml && rm -rf $(find $conda_dir -type d -name pkgs) # Remove temp files
  	echo -e "\n\nInstalling reanalyzerGSE2...\n\n"
-	conda env create -q --file $CURRENT_DIR/reanalyzerGSE2.yml
+	conda env create -q --file $CURRENT_DIR/reanalyzerGSE2.yml && rm -rf $(find $conda_dir -type d -name pkgs) # Remove temp files
  	echo -e "\n\nInstalling reanalyzerGSE3...\n\n"
-	conda env create -q --file $CURRENT_DIR/reanalyzerGSE3.yml
+	conda env create -q --file $CURRENT_DIR/reanalyzerGSE3.yml && rm -rf $(find $conda_dir -type d -name pkgs) # Remove temp files
  	echo -e "\n\nInstalling reanalyzerGSE4...\n\n"
-	conda env create -q --file $CURRENT_DIR/reanalyzerGSE4.yml
+	conda env create -q --file $CURRENT_DIR/reanalyzerGSE4.yml && rm -rf $(find $conda_dir -type d -name pkgs) # Remove temp files
 	echo -e "\n\nInstalling reanalyzerGSE5...\n\n"
-	conda env create -q --file $CURRENT_DIR/reanalyzerGSE5.yml
+	conda env create -q --file $CURRENT_DIR/reanalyzerGSE5.yml && rm -rf $(find $conda_dir -type d -name pkgs) # Remove temp files
 fi
 
-echo -e "\nRemoving tmp files in pkgs directory\n"
-rm -rf $(find $conda_dir -type d -name pkgs) # Remove temp files
+echo -e "\nTmp files in pkgs directory have been removed \n"
+
 
 $conda_envs_path/reanalyzerGSE_4/bin/pip -q install statistics
 $conda_envs_path/reanalyzerGSE/bin/pip -q install deeptools
