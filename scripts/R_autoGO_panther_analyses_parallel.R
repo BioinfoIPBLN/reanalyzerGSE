@@ -18,7 +18,10 @@ org_panther <- as.numeric(a$taxon_id[grep(gsub(" ","_",organism),gsub(" ","_",a$
 methods <- rba_panther_info(what = "datasets")$id
 
 # JLR temporal fix to allow for the use of background in autoGO/enrichr, til they are fully updated... I downloaded some of their pull requests and adapted code, which has to replace the things loaded by the library(autoGO)
-path_to_source <- file.path(here::here(),"scripts")
+cmd_args <- commandArgs(trailingOnly = FALSE)
+file_arg <- "--file="
+script_path <- sub(file_arg, "", cmd_args[grep(file_arg, cmd_args)])
+path_to_source <- dirname(script_path)
 source(file.path(path_to_source,"functions_enrichr_mod_background.R"))
 source(file.path(path_to_source,"autoGO_mod_background.R"))
 
