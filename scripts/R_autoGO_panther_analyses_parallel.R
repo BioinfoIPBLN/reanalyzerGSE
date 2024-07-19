@@ -17,14 +17,6 @@ a <- rba_panther_info(what="organisms")
 org_panther <- as.numeric(a$taxon_id[grep(gsub(" ","_",organism),gsub(" ","_",a$long_name))])
 methods <- rba_panther_info(what = "datasets")$id
 
-# JLR temporal fix to allow for the use of background in autoGO/enrichr, til they are fully updated... I downloaded some of their pull requests and adapted code, which has to replace the things loaded by the library(autoGO)
-cmd_args <- commandArgs(trailingOnly = FALSE)
-file_arg <- "--file="
-script_path <- sub(file_arg, "", cmd_args[grep(file_arg, cmd_args)])
-path_to_source <- dirname(script_path)
-source(file.path(path_to_source,"functions_enrichr_mod_background.R"))
-source(file.path(path_to_source,"autoGO_mod_background.R"))
-
 # choose_database() # Check out enrichr webpage to get updated list
 ### 04/2024:
 #  [1] "Genome_Browser_PWMs"                               
@@ -415,44 +407,6 @@ process_file <- function(file){
   }
   invisible(file.rename(path3,sub("//enrichment_tables","_autoGO",path3)))
 
-  # autoGO with custom background: (the expressed transcriptome that have been detected)
-  expr_back <- convert_ids(read.table(key_files$old_file[grep(file2,key_files$new_files)])$V1,mode)
-  
-  while(dev.cur() > 1) dev.off()
-    
-  tryCatch({
-    autoGO(read_gene_lists(gene_lists_path=path2,which_list="everything",from_autoGO=F,files_format=basename(file)),
-           databases_autoGO,background=expr_back)
-  }, error = function(e) {
-          print("autoGO with errors"); print(e)
-  })
-  path3=paste0(path2,"/","enrichment_tables")
-  if (dir.exists(path3) & length(list.files(path3)) > 0){
-    setwd(path3)
-    enrich_tables <- read_enrich_tables(
-        enrich_table_path = path3,
-        which_list = "everything",
-        from_autoGO = F,
-        files_format = ".tsv")
-    tryCatch({
-        for (i in 1:length(names(enrich_tables))){
-          barplotGO(enrich_tables = enrich_tables[[i]],
-                    title = c(names(enrich_tables)[i],file2),
-                    outfolder = getwd(),
-                    outfile = paste0(file2,"_",names(enrich_tables)[i],"_back_expr_barplot.png"),
-                    from_autoGO = F)
-          lolliGO(enrich_tables = enrich_tables[[i]],
-                  title = c(names(enrich_tables)[i],file2),
-                  outfolder = getwd(),
-                  outfile = paste0(file2,"_",names(enrich_tables)[i],"_back_expr_lolliplot.png"),
-                  from_autoGO = F)
-          }
-        }, error = function(e) {
-          print("autoGO with errors"); print(e)
-        })
-  }
-  invisible(file.rename(path3,sub("//enrichment_tables","_back_expr_autoGO",path3)))
-  
   # Panther:
   print(paste0("Processing Panther for ",file2," and ",length(read.table(file,head=F)$V1)," genes..."))
   setwd(path2)
