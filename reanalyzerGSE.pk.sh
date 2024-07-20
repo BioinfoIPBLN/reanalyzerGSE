@@ -18,7 +18,7 @@ for argument in $options; do
 
 ### Gather the parameters, default values, exit if essential not provided...
 	case $argument in
-		-h*) echo "reanalyzerGSE v2.8.10 - usage: reanalyzerGSE.pk.sh [options]
+		-h*) echo "reanalyzerGSE v2.9.0 - usage: reanalyzerGSE.pk.sh [options]
 		-h | -help # Type this to get help
 		-i | -input # GEO_ID (GSEXXXXXX, separated by comma if more than one), or folder containing raw reads (please provide full absolute path, e.g. /path/folder_name/, containing only fastq.gz files and not folders, links or any other item), or almost any accession from ENA/SRA to download .fastq from (any of the ids with the prefixes PRJEB,PRJNA,PRJDB,ERP,DRP,SRP,SAMD,SAME,SAMN,ERS,DRS,SRS,ERX,DRX,SRX,ERR,DRR,SRR, please separated by commas if more than one id as input)
 		-n | -name # Name of the project/folder to create and store results
@@ -75,6 +75,7 @@ for argument in $options; do
 		-mGS | -clusterProfiler_minGSSize # minGSSize parameter to use in clusterProfiler iterations (a number, '10' by default)
 		-MGS | -clusterProfiler_maxGSSize # maxGSSize parameter to use in clusterProfiler iterations (a number, '500' by default)
 		-Pm | -panther_method # Method for adjusting p.value in panther analyses via rbioapi (one of 'NONE','BONFERRONI', or 'FDR', by default)
+		-apl | -autogo_per_log # Whether to perform additional autoGO and Panther analyses for DEGs separated by log2Fc positive or negative ('yes' or 'no', by default)
 		-Tc | -time_course_analyses # Whether to perform additional time-course analyses as a last step ('yes' or 'no', by default)
 		-Tcsd | -time_course_std # Standard deviation threshold to filter in time course analyses (numeric, 1 by default)
 		-Tcf | -time_course_fuzzi # Fuziness value for the soft clustering approach (by default an estimate is automatically computed but manual testing is encouraged)
@@ -150,6 +151,7 @@ for argument in $options; do
 		-fpt) fastp_trimmnig=${arguments[index]} ;;
 		-cR) cores_reads_to_subsample=${arguments[index]} ;;
 		-pR) pattern_to_remove=${arguments[index]} ;;
+		-apl) auto_panther_log=${arguments[index]} ;;
 	esac
 done
 
@@ -336,6 +338,9 @@ if [ -z "$fastp_adapter" ]; then
 fi
 if [ -z "$fastp_trimmnig" ]; then
 	fastp_trimmnig="none"
+fi
+if [ -z "$auto_panther_log" ]; then
+	auto_panther_log="no"
 fi
 if [ -z "$cores_reads_to_subsample" ]; then
 	cores_reads_to_subsample=10
@@ -1136,11 +1141,11 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 				cd $output_folder/$name/final_results_reanalysis$index/DGE/
 				ls | egrep "^DGE_analysis_comp[0-9]+.txt$" | parallel --joblog R_clusterProfiler_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_clusterProfiler_analyses_parallel.R $PWD $organism "1" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution '^{}$' $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_{}_funct_enrichment.log"
 				echo -e "\nPerforming autoGO and Panther execution... this may take long if many genes or comparisons...\n"
-				ls | egrep "^DGE_analysis_comp[0-9]+.txt$" | parallel --joblog R_autoGO_panther_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism "1" $databases_function {} $panther_method &> autoGO_panther_{}_funct_enrichment.log"
+				ls | egrep "^DGE_analysis_comp[0-9]+.txt$" | parallel --joblog R_autoGO_panther_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism "1" $databases_function {} $panther_method $auto_panther_log &> autoGO_panther_{}_funct_enrichment.log"
 				if [[ "$time_course" == "yes" ]]; then 
 					cd $output_folder/$name/final_results_reanalysis$index/time_course_analyses
 					ls | egrep "^DGE_limma_timecourse.*.txt$" | parallel --joblog R_clusterProfiler_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_clusterProfiler_analyses_parallel.R $PWD $organism "1" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution '^{}$' $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_{}_funct_enrichment.log"
-					ls | egrep "^DGE_limma_timecourse.*.txt$" | parallel --joblog R_autoGO_panther_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism "1" $databases_function {} $panther_method &> autoGO_panther_{}_funct_enrichment.log"
+					ls | egrep "^DGE_limma_timecourse.*.txt$" | parallel --joblog R_autoGO_panther_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism "1" $databases_function {} $panther_method $auto_panther_log &> autoGO_panther_{}_funct_enrichment.log"
 				fi				
 			fi
 		else
