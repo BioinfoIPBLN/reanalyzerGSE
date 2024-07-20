@@ -6,6 +6,7 @@ cores <- args[3]
 enrichment_databases <- args[4]
 pattern_search <- args[5]
 padjustmethod <- args[6]
+separate_per_log <- args[7]
 
 print("Attempting automatic gene ontology enrichment analyses by autoGO of the results...")
 print(paste0("Current date: ",date()))
@@ -480,7 +481,12 @@ process_file <- function(file){
   invisible(file.rename(path2,sub("_funct_enrichment/","_funct_enrichment_panther",path2)))
 }
 
-final_files_list <- grep(tools::file_path_sans_ext(pattern_search),list.files(path = path, pattern = "_Gene_IDs\\.txt$",recursive=T,full=T),val=T)
+if (separate_per_log=="yes"){
+  final_files_list <- grep(tools::file_path_sans_ext(pattern_search),list.files(path = path, pattern = "_Gene_IDs\\.txt$",recursive=T,full=T),val=T)
+} else {
+  final_files_list <- grep("log",grep(tools::file_path_sans_ext(pattern_search),list.files(path = path, pattern = "_Gene_IDs\\.txt$",recursive=T,full=T),val=T),invert=T,val=T)
+}
+
 mclapply(
     mc.cores = cores,
     X = final_files_list[which(!(duplicated(basename(final_files_list))))], # If you are at any time using this script outside the main pipeline be aware of these input files... there may be confounding...
