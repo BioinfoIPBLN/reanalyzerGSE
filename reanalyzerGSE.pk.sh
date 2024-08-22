@@ -18,7 +18,7 @@ for argument in $options; do
 
 ### Gather the parameters, default values, exit if essential not provided...
 	case $argument in
-		-h*) echo "reanalyzerGSE v2.9.0 - usage: reanalyzerGSE.pk.sh [options]
+		-h*) echo "reanalyzerGSE v2.9.2 - usage: reanalyzerGSE.pk.sh [options]
 		-h | -help # Type this to get help
 		-i | -input # GEO_ID (GSEXXXXXX, separated by comma if more than one), or folder containing raw reads (please provide full absolute path, e.g. /path/folder_name/, containing only fastq.gz files and not folders, links or any other item), or almost any accession from ENA/SRA to download .fastq from (any of the ids with the prefixes PRJEB,PRJNA,PRJDB,ERP,DRP,SRP,SAMD,SAME,SAMN,ERS,DRS,SRS,ERX,DRX,SRX,ERR,DRR,SRR, please separated by commas if more than one id as input)
 		-n | -name # Name of the project/folder to create and store results
@@ -787,8 +787,7 @@ fi
 ### STEP 1d. Give info of NCBI's current genome:
 	Rscript -e "genomes <- rentrez::entrez_summary(db='genome', id=rentrez::entrez_search(db='genome', term='${organism}[orgn]')\$ids);cat(paste(paste0('\n\nNCBI current genome info: ', date()),genomes\$assembly_name,genomes\$assembly_accession,genomes\$create_date,'\n',sep='\n'))"
 	organism=$(cat $output_folder/$name/GEO_info/organism.txt | sed 's/ \+/_/g;s/__*/_/g') # Get again the organism in case it has been manually modified... and without spaces...
-	export debug_step="all"
-
+	
 ### STEP 1d. Deal with fastp if required:
 if [ "$fastp_mode" == "yes" ]; then
 	mkdir -p $output_folder/$name/fastp_out
