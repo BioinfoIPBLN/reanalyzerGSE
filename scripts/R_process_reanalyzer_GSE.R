@@ -1500,6 +1500,6 @@ if (diff_soft=="DESeq2"){
             file=paste0(output_dir,"/DGE/DGE_analysis_DESEQ2_comp",combn(unique(d),2)[,i][1],"vs",combn(unique(d),2)[,i][2],".txt"),quote = F,row.names = F, col.names = T,sep = "\t")
   }
 }
-print("ALL DONE")
+# print("ALL DONE")
 
-print(paste0("Current date: ",date()))
+# print(paste0("Current date: ",date()))
