@@ -6,7 +6,7 @@ type conda >/dev/null 2>&1 || { echo >&2 "Conda is required to be installed... a
 
 if [ "$conda_within_reanalyzer" == "yes" ]; then	
 	conda_dir=$EXTERNAL_SOFTWARE_DIR/miniconda3/bin
-	conda_exec=$(conda env list | grep -v "#" | head -1 | sed 's,.* ,,g;s,/envs.*,,g')/bin
+	conda_exec=$($EXTERNAL_SOFTWARE_DIR/miniconda3/bin/conda env list | grep -v "#" | head -1 | sed 's,.* ,,g;s,/envs.*,,g')/bin
 else	
 	conda_exec=$(conda env list | grep -v "#" | head -1 | sed 's,.* ,,g;s,/envs.*,,g')/bin
 	conda_dir=$(echo $conda_exec | sed 's,/bin$,,g;s,/condabin$,,g')
