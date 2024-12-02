@@ -209,12 +209,24 @@ pattern_to_remove <- args[14] # if not provided, "no"
   colnames(gene_counts_rpkm) <- rownames(edgeR_object_norm$samples)
   gene_counts_rpkm$Gene_ID <- stringr::str_to_title(rownames(gene_counts_rpkm))
 
+  # Function for saving tpms later:
+  rpkm_to_tpm <- function(rpkm) {    
+    rpkm_sum <- sum(rpkm)
+    tpm <- (rpkm / rpkm_sum) * 1e6    
+    return(tpm)
+  }
+
 ###### Reorder so gene_counts columns follow the alfanumeric order, easier for the users in the written tables, although for the figures the script needs GSMXXXX-ordered:
   gene_counts_rpkm_to_write <- gene_counts_rpkm[,c(grep("Gene_ID",colnames(gene_counts_rpkm)),grep("Gene_ID",colnames(gene_counts_rpkm),invert=T))]
   gene_counts_rpkm_to_write <- gene_counts_rpkm_to_write[,c("Gene_ID",sort(colnames(gene_counts_rpkm_to_write)[-1]))]
   # High/medium/low categ:    
   write.table(gene_counts_rpkm_to_write,
               file=paste0(output_dir,"/RPKM_counts_genes.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
+  tpm_counts <- rpkm_to_tpm(gene_counts_rpkm_to_write[,grep("Gene_ID",colnames(gene_counts_rpkm_to_write),invert=T)]); rownames(tpm_counts) <- gene_counts_rpkm_to_write$Gene_ID
+  write.table(tpm_counts,
+              file=paste0(output_dir,"/TPM_counts_genes.txt"),quote = F,row.names = T, col.names = T,sep = "\t")
+  write.table(log2(tpm_counts+0.1),
+              file=paste0(output_dir,"/TPM_counts_genes_log2_0.1.txt"),quote = F,row.names = T, col.names = T,sep = "\t")
   gene_counts_rpkm_to_write_categ <- gene_counts_rpkm_to_write
   for (col in colnames(gene_counts_rpkm_to_write_categ[,-1])){
     a <- Hmisc::cut2(gene_counts_rpkm_to_write_categ[,col],g=3); b <- as.character(a)
@@ -243,6 +255,7 @@ pattern_to_remove <- args[14] # if not provided, "no"
   write.table(gene_counts_rpkm_log_categ,
               file=paste0(output_dir,"/RPKM_counts_genes_log2_0.1_categ.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
 
+  
 ###### Similar to above, obtain RPKM counts but from the ComBat-Seq-adjusted counts instead of the raw counts
   if (exists("adjusted_counts")){
     edgeR_object_combat <- DGEList(counts=adjusted_counts,
