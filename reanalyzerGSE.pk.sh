@@ -418,10 +418,10 @@ elif [[ $fastp_adapter == /* ]]; then
 	fi
 fi
 
-if [ "$fastp_trimmnig" != "none" ]; then
+if [ "$fastp_trimming" != "none" ]; then
 	mkdir -p $output_folder/$name/fastp_out
 	cd $output_folder/$name/fastp_out
-	IFS=', ' read -r -a arrfastp <<< "$fastp_trimmnig"
+	IFS=', ' read -r -a arrfastp <<< "$fastp_trimming"
 	if [[ "$(cat $output_folder/$name/GEO_info/library_layout_info.txt)" == "SINGLE" ]]; then
 		for f in $(ls -d $seqs_location/*); do fastp --in1 $f --out1 $f\_fastp --dont_overwrite --dont_eval_duplication  --trim_front1 "${arrfastp[0]}" --trim_tail1 "${arrfastp[1]}" --thread $cores; done
 	elif [[ "$(cat $output_folder/$name/GEO_info/library_layout_info.txt)" == "PAIRED" ]]; then
