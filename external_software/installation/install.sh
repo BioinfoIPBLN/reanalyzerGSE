@@ -70,7 +70,7 @@ echo -e "\n\n\nThe pathway to conda environments is $conda_envs_path...\n\n\n"
 if [[ $manager == "mamba" ]]; then
 	echo -e "The manager chosen is 'mamba', first trying to install mamba in the base environment replacing 'conda' to reduce time, if it's not already installed, and then populating the environments based on the yml files (keep in mind, this is frozen versions of the software)...\n\n\n"
 	conda install -y -q -c conda-forge mamba
-	conda install -y -q -c anaconda wget 
+	conda install -y -q -c anaconda -c conda-forge wget 
  	echo -e "\n\nInstalling reanalyzerGSE1...\n\n"
 	mamba env create -q --file $CURRENT_DIR/reanalyzerGSE1.yml && rm -rf $(find $conda_dir -type d -name pkgs) # Remove temp files
  	echo -e "\n\nInstalling reanalyzerGSE2...\n\n"
@@ -82,7 +82,8 @@ if [[ $manager == "mamba" ]]; then
  	echo -e "\n\nInstalling reanalyzerGSE5...\n\n"
 	mamba env create -q --file $CURRENT_DIR/reanalyzerGSE5.yml && rm -rf $(find $conda_dir -type d -name pkgs) # Remove temp files
 else
-	echo -e "The manager chosen is 'conda', populating the environments based on the yml files (keep in mind, this is frozen versions of the software)...\n\n\n"
+	conda install -y -q -c anaconda -c conda-forge wget
+ 	echo -e "The manager chosen is 'conda', populating the environments based on the yml files (keep in mind, this is frozen versions of the software)...\n\n\n"
  	echo -e "\n\nInstalling reanalyzerGSE1...\n\n"
 	conda env create -q --file $CURRENT_DIR/reanalyzerGSE1.yml && rm -rf $(find $conda_dir -type d -name pkgs) # Remove temp files
  	echo -e "\n\nInstalling reanalyzerGSE2...\n\n"
