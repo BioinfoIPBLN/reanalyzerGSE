@@ -16,17 +16,6 @@ if [ $? -ne 0 ]; then
 fi
 
 ###### STEP 1. Download info from GEO and organize metadata and so:
-### Handle TMPDIR, problematic in some systems or with some runs
-if [ -z "$TMPDIR_arg" ]; then
-	export TMPDIR=$output_folder/$name/miARma_out0/tmpdir; mkdir -p $TMPDIR
-	echo -e "\nTMPDIR changed to $TMPDIR\n"
-elif [ "$TMPDIR_arg" == "system" ]; then
-	echo -e "\nTMPDIR used is $TMPDIR\n"
-else
-	export TMPDIR=$TMPDIR_arg; mkdir -p $TMPDIR
-	echo -e "\nTMPDIR changed to $TMPDIR\n"
-fi
-
 if [[ $debug_step == "all" || $debug_step == "step1" ]]; then
 	echo -e "\n\nSTEP 1: Starting...\nCurrent date/time: $(date)\n\n"
 	rm -rf $output_folder/*
