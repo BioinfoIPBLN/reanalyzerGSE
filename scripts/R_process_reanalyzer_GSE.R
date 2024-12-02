@@ -219,7 +219,6 @@ pattern_to_remove <- args[14] # if not provided, "no"
 ###### Reorder so gene_counts columns follow the alfanumeric order, easier for the users in the written tables, although for the figures the script needs GSMXXXX-ordered:
   gene_counts_rpkm_to_write <- gene_counts_rpkm[,c(grep("Gene_ID",colnames(gene_counts_rpkm)),grep("Gene_ID",colnames(gene_counts_rpkm),invert=T))]
   gene_counts_rpkm_to_write <- gene_counts_rpkm_to_write[,c("Gene_ID",sort(colnames(gene_counts_rpkm_to_write)[-1]))]
-  # High/medium/low categ:    
   write.table(gene_counts_rpkm_to_write,
               file=paste0(output_dir,"/RPKM_counts_genes.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
   tpm_counts <- rpkm_to_tpm(gene_counts_rpkm_to_write[,grep("Gene_ID",colnames(gene_counts_rpkm_to_write),invert=T)]); rownames(tpm_counts) <- gene_counts_rpkm_to_write$Gene_ID
@@ -227,6 +226,7 @@ pattern_to_remove <- args[14] # if not provided, "no"
               file=paste0(output_dir,"/TPM_counts_genes.txt"),quote = F,row.names = T, col.names = T,sep = "\t")
   write.table(log2(tpm_counts+0.1),
               file=paste0(output_dir,"/TPM_counts_genes_log2_0.1.txt"),quote = F,row.names = T, col.names = T,sep = "\t")
+  # High/medium/low categ:
   gene_counts_rpkm_to_write_categ <- gene_counts_rpkm_to_write
   for (col in colnames(gene_counts_rpkm_to_write_categ[,-1])){
     a <- Hmisc::cut2(gene_counts_rpkm_to_write_categ[,col],g=3); b <- as.character(a)
@@ -288,6 +288,11 @@ pattern_to_remove <- args[14] # if not provided, "no"
     colnames(gene_counts_rpkm_combat_log)[1] <- "Gene_ID"
     write.table(gene_counts_rpkm_combat_log,
           file=paste0(output_dir,"/RPKM_counts_ComBat_seq_genes_log2_0.1.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
+    tpm_counts <- rpkm_to_tpm(gene_counts_rpkm_combat_to_write[,grep("Gene_ID",colnames(gene_counts_rpkm_to_write),invert=T)]); rownames(tpm_counts) <- gene_counts_rpkm_combat_to_write$Gene_ID
+    write.table(tpm_counts,
+                file=paste0(output_dir,"/TPM_counts_ComBat_seq_genes.txt"),quote = F,row.names = T, col.names = T,sep = "\t")
+    write.table(log2(tpm_counts+0.1),
+                file=paste0(output_dir,"/TPM_counts_ComBat_seq_genes_log2_0.1.txt"),quote = F,row.names = T, col.names = T,sep = "\t")
   }
   print(paste0("Counts written. Current date: ",date()))
 
