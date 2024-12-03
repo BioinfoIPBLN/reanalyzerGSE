@@ -9,11 +9,11 @@ echo -e "doi.org/10.1101/2023.07.12.548663v2\n\n"
 export options=$@
 export arguments=($options)
 
-CURRENT_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 source $CURRENT_DIR/scripts/parse_options.sh
 if [ $? -ne 0 ]; then
 	echo "Exiting..."; exit 1
 fi
+CURRENT_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd ) # Overwrite the one exported from parse_options.sh
 
 ###### STEP 1. Download info from GEO and organize metadata and so:
 if [[ $debug_step == "all" || $debug_step == "step1" ]]; then
