@@ -8,13 +8,12 @@ if [ "$conda_within_reanalyzer" == "yes" ]; then
 	conda_dir=$EXTERNAL_SOFTWARE_DIR/miniconda3/bin
 	conda_exec=$($EXTERNAL_SOFTWARE_DIR/miniconda3/bin/conda env list | grep -v "#" | head -1 | sed 's,.* ,,g;s,/envs.*,,g')/bin
 else	
-	conda_exec=$(conda env list | grep -v "#" | head -1 | sed 's,.* ,,g;s,/envs.*,,g')/bin
-	conda_dir=$(echo $conda_exec | sed 's,/bin$,,g;s,/condabin$,,g')
-	
+	conda_exec=$(conda env list | egrep -v '^#|^$' | head -1 | sed 's,.* ,,g;s,/envs.*,,g')/bin
+	conda_dir=$(echo $conda_exec | sed 's,/bin$,,g;s,/condabin$,,g')	
 fi
 
+conda_exec=$(conda env list | egrep -v '^#|^$' | head -1 | sed 's,.* ,,g;s,/envs.*,,g')/bin
 conda_envs_path=$(echo $conda_exec | sed 's,/bin$,/envs,g;s,/condabin$,/envs,g')
-
 echo -e "\nDetected conda environments path: $conda_envs_path\n"
 
 #### Set PATH:
