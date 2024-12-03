@@ -248,7 +248,7 @@ if [ -z "$memory_max" ]; then
 fi
 echo -e "\nmemory_max=$memory_max\n"
 if [ -z "$miarma_path" ]; then
-	miarma_path=$CURRENT_DIR/external_software/miARma-seq
+	miarma_path=$(dirname $CURRENT_DIR)/external_software/miARma-seq
 fi
 if [ -d "$output_folder/$name" ]; then
 	echo -e "Please note that $output_folder/$name already exists... reanalyzerGSE is going to attempt a new run or resume running, but you may want to remove the folder, change the destination folder with '-o' or '-n', use downloaded raw data from an external software... etc. Sleeping for a while to give you time to exit if you want, and then continuing..."
