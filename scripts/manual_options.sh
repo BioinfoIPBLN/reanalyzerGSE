@@ -3,7 +3,6 @@ input=
 input_geo_reads=
 name=project_name
 output_folder=
-number_reads=
 genes=none
 TMPDIR_arg=
 
@@ -21,6 +20,7 @@ design_custom_local=
 design_custom=no
 organism_argument=
 taxonid=
+number_reads=
 batch_vector=
 batch_biological_covariates=
 covariables=none
