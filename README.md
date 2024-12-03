@@ -44,7 +44,7 @@ Please refer to the help page for futher details:
 ```
 reanalyzerGSE.pk.sh -h
 		-h | -help # Type this to get help
-	        -options | Provide the file containing the parameters to be used. You can adapt the file 'manual_options.sh', alternative to manually input in the command line all the options...)
+	        -options | Provide the file containing the parameters to be used. You can adapt the file 'manual_options.txt' provided in the scripts folder, alternative to manually input in the command line all the options...)
 	        
 	        #### Input/output: 
 	        -i | -input # GEO_ID (GSEXXXXXX, separated by comma if more than one), or folder containing raw reads (please provide full absolute path, e.g. /path/folder_name/, containing only fastq.gz files and not folders, links or any other item), or almost any accession from ENA/SRA to download .fastq from (any of the ids with the prefixes PRJEB,PRJNA,PRJDB,ERP,DRP,SRP,SAMD,SAME,SAMN,ERS,DRS,SRS,ERX,DRX,SRX,ERR,DRR,SRR, please separated by commas if more than one id as input)
