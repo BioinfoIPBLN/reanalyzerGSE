@@ -1,8 +1,8 @@
 #!/bin/bash
 
 
-CURRENT_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-export PATH=$CURRENT_DIR:$PATH; echo -e "\n\nAdding to PATH the scripts folder...$CURRENT_DIR"
+CURRENT_DIR_SCRIPTS=$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+export PATH=$CURRENT_DIR_SCRIPTS:$PATH; echo -e "\n\nAdding to PATH the scripts folder...$CURRENT_DIR_SCRIPTS"
 
 ##### From the command line, get arguments by looping through an index...
 index=0
@@ -248,7 +248,7 @@ if [ -z "$memory_max" ]; then
 fi
 echo -e "\nmemory_max=$memory_max\n"
 if [ -z "$miarma_path" ]; then
-	miarma_path=$(dirname $CURRENT_DIR)/external_software/miARma-seq
+	miarma_path=$(dirname $CURRENT_DIR_SCRIPTS)/external_software/miARma-seq
 fi
 if [ -d "$output_folder/$name" ]; then
 	echo -e "Please note that $output_folder/$name already exists... reanalyzerGSE is going to attempt a new run or resume running, but you may want to remove the folder, change the destination folder with '-o' or '-n', use downloaded raw data from an external software... etc. Sleeping for a while to give you time to exit if you want, and then continuing..."
