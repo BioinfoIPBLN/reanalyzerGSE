@@ -128,6 +128,7 @@ fi
 ###### STEP 1a. Download and process fastq files from the GEO ID provided:
 if [[ $debug_step == "all" || $debug_step == "step1a" ]]; then
 	echo -e "\n\nSTEP 1a: Starting...\nCurrent date/time: $(date)\n\n"
+ 	mkdir -p $TMPDIR
 	rm -rf $seqs_location
 	if [[ $input == G* ]]; then
 		if [ "$stop" == "yes" ]; then
@@ -235,6 +236,7 @@ fi
 ### STEP 1b. Process if not required to download from NCBI/GEO the metadata and raw reads provided locally:
 if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
 	echo -e "\n\nSTEP 1b: Starting...\nCurrent date/time: $(date)\n\n"
+ 	mkdir -p $TMPDIR
 	if [[ $input == /* ]]; then
 		seqs_location=$output_folder/$name/raw_reads
 		rm -rf $seqs_location # I'm now removing the seqs_location at the beginning of this section, in the context of the new system of resuming by -Dm stepx, so this should always be done
