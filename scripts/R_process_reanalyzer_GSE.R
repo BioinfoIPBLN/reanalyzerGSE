@@ -856,6 +856,9 @@ save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
   suppressMessages(library("corrplot",quiet = T,warn.conflicts = F))
   suppressMessages(library("ggpubr",quiet = T,warn.conflicts = F))
   suppressMessages(library("ggpmisc",quiet = T,warn.conflicts = F))
+  suppressMessages(library("dplyr",quiet = T,warn.conflicts = F))
+  suppressMessages(library("dendextend",quiet = T,warn.conflicts = F))
+  
 
   label <- basename(path)
 
@@ -1081,11 +1084,44 @@ save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
   par(mfrow=c(1,1), col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
   pr.hc.c <- hclust(na.omit(dist(t(cpm(x2$counts,log=F)),method = "euclidean")))
   plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of normalized counts from samples of ", label, sep=""), labels=targets$Filename, cex=0.5)
-  ### 8.3. Dendogram cluster raw norm
+  # Colored:
+  par(mfrow=c(1,1), mar=c(10, 4, 4, 2),
+    col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", 
+    bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
+  plot(pr.hc.c, xlab = NA,sub="",
+       main = paste("Hierarchical Clustering of normalized counts from samples of ", label, sep = ""), 
+       labels = FALSE, cex = 0.5)
+  groups <- as.factor(x$samples$group)  
+  group_index <- as.numeric(groups[pr.hc.c$order])  
+  heights <- as.dendrogram(pr.hc.c) %>% hang.dendrogram %>% get_leaves_attr("height")
+  leaf_order <- pr.hc.c$order
+  x_coords <- 1:length(leaf_order)
+  for (i in seq_along(x_coords)) {
+    text(x = x_coords[i], y = heights[i], 
+         labels = targets$Filename[leaf_order[i]], 
+         col = unique(col.group)[group_index[i]], srt = 90, adj = c(1, 0.5), xpd = TRUE, cex = 0.5)
+  }  
+  ### 8.4. Dendogram cluster raw norm log
   par(mfrow=c(1,1), col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
   pr.hc.c <- hclust(na.omit(dist(t(cpm(x2$counts,log=T)),method = "euclidean")))
   plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of log2 normalized counts from samples of ", label, sep=""), labels=targets$Filename, cex=0.5)
-
+  # Colored:
+  par(mfrow=c(1,1), mar=c(10, 4, 4, 2),
+    col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", 
+    bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
+  plot(pr.hc.c, xlab = NA,sub="",
+       main = paste("Hierarchical Clustering of normalized counts from samples of ", label, sep = ""), 
+       labels = FALSE, cex = 0.5)
+  groups <- as.factor(x$samples$group)  
+  group_index <- as.numeric(groups[pr.hc.c$order])  
+  heights <- as.dendrogram(pr.hc.c) %>% hang.dendrogram %>% get_leaves_attr("height")
+  leaf_order <- pr.hc.c$order
+  x_coords <- 1:length(leaf_order)
+  for (i in seq_along(x_coords)) {
+    text(x = x_coords[i], y = heights[i], 
+         labels = targets$Filename[leaf_order[i]], 
+         col = unique(col.group)[group_index[i]], srt = 90, adj = c(1, 0.5), xpd = TRUE, cex = 0.5)
+  }
   #tSNE
   #a <- tsne(x$counts,seed=100,labels=as.factor(targets$Type), perplex=perplex, legendtitle="Types",text=targets$Type ,dotsize=3, legendtextsize = 8) + ggtitle("Tsne") + theme(plot.title = element_text(face = "bold", size = 12, hjust = 0.5))
   #plot(a)
@@ -1282,10 +1318,44 @@ if (pattern_to_remove!="none"){
   par(mfrow=c(1,1), col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
   pr.hc.c <- hclust(na.omit(dist(t(cpm(x2$counts,log=F)),method = "euclidean")))
   plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of normalized counts from samples of ", label, sep=""), labels=targets_pattern_to_remove$Filename, cex=0.5)
-  ### 8.3. Dendogram cluster raw norm
+  # Colored:
+  par(mfrow=c(1,1), mar=c(10, 4, 4, 2),
+    col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", 
+    bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
+  plot(pr.hc.c, xlab = NA,sub="",
+       main = paste("Hierarchical Clustering of normalized counts from samples of ", label, sep = ""), 
+       labels = FALSE, cex = 0.5)
+  groups <- as.factor(x$samples$group)  
+  group_index <- as.numeric(groups[pr.hc.c$order])  
+  heights <- as.dendrogram(pr.hc.c) %>% hang.dendrogram %>% get_leaves_attr("height")
+  leaf_order <- pr.hc.c$order
+  x_coords <- 1:length(leaf_order)
+  for (i in seq_along(x_coords)) {
+    text(x = x_coords[i], y = heights[i], 
+         labels = targets$Filename[leaf_order[i]], 
+         col = unique(col.group)[group_index[i]], srt = 90, adj = c(1, 0.5), xpd = TRUE, cex = 0.5)
+  }  
+  ### 8.4. Dendogram cluster raw norm log
   par(mfrow=c(1,1), col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
   pr.hc.c <- hclust(na.omit(dist(t(cpm(x2$counts,log=T)),method = "euclidean")))
   plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of log2 normalized counts from samples of ", label, sep=""), labels=targets_pattern_to_remove$Filename, cex=0.5)
+  # Colored:
+  par(mfrow=c(1,1), mar=c(10, 4, 4, 2),
+    col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", 
+    bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
+  plot(pr.hc.c, xlab = NA,sub="",
+       main = paste("Hierarchical Clustering of normalized counts from samples of ", label, sep = ""), 
+       labels = FALSE, cex = 0.5)
+  groups <- as.factor(x$samples$group)  
+  group_index <- as.numeric(groups[pr.hc.c$order])  
+  heights <- as.dendrogram(pr.hc.c) %>% hang.dendrogram %>% get_leaves_attr("height")
+  leaf_order <- pr.hc.c$order
+  x_coords <- 1:length(leaf_order)
+  for (i in seq_along(x_coords)) {
+    text(x = x_coords[i], y = heights[i], 
+         labels = targets$Filename[leaf_order[i]], 
+         col = unique(col.group)[group_index[i]], srt = 90, adj = c(1, 0.5), xpd = TRUE, cex = 0.5)
+  }
   dev.off()
 }
 
