@@ -1123,7 +1123,7 @@ save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
   for (i in seq_along(x_coords)) {
     text(x = x_coords[i], y = heights[i], 
          labels = targets$Filename[leaf_order[i]], 
-         col = unique(col.group)[group_index[i]], srt = 90, adj = c(0.05, 0.5), xpd = TRUE, cex = 0.5)
+         col = unique(col.group)[group_index[i]], srt = 90, adj = c(1, 0.5), xpd = TRUE, cex = 0.5)
   }
   #tSNE
   #a <- tsne(x$counts,seed=100,labels=as.factor(targets$Type), perplex=perplex, legendtitle="Types",text=targets$Type ,dotsize=3, legendtextsize = 8) + ggtitle("Tsne") + theme(plot.title = element_text(face = "bold", size = 12, hjust = 0.5))
@@ -1357,7 +1357,7 @@ if (pattern_to_remove!="none"){
   for (i in seq_along(x_coords)) {
     text(x = x_coords[i], y = heights[i], 
          labels = targets$Filename[leaf_order[i]], 
-         col = unique(col.group)[group_index[i]], srt = 90, adj = c(0.05, 0.5), xpd = TRUE, cex = 0.5)
+         col = unique(col.group)[group_index[i]], srt = 90, adj = c(1, 0.5), xpd = TRUE, cex = 0.5)
   }
   dev.off()
 }
