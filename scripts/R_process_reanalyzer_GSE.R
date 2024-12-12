@@ -1088,7 +1088,7 @@ save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
   pr.hc.c <- hclust(na.omit(dist(t(cpm(x2$counts,log=F)),method = "euclidean")))
   plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of normalized counts from samples of ", label, sep=""), labels=targets$Filename, cex=0.5)
   # Colored:
-  par(mfrow=c(1,1), mar=c(10, 4, 4, 2),
+  par(mfrow=c(1,1), mar=c(12, 4, 4, 2),
     col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", 
     bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
   plot(pr.hc.c, xlab = NA,sub="",
@@ -1109,11 +1109,11 @@ save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
   pr.hc.c <- hclust(na.omit(dist(t(cpm(x2$counts,log=T)),method = "euclidean")))
   plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of log2 normalized counts from samples of ", label, sep=""), labels=targets$Filename, cex=0.5)
   # Colored:
-  par(mfrow=c(1,1), mar=c(10, 4, 4, 2),
+  par(mfrow=c(1,1), mar=c(12, 4, 4, 2),
     col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", 
     bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
   plot(pr.hc.c, xlab = NA,sub="",
-       main = paste("Hierarchical Clustering of normalized counts from samples of ", label, sep = ""), 
+       main = paste("Hierarchical Clustering of log2 normalized counts from samples of ", label, sep = ""), 
        labels = FALSE, cex = 0.5)
   groups <- as.factor(x$samples$group)  
   group_index <- as.numeric(groups[pr.hc.c$order])  
@@ -1123,7 +1123,7 @@ save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
   for (i in seq_along(x_coords)) {
     text(x = x_coords[i], y = heights[i], 
          labels = targets$Filename[leaf_order[i]], 
-         col = unique(col.group)[group_index[i]], srt = 90, adj = c(1, 0.5), xpd = TRUE, cex = 0.5)
+         col = unique(col.group)[group_index[i]], srt = 90, adj = c(0.05, 0.5), xpd = TRUE, cex = 0.5)
   }
   #tSNE
   #a <- tsne(x$counts,seed=100,labels=as.factor(targets$Type), perplex=perplex, legendtitle="Types",text=targets$Type ,dotsize=3, legendtextsize = 8) + ggtitle("Tsne") + theme(plot.title = element_text(face = "bold", size = 12, hjust = 0.5))
@@ -1322,7 +1322,7 @@ if (pattern_to_remove!="none"){
   pr.hc.c <- hclust(na.omit(dist(t(cpm(x2$counts,log=F)),method = "euclidean")))
   plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of normalized counts from samples of ", label, sep=""), labels=targets_pattern_to_remove$Filename, cex=0.5)
   # Colored:
-  par(mfrow=c(1,1), mar=c(10, 4, 4, 2),
+  par(mfrow=c(1,1), mar=c(12, 4, 4, 2),
     col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", 
     bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
   plot(pr.hc.c, xlab = NA,sub="",
@@ -1343,11 +1343,11 @@ if (pattern_to_remove!="none"){
   pr.hc.c <- hclust(na.omit(dist(t(cpm(x2$counts,log=T)),method = "euclidean")))
   plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of log2 normalized counts from samples of ", label, sep=""), labels=targets_pattern_to_remove$Filename, cex=0.5)
   # Colored:
-  par(mfrow=c(1,1), mar=c(10, 4, 4, 2),
+  par(mfrow=c(1,1), mar=c(12, 4, 4, 2),
     col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", 
     bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
   plot(pr.hc.c, xlab = NA,sub="",
-       main = paste("Hierarchical Clustering of normalized counts from samples of ", label, sep = ""), 
+       main = paste("Hierarchical Clustering of log2 normalized counts from samples of ", label, sep = ""), 
        labels = FALSE, cex = 0.5)
   groups <- as.factor(x$samples$group)  
   group_index <- as.numeric(groups[pr.hc.c$order])  
@@ -1357,7 +1357,7 @@ if (pattern_to_remove!="none"){
   for (i in seq_along(x_coords)) {
     text(x = x_coords[i], y = heights[i], 
          labels = targets$Filename[leaf_order[i]], 
-         col = unique(col.group)[group_index[i]], srt = 90, adj = c(1, 0.5), xpd = TRUE, cex = 0.5)
+         col = unique(col.group)[group_index[i]], srt = 90, adj = c(0.05, 0.5), xpd = TRUE, cex = 0.5)
   }
   dev.off()
 }
