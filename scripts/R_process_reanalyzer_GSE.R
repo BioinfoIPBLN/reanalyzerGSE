@@ -478,20 +478,23 @@ pattern_to_remove <- args[14] # if not provided, "no"
     suppressWarnings(htmlwidgets::saveWidget(widget = ggplotly(p),file = gsub("pdf","html",file),selfcontained = TRUE))
   }
   DGE <- function(comp,object=edgeR_object_norm, organism="mouse", myFDR=0.05, myFC=0){
-    et <- exactTest(object,pair = comp)
+    et <- exactTest(object,pair = rev(comp))
     #Extracting the statistical data order by p-value
     top1 <- topTags(et, n=nrow(et), adjust.method="BH",sort.by="PValue")
 
     print(summary(decideTests(et)))
     print(nrow(top1$table[top1$table$FDR<=myFDR & abs(top1$table$logFC)>= myFC,]))
-    print(comp); print("Top results:")
-    print(head(top1$table,10)[,c(-1,-2)])
-    myLabel1=paste(comp, collapse = '_vs_')
-    myLabel1=gsub("^_","",gsub("_+","_",gsub("[^[:alnum:]_]+", "_", myLabel1)))
-    myLabel2=paste(myLabel1, "FDR", myFDR, "FC", myFC, sep="_")
+    print(comp); print("Top 10 results (each sense):")
+    print(as.data.frame(top1)[order(as.data.frame(top1)$logFC)[c(as.numeric(dim(top1)[1]):as.numeric(dim(top1)[1]-10),1:10)],3:6])
+    
+    if (venn_volcano!="no"){
+      myLabel1=gsub("^_","",gsub("_+","_",gsub("[^[:alnum:]_]+", "_", paste(comp, collapse = '_vs_'))))
+      Volcano(top1,paste(output_dir,"/DGE/Volcano_plot_",myLabel1,".pdf", sep=""),myLabel1)
+    }
+    # myLabel2=paste(myLabel1, "FDR", myFDR, "FC", myFC, sep="_")
     # createExcel(top1$table,paste("DEG_",myLabel1,".xlsx", sep=""),organism = organism)
     # my_enrichment(top1$table,FA_label=myLabel2,cutoff=0.05,organism = organism, FDR=myFDR,FC=myFC)
-    Volcano(top1,paste(output_dir,"/DGE/Volcano_plot_",myLabel1,".pdf", sep=""),myLabel1)
+    
     return(top1)
   }
 
@@ -533,6 +536,7 @@ pattern_to_remove <- args[14] # if not provided, "no"
         targets <- targets[idxs_gsm_manual_3,]
     }
 
+    write.table(as.data.frame(targets),file=paste0(output_dir,"/QC_and_others/targets_info_file.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
 
   ## Proceed with DGE analyses:
     print("Attempting differential gene expression analyses between the conditions:")
@@ -582,13 +586,11 @@ pattern_to_remove <- args[14] # if not provided, "no"
       # Process each combination
       list_combinations <- strsplit(unique(unlist(lapply(strsplit(apply(expand.grid(unique(condition), unique(condition)),1,function(x){paste(x,collapse="*****")}),"*****",fixed=T),function(x){if (x[1] != x[2]){paste(sort(x),collapse="*****")}}))),"*****",fixed=T)
       list_combinations <- lapply(list_combinations,function(x){if (sum(!startsWith(x,"__"))==2){paste0("__",x)} else {x}})
-      print("These are the combinations that will be analyzed in differential gene expression analyses, if you want to restrict these, please use the argument -Dec or -pR")
+      print("These are the combinations that will be analyzed in differential gene expression analyses, if you want to restrict or change these, please use the argument -Dec or -pR")
       if (restrict_comparisons!="no"){
-        cat("Restriction requested. Reading the comma-separated list with the indexes of the combinations that you want to keep...\n")
-        indexes_restrict_combinations <- as.numeric(unlist(strsplit(restrict_comparisons, ",")))
-        list_combinations <- list_combinations[indexes_restrict_combinations]
-        cat("Restricted to:\n")
-        print(indexes_restrict_combinations)
+        cat("You have manually provided a list. Reading the comma-separated list with the ordered comparisons that you want to perform...\n")
+        cat("These are:\n")
+        list_combinations <- strsplit(unlist(strsplit(restrict_comparisons,",")),"//")        
         print(list_combinations)
       }
       if (pattern_to_remove!="none"){
@@ -637,22 +639,23 @@ pattern_to_remove <- args[14] # if not provided, "no"
       if (full_analyses!="no"){
         if(covariab == "none"){
           edgeR_results <- DGE(comp=list_combinations[[i]],object=edgeR_object_norm_temp_to_process)
-          colnames(edgeR_results$table)[3] <- paste0(colnames(edgeR_results$table)[3],list_combinations[[i]][1],"_VS_",list_combinations[[i]][2])
+          colnames(edgeR_results$table)[3] <- paste0(colnames(edgeR_results$table)[3],paste(sub("__","",list_combinations[[i]]),collapse = "__VS__"))
         } else {
           fit <- glmQLFit(edgeR_object_norm_temp_to_process, design, robust=TRUE)
           contrast <- rep(0,dim(design)[2])
-          idxs_design <- grep(paste(gsub("__|_seq1|_seq2","",list_combinations[[i]]),collapse="|"),colnames(design))
-          if(length(idxs_design)!=2){cat(paste0("\n\nSomething is WRONG as one of your contrasts has been required to compare ",length(idxs_design)," conditions. Probably conflicting naming of biological conditions...\n\n"));stop("Exiting, please review the condition naming...")}
+          idxs_design <- rev(c(grep(list_combinations[[i]][1],colnames(design)),grep(list_combinations[[i]][2],colnames(design))))
+          if(length(idxs_design)!=2){cat(paste0("\n\nSomething is WRONG as one of your contrasts has been required to compare ",length(idxs_design)," conditions. Probably conflicting naming of biological conditions...\n\n"));stop("Exiting, please review the naming of the conditions...")}
           contrast[idxs_design] <- c(-1,1)
           qlf <- glmQLFTest(fit,contrast=contrast)
           edgeR_results <- topTags(qlf,n=nrow(qlf),adjust.method="BH",sort.by="PValue")
           print(summary(decideTests(qlf)))
           print(nrow(edgeR_results$table[edgeR_results$table$FDR<=0.05 & abs(edgeR_results$table$logFC)>= 0,]))
-          print(list_combinations[[i]]); print("Top results:")
-          print(head(edgeR_results$table,10)[,c(-1,-2)])
-          myLabel1=paste(list_combinations[[i]], collapse = '_vs_')
-          myLabel1=gsub("^_","",gsub("_+","_",gsub("[^[:alnum:]_]+", "_", myLabel1)))
+          print(list_combinations[[i]]); print("Top 10 results (each sense):")
+          print(as.data.frame(edgeR_results)[order(as.data.frame(edgeR_results)$logFC)[c(as.numeric(dim(edgeR_results)[1]):as.numeric(dim(edgeR_results)[1]-10),1:10)],3:6])
+          colnames(edgeR_results$table)[3] <- paste0(colnames(edgeR_results$table)[3],paste(sub("__","",list_combinations[[i]]),collapse = "__VS__"))
           if (venn_volcano!="no"){
+            myLabel1=paste(list_combinations[[i]], collapse = '_vs_')
+            myLabel1=gsub("^_","",gsub("_+","_",gsub("[^[:alnum:]_]+", "_", myLabel1)))
             Volcano(edgeR_results,paste(output_dir,"/DGE/Volcano_plot_",myLabel1,".pdf", sep=""),myLabel1)
           }
         }
@@ -1051,18 +1054,18 @@ save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
   data_pca$TypeII <- targets$TypeII
   plot(autoplot(data_pca.PC,title="PCA_over_edgeR",label=T,data=data_pca,colour='Type',xlim = c(-0.8,0.8),label.size=3,label.repel=T))
   ### 6. PCA por tipos normalizada (no log2 si no en edgeR)
-  data_pca <- as.matrix(x2)
-  data_pca <- as.data.frame(t(data_pca))
-  rownames(data_pca) <- targets$Name
-  data_pca.PC = prcomp(data_pca)
-  data_pca$Type <- targets$Type
-  data_pca$Filename <- targets$Filename
-  data_pca$Name <- targets$Name
-  data_pca$Sex <- targets$Sex
-  data_pca$Age <- targets$Age
-  data_pca$VAS_Group <- targets$VAS_Group
-  data_pca$TypeII <- targets$TypeII
-  plot(autoplot(data_pca.PC,title="PCA_over_edgeR_norm",label=T,data=data_pca,colour='Type',xlim = c(-0.8,0.8),label.size=3,label.repel=T))
+  #data_pca <- as.matrix(x2)
+  #data_pca <- as.data.frame(t(data_pca))
+  #rownames(data_pca) <- targets$Name
+  #data_pca.PC = prcomp(data_pca)
+  #data_pca$Type <- targets$Type
+  #data_pca$Filename <- targets$Filename
+  #data_pca$Name <- targets$Name
+  #data_pca$Sex <- targets$Sex
+  #data_pca$Age <- targets$Age
+  #data_pca$VAS_Group <- targets$VAS_Group
+  #data_pca$TypeII <- targets$TypeII
+  #plot(autoplot(data_pca.PC,title="PCA_over_edgeR_norm",label=T,data=data_pca,colour='Type',xlim = c(-0.8,0.8),label.size=3,label.repel=T))
   ### 7. Heatmap 250 mots differential entities
   rsd <- rowSds(as.matrix(x))
   sel <- order(rsd, decreasing=TRUE)[1:250]
@@ -1297,18 +1300,18 @@ if (pattern_to_remove!="none"){
   data_pca$TypeII <- targets_pattern_to_remove$TypeII
   plot(autoplot(data_pca.PC,title="PCA_over_edgeR",label=T,data=data_pca,colour='Type',xlim = c(-0.8,0.8),label.size=3,label.repel=T))
   ### 6. PCA por tipos normalizada (no log2 si no en edgeR)
-  data_pca <- as.matrix(x2)
-  data_pca <- as.data.frame(t(data_pca))
-  rownames(data_pca) <- targets_pattern_to_remove$Name
-  data_pca.PC = prcomp(data_pca)
-  data_pca$Type <- targets_pattern_to_remove$Type
-  data_pca$Filename <- targets_pattern_to_remove$Filename
-  data_pca$Name <- targets_pattern_to_remove$Name
-  data_pca$Sex <- targets_pattern_to_remove$Sex
-  data_pca$Age <- targets_pattern_to_remove$Age
-  data_pca$VAS_Group <- targets_pattern_to_remove$VAS_Group
-  data_pca$TypeII <- targets_pattern_to_remove$TypeII
-  plot(autoplot(data_pca.PC,title="PCA_over_edgeR_norm",label=T,data=data_pca,colour='Type',xlim = c(-0.8,0.8),label.size=3,label.repel=T))
+  #data_pca <- as.matrix(x2)
+  #data_pca <- as.data.frame(t(data_pca))
+  #rownames(data_pca) <- targets_pattern_to_remove$Name
+  #data_pca.PC = prcomp(data_pca)
+  #data_pca$Type <- targets_pattern_to_remove$Type
+  #data_pca$Filename <- targets_pattern_to_remove$Filename
+  #data_pca$Name <- targets_pattern_to_remove$Name
+  #data_pca$Sex <- targets_pattern_to_remove$Sex
+  #data_pca$Age <- targets_pattern_to_remove$Age
+  #data_pca$VAS_Group <- targets_pattern_to_remove$VAS_Group
+  #data_pca$TypeII <- targets_pattern_to_remove$TypeII
+  #plot(autoplot(data_pca.PC,title="PCA_over_edgeR_norm",label=T,data=data_pca,colour='Type',xlim = c(-0.8,0.8),label.size=3,label.repel=T))
   ### 7. Heatmap 250 mots differential entities
   rsd <- rowSds(as.matrix(x))
   sel <- order(rsd, decreasing=TRUE)[1:250]
