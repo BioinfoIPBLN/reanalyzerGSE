@@ -762,9 +762,10 @@ if (venn_volcano!="no"){
   Venn_funct <- function(files){
       list_of_tables <- lapply(files, read.delim)
       group <- sub("\\..*$", "",sub("DGE_limma_timecourse_|DGE_analysis_","",basename(files))); col.group <- as.factor(group)
-      color = grDevices::colors()[grep('gr(a|e)y', grDevices::colors(), invert = TRUE)] # Get a list of non-gray colors
-      contrast <- sapply(color,colorspace::contrast_ratio); contrast <- contrast[contrast>4] # Ensure a high contrast (>4 on W3C standard)
-      levels(col.group) <- sample(names(contrast), nlevels(col.group)); col.group <- as.character(col.group)
+      color = grDevices::colors()[grep('gr(a|e)y|white', grDevices::colors(), invert = TRUE)] # Get a list of non-gray or white colors
+      contrast <- sapply(color,colorspace::contrast_ratio); contrast <- contrast[contrast>4] # Ensure a high contrast here and below (>4 on W3C standard)
+      contrast2 <- unique(t(combn(unique(names(contrast)),2))[apply(t(combn(unique(names(contrast)),2)),1,function(x){colorspace::contrast_ratio(x[1],col2=x[2])}) > 4])
+      levels(col.group) <- sample(contrast2, nlevels(col.group)); col.group <- as.character(col.group)
       list_of_ids <- lapply(list_of_tables,function(y){y$Gene_ID[y$FDR<0.05]})
       names(list_of_ids) <- group
   
@@ -857,7 +858,7 @@ save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
   suppressMessages(library("ggpubr",quiet = T,warn.conflicts = F))
   suppressMessages(library("ggpmisc",quiet = T,warn.conflicts = F))
   suppressMessages(library("dplyr",quiet = T,warn.conflicts = F))
-  suppressMessages(library("dendextend",quiet = T,warn.conflicts = F))
+  suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   
 
   label <- basename(path)
@@ -893,9 +894,11 @@ save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
   col.group <- as.factor(group)
   # levels(col.group) <- RColorBrewer::brewer.pal(nlevels(col.group), "Set1")
   # not enough colors sometimes, so I get random colors:
-  color = grDevices::colors()[grep('gr(a|e)y', grDevices::colors(), invert = TRUE)] # Get a list of non-gray colors
-  contrast <- sapply(color,colorspace::contrast_ratio); contrast <- contrast[contrast>4] # Ensure a high contrast (>4 on W3C standard)
-  levels(col.group) <- sample(names(contrast), nlevels(col.group)); col.group <- as.character(col.group)
+  color = grDevices::colors()[grep('gr(a|e)y|white', grDevices::colors(), invert = TRUE)] # Get a list of non-gray or white colors
+  contrast <- sapply(color,colorspace::contrast_ratio); contrast <- contrast[contrast>4] # Ensure a high contrast here and below (>4 on W3C standard)
+  contrast2 <- unique(t(combn(unique(names(contrast)),2))[apply(t(combn(unique(names(contrast)),2)),1,function(x){colorspace::contrast_ratio(x[1],col2=x[2])}) > 4])
+  levels(col.group) <- sample(contrast2, nlevels(col.group)); col.group <- as.character(col.group)
+
 
   # summary(lcpm)
   # table(rowSums(x$counts==0)==6)
@@ -1081,43 +1084,18 @@ save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
   pr.hc.c <- hclust(na.omit(dist(t(cpm(x2$counts,log=F)),method = "euclidean")))
   plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of normalized counts from samples of ", label, sep=""), labels=targets$Filename, cex=0.5)
   # Colored:
-  par(mfrow=c(1,1), mar=c(14, 4, 4, 2),
-      col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", 
-      bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
-  plot(pr.hc.c, xlab = NA,sub="",
-       main = paste("Hierarchical Clustering of normalized counts from samples of ", label, sep = ""), 
-       labels = FALSE, cex = 0.5)
-  groups <- as.factor(x$samples$group)  
-  group_index <- as.numeric(groups[pr.hc.c$order])  
-  heights <- as.dendrogram(pr.hc.c) %>% hang.dendrogram %>% get_leaves_attr("height")
-  leaf_order <- pr.hc.c$order
-  x_coords <- 1:length(leaf_order)
-  for (i in seq_along(x_coords)) {
-    text(x = x_coords[i], y = heights[i], 
-         labels = targets$Filename[leaf_order[i]], 
-         col = unique(col.group)[group_index[i]], srt = 90, adj = c(1, 0.5), xpd = TRUE, cex = 0.4)
-  }
+  groups <- as.factor(x$samples$group)
+  group_index <- as.numeric(groups[pr.hc.c$order])
+  ggdendrogram(pr.hc.c, rotate = FALSE, theme_dendro=F) + theme_minimal() + theme(axis.text.x = element_text(face="bold", color=unique(col.group)[group_index])) + labs(title=paste("Hierarchical Clustering of normalized counts from samples of ", label, sep=""), y="Height",x="Samples") + ggpubr::rotate_x_text() + ylim(c(min(pr.hc.c$height),tail(sort(pr.hc.c$height),2)[1]))
   ### 8.4. Dendogram cluster raw norm log
   par(mfrow=c(1,1), mar=c(8, 4, 4, 2),col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
   pr.hc.c <- hclust(na.omit(dist(t(cpm(x2$counts,log=T)),method = "euclidean")))
   plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of log2 normalized counts from samples of ", label, sep=""), labels=targets$Filename, cex=0.5)
   # Colored:
-  par(mfrow=c(1,1), mar=c(14, 4, 4, 2),
-      col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", 
-      bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
-  plot(pr.hc.c, xlab = NA,sub="",
-       main = paste("Hierarchical Clustering of log2 normalized counts from samples of ", label, sep = ""), 
-       labels = FALSE, cex = 0.5)
-  groups <- as.factor(x$samples$group)  
-  group_index <- as.numeric(groups[pr.hc.c$order])  
-  heights <- as.dendrogram(pr.hc.c) %>% hang.dendrogram %>% get_leaves_attr("height")
-  leaf_order <- pr.hc.c$order
-  x_coords <- 1:length(leaf_order)
-  for (i in seq_along(x_coords)) {
-    text(x = x_coords[i], y = heights[i]+8, # Not sure why this offset is required in the log2 hclust, but it seems to be 
-         labels = targets$Filename[leaf_order[i]], 
-         col = unique(col.group)[group_index[i]], srt = 90, adj = c(1, 0.5), xpd = TRUE, cex = 0.4)
-  }
+  groups <- as.factor(x$samples$group)
+  group_index <- as.numeric(groups[pr.hc.c$order])
+  ggdendrogram(pr.hc.c, rotate = FALSE, theme_dendro=F) + theme_minimal() + theme(axis.text.x = element_text(face="bold", color=unique(col.group)[group_index])) + labs(title=paste("Hierarchical Clustering of normalized counts from samples of ", label, sep=""), y="Height",x="Samples") + ggpubr::rotate_x_text() + ylim(c(min(pr.hc.c$height),tail(sort(pr.hc.c$height),2)[1]))
+
   #tSNE
   #a <- tsne(x$counts,seed=100,labels=as.factor(targets$Type), perplex=perplex, legendtitle="Types",text=targets$Type ,dotsize=3, legendtextsize = 8) + ggtitle("Tsne") + theme(plot.title = element_text(face = "bold", size = 12, hjust = 0.5))
   #plot(a)
@@ -1148,9 +1126,11 @@ if (pattern_to_remove!="none"){
   group <- x$samples$group
   col.group <- as.factor(group)
   
-  color = grDevices::colors()[grep('gr(a|e)y', grDevices::colors(), invert = TRUE)] # Get a list of non-gray colors
-  contrast <- sapply(color,colorspace::contrast_ratio); contrast <- contrast[contrast>4] # Ensure a high contrast (>4 on W3C standard)
-  levels(col.group) <- sample(names(contrast), nlevels(col.group)); col.group <- as.character(col.group)
+  color = grDevices::colors()[grep('gr(a|e)y|white', grDevices::colors(), invert = TRUE)] # Get a list of non-gray or white colors
+  contrast <- sapply(color,colorspace::contrast_ratio); contrast <- contrast[contrast>4] # Ensure a high contrast here and below (>4 on W3C standard)
+  contrast2 <- unique(t(combn(unique(names(contrast)),2))[apply(t(combn(unique(names(contrast)),2)),1,function(x){colorspace::contrast_ratio(x[1],col2=x[2])}) > 4])
+  levels(col.group) <- sample(contrast2, nlevels(col.group)); col.group <- as.character(col.group)
+
 
   targets_pattern_to_remove <- targets[grep(pattern_to_remove,targets$Filename,invert=T),]
 
@@ -1311,43 +1291,18 @@ if (pattern_to_remove!="none"){
   pr.hc.c <- hclust(na.omit(dist(t(cpm(x2$counts,log=F)),method = "euclidean")))
   plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of normalized counts from samples of ", label, sep=""), labels=targets$Filename, cex=0.5)
   # Colored:
-  par(mfrow=c(1,1), mar=c(14, 4, 4, 2),
-      col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", 
-      bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
-  plot(pr.hc.c, xlab = NA,sub="",
-       main = paste("Hierarchical Clustering of normalized counts from samples of ", label, sep = ""), 
-       labels = FALSE, cex = 0.5)
-  groups <- as.factor(x$samples$group)  
-  group_index <- as.numeric(groups[pr.hc.c$order])  
-  heights <- as.dendrogram(pr.hc.c) %>% hang.dendrogram %>% get_leaves_attr("height")
-  leaf_order <- pr.hc.c$order
-  x_coords <- 1:length(leaf_order)
-  for (i in seq_along(x_coords)) {
-    text(x = x_coords[i], y = heights[i], 
-         labels = targets$Filename[leaf_order[i]], 
-         col = unique(col.group)[group_index[i]], srt = 90, adj = c(1, 0.5), xpd = TRUE, cex = 0.4)
-  }
+  groups <- as.factor(x$samples$group)
+  group_index <- as.numeric(groups[pr.hc.c$order])
+  ggdendrogram(pr.hc.c, rotate = FALSE, theme_dendro=F) + theme_minimal() + theme(axis.text.x = element_text(face="bold", color=unique(col.group)[group_index])) + labs(title=paste("Hierarchical Clustering of normalized counts from samples of ", label, sep=""), y="Height",x="Samples") + ggpubr::rotate_x_text() + ylim(c(min(pr.hc.c$height),tail(sort(pr.hc.c$height),2)[1]))
   ### 8.4. Dendogram cluster raw norm log
   par(mfrow=c(1,1), mar=c(8, 4, 4, 2),col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
   pr.hc.c <- hclust(na.omit(dist(t(cpm(x2$counts,log=T)),method = "euclidean")))
   plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of log2 normalized counts from samples of ", label, sep=""), labels=targets$Filename, cex=0.5)
   # Colored:
-  par(mfrow=c(1,1), mar=c(14, 4, 4, 2),
-      col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", 
-      bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
-  plot(pr.hc.c, xlab = NA,sub="",
-       main = paste("Hierarchical Clustering of log2 normalized counts from samples of ", label, sep = ""), 
-       labels = FALSE, cex = 0.5)
-  groups <- as.factor(x$samples$group)  
-  group_index <- as.numeric(groups[pr.hc.c$order])  
-  heights <- as.dendrogram(pr.hc.c) %>% hang.dendrogram %>% get_leaves_attr("height")
-  leaf_order <- pr.hc.c$order
-  x_coords <- 1:length(leaf_order)
-  for (i in seq_along(x_coords)) {
-    text(x = x_coords[i], y = heights[i]+8, # Not sure why this offset is required in the log2 hclust, but it seems to be 
-         labels = targets$Filename[leaf_order[i]], 
-         col = unique(col.group)[group_index[i]], srt = 90, adj = c(1, 0.5), xpd = TRUE, cex = 0.4)
-  }
+  groups <- as.factor(x$samples$group)
+  group_index <- as.numeric(groups[pr.hc.c$order])
+  ggdendrogram(pr.hc.c, rotate = FALSE, theme_dendro=F) + theme_minimal() + theme(axis.text.x = element_text(face="bold", color=unique(col.group)[group_index])) + labs(title=paste("Hierarchical Clustering of normalized counts from samples of ", label, sep=""), y="Height",x="Samples") + ggpubr::rotate_x_text() + ylim(c(min(pr.hc.c$height),tail(sort(pr.hc.c$height),2)[1]))
+
   dev.off()
 }
 
@@ -1393,9 +1348,11 @@ if (exists("adjusted_counts")){
   col.group <- as.factor(group)
   # levels(col.group) <- RColorBrewer::brewer.pal(nlevels(col.group), "Set1")
   # not enough colors sometimes, so I get random colors:
-  color = grDevices::colors()[grep('gr(a|e)y', grDevices::colors(), invert = TRUE)] # Get a list of non-gray colors
-  contrast <- sapply(color,colorspace::contrast_ratio); contrast <- contrast[contrast>4] # Ensure a high contrast (>4 on W3C standard)
-  levels(col.group) <- sample(names(contrast), nlevels(col.group)); col.group <- as.character(col.group)
+  color = grDevices::colors()[grep('gr(a|e)y|white', grDevices::colors(), invert = TRUE)] # Get a list of non-gray or white colors
+  contrast <- sapply(color,colorspace::contrast_ratio); contrast <- contrast[contrast>4] # Ensure a high contrast here and below (>4 on W3C standard)
+  contrast2 <- unique(t(combn(unique(names(contrast)),2))[apply(t(combn(unique(names(contrast)),2)),1,function(x){colorspace::contrast_ratio(x[1],col2=x[2])}) > 4])
+  levels(col.group) <- sample(contrast2, nlevels(col.group)); col.group <- as.character(col.group)
+
 
   # summary(lcpm)
   # table(rowSums(x$counts==0)==6)
@@ -1442,43 +1399,18 @@ if (exists("adjusted_counts")){
   pr.hc.c <- hclust(na.omit(dist(t(cpm(x2$counts,log=F)),method = "euclidean")))
   plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of normalized counts from samples of ", label, sep=""), labels=targets$Filename, cex=0.5)
   # Colored:
-  par(mfrow=c(1,1), mar=c(14, 4, 4, 2),
-      col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", 
-      bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
-  plot(pr.hc.c, xlab = NA,sub="",
-       main = paste("Hierarchical Clustering of normalized counts from samples of ", label, sep = ""), 
-       labels = FALSE, cex = 0.5)
-  groups <- as.factor(x$samples$group)  
-  group_index <- as.numeric(groups[pr.hc.c$order])  
-  heights <- as.dendrogram(pr.hc.c) %>% hang.dendrogram %>% get_leaves_attr("height")
-  leaf_order <- pr.hc.c$order
-  x_coords <- 1:length(leaf_order)
-  for (i in seq_along(x_coords)) {
-    text(x = x_coords[i], y = heights[i], 
-         labels = targets$Filename[leaf_order[i]], 
-         col = unique(col.group)[group_index[i]], srt = 90, adj = c(1, 0.5), xpd = TRUE, cex = 0.4)
-  }
+  groups <- as.factor(x$samples$group)
+  group_index <- as.numeric(groups[pr.hc.c$order])
+  ggdendrogram(pr.hc.c, rotate = FALSE, theme_dendro=F) + theme_minimal() + theme(axis.text.x = element_text(face="bold", color=unique(col.group)[group_index])) + labs(title=paste("Hierarchical Clustering of normalized counts from samples of ", label, sep=""), y="Height",x="Samples") + ggpubr::rotate_x_text() + ylim(c(min(pr.hc.c$height),tail(sort(pr.hc.c$height),2)[1]))
+
   ### 8.4. Dendogram cluster raw norm log
   par(mfrow=c(1,1), mar=c(8, 4, 4, 2),col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
   pr.hc.c <- hclust(na.omit(dist(t(cpm(x2$counts,log=T)),method = "euclidean")))
   plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of log2 normalized counts from samples of ", label, sep=""), labels=targets$Filename, cex=0.5)
   # Colored:
-  par(mfrow=c(1,1), mar=c(14, 4, 4, 2),
-      col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", 
-      bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
-  plot(pr.hc.c, xlab = NA,sub="",
-       main = paste("Hierarchical Clustering of log2 normalized counts from samples of ", label, sep = ""), 
-       labels = FALSE, cex = 0.5)
-  groups <- as.factor(x$samples$group)  
-  group_index <- as.numeric(groups[pr.hc.c$order])  
-  heights <- as.dendrogram(pr.hc.c) %>% hang.dendrogram %>% get_leaves_attr("height")
-  leaf_order <- pr.hc.c$order
-  x_coords <- 1:length(leaf_order)
-  for (i in seq_along(x_coords)) {
-    text(x = x_coords[i], y = heights[i]+8, # Not sure why this offset is required in the log2 hclust, but it seems to be 
-         labels = targets$Filename[leaf_order[i]], 
-         col = unique(col.group)[group_index[i]], srt = 90, adj = c(1, 0.5), xpd = TRUE, cex = 0.4)
-  }
+  groups <- as.factor(x$samples$group)
+  group_index <- as.numeric(groups[pr.hc.c$order])
+  ggdendrogram(pr.hc.c, rotate = FALSE, theme_dendro=F) + theme_minimal() + theme(axis.text.x = element_text(face="bold", color=unique(col.group)[group_index])) + labs(title=paste("Hierarchical Clustering of normalized counts from samples of ", label, sep=""), y="Height",x="Samples") + ggpubr::rotate_x_text() + ylim(c(min(pr.hc.c$height),tail(sort(pr.hc.c$height),2)[1]))
 
   #tSNE
   #a <- tsne(x$counts,seed=100,labels=as.factor(targets$Type), perplex=perplex, legendtitle="Types",text=targets$Type ,dotsize=3, legendtextsize = 8) + ggtitle("Tsne") + theme(plot.title = element_text(face = "bold", size = 12, hjust = 0.5))
@@ -1510,9 +1442,11 @@ if (pattern_to_remove!="none"){
   group <- x$samples$group
   col.group <- as.factor(group)
   
-  color = grDevices::colors()[grep('gr(a|e)y', grDevices::colors(), invert = TRUE)] # Get a list of non-gray colors
-  contrast <- sapply(color,colorspace::contrast_ratio); contrast <- contrast[contrast>4] # Ensure a high contrast (>4 on W3C standard)
-  levels(col.group) <- sample(names(contrast), nlevels(col.group)); col.group <- as.character(col.group)
+  color = grDevices::colors()[grep('gr(a|e)y|white', grDevices::colors(), invert = TRUE)] # Get a list of non-gray or white colors
+  contrast <- sapply(color,colorspace::contrast_ratio); contrast <- contrast[contrast>4] # Ensure a high contrast here and below (>4 on W3C standard)
+  contrast2 <- unique(t(combn(unique(names(contrast)),2))[apply(t(combn(unique(names(contrast)),2)),1,function(x){colorspace::contrast_ratio(x[1],col2=x[2])}) > 4])
+  levels(col.group) <- sample(contrast2, nlevels(col.group)); col.group <- as.character(col.group)
+
 
   targets_pattern_to_remove <- targets[grep(pattern_to_remove,targets$Filename,invert=T),]
 
