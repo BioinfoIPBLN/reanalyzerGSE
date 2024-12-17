@@ -760,14 +760,11 @@ pattern_to_remove <- args[14] # if not provided, "no"
 ###### Performing Venn diagrams for the DEGs:
 if (venn_volcano!="no"){  
   Venn_funct <- function(files){
-    list_of_tables <- lapply(files, read.delim)
-    group <- sub("\\..*$", "",sub("DGE_limma_timecourse_|DGE_analysis_","",basename(files))); col.group <- as.factor(group)
+      list_of_tables <- lapply(files, read.delim)
+      group <- sub("\\..*$", "",sub("DGE_limma_timecourse_|DGE_analysis_","",basename(files))); col.group <- as.factor(group)
       color = grDevices::colors()[grep('gr(a|e)y', grDevices::colors(), invert = TRUE)] # Get a list of non-gray colors
-      color_rgb <- col2rgb(color); luminance <- 0.299*color_rgb[1,] + 0.587*color_rgb[2,] + 0.114*color_rgb[3,]
-      # Filter out light colors based on a luminance threshold
-      color <- color[luminance < 400] # You can adjust the threshold value as needed
-      levels(col.group) <- sample(color, nlevels(col.group))
-      col.group <- as.character(col.group)
+      contrast <- sapply(color,colorspace::contrast_ratio); contrast <- contrast[contrast>4] # Ensure a high contrast (>4 on W3C standard)
+      levels(col.group) <- sample(names(contrast), nlevels(col.group)); col.group <- as.character(col.group)
       list_of_ids <- lapply(list_of_tables,function(y){y$Gene_ID[y$FDR<0.05]})
       names(list_of_ids) <- group
   
@@ -897,12 +894,8 @@ save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
   # levels(col.group) <- RColorBrewer::brewer.pal(nlevels(col.group), "Set1")
   # not enough colors sometimes, so I get random colors:
   color = grDevices::colors()[grep('gr(a|e)y', grDevices::colors(), invert = TRUE)] # Get a list of non-gray colors
-  color_rgb <- col2rgb(color)
-  luminance <- 0.299*color_rgb[1,] + 0.587*color_rgb[2,] + 0.114*color_rgb[3,]
-  # Filter out light colors based on a luminance threshold
-  color <- color[luminance < 400] # You can adjust the threshold value as needed
-  levels(col.group) <- sample(color, nlevels(col.group))
-  col.group <- as.character(col.group)
+  contrast <- sapply(color,colorspace::contrast_ratio); contrast <- contrast[contrast>4] # Ensure a high contrast (>4 on W3C standard)
+  levels(col.group) <- sample(names(contrast), nlevels(col.group)); col.group <- as.character(col.group)
 
   # summary(lcpm)
   # table(rowSums(x$counts==0)==6)
@@ -1156,12 +1149,8 @@ if (pattern_to_remove!="none"){
   col.group <- as.factor(group)
   
   color = grDevices::colors()[grep('gr(a|e)y', grDevices::colors(), invert = TRUE)] # Get a list of non-gray colors
-  color_rgb <- col2rgb(color)
-  luminance <- 0.299*color_rgb[1,] + 0.587*color_rgb[2,] + 0.114*color_rgb[3,]
-  
-  color <- color[luminance < 400] # You can adjust the threshold value as needed
-  levels(col.group) <- sample(color, nlevels(col.group))
-  col.group <- as.character(col.group)
+  contrast <- sapply(color,colorspace::contrast_ratio); contrast <- contrast[contrast>4] # Ensure a high contrast (>4 on W3C standard)
+  levels(col.group) <- sample(names(contrast), nlevels(col.group)); col.group <- as.character(col.group)
 
   targets_pattern_to_remove <- targets[grep(pattern_to_remove,targets$Filename,invert=T),]
 
@@ -1404,9 +1393,9 @@ if (exists("adjusted_counts")){
   col.group <- as.factor(group)
   # levels(col.group) <- RColorBrewer::brewer.pal(nlevels(col.group), "Set1")
   # not enough colors sometimes, so I get random colors:
-  color = gplots::col2hex(grDevices::colors()[grep('gr(a|e)y', grDevices::colors(), invert = T)])
-  levels(col.group) <- sample(color,nlevels(col.group))
-  col.group <- as.character(col.group)
+  color = grDevices::colors()[grep('gr(a|e)y', grDevices::colors(), invert = TRUE)] # Get a list of non-gray colors
+  contrast <- sapply(color,colorspace::contrast_ratio); contrast <- contrast[contrast>4] # Ensure a high contrast (>4 on W3C standard)
+  levels(col.group) <- sample(names(contrast), nlevels(col.group)); col.group <- as.character(col.group)
 
   # summary(lcpm)
   # table(rowSums(x$counts==0)==6)
@@ -1487,9 +1476,9 @@ if (pattern_to_remove!="none"){
   group <- x$samples$group
   col.group <- as.factor(group)
   
-  color = gplots::col2hex(grDevices::colors()[grep('gr(a|e)y', grDevices::colors(), invert = T)])
-  levels(col.group) <- sample(color,nlevels(col.group))
-  col.group <- as.character(col.group)
+  color = grDevices::colors()[grep('gr(a|e)y', grDevices::colors(), invert = TRUE)] # Get a list of non-gray colors
+  contrast <- sapply(color,colorspace::contrast_ratio); contrast <- contrast[contrast>4] # Ensure a high contrast (>4 on W3C standard)
+  levels(col.group) <- sample(names(contrast), nlevels(col.group)); col.group <- as.character(col.group)
 
   targets_pattern_to_remove <- targets[grep(pattern_to_remove,targets$Filename,invert=T),]
 
