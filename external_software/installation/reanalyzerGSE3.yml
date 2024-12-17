@@ -466,6 +466,7 @@ dependencies:
   - r-getopt=1.20.4=r43ha770c72_0
   - r-getoptlong=1.0.5=r43hc72bb7e_2
   - r-ggbeeswarm=0.7.2=r43hc72bb7e_1
+  - r-ggdendro=0.1.23=r43h6115d3f_0
   - r-ggforce=0.4.1=r43h884c59f_0
   - r-ggfortify=0.4.16=r43hc72bb7e_1
   - r-ggfun=0.1.4=r43hc72bb7e_0
