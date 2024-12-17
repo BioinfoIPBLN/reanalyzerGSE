@@ -1133,14 +1133,14 @@ sub bowtie1{
 		
 		if(lc($Seqtype) eq "pairedend" or lc($Seqtype) eq "paired" or lc($Seqtype) eq "paired-end"){
 			#Check if the file is a paired-end file
-			if($file =~ /.*_R?1.*/){
+			if($file =~ /.*_R?1\.f.*/){
 				#it contains the _1 label
 				my $mate_file=$file;
-				if($file =~  /.*_R1.*/){
-					$mate_file=~s/_R1(.+)/_R2$1/g;
+				if($file =~ /.*_R1\.f.*/){
+					$mate_file =~ s/_R1\.f(.+)/_R2\.f$1/g;
 				}
 				else{
-					$mate_file=~s/_1(.+)/_2$1/g;
+					$mate_file =~ s/_1\.f(.+)/_2\.f$1/g;
 				}
 				if(-e $mate_file){
 					if($file ne $mate_file){
@@ -1519,14 +1519,14 @@ sub bowtie2{
 			print STDOUT "\tBOWTIE 2 :: ".date()." Checking $file for bowtie2 (paired-end) analysis\n" if($verbose);
 			
 			#Check if the file is a paired-end file
-			if($file =~ /.*_R?1.*/){
+			if($file =~ /.*_R?1\.f.*/){
 				#it contains the _1 label
 				my $mate_file=$file;
-				if($file =~  /.*_R1.*/){
-					$mate_file=~s/_R1(.+)/_R2$1/g;
+				if($file =~ /.*_R1\.f.*/){
+					$mate_file =~ s/_R1\.f(.+)/_R2\.f$1/g;
 				}
 				else{
-					$mate_file=~s/_1(.+)/_2$1/g;
+					$mate_file =~ s/_1\.f(.+)/_2\.f$1/g;
 				}
 				if(-e $mate_file){
 					if($file ne $mate_file){
@@ -1755,14 +1755,14 @@ sub TopHat{
 		my $command;
 		if(lc($Seqtype) eq "pairedend" or lc($Seqtype) eq "paired" or lc($Seqtype) eq "paired-end"){
 			#Check if the file is a paired-end file
-			if($file =~ /.*_R?1.*/){
+			if($file =~ /.*_R?1\.f.*/){
 				#it contains the _1 label
 				my $mate_file=$file;
-				if($file =~  /.*_R1.*/){
-					$mate_file=~s/_R1(.+)/_R2$1/g;
+				if($file =~ /.*_R1\.f.*/){
+					$mate_file =~ s/_R1\.f(.+)/_R2\.f$1/g;
 				}
 				else{
-					$mate_file=~s/_1(.+)/_2$1/g;
+					$mate_file =~ s/_1\.f(.+)/_2\.f$1/g;
 				}
 				if(-e $mate_file){
 					if($file ne $mate_file){
@@ -2074,14 +2074,14 @@ sub bwa{
 			print LOG "BWA :: ".date()." Checking $file for bwa analysis (Paired End)\n";
 			
 			#Check if the file is a paired-end file
-			if($file =~ /.*_R?1.*/){
+			if($file =~ /.*_R?1\.f.*/){
 				#it contains the _1 label
 				my $mate_file=$file;
-				if($file =~  /.*_R1.*/){
-					$mate_file=~s/_R1(.+)/_R2$1/g;
+				if($file =~ /.*_R1\.f.*/){
+					$mate_file =~ s/_R1\.f(.+)/_R2\.f$1/g;
 				}
 				else{
-					$mate_file=~s/_1(.+)/_2$1/g;
+					$mate_file =~ s/_1\.f(.+)/_2\.f$1/g;
 				}
 				if(-e $mate_file){
 					if($file ne $mate_file){						
@@ -2697,14 +2697,14 @@ sub hisat2{
 			my $memorylimit_in_mb = int($memorylimit / 1000000);
 			my $memorylimit_div = int($memorylimit / ($parallelnumber + 1));
 			my $memorylimit_div_mb = int($memorylimit_in_mb / ($parallelnumber + 1));
-			if($file =~ /.*_R?1.*/){
+			if($file =~ /.*_R?1\.f.*/){
 				#it contains the _1 label
 				my $mate_file=$file;
-				if($file =~  /.*_R1.*/){
-					$mate_file=~s/_R1(.+)/_R2$1/g;
+				if($file =~ /.*_R1\.f.*/){
+					$mate_file =~ s/_R1\.f(.+)/_R2\.f$1/g;
 				}
 				else{
-					$mate_file=~s/_1(.+)/_2$1/g;
+					$mate_file =~ s/_1\.f(.+)/_2\.f$1/g;
 				}
 				if(-e $mate_file){
 					if($file ne $mate_file){						
@@ -3069,14 +3069,14 @@ sub star{
 			print STDOUT "\tSTAR :: ".date()." Checking $file for star (paired-end) analysis\n" if($verbose);
 			
 			#Check if the file is a paired-end file
-			if($file =~ /.*_R?1.*/){
+			if($file =~ /.*_R?1\.f.*/){
 				#it contains the _1 label
 				my $mate_file=$file;
-				if($file =~  /.*_R1.*/){
-					$mate_file=~s/_R1(.+)/_R2$1/g;
+				if($file =~ /.*_R1\.f.*/){
+					$mate_file =~ s/_R1\.f(.+)/_R2\.f$1/g;
 				}
 				else{
-					$mate_file=~s/_1(.+)/_2$1/g;
+					$mate_file =~ s/_1\.f(.+)/_2\.f$1/g;
 				}
 				if(-e $mate_file){
 					if($file ne $mate_file){
