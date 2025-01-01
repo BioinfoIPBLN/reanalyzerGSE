@@ -71,7 +71,7 @@ pattern_to_remove <- args[14] # if not provided, "no"
     adjusted_counts <- sva::ComBat_seq(count_matrix, batch=as.numeric(batch), group=NULL)
     write.table(batch,file=paste0(path,"/GEO_info/batch_vector.txt"),quote = F,row.names = F, col.names = F,sep = "\n"); print("BATCH DONE_1")
     write.table(adjusted_counts,
-                file=paste0(output_dir,"/counts_adjusted_ComBat_seq.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
+                file=paste0(output_dir,"/counts_adjusted.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
   } else if (file.exists(paste0(path,"/GEO_info/batch_vector.txt")) && file.exists(paste0(path,"/GEO_info/batch_biological_variables.txt"))){
     count_matrix <- as.matrix(gene_counts[,grep("Gene_ID|Length",colnames(gene_counts),invert=T)])
     batch <- data.table::fread(paste0(path,"/GEO_info/batch_vector.txt"),head=F,sep="*")$V1
@@ -83,7 +83,7 @@ pattern_to_remove <- args[14] # if not provided, "no"
       write.table(batch,file=paste0(path,"/GEO_info/batch_vector.txt"),quote = F,row.names = F, col.names = F,sep = "\n")
       write.table(group,file=paste0(path,"/GEO_info/batch_biological_variables.txt"),quote = F,row.names = F, col.names = F,sep = "\n"); print("BATCH DONE_2")
       write.table(adjusted_counts,
-                file=paste0(output_dir,"/counts_adjusted_ComBat_seq.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
+                file=paste0(output_dir,"/counts_adjusted.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
     } else {
       covar_mat <- matrix(rep(1,stringr::str_count(gsub(" .*","",biological_cov),",")+1))
       for (i in 1:(stringr::str_count(biological_cov," ") + 1)){
@@ -94,7 +94,7 @@ pattern_to_remove <- args[14] # if not provided, "no"
       write.table(batch,file=paste0(path,"/GEO_info/batch_vector.txt"),quote = F,row.names = F, col.names = F,sep = "\n")
       write.table(covar_mat,file=paste0(path,"/GEO_info/batch_biological_variables.txt"),quote = F,row.names = F, col.names = F,sep = "\t"); print("BATCH DONE_3")
       write.table(adjusted_counts,
-                file=paste0(output_dir,"/Raw_counts_adjusted_ComBat_seq.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
+                file=paste0(output_dir,"/Raw_counts_adjusted.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
     }
 
   }
@@ -256,43 +256,43 @@ pattern_to_remove <- args[14] # if not provided, "no"
               file=paste0(output_dir,"/RPKM_counts_genes_log2_0.1_categ.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
 
   
-###### Similar to above, obtain RPKM counts but from the ComBat-Seq-adjusted counts instead of the raw counts
+###### Similar to above, obtain RPKM counts but from the adjusted counts instead of the raw counts (ComBat-Seq, edgeR...)
   if (exists("adjusted_counts")){
-    edgeR_object_combat <- DGEList(counts=adjusted_counts,
+    edgeR_object_adjusted <- DGEList(counts=adjusted_counts,
                                    group=pheno$condition,
                                    genes=gene_counts[,c(grep("Gene_ID",colnames(gene_counts)),grep("Length",colnames(gene_counts)))])
-    cat(paste0("Number of genes combat before filter: ", nrow(edgeR_object_combat)),"\n")
-    edgeR_object_prefilter_combat <- edgeR_object_combat
-    edgeR_object_combat <- filter(filter=filter_option,edgeR_object_combat) # Make sure of use bin to capture Cort and the lower expressed genes
-    cat(paste0("Number of genes combat after filter: ", nrow(edgeR_object_combat)),"\n")
-    #edgeR_object_norm_combat <- calcNormFactors(edgeR_object_combat)
-    #edgeR_object_norm_combat <- estimateCommonDisp(edgeR_object_norm_combat, robust=TRUE)
-    edgeR_object_norm_combat <- normLibSizes(edgeR_object_combat)
-    edgeR_object_norm_combat <- estimateDisp(edgeR_object_norm_combat, robust=TRUE)
-    if (is.na(edgeR_object_norm_combat$common.dispersion)){
-      edgeR_object_norm_combat$common.dispersion <- 0.4 ^ 2
+    cat(paste0("Counts adjustment... Number of genes before filter: ", nrow(edgeR_object_adjusted)),"\n")
+    edgeR_object_prefilter_adjusted <- edgeR_object_adjusted
+    edgeR_object_adjusted <- filter(filter=filter_option,edgeR_object_adjusted) # Make sure of use bin to capture Cort and the lower expressed genes
+    cat(paste0("Counts adjustment... Number of genes after filter: ", nrow(edgeR_object_adjusted)),"\n")
+    #edgeR_object_norm_adjusted <- calcNormFactors(edgeR_object_adjusted)
+    #edgeR_object_norm_adjusted <- estimateCommonDisp(edgeR_object_norm_adjusted, robust=TRUE)
+    edgeR_object_norm_adjusted <- normLibSizes(edgeR_object_adjusted)
+    edgeR_object_norm_adjusted <- estimateDisp(edgeR_object_norm_adjusted, robust=TRUE)
+    if (is.na(edgeR_object_norm_adjusted$common.dispersion)){
+      edgeR_object_norm_adjusted$common.dispersion <- 0.4 ^ 2
       # https://www.bioconductor.org/packages/devel/bioc/vignettes/edgeR/inst/doc/edgeRUsersGuide.pdf
       cat("Estimating Dispersion... Errors or warnings? Likely because no replicates, addressing providing a fixed value for dispersion, but do not trust comparative analyses because it's likely not accurate...")
     }
-    #edgeR_object_norm_combat <- estimateTagwiseDisp(edgeR_object_norm_combat)
-    gene_counts_rpkm_combat <- as.data.frame(rpkm(edgeR_object_norm_combat,normalized.lib.sizes=TRUE))
-    colnames(gene_counts_rpkm_combat) <- rownames(edgeR_object_norm_combat$samples)
-    gene_counts_rpkm_combat$Gene_ID <- stringr::str_to_title(rownames(gene_counts_rpkm_combat))
+    #edgeR_object_norm_adjusted <- estimateTagwiseDisp(edgeR_object_norm_adjusted)
+    gene_counts_rpkm_adjusted <- as.data.frame(rpkm(edgeR_object_norm_adjusted,normalized.lib.sizes=TRUE))
+    colnames(gene_counts_rpkm_adjusted) <- rownames(edgeR_object_norm_adjusted$samples)
+    gene_counts_rpkm_adjusted$Gene_ID <- stringr::str_to_title(rownames(gene_counts_rpkm_adjusted))
 
-    gene_counts_rpkm_combat_to_write <- gene_counts_rpkm_combat[,c(grep("Gene_ID",colnames(gene_counts_rpkm_combat)),grep("Gene_ID",colnames(gene_counts_rpkm_combat),invert=T))]
-    gene_counts_rpkm_combat_to_write <- gene_counts_rpkm_combat_to_write[,c("Gene_ID",sort(colnames(gene_counts_rpkm_combat_to_write)[-1]))]
-    write.table(gene_counts_rpkm_combat_to_write,
-          file=paste0(output_dir,"/RPKM_counts_ComBat_seq_genes.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
-    gene_counts_rpkm_combat_log <- log2(gene_counts_rpkm_combat_to_write[,grep("Gene_ID",colnames(gene_counts_rpkm_combat_to_write),invert=T)] + 0.1)
-    gene_counts_rpkm_combat_log <- cbind(gene_counts_rpkm_combat_to_write$Gene_ID,gene_counts_rpkm_combat_log)
-    colnames(gene_counts_rpkm_combat_log)[1] <- "Gene_ID"
-    write.table(gene_counts_rpkm_combat_log,
-          file=paste0(output_dir,"/RPKM_counts_ComBat_seq_genes_log2_0.1.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
-    tpm_counts <- rpkm_to_tpm(gene_counts_rpkm_combat_to_write[,grep("Gene_ID",colnames(gene_counts_rpkm_to_write),invert=T)]); rownames(tpm_counts) <- gene_counts_rpkm_combat_to_write$Gene_ID
+    gene_counts_rpkm_adjusted_to_write <- gene_counts_rpkm_adjusted[,c(grep("Gene_ID",colnames(gene_counts_rpkm_adjusted)),grep("Gene_ID",colnames(gene_counts_rpkm_adjusted),invert=T))]
+    gene_counts_rpkm_adjusted_to_write <- gene_counts_rpkm_adjusted_to_write[,c("Gene_ID",sort(colnames(gene_counts_rpkm_adjusted_to_write)[-1]))]
+    write.table(gene_counts_rpkm_adjusted_to_write,
+          file=paste0(output_dir,"/RPKM_counts_adjusted_genes.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
+    gene_counts_rpkm_adjusted_log <- log2(gene_counts_rpkm_adjusted_to_write[,grep("Gene_ID",colnames(gene_counts_rpkm_adjusted_to_write),invert=T)] + 0.1)
+    gene_counts_rpkm_adjusted_log <- cbind(gene_counts_rpkm_adjusted_to_write$Gene_ID,gene_counts_rpkm_adjusted_log)
+    colnames(gene_counts_rpkm_adjusted_log)[1] <- "Gene_ID"
+    write.table(gene_counts_rpkm_adjusted_log,
+          file=paste0(output_dir,"/RPKM_counts_adjusted_genes_log2_0.1.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
+    tpm_counts <- rpkm_to_tpm(gene_counts_rpkm_adjusted_to_write[,grep("Gene_ID",colnames(gene_counts_rpkm_to_write),invert=T)]); rownames(tpm_counts) <- gene_counts_rpkm_adjusted_to_write$Gene_ID
     write.table(tpm_counts,
-                file=paste0(output_dir,"/TPM_counts_ComBat_seq_genes.txt"),quote = F,row.names = T, col.names = T,sep = "\t")
+                file=paste0(output_dir,"/TPM_counts_adjusted_genes.txt"),quote = F,row.names = T, col.names = T,sep = "\t")
     write.table(log2(tpm_counts+0.1),
-                file=paste0(output_dir,"/TPM_counts_ComBat_seq_genes_log2_0.1.txt"),quote = F,row.names = T, col.names = T,sep = "\t")
+                file=paste0(output_dir,"/TPM_counts_adjusted_genes_log2_0.1.txt"),quote = F,row.names = T, col.names = T,sep = "\t")
   }
   print(paste0("Counts written. Current date: ",date()))
 
@@ -308,7 +308,7 @@ pattern_to_remove <- args[14] # if not provided, "no"
   if (!exists("adjusted_counts")){
     gene_counts_rpkm_to_plot <- gene_counts_rpkm
   } else {
-    gene_counts_rpkm_to_plot <- gene_counts_rpkm_combat
+    gene_counts_rpkm_to_plot <- gene_counts_rpkm_adjusted
   }
 
   for (i in unlist(strsplit(genes,","))){
@@ -842,10 +842,10 @@ save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
 R_qc_figs.R path input_dir output_dir edgeR_object_prefilter edgeR_object edgeR_object_norm pattern_to_remove
 ###### Add the figures using the counts corrected by ComBat-seq:
 if (exists("adjusted_counts")){
-  cat("\n\nRemember that batch effect correction/covariables have been only provided to Combat-Seq for visualization purposes, if you need to include covariables in the DGE model after checking the visualization, please rerun the main program using the argument -C\n\n")
-  cat("\nQC_PDF ComBat-seq counts\n")
-  cat("\nRemember that you have requested batch effect correction, so you have to mind the figures in this QC_PDF from ComBat-seq counts...\n")
-  R_qc_figs.R path input_dir output_dir edgeR_object_prefilter_combat edgeR_object_combat edgeR_object_norm_combat pattern_to_remove 
+  cat("\n\nRemember that batch effect correction/covariables have been only provided to Combat-Seq/edgeR for visualization purposes, if you need to include covariables in the DGE model after checking the visualization, please rerun the main program using the argument -C\n\n")
+  cat("\nQC_PDF adjuste counts\n")
+  cat("\nRemember that you have requested batch effect correction/count adjustment, so you have to mind the figures in this QC_PDF from ComBat-seq/edgeR counts...\n")
+  R_qc_figs.R path input_dir output_dir edgeR_object_prefilter_adjusted edgeR_object_adjusted edgeR_object_norm_adjusted pattern_to_remove 
 }
 
 
