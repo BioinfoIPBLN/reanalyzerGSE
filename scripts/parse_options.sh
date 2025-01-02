@@ -13,7 +13,7 @@ for argument in $options; do
 
 ### Gather the parameters, default values, exit if essential not provided...
 	case $argument in
-		-h*) echo "reanalyzerGSE v2.10.0 - usage: reanalyzerGSE.pk.sh [options]
+		-h*) echo "reanalyzerGSE v3.0.0 - usage: reanalyzerGSE.pk.sh [options]
 	        -h | -help # Type this to get help
 	        -options | Provide the file containing the parameters to be used. You can adapt the file 'manual_options.txt' provided in the scripts folder, alternative to manually input in the command line all the options...)
 	        
@@ -42,7 +42,7 @@ for argument in $options; do
 	        -R | -number_reads_to_subsample # Information and number of reads to subsample to the sequences before the analyses (none by default, a path to the 'reads_numbers.txt' file from a previous execution and a number of reads must be provided, separated with comma, and proportions will be computed, with all samples being scaled to approximately, +- 10% of that number)
 	        -bv | -batch_vector # Comma-separated list of numbers for use as batch vector with Combat-seq
 	        -bc | -batch_biological_covariable # Comma-separated list of numbers for use as batch vector of covariables of biological interest with Combat-seq
-	        -C | -covariables # Please input a comma-separated list for the covariable that should be included in the edgeR model for DGE (for now only one covariable allowed, for example a proven batch effect) 
+	        -C | -covariables # Please input a comma-separated list for the covariable that will be included in the edgeR model for DGE and in limma::removeBatchEffect as covariate (only one covariable allowed, for example a proven batch effect, and adjusted_counts will be overwritten by ComBat-seq if activated)
 	        -T | -target # Protopical target file for attempts to differential gene expression analyses (containing filenames and covariates, automatically built if not provided)
 	
 	        #### Activate alternative modes:
