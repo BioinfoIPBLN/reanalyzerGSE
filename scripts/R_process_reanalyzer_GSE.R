@@ -63,7 +63,15 @@ pattern_to_remove <- args[14] # if not provided, "no"
     result_cdseq$estProp; cat("\n\n")
   }
 
-###### Batch effect correction if requested:
+###### Batch effect correction/count adjustment if requested:
+  # First check if covariable has been provided, and then that will be used with limma's removeBatchEffect() to perform an adjustment. 
+  # If batch has also been provided, then it will be overwritten immediately below, as ComBat_seq is the preferred method
+  if(covariab != "none"){
+    count_matrix <- as.matrix(gene_counts[,grep("Gene_ID|Length",colnames(gene_counts),invert=T)])
+    adjusted_counts <- limma::removeBatchEffect(x=log2(count_matrix + 0.1),covariates=as.factor(unlist(strsplit(as.character(covariab),","))))
+    write.table(adjusted_counts,
+                file=paste0(output_dir,"/counts_adjusted.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
+  }
   if (file.exists(paste0(path,"/GEO_info/batch_vector.txt")) && !file.exists(paste0(path,"/GEO_info/batch_biological_variables.txt"))){
     count_matrix <- as.matrix(gene_counts[,grep("Gene_ID|Length",colnames(gene_counts),invert=T)])
     batch <- data.table::fread(paste0(path,"/GEO_info/batch_vector.txt"),head=F,sep="*")$V1
@@ -96,7 +104,6 @@ pattern_to_remove <- args[14] # if not provided, "no"
       write.table(adjusted_counts,
                 file=paste0(output_dir,"/Raw_counts_adjusted.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
     }
-
   }
 
   pheno <- as.data.frame(data.table::fread(paste0(path,"/GEO_info/samples_info.txt"),head=F))
