@@ -846,13 +846,13 @@ save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
 
 
 ###### QC PDF from Bioinfo:
-R_qc_figs.R path input_dir output_dir edgeR_object_prefilter edgeR_object edgeR_object_norm pattern_to_remove
+system(paste("R_qc_figs.R",path,input_dir,output_dir,edgeR_object_prefilter,edgeR_object,edgeR_object_norm,pattern_to_remove,sep=" "))
 ###### Add the figures using the counts corrected by ComBat-seq:
 if (exists("adjusted_counts")){
   cat("\n\nRemember that batch effect correction/covariables have been only provided to Combat-Seq/limma for visualization purposes, to include covariables in the DGE model after checking the visualization the argument -C will be used\n\n")
   cat("\nQC_PDF adjuste counts\n")
   cat("\nRemember that you have requested batch effect correction/count adjustment, so you have to mind the figures in this QC_PDF from ComBat-seq/limma counts...\n")
-  R_qc_figs.R path input_dir output_dir edgeR_object_prefilter_adjusted edgeR_object_adjusted edgeR_object_norm_adjusted pattern_to_remove 
+  system(paste("R_qc_figs.R",path,input_dir,output_dir,edgeR_object_prefilter_adjusted,edgeR_object_adjusted,edgeR_object_norm_adjusted,pattern_to_remove))
 }
 
 
