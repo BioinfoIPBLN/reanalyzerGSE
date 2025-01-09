@@ -102,7 +102,7 @@ pattern_to_remove <- args[14] # if not provided, "no"
       write.table(batch,file=paste0(path,"/GEO_info/batch_vector.txt"),quote = F,row.names = F, col.names = F,sep = "\n")
       write.table(covar_mat,file=paste0(path,"/GEO_info/batch_biological_variables.txt"),quote = F,row.names = F, col.names = F,sep = "\t"); print("BATCH DONE_3")
       write.table(adjusted_counts,
-                file=paste0(output_dir,"/Raw_counts_adjusted.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
+                file=paste0(output_dir,"/counts_adjusted.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
     }
   }
 

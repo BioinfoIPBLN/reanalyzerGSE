@@ -1,15 +1,18 @@
 #!/usr/bin/env Rscript
+load(file.path(commandArgs(trailingOnly=TRUE)[3],"QC_and_others/globalenvir.RData"))
+
 args = commandArgs(trailingOnly=TRUE)
 path <- args[1]
 input_dir <- args[2]
 output_dir <- args[3]
-edgeR_object_prefilter <- args[4] 
-edgeR_object <- args[5] 
-edgeR_object_norm <- args[6]
+edgeR_object_prefilter <- eval(as.symbol(args[4]))
+edgeR_object <- eval(as.symbol(args[5]))
+edgeR_object_norm <- eval(as.symbol(args[6]))
 pattern_to_remove <- args[7]
+label <- basename(path)
+label2 <- sub(".*_","",args[6])
 
-  
-cat("\nPerforming QC_PDF...\n");print(paste0("Current date: ",date()))
+cat(paste0("\nPerforming QC_PDF_",label,"_",label2,"...\n"));print(paste0("Current date: ",date()))
 
 suppressMessages(library("edgeR",quiet = T,warn.conflicts = F))
 suppressMessages(library("RColorBrewer",quiet = T,warn.conflicts = F))
@@ -31,8 +34,6 @@ suppressMessages(library("dplyr",quiet = T,warn.conflicts = F))
 suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
 
 ### Prepare counts:
-  label <- basename(path)
-
   lcpm_prefilter <- cpm(edgeR_object_prefilter, log=TRUE)  # This is log2 and normalized due to the argument normalized.lib.sizes=TRUE by default in cpm...
   if (pattern_to_remove!="none"){
     cat("\n\nRepeating QC figures removing the samples matching: ")
@@ -84,7 +85,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
 
 
 ### QC figures:
-  pdf(paste0(output_dir,"/QC_and_others/",label,"_QC.pdf"),paper="A4")
+  pdf(paste0(output_dir,"/QC_and_others/",label,"_",label2,"_QC.pdf"),paper="A4")
   
 
   ### 0 Reminder of the samples:
