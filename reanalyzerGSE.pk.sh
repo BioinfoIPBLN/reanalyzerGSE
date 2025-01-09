@@ -128,8 +128,8 @@ fi
 ###### STEP 1a. Download and process fastq files from the GEO ID provided:
 if [[ $debug_step == "all" || $debug_step == "step1a" ]]; then
 	echo -e "\n\nSTEP 1a: Starting...\nCurrent date/time: $(date)\n\n"
- 	mkdir -p $TMPDIR
 	rm -rf $seqs_location
+	mkdir -p $TMPDIR
 	if [[ $input == G* ]]; then
 		if [ "$stop" == "yes" ]; then
 			echo "You have requested a stop to manually provide the SRR ids, or potentially modify other files that may have not been detected properly from GEO, and were not correct, or you just want to adapt some of them. Please double check or manually modify the files GEO_info/srr_ids.txt, samples_info.txt, sample_names.txt, phenodata_extracted.txt, library_layout_info.txt, organism.txt, design_files, etc. The pipeline is stopped. Please press space to continue or Ctrl + C to exit..."
@@ -236,7 +236,7 @@ fi
 ### STEP 1b. Process if not required to download from NCBI/GEO the metadata and raw reads provided locally:
 if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
 	echo -e "\n\nSTEP 1b: Starting...\nCurrent date/time: $(date)\n\n"
- 	mkdir -p $TMPDIR
+	mkdir -p $TMPDIR
 	if [[ $input == /* ]]; then
 		seqs_location=$output_folder/$name/raw_reads
 		rm -rf $seqs_location # I'm now removing the seqs_location at the beginning of this section, in the context of the new system of resuming by -Dm stepx, so this should always be done
@@ -264,7 +264,7 @@ if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
 			echo -e "\nSubsampling...\n"
 			# From the input parameter by the user, obtain a random number allowing a +- 10% window:
 			IFS=', ' read -r -a arr <<< "$number_reads"
-			IFS=', ' read -r -a arr2 <<< "$(ls | egrep .fastq.gz$ | sed 's,1.fastq.gz,,g;s,2.fastq.gz,,g' | sort | uniq | tr '\n' ',')"
+			IFS=', ' read -r -a arr2 <<< "$(ls | egrep .fastq.gz$ | sed 's,1.fastq.gz,,g;s,2.fastq.gz,,g' | sort | uniq | tr '\n' ',')"			
 			desired_number=${arr[1]}
 			apply_random_shift() {
 				Rscript -e '
@@ -680,6 +680,11 @@ if [[ $debug_step == "all" || $debug_step == "step4" ]]; then
 	for index in "${!array[@]}"; do
 		annotation_file=${array[index]}
   		R_process_reanalyzer_GSE.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index $genes ${array2[index]} $organism $target $differential_expr_soft $covariables $deconvolution $differential_expr_comparisons $perform_differential_analyses $perform_volcano_venn $pattern_to_remove
+		R_qc_figs.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index "edgeR_object_prefilter" "edgeR_object" "edgeR_object_norm" $pattern_to_remove
+		if [[ -e "$output_folder/$name/final_results_reanalysis$index/counts_adjusted.txt" ]]; then
+			echo -e "\n\nRemember that batch effect correction/covariables have been only provided to Combat-Seq/limma for visualization purposes, to include covariables in the DGE model after checking the visualization the argument -C will be used\n\n\nQC_PDF adjuste counts\n\nRemember that you have requested batch effect correction/count adjustment, so you have to mind the figures in this QC_PDF from ComBat-seq/limma counts...\n"
+			R_qc_figs.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index "edgeR_object_prefilter_adjusted" "edgeR_object_adjusted" "edgeR_object_norm_adjusted" $pattern_to_remove
+		fi
 		cd $output_folder/$name/final_results_reanalysis$index/DGE/
 		tar -cf - $(ls | egrep ".RData$") | pigz -p $cores > allRData.tar.gz; rm -rf $(ls | egrep ".RData$")
 	done
