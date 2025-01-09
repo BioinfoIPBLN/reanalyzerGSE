@@ -9,11 +9,12 @@ organism <- args[6]
 targets_file <- args[7] # if not provided, "no"
 diff_soft <- args[8] # if not provided, "edgeR"
 covariab <- args[9] # if not provided, "none"
-cdseq_exec <- args[10] # if not provided, "no"
-restrict_comparisons <- args[11] # if not provided, "no"
-full_analyses <- args[12] # if not provided, "yes"
-venn_volcano <- args[13] # if not provided, "none"
-pattern_to_remove <- args[14] # if not provided, "no"
+covariab_format <- args[10] # if not provided, "num"
+cdseq_exec <- args[11] # if not provided, "no"
+restrict_comparisons <- args[12] # if not provided, "no"
+full_analyses <- args[13] # if not provided, "yes"
+venn_volcano <- args[14] # if not provided, "none"
+pattern_to_remove <- args[15] # if not provided, "no"
 
 ###### Load read counts, format, filter, start differential expression analyses, get RPKM, save...:
   cat("\nProcessing counts and getting figures...\n")
@@ -68,7 +69,13 @@ pattern_to_remove <- args[14] # if not provided, "no"
   # If batch has also been provided, then it will be overwritten immediately below, as ComBat_seq is the preferred method
   if(covariab != "none"){
     count_matrix <- as.matrix(gene_counts[,grep("Gene_ID|Length",colnames(gene_counts),invert=T)])
-    adjusted_counts <- limma::removeBatchEffect(x=log2(count_matrix + 0.1),covariates=as.factor(unlist(strsplit(as.character(covariab),","))))
+    if(covariab_format == "fact"){
+      cov <- as.factor(unlist(strsplit(as.character(covariab),",")))
+      cov <- model.matrix(~ cov)
+    } else if(covariab_format == "num"){
+      cov <- as.numeric(unlist(strsplit(as.character(covariab),",")))      
+    }    
+    adjusted_counts <- limma::removeBatchEffect(x=log2(count_matrix + 0.1),covariates=cov)
     write.table(adjusted_counts,
                 file=paste0(output_dir,"/counts_adjusted.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
   }
@@ -198,14 +205,22 @@ pattern_to_remove <- args[14] # if not provided, "no"
       print("Applying filterByExpr by edgeR together with the covariables in the model...Overwriting previous application...")
       edgeR_object <- edgeR_object_prefilter
       Treat <- edgeR_object$samples$group
-      Time <- as.factor(unlist(strsplit(as.character(covariab),",")))
+      if(covariab_format == "fact"){
+        Time <- as.factor(unlist(strsplit(as.character(covariab),",")))
+      } else if(covariab_format == "num"){
+        Time <- as.numeric(unlist(strsplit(as.character(covariab),",")))
+      }      
       design <- model.matrix(~0+Treat+Time)
       keep <- filterByExpr(edgeR_object,design)
       edgeR_object <- edgeR_object[keep,,keep.lib.sizes=FALSE]
       edgeR_object_norm <- normLibSizes(edgeR_object)
     } else {
       Treat <- edgeR_object$samples$group
-      Time <- as.factor(unlist(strsplit(as.character(covariab),",")))
+      if(covariab_format == "fact"){
+        Time <- as.factor(unlist(strsplit(as.character(covariab),",")))
+      } else if(covariab_format == "num"){
+        Time <- as.numeric(unlist(strsplit(as.character(covariab),",")))
+      }      
       design <- model.matrix(~0+Treat+Time)
       rownames(design) <- colnames(edgeR_object_norm)
       edgeR_object_norm <- estimateDisp(edgeR_object_norm, design, robust=TRUE) # Preparing for one covariable following edgeR vignette new methods Nov2023

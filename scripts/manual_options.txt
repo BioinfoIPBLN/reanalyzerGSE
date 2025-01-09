@@ -23,7 +23,8 @@ taxonid=
 number_reads_to_subsample=
 batch_vector=
 batch_biological_covariates=
-covariables=none
+covariables=
+covariables_format=
 target=
 
 #### Activate alternative modes:
