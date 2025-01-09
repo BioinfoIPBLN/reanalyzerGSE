@@ -2,19 +2,19 @@
 reanalyzerGSE is a pipeline to assist with and streamline transcriptomic analyses of various datasets (i.e. microarrays, RNA-seq, scRNA-seq) by automatically reanalyzing raw data submitted to public databases like [GEO](https://www.ncbi.nlm.nih.gov/geo/), [ENA](https://www.ebi.ac.uk/ena/browser/home) or [SRA](https://www.ncbi.nlm.nih.gov/sra). Local data can also be provided by the user. The pipeline is based on several steps implementing standard tools and novel scripts. (i.e. data download, quality control, alignment to reference genome, quantification, differential gene expression analyses, functional enrichment analyses...)
 
 ## Installation
-We suggest two alternatives for installation. Please choose one of:
-
-1) The fastest option is to use the folder 'external_software', which contain some of the required software (i.e. miARma-seq), a script to install dependencies (mainly through miniconda and pip, 'external_software/installation/install.sh'), and a suggestion of the PATH to be set ('source_path.sh'). To perform a conda-based installation and setup everything required to run reanalyzerGSE, please execute:
+We suggest alternatives for installation. Please choose one of:
+1) A singularity container is provided...
+DETAILS PENDING
+2) Another option is to use the folder 'external_software' and an installation wrapper, which contain some of the required software (i.e. miARma-seq), a script to install dependencies (mainly through miniconda and pip, 'external_software/installation/install.sh'), and a suggestion of the PATH to be set ('source_path.sh'). To perform a conda-based installation and setup everything required to run reanalyzerGSE, please execute:
 
 ```
 git clone https://github.com/BioinfoIPBLN/reanalyzerGSE
 bash reanalyzerGSE/external_software/installation/install.sh 2>&1 | tee -a reanalyzerGSE/external_software/installation/install.sh.log # Check log to make sure that installation of all dependencies has been succesful
 ```
 
-This should work if you already have miniconda3 installed, and also install miniconda3 within the reanalyzerGSE folder if not available or if you have kept it out of the PATH. Plese keep in mind that in the install.sh script most of the versions of the tools installed by conda are frozen (by means of multiple '.yml' files corresponding to different environments), so please open an issue if conda fails with dependency-related problems or you may need to manually change installed versions.
+This should work if you already have miniconda3 installed, and also install miniconda3 within the reanalyzerGSE folder if not available or if you have kept it out of the PATH. Plese keep in mind that in the install.sh script most of the versions of the tools installed by conda are frozen (by means of multiple '.yml' files corresponding to different environments), so please open an issue or try to install with conda if there are dependency-related problems or any software is not installed.
 
-
-2) The less recommended option is to manually install the required software.
+3) The less recommended option is to manually install the required software.
 If you want to manually install the software, check out in the files '.yml' within the folder external_software/installation the list of required tools, which must be in the PATH when running. Please be aware that many scripts (bash, perl...) within the 'scripts' folder are also used, so you may need to manually change the interpreter in the corresponding shebang statements (first line #!) to ensure that everything works in your system. You may also need to make scripts executable ('chmod' command) and to make source or export so that the PATH variable and others are available for all scripts.
 
 
@@ -71,7 +71,8 @@ reanalyzerGSE.pk.sh -h
 	        -R | -number_reads_to_subsample # Information and number of reads to subsample to the sequences before the analyses (none by default, a path to the 'reads_numbers.txt' file from a previous execution and a number of reads must be provided, separated with comma, and proportions will be computed, with all samples being scaled to approximately, +- 10% of that number)
 	        -bv | -batch_vector # Comma-separated list of numbers for use as batch vector with Combat-seq
 	        -bc | -batch_biological_covariable # Comma-separated list of numbers for use as batch vector of covariables of biological interest with Combat-seq
-	        -C | -covariables # Please input a comma-separated list for the covariable that should be included in the edgeR model for DGE (for now only one covariable allowed, for example a proven batch effect) 
+	        -C | -covariables # Please input a comma-separated list for the covariable that should be included in the limma model for removeBatchEffect or in the edgeR model for DGE (for now only one covariable allowed, for example an expected batch effect)
+	        -Cf | -covariables_format # Format of the provided covariate ('num' by default for numeric covariables, or 'fact' for factors)
 	        -T | -target # Protopical target file for attempts to differential gene expression analyses (containing filenames and covariates, automatically built if not provided)
 	
 	        #### Activate alternative modes:
