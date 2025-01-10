@@ -60,7 +60,7 @@ time_course_fuzz=0
 #### Filtering out samples/comparisons:
 GSM_filter=
 stop=no
-pattern_to_remove=none
+pattern_to_remove=
 differential_expr_comparisons=no
 
 #### Functional enrichment/networking analyses
