@@ -9,10 +9,9 @@ wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M36/ge
 wget -q https://ftp.ensembl.org/pub/release-113/fasta/mus_musculus/cdna/Mus_musculus.GRCm39.cdna.all.fa.gz # Download reference genome transcripts
 gzip -d *.gz # To uncompress the references
 
-### Case examples of mouse transcriptomic datasets, analyzed in a machine with 12 cores and 32GB RAM available.
-# A) Local raw data simultaneously processing 4 samples and highligthing the genes Gpatch3 and Tent2
+### Case example of a mouse transcriptomic dataset, analyzed in a machine with 12 cores and 32GB RAM available.
+# Local raw data simultaneously processing 4 samples and highligthing the genes Gpatch3 and Tent2
 reanalyzerGSE.pk.sh -options manual_options_out_test.txt 2>&1 | tee -a manual_options_out_test.log
 
-# B) The GEO entry GSE118451, simultaneously processing 6 samples, highligthing the genes B4galt3 and Chd1
-reanalyzerGSE.pk.sh -options manual_options_out_test2.txt 2>&1 | tee -a manual_options_out_test2.log
+
 ```
