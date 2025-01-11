@@ -10,7 +10,7 @@ wget -q https://ftp.ensembl.org/pub/release-113/fasta/mus_musculus/cdna/Mus_musc
 gzip -d *.gz # To uncompress the references
 
 ### Case example of a mouse transcriptomic dataset, analyzed in a machine with 12 cores and 32GB RAM available.
-# Local raw data simultaneously processing 4 samples and highligthing the genes Gpatch3 and Tent2
+# Local raw data simultaneously processing 4 samples and highligthing the genes Rpl4 and Krt14
 reanalyzerGSE.pk.sh -options manual_options_out_test.txt 2>&1 | tee -a manual_options_out_test.log
 
 
