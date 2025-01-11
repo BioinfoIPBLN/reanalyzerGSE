@@ -854,7 +854,7 @@ if (venn_volcano!="no"){
       Venn_funct(list.files(path=paste0(output_dir,"/DGE"),full.names=T,pattern="^DGE_analysis_comp\\d+\\.txt$"))
     }
     
-    try(system("tar cf venn_diagrams.tar Venn_diagram*; rm Venn_diagram*"))
+    try(system("tar cf venn_diagrams.tar Venn_diagram* 2>/dev/null; rm Venn_diagram* 2>/dev/null"))
   }
 }
 save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
