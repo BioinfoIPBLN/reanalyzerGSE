@@ -3,7 +3,7 @@ input=$PWD/seqs
 input_geo_reads=
 name=out_test
 output_folder=$PWD/out_test
-genes=Gpatch3,Tent2
+genes=Krt14,Rpl4
 TMPDIR_arg=
 
 #### Reference and databases:
