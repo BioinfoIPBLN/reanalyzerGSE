@@ -545,7 +545,9 @@ if [[ $debug_step == "all" || $debug_step == "step3a" ]]; then
 				echo "Salmon to detect strandedness seems to have failed. This is not acceptable, plese double check or provide the parameter -s. Exiting..."
 				exit 1
 			fi
-		fi
+		else
+  			echo $strand > $output_folder/$name/strand_info.txt
+  		fi
 
 	### Prepare other info required by the updated version of miARma...
 		echo -e "\nPreparing miARma-seq execution...\n"
