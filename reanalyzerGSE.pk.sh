@@ -374,6 +374,9 @@ if [[ $debug_step == "all" ]]; then
 		echo $batch_biological_covariates > $output_folder/$name/GEO_info/batch_biological_variables.txt
 		echo -e "\nThe comma-separated list for the vector of biological covariable for batch separation is $batch_biological_covariates\n"
 	fi
+	if [ ! -z "$covariables" ]; then
+ 		echo $covariables > $output_folder/$name/GEO_info/covariables.txt
+  	fi
 fi
 
 ### STEP 1d. Give info of NCBI's current genome:
