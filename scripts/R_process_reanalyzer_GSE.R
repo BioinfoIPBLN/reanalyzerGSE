@@ -75,7 +75,7 @@ pattern_to_remove <- args[15] # if not provided, "no"
     } else if(covariab_format == "num"){
       cov <- as.numeric(unlist(strsplit(as.character(covariab),",")))      
     }    
-    adjusted_counts <- limma::removeBatchEffect(x=log2(count_matrix + 0.1),covariates=cov)
+    adjusted_counts <- limma::removeBatchEffect(x=count_matrix,covariates=cov)
     write.table(adjusted_counts,
                 file=paste0(output_dir,"/counts_adjusted.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
   }
