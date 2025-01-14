@@ -518,12 +518,12 @@ if [[ $debug_step == "all" || $debug_step == "step3a" ]]; then
 			echo -e "\nPredicting strandness on two random sample...\n"
 			mkdir -p $output_folder/$name/strand_prediction/salmon_out; mkdir -p $output_folder/$name/strand_prediction/how_are_we_stranded_here_out
 			if [[ $(find $output_folder/$name -name library_layout_info.txt | xargs cat) == "SINGLE" ]]; then
-				salmon quant -i $salmon_idx -l A -r $seqs_location/$(ls $seqs_location | head -1) -p $cores -o $output_folder/$name/strand_prediction/salmon_out/ --skipQuant &> $output_folder/$name/strand_prediction/salmon_out/salmon_out.log
+				salmon quant -i $salmon_idx -l A -r $seqs_location/$(ls $seqs_location | shufl | head -1) -p $cores -o $output_folder/$name/strand_prediction/salmon_out/ --skipQuant &> $output_folder/$name/strand_prediction/salmon_out/salmon_out.log
 				cd $output_folder/$name/strand_prediction/how_are_we_stranded_here_out; check_strandedness --gtf $(echo $annotation | sed 'sa,.*aag') --transcripts $transcripts --reads_1 $seqs_location/$(ls $seqs_location | shuf | head -1) --kallisto_index $kall_idx --print_commands &> check_strandedness_out.log
 			elif [[ $(find $output_folder/$name -name library_layout_info.txt | xargs cat) == "PAIRED" ]]; then
-				rand_sample_root=$(ls $seqs_location | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq | head -1)
+				rand_sample_root=$(ls $seqs_location | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq | shufl | head -1)
 				salmon quant -i $salmon_idx -l A -1 $seqs_location/${rand_sample_root}_1.fastq.gz -2 $seqs_location/${rand_sample_root}_2.fastq.gz -p $cores -o $output_folder/$name/strand_prediction/salmon_out/ --skipQuant &> $output_folder/$name/strand_prediction/salmon_out/salmon_out.log
-				rand_sample_root=$(ls $seqs_location | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq | head -1)
+				rand_sample_root=$(ls $seqs_location | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq | shufl | head -1)
 				cd $output_folder/$name/strand_prediction/how_are_we_stranded_here_out; check_strandedness --gtf $(echo $annotation | sed 'sa,.*aag') --transcripts $transcripts --reads_1 $seqs_location/${rand_sample_root}_1.fastq.gz --reads_2 $seqs_location/${rand_sample_root}_2.fastq.gz --kallisto_index $kall_idx --print_commands &> check_strandedness_out.log
 			fi
 			cd $output_folder/$name/strand_prediction/salmon_out/
