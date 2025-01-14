@@ -10,7 +10,7 @@ TMPDIR_arg=
 reference_genome=$PWD/GRCm39.primary_assembly.genome.fa
 reference_genome_index=
 annotation=$PWD/gencode.vM36.primary_assembly.basic.annotation.gtf
-transcripts=$PWD/Mus_musculus.GRCm39.cdna.all.fa
+transcripts=
 kraken2_databases=
 sortmerna_databases=
 databases_function=GO_Biological_Process_2023,GO_Molecular_Function_2023,GO_Cellular_Component_2023
@@ -45,7 +45,7 @@ network_analyses=no
 auto_panther_log=no
 
 #### Processing parameters:
-strand=
+strand=reverse
 filter=bin
 optionsFeatureCounts_feat=exon
 optionsFeatureCounts_seq=gene_name
