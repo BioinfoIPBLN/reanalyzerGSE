@@ -6,7 +6,7 @@ source external_software/source_path # To set up the PATH
 cd test_data
 wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M36/GRCm39.primary_assembly.genome.fa.gz # Download reference genome
 wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M36/gencode.vM36.primary_assembly.basic.annotation.gtf.gz # Download reference genome annotation
-wget -q https://ftp.ensembl.org/pub/release-113/fasta/mus_musculus/cdna/Mus_musculus.GRCm39.cdna.all.fa.gz # Download reference genome transcripts
+# wget -q https://ftp.ensembl.org/pub/release-113/fasta/mus_musculus/cdna/Mus_musculus.GRCm39.cdna.all.fa.gz # Download reference genome transcripts if you want to predict the strandedness, but here in the test data not enough coverage so this is skipped
 gzip -d *.gz # To uncompress the references
 
 ### Case example of a mouse transcriptomic dataset, analyzed in a machine with 12 cores and 32GB RAM available.
