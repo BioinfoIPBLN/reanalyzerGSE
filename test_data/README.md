@@ -1,7 +1,7 @@
 ## Quick start / Minimal examples
 ```
 cd reanalyzerGSE # Installation folder
-source external_software/source_path # To set up the PATH
+source external_software/source_path.sh # To set up the PATH
 
 cd test_data
 wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M36/GRCm39.primary_assembly.genome.fa.gz # Download reference genome
