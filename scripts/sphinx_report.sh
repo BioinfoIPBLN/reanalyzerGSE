@@ -269,5 +269,6 @@ Please use the following links:
 ######### Build
 sphinx-build -M html . . &>> sphinx.log
 
-######### Link the report:
+######### Link the report to the main folder:
 ln -sf $path/sphinx_report/html/index.html $path/report_$project_name.html
+
