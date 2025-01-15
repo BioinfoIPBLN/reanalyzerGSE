@@ -268,7 +268,7 @@ Please use the following links:
    
    <a href=\"multiqc_report.html\" target=\"_blank\">Click to open report by MultiQC</a><br>
    <a href=\"multisampleBamQcReport.html\" target=\"_blank\">Click to open Multi-sample BAM QC by Qualimap</a><br>
-   <a href=\"$project_name_norm_QC.pdf\" target=\"_blank\">Click to open PDF with multiple QC figures</a>
+   <a href=\"${project_name}_norm_QC.pdf\" target=\"_blank\">Click to open PDF with multiple QC figures</a>
 
 .. index:: QC analyses" > index.rst
 
