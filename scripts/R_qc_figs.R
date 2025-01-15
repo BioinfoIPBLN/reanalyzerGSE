@@ -12,7 +12,7 @@ pattern_to_remove <- args[7]
 label <- basename(path)
 label2 <- sub(".*_","",args[6])
 
-cat(paste0("\nPerforming QC_PDF_",label,"_",label2,"...\n"));print(paste0("Current date: ",date()))
+cat(paste0("\n\nPerforming QC_PDF_",label,"_",label2,"...\n"));print(paste0("Current date: ",date()))
 
 suppressMessages(library("edgeR",quiet = T,warn.conflicts = F))
 suppressMessages(library("RColorBrewer",quiet = T,warn.conflicts = F))
