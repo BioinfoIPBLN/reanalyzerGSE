@@ -85,7 +85,7 @@ class IncludeMatchingFiles(SphinxDirective):
         \"\"\"Provide a clickable link to open/download the PDF file.\"\"\"
         try:
             caption_node = nodes.paragraph(text=f\"Found {file_name}:\")
-            link_html = f\"<a href=\\"{file_name}\\" target=\\"_blank\\">Open PDF</a>\"
+            link_html = f\"<a href=\\\"{file_name}\\\" target=\\\"_blank\\\">Open PDF</a>\"
             raw_node = nodes.raw(\"\", link_html, format=\"html\")
             return [caption_node, raw_node]
         except Exception as e:
@@ -97,7 +97,7 @@ class IncludeMatchingFiles(SphinxDirective):
 
         try:
             # Read the file as a tab-separated file (assume .txt is tab-delimited)
-            data = pd.read_csv(file_path, sep=\"\t\", header=None)
+            data = pd.read_csv(file_path, sep=\"\\\t\", header=None)
 
             # Ensure numeric conversion for columns 3 and 6
             for col in [2, 5]:
@@ -211,7 +211,7 @@ Please use the following links:
 .. raw:: html
    
    <a href=\"RPKM_counts_genes_log2_0.1_categ.txt\" target=\"_blank\">Click to get RPKM counts (log2 + 0.1)</a><br>
-   <a href=\"TPM_counts_genes_log2_0.1\" target=\"_blank\">Click to get TPM counts (log2 + 0.1)</a>
+   <a href=\"TPM_counts_genes_log2_0.1.txt\" target=\"_blank\">Click to get TPM counts (log2 + 0.1)</a>
 
 If requested, please go to \"$project_name/final_results_reanalysis0/violin\" to check out the figures showing the transcriptional profiles of genes of interest. You may also find the tables \"_annotation.txt\" including the gene annotation available
 
