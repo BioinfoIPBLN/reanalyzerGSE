@@ -246,7 +246,7 @@ Volcano plots
 
 Functional enrichment analyses
 ------------------------------------------------------------------------------------
-If requested, please use the following :download:`link <../final_results_reanalysis0/DGE/funct_enrichment_analyses.tar.gz>`
+If requested, please use the following :download:\`link <../final_results_reanalysis0/DGE/funct_enrichment_analyses.tar.gz>\`
 
 .. index:: Funct_enrich
 
