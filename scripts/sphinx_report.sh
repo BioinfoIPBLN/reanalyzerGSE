@@ -23,11 +23,11 @@ html_extra_path = [
 ]
 ' >> conf.py
 
-echo -e "\n
-html_static_path = [
-    \"$path/sphinx_report/_static\"
-]
-" >> conf.py
+#echo -e "\n
+#html_static_path = [
+#    \"$path/sphinx_report/_static\"
+#]
+#" >> conf.py
 
 echo -e "\nhtml_baseurl = \"file://$path/sphinx_report/html/\"\n\n
 from docutils import nodes
