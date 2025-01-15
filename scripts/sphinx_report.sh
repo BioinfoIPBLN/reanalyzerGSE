@@ -23,7 +23,13 @@ html_extra_path = [
 ]
 ' >> conf.py
 
-echo -e '\n
+echo -e "\n
+html_static_path = [
+    \"$path/sphinx_report/_static\"
+]
+" >> conf.py
+
+echo -e "\nhtml_baseurl = \"file://$path/sphinx_report/html/\"\n\n
 from docutils import nodes
 from sphinx.util.docutils import SphinxDirective
 import os
@@ -33,13 +39,13 @@ import pandas as pd  # Requires pandas for easy CSV processing
 
 class IncludeMatchingFiles(SphinxDirective):
     required_arguments = 1  # The file pattern is required
-    optional_arguments = 2  # Directory and optional mode (e.g., "degs")
+    optional_arguments = 2  # Directory and optional mode (e.g., \"degs\")
     has_content = False
 
     def run(self):
         # Handle arguments
         pattern = self.arguments[0]
-        directory = self.arguments[1] if len(self.arguments) > 1 else "."
+        directory = self.arguments[1] if len(self.arguments) > 1 else \".\"
         mode = self.arguments[2] if len(self.arguments) > 2 else None
 
         # Resolve the absolute path of the directory
@@ -47,7 +53,7 @@ class IncludeMatchingFiles(SphinxDirective):
 
         # Check if the directory exists
         if not os.path.isdir(directory):
-            error_node = nodes.paragraph(text=f"Directory does not exist: {directory}")
+            error_node = nodes.paragraph(text=f\"Directory does not exist: {directory}\")
             return [error_node]
 
         # Search for files matching the pattern
@@ -56,19 +62,19 @@ class IncludeMatchingFiles(SphinxDirective):
 
         # If matching files are empty, return a warning node
         if not matched_files:
-            warning_node = nodes.paragraph(text=f"No files match the pattern: {pattern} in {directory}")
+            warning_node = nodes.paragraph(text=f\"No files match the pattern: {pattern} in {directory}\")
             return [warning_node]
 
         file_nodes = []
         for file in matched_files:
-            # Ignore files containing "annotation" or "Gene_IDs"
-            if "annotation" in file or "Gene_IDs" in file:
+            # Ignore files containing \"annotation\" or \"Gene_IDs\" or \"fdr\"
+            if \"annotation\" in file or \"Gene_IDs\" in file or \"fdr\" in file:
                 continue
 
             file_path = os.path.join(directory, file)
-            if pattern.endswith(".pdf"):
+            if pattern.endswith(\".pdf\"):
                 file_nodes.extend(self.process_pdf(file_path, file))
-            elif mode == "degs":
+            elif mode == \"degs\":
                 file_nodes.extend(self.process_degs(file_path, file))
             else:
                 file_nodes.extend(self.process_text(file_path, file))
@@ -76,26 +82,26 @@ class IncludeMatchingFiles(SphinxDirective):
         return file_nodes
 
     def process_pdf(self, file_path, file_name):
-        """Provide a clickable link to open/download the PDF file."""
+        \"\"\"Provide a clickable link to open/download the PDF file.\"\"\"
         try:
-            caption_node = nodes.paragraph(text=f"Found {file_name}:")
-            link_html = f"<a href=\"{file_name}\" target=\"_blank\">Open PDF</a>"
-            raw_node = nodes.raw("", link_html, format="html")
+            caption_node = nodes.paragraph(text=f\"Found {file_name}:\")
+            link_html = f\"<a href=\\"{file_name}\\" target=\\"_blank\\">Open PDF</a>\"
+            raw_node = nodes.raw(\"\", link_html, format=\"html\")
             return [caption_node, raw_node]
         except Exception as e:
-            return [nodes.paragraph(text=f"Error processing PDF file {file_name}: {e}")]
+            return [nodes.paragraph(text=f\"Error processing PDF file {file_name}: {e}\")]
 
     def process_degs(self, file_path, file_name):
-        """Process the file in DEGs mode."""
+        \"\"\"Process the file in DEGs mode.\"\"\"
         deg_nodes = []
 
         try:
             # Read the file as a tab-separated file (assume .txt is tab-delimited)
-            data = pd.read_csv(file_path, sep="\t", header=None)
+            data = pd.read_csv(file_path, sep=\"\t\", header=None)
 
             # Ensure numeric conversion for columns 3 and 6
             for col in [2, 5]:
-                data[col] = pd.to_numeric(data[col], errors="coerce")
+                data[col] = pd.to_numeric(data[col], errors=\"coerce\")
 
             # Drop rows with invalid numeric values in columns 3 or 6
             data = data.dropna(subset=[2, 5])
@@ -116,43 +122,43 @@ class IncludeMatchingFiles(SphinxDirective):
             head_tail_degs = pd.concat([sorted_degs.head(10), sorted_degs.tail(10)])
 
             # Add information to nodes
-            deg_nodes.append(nodes.paragraph(text=f"Contents of {file_name}:"))
-            deg_nodes.append(nodes.paragraph(text=f"{num_degs_up} DEGs up"))
-            deg_nodes.append(nodes.paragraph(text=f"{num_degs_down} DEGs down"))
-            deg_nodes.append(nodes.paragraph(text=f"Total number of DEGs: {num_degs_up + num_degs_down}"))
-            deg_nodes.append(nodes.paragraph(text=f"Top 10 DEGs in each sense:"))
+            deg_nodes.append(nodes.paragraph(text=f\"Contents of {file_name}:\"))
+            deg_nodes.append(nodes.paragraph(text=f\"{num_degs_up} DEGs up\"))
+            deg_nodes.append(nodes.paragraph(text=f\"{num_degs_down} DEGs down\"))
+            deg_nodes.append(nodes.paragraph(text=f\"Total number of DEGs: {num_degs_up + num_degs_down}\"))
+            deg_nodes.append(nodes.paragraph(text=f\"Top 10 DEGs in each sense:\"))
 
             literal_node = nodes.literal_block()
-            literal_node['language'] = "text"
+            literal_node['language'] = \"text\"
             literal_node += nodes.Text(head_tail_degs.to_string(index=False, header=False))
             deg_nodes.append(literal_node)
 
         except Exception as e:
-            error_node = nodes.paragraph(text=f"Error processing DEGs in {file_name}: {e}")
+            error_node = nodes.paragraph(text=f\"Error processing DEGs in {file_name}: {e}\")
             deg_nodes.append(error_node)
 
         return deg_nodes
 
     def process_text(self, file_path, file_name):
-        """Process text files."""
+        \"\"\"Process text files.\"\"\"
         try:
             literal_node = nodes.literal_block()
-            literal_node['language'] = "text"
-            with open(file_path, "r") as f:
+            literal_node['language'] = \"text\"
+            with open(file_path, \"r\") as f:
                 literal_node += nodes.Text(f.read())
-            caption_node = nodes.paragraph(text=f"Contents of {file_name}:")
+            caption_node = nodes.paragraph(text=f\"Contents of {file_name}:\")
             return [caption_node, literal_node]
         except Exception as e:
-            return [nodes.paragraph(text=f"Error processing text file {file_name}: {e}")]
+            return [nodes.paragraph(text=f\"Error processing text file {file_name}: {e}\")]
 
 
 def setup(app):
-    app.add_directive("include_matching_files", IncludeMatchingFiles)
-' >> conf.py
+    app.add_directive(\"include_matching_files\", IncludeMatchingFiles)
+" >> conf.py
 
 
 ######### Modify index.rst
-echo ' 
+echo " 
 Welcome to $project_name report!
 ####################################################################################
 
@@ -204,10 +210,10 @@ Please use the following links:
 
 .. raw:: html
    
-   <a href="RPKM_counts_genes_log2_0.1_categ.txt" target="_blank">Click to get RPKM counts (log2 + 0.1)</a><br>
-   <a href="TPM_counts_genes_log2_0.1" target="_blank">Click to get TPM counts (log2 + 0.1)</a>
+   <a href=\"RPKM_counts_genes_log2_0.1_categ.txt\" target=\"_blank\">Click to get RPKM counts (log2 + 0.1)</a><br>
+   <a href=\"TPM_counts_genes_log2_0.1\" target=\"_blank\">Click to get TPM counts (log2 + 0.1)</a>
 
-If requested, please go to "$project_name/final_results_reanalysis0/violin" to check out the figures showing the transcriptional profiles of genes of interest. You may also find the tables "_annotation.txt" including the gene annotation available
+If requested, please go to \"$project_name/final_results_reanalysis0/violin\" to check out the figures showing the transcriptional profiles of genes of interest. You may also find the tables \"_annotation.txt\" including the gene annotation available
 
 .. index:: Counts
 
@@ -260,14 +266,14 @@ Please use the following links:
 
 .. raw:: html
    
-   <a href="multiqc_report.html" target="_blank">Click to open report by MultiQC</a><br>
-   <a href="multisampleBamQcReport.html" target="_blank">Click to open Multi-sample BAM QC by Qualimap</a><br>
-   <a href="$project_name_norm_QC.pdf" target="_blank">Click to open PDF with multiple QC figures</a>
+   <a href=\"multiqc_report.html\" target=\"_blank\">Click to open report by MultiQC</a><br>
+   <a href=\"multisampleBamQcReport.html\" target=\"_blank\">Click to open Multi-sample BAM QC by Qualimap</a><br>
+   <a href=\"$project_name_norm_QC.pdf\" target=\"_blank\">Click to open PDF with multiple QC figures</a>
 
-.. index:: QC analyses' > index.rst
+.. index:: QC analyses" > index.rst
 
 ######### Build
 sphinx-build -M html . . &>> sphinx.log
 
 ######### Link the report:
-ln -sf $PWD/html/index.html $path/report_$project_name.html
+ln -sf $path/sphinx_report/html/index.html $path/report_$project_name.html
