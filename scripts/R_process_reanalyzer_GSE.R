@@ -316,7 +316,7 @@ pattern_to_remove <- args[15] # if not provided, "no"
     write.table(log2(tpm_counts+0.1),
                 file=paste0(output_dir,"/TPM_counts_adjusted_genes_log2_0.1.txt"),quote = F,row.names = T, col.names = T,sep = "\t")
   }
-  print(paste0("Counts written. Current date: ",date()))
+  cat(paste0("\nCounts written. Current date: ",date()))
 
 ###### Figure of the expr of certain genes of interest:
   ## Introduce in the violin plot statistics, loop through the different designs to get different coloring and grouping... etc
@@ -338,7 +338,8 @@ pattern_to_remove <- args[15] # if not provided, "no"
       if (length(unique(read.table(z,head=F,blank.lines.skip=T)$V1)) == 1){
         next
       }
-      system(paste0("sed -i -e 's/[^a-zA-Z0-9]/_/g' -e '/^$/s//_/' ",z)); print(i); print(z); print("Design:"); print(read.table(z)$V1) # Deal with the designs, also dealing with special characters
+      system(paste0("sed -i -e 's/[^a-zA-Z0-9]/_/g' -e '/^$/s//_/' ",z))
+      cat("\n\nPerforming figures for "); print(i); print(z); print("Design:"); print(read.table(z)$V1) # Deal with the designs, also dealing with special characters
       if (i %in% gene_counts_rpkm_to_plot$Gene_ID){
         a <- gene_counts_rpkm_to_plot[gene_counts_rpkm_to_plot$Gene_ID==i,-grep("Gene_ID",colnames(gene_counts_rpkm_to_plot))]
         a <- a[,gtools::mixedsort(colnames(a))]
@@ -466,10 +467,8 @@ pattern_to_remove <- args[15] # if not provided, "no"
   }
   }
 
-  print(paste0("PDF barplots and violin plots done if required. Keep in mind you can also use the Expression Visualization App at https://bioinfoipbln.shinyapps.io/expressionvisualizationapp/."))
-  print(paste0("Current date: ",date()))
-  print("Genes highlighted are:")
-  print(genes)
+  cat(paste0("\n\nPDF barplots and violin plots done if required. Keep in mind you can also use the Expression Visualization App at https://bioinfoipbln.shinyapps.io/expressionvisualizationapp/."))
+  print("Genes highlighted are:");print(genes);print(paste0("Current date: ",date()))
 
 
 ###### Attempt of Differential Gene Expression Analyses... modified from Bioinfo Unit to use here:
