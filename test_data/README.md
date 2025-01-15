@@ -10,6 +10,7 @@ wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M36/ge
 gzip -d *.gz # To uncompress the references
 
 ### Case example of a mouse transcriptomic dataset, analyzed in a machine with 12 cores and 32GB RAM available.
+### This will take ~35 min (reference genome indexing will take ~20 min)
 # Local raw data simultaneously processing 4 samples and highligthing the genes Rpl4 and Krt14
 reanalyzerGSE.pk.sh -options manual_options_out_test.txt 2>&1 | tee -a manual_options_out_test.log
 
