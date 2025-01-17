@@ -23,6 +23,7 @@ taxonid=
 number_reads_to_subsample=
 batch_vector=
 batch_biological_covariates=
+batch_format=
 covariables=
 covariables_format=
 target=
