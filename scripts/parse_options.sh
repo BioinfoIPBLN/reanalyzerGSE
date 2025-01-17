@@ -42,6 +42,7 @@ for argument in $options; do
 	        -R | -number_reads_to_subsample # Information and number of reads to subsample to the sequences before the analyses (none by default, a path to the 'reads_numbers.txt' file from a previous execution and a number of reads must be provided, separated with comma, and proportions will be computed, with all samples being scaled to approximately, +- 10% of that number)
 	        -bv | -batch_vector # Comma-separated list of numbers for use as batch vector with Combat-seq
 	        -bc | -batch_biological_covariable # Comma-separated list of numbers for use as batch vector of covariables of biological interest with Combat-seq
+		-bf | -batch_format # Format of the provided batch variables ('num' by default for numeric/vector variables, or 'fact' for factors)
 	        -C | -covariables # Please input a comma-separated list for the covariable that should be included in the limma model for removeBatchEffect or in the edgeR model for DGE (for now only one covariable allowed, for example an expected batch effect)
 	        -Cf | -covariables_format # Format of the provided covariate ('num' by default for numeric covariables, or 'fact' for factors)
 	        -T | -target # Protopical target file for attempts to differential gene expression analyses (containing filenames and covariates, automatically built if not provided)
@@ -120,6 +121,7 @@ for argument in $options; do
 		-b) batch=${arguments[index]} ;;
 		-bv) batch_vector=${arguments[index]} ;;
 		-bc) batch_biological_covariates=${arguments[index]} ;;
+		-bf) batch_format=${arguments[index]} ;;
 		-B) bed_mode=${arguments[index]} ;;
 		-C) covariables=${arguments[index]} ;;
 		-Cf) covariables_format=${arguments[index]} ;;
@@ -233,6 +235,10 @@ echo -e "\nbatch=$batch\n"
 if [ -z "$covariables" ]; then
 	covariables="none"
 fi
+if [ -z "$batch_format" ]; then
+	batch_format="num"
+fi
+echo -e "\ncovariables_format=$covariables_format\n"
 echo -e "\ncovariables=$covariables\n"
 if [ -z "$covariables_format" ]; then
 	covariables_format="num"
