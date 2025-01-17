@@ -8,13 +8,14 @@ filter_option <- args[5] # For now, bin or standard
 organism <- args[6]
 targets_file <- args[7] # if not provided, "no"
 diff_soft <- args[8] # if not provided, "edgeR"
-covariab <- args[9] # if not provided, "none"
-covariab_format <- args[10] # if not provided, "num"
-cdseq_exec <- args[11] # if not provided, "no"
-restrict_comparisons <- args[12] # if not provided, "no"
-full_analyses <- args[13] # if not provided, "yes"
-venn_volcano <- args[14] # if not provided, "none"
-pattern_to_remove <- args[15] # if not provided, "no"
+batch_format <- args[9] # if not provided, "fact"
+covariab <- args[10] # if not provided, "none"
+covariab_format <- args[11] # if not provided, "num"
+cdseq_exec <- args[12] # if not provided, "no"
+restrict_comparisons <- args[13] # if not provided, "no"
+full_analyses <- args[14] # if not provided, "yes"
+venn_volcano <- args[15] # if not provided, "none"
+pattern_to_remove <- args[16] # if not provided, "no"
 
 ###### Load read counts, format, filter, start differential expression analyses, get RPKM, save...:
   cat("\nProcessing counts and getting figures...\n")
@@ -83,7 +84,11 @@ pattern_to_remove <- args[15] # if not provided, "no"
     count_matrix <- as.matrix(gene_counts[,grep("Gene_ID|Length",colnames(gene_counts),invert=T)])
     batch <- data.table::fread(paste0(path,"/GEO_info/batch_vector.txt"),head=F,sep="*")$V1
     batch <- unlist(strsplit(batch,","))
-    adjusted_counts <- sva::ComBat_seq(count_matrix, batch=as.numeric(batch), group=NULL)
+    if(covariab_format == "fact"){
+      adjusted_counts <- sva::ComBat_seq(count_matrix, batch=as.factor(batch), group=NULL)
+    } else {
+      adjusted_counts <- sva::ComBat_seq(count_matrix, batch=as.numeric(batch), group=NULL)
+    }
     write.table(batch,file=paste0(path,"/GEO_info/batch_vector.txt"),quote = F,row.names = F, col.names = F,sep = "\n"); print("BATCH DONE_1")
     write.table(adjusted_counts,
                 file=paste0(output_dir,"/counts_adjusted.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
@@ -94,7 +99,11 @@ pattern_to_remove <- args[15] # if not provided, "no"
     biological_cov <- data.table::fread(paste0(path,"/GEO_info/batch_biological_variables.txt"),head=F,sep="*")$V1
     if (stringr::str_count(biological_cov," ") == 0){
       group <- unlist(strsplit(biological_cov,","))
-      adjusted_counts <- sva::ComBat_seq(count_matrix, batch=as.numeric(batch), group=as.numeric(group))
+      if(covariab_format == "fact"){
+        adjusted_counts <- sva::ComBat_seq(count_matrix, batch=as.factor(batch), group=as.factor(group))
+      } else {
+        adjusted_counts <- sva::ComBat_seq(count_matrix, batch=as.numeric(batch), group=as.numeric(group))
+      }
       write.table(batch,file=paste0(path,"/GEO_info/batch_vector.txt"),quote = F,row.names = F, col.names = F,sep = "\n")
       write.table(group,file=paste0(path,"/GEO_info/batch_biological_variables.txt"),quote = F,row.names = F, col.names = F,sep = "\n"); print("BATCH DONE_2")
       write.table(adjusted_counts,
@@ -105,7 +114,11 @@ pattern_to_remove <- args[15] # if not provided, "no"
         covar_mat <- cbind(covar_mat,as.numeric(unlist(strsplit(strsplit(biological_cov," ")[[1]][i],","))))
       }
       covar_mat <- covar_mat[,-1]
-      adjusted_counts <- sva::ComBat_seq(count_matrix, batch=as.numeric(batch), group=NULL, covar_mod=covar_mat)
+      if(covariab_format == "fact"){
+        adjusted_counts <- sva::ComBat_seq(count_matrix, batch=as.factor(batch), group=NULL, covar_mod=covar_mat)
+      } else {
+        adjusted_counts <- sva::ComBat_seq(count_matrix, batch=as.numeric(batch), group=NULL, covar_mod=covar_mat)
+      }
       write.table(batch,file=paste0(path,"/GEO_info/batch_vector.txt"),quote = F,row.names = F, col.names = F,sep = "\n")
       write.table(covar_mat,file=paste0(path,"/GEO_info/batch_biological_variables.txt"),quote = F,row.names = F, col.names = F,sep = "\t"); print("BATCH DONE_3")
       write.table(adjusted_counts,
