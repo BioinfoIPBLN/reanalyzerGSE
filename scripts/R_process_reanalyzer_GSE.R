@@ -76,9 +76,7 @@ pattern_to_remove <- args[16] # if not provided, "no"
     } else if(covariab_format == "num"){
       cov <- as.numeric(unlist(strsplit(as.character(covariab),",")))      
     }    
-    adjusted_counts <- limma::removeBatchEffect(x=count_matrix,covariates=cov)
-    write.table(adjusted_counts,
-                file=paste0(output_dir,"/counts_adjusted.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
+    adjusted_counts <- limma::removeBatchEffect(x=count_matrix,covariates=cov)    
   }
   if (file.exists(paste0(path,"/GEO_info/batch_vector.txt")) && !file.exists(paste0(path,"/GEO_info/batch_biological_variables.txt"))){
     count_matrix <- as.matrix(gene_counts[,grep("Gene_ID|Length",colnames(gene_counts),invert=T)])
@@ -89,9 +87,7 @@ pattern_to_remove <- args[16] # if not provided, "no"
     } else {
       adjusted_counts <- sva::ComBat_seq(count_matrix, batch=as.numeric(batch), group=NULL)
     }
-    write.table(batch,file=paste0(path,"/GEO_info/batch_vector.txt"),quote = F,row.names = F, col.names = F,sep = "\n"); print("BATCH DONE_1")
-    write.table(adjusted_counts,
-                file=paste0(output_dir,"/counts_adjusted.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
+    write.table(batch,file=paste0(path,"/GEO_info/batch_vector.txt"),quote = F,row.names = F, col.names = F,sep = "\n"); print("BATCH DONE_1")    
   } else if (file.exists(paste0(path,"/GEO_info/batch_vector.txt")) && file.exists(paste0(path,"/GEO_info/batch_biological_variables.txt"))){
     count_matrix <- as.matrix(gene_counts[,grep("Gene_ID|Length",colnames(gene_counts),invert=T)])
     batch <- data.table::fread(paste0(path,"/GEO_info/batch_vector.txt"),head=F,sep="*")$V1
@@ -105,9 +101,7 @@ pattern_to_remove <- args[16] # if not provided, "no"
         adjusted_counts <- sva::ComBat_seq(count_matrix, batch=as.numeric(batch), group=as.numeric(group))
       }
       write.table(batch,file=paste0(path,"/GEO_info/batch_vector.txt"),quote = F,row.names = F, col.names = F,sep = "\n")
-      write.table(group,file=paste0(path,"/GEO_info/batch_biological_variables.txt"),quote = F,row.names = F, col.names = F,sep = "\n"); print("BATCH DONE_2")
-      write.table(adjusted_counts,
-                file=paste0(output_dir,"/counts_adjusted.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
+      write.table(group,file=paste0(path,"/GEO_info/batch_biological_variables.txt"),quote = F,row.names = F, col.names = F,sep = "\n"); print("BATCH DONE_2")      
     } else {
       covar_mat <- matrix(rep(1,stringr::str_count(gsub(" .*","",biological_cov),",")+1))
       for (i in 1:(stringr::str_count(biological_cov," ") + 1)){
@@ -120,11 +114,24 @@ pattern_to_remove <- args[16] # if not provided, "no"
         adjusted_counts <- sva::ComBat_seq(count_matrix, batch=as.numeric(batch), group=NULL, covar_mod=covar_mat)
       }
       write.table(batch,file=paste0(path,"/GEO_info/batch_vector.txt"),quote = F,row.names = F, col.names = F,sep = "\n")
-      write.table(covar_mat,file=paste0(path,"/GEO_info/batch_biological_variables.txt"),quote = F,row.names = F, col.names = F,sep = "\t"); print("BATCH DONE_3")
-      write.table(adjusted_counts,
-                file=paste0(output_dir,"/counts_adjusted.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
+      write.table(covar_mat,file=paste0(path,"/GEO_info/batch_biological_variables.txt"),quote = F,row.names = F, col.names = F,sep = "\t"); print("BATCH DONE_3")      
     }
   }
+  quantile.normalize <- function(x, target){
+    sort(target)[rank(x)]
+  }
+  # Before writing the counts, quantile normalization for the adjusted counts if negative values present:
+  if (exists("adjusted_counts")){  
+    if(any(adjusted_counts<0)){
+        counts.quant <- matrix(0, nrow=nrow(count_matrix), ncol=ncol(count_matrix))
+        for (i in 1:ncol(counts.quant)){
+          counts.quant[,i] <- quantile.normalize(adjusted_counts[,i], count_matrix[,i])
+        }
+        adjusted_counts <- counts.quant
+      }
+    write.table(adjusted_counts,
+                file=paste0(output_dir,"/counts_adjusted.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
+  }  
 
   pheno <- as.data.frame(data.table::fread(paste0(path,"/GEO_info/samples_info.txt"),head=F))
   if(dim(pheno)[2]>2){
