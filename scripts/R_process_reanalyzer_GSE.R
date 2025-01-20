@@ -515,11 +515,10 @@ pattern_to_remove <- args[16] # if not provided, "no"
     et <- exactTest(object,pair = rev(comp))
     #Extracting the statistical data order by p-value
     top1 <- topTags(et, n=nrow(et), adjust.method="BH",sort.by="PValue")
-
     print(summary(decideTests(et)))
     print(nrow(top1$table[top1$table$FDR<=myFDR & abs(top1$table$logFC)>= myFC,]))
-    print(comp); print("Top 10 results (each sense):")
-    print(as.data.frame(top1)[order(as.data.frame(top1)$logFC)[c(as.numeric(dim(top1)[1]):as.numeric(dim(top1)[1]-10),1:10)],3:6])
+    print(comp); print("Top 10 results (each sense):"); top2 <- top1[top1$table$FDR<=myFDR,3:6]
+    print(as.data.frame(top2)[order(as.data.frame(top2)$logFC)[c(as.numeric(dim(top2)[1]):as.numeric(dim(top2)[1]-10),1:10)],])
     
     if (venn_volcano!="no"){
       myLabel1=gsub("^_","",gsub("_+","_",gsub("[^[:alnum:]_]+", "_", paste(comp, collapse = '_vs_'))))
