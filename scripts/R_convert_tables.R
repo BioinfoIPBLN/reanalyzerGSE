@@ -50,7 +50,7 @@ process_file <- function(file){
     data[is.na(data) | data == ""] <- "-"
     data_final <- split_large_cells(data)
     writexl::write_xlsx(as.data.frame(data_final), paste0(sub("\\.txt$", "", file), ".xlsx"))
-    unlink(file)
+    #unlink(file)
   }
 }
 
