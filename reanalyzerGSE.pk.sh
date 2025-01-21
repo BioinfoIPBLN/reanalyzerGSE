@@ -818,13 +818,7 @@ if [[ $debug_step == "all" || $debug_step == "step7" ]]; then
 fi
 
 
-###### STEP 8. Sum up results in a sphinx report
-if [[ $debug_step == "all" || $debug_step == "step8" ]]; then
-	sphinx_report.sh $output_folder/$name $name
-fi
-
-
-###### STEP 9. Tidy up, prepare for storage if final results have been created and the number of aligned files is equal to the numbers of samples, rename folders, convert tables to xlsx if required... etc
+###### STEP 8. Tidy up, prepare for storage if final results have been created and the number of aligned files is equal to the numbers of samples, rename folders, convert tables to xlsx if required... etc
 # Compress the folders
 if [[ $debug_step == "all" || $debug_step == "step9" ]]; then
 	echo -e "\n\nSTEP 8: Starting...\nCurrent date/time: $(date)\n\n"
@@ -876,6 +870,12 @@ if [[ $debug_step == "all" || $debug_step == "step9" ]]; then
 	fi
 	export debug_step="all"
 	echo -e "\n\nSTEP 8: DONE\nCurrent date/time: $(date)\n\n"
+fi
+
+
+###### STEP 9. Sum up results in a sphinx report
+if [[ $debug_step == "all" || $debug_step == "step8" ]]; then
+	sphinx_report.sh $output_folder/$name $name
 fi
 
 echo -e "\n\n\nALL STEPS DONE! Best wishes\n\n\n"
