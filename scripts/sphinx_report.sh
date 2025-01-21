@@ -13,15 +13,15 @@ sphinx-quickstart -a $(echo $(whoami)_reanalyzerGSE) -l en -p $project_name -r "
 ######### Modify conf.py
 sed -i "s,html_theme =.*,html_theme = 'sphinxdoc',g" conf.py
 
-echo -e '\n
+echo -e "\n
 html_extra_path = [
-    "../multiqc_out",
-    "../miARma_out0/star_results/multibamqc_results",
-    "../final_results_reanalysis0_$project_name/QC_and_others",
-    "../final_results_reanalysis0_$project_name/DGE",
-    "../final_results_reanalysis0_$project_name"
+    \"../multiqc_out\",
+    \"../miARma_out0/star_results/multibamqc_results\",
+    \"../final_results_reanalysis0_$project_name/QC_and_others\",
+    \"../final_results_reanalysis0_$project_name/DGE\",
+    \"../final_results_reanalysis0_$project_name\"
 ]
-' >> conf.py
+" >> conf.py
 
 echo -e "\n
 from docutils import nodes
@@ -263,6 +263,7 @@ Please use the following links:
    <a href=\"multiqc_report.html\" target=\"_blank\">Click to open report by MultiQC</a><br>
    <a href=\"multisampleBamQcReport.html\" target=\"_blank\">Click to open Multi-sample BAM QC by Qualimap</a><br>
    <a href=\"${project_name}_norm_QC.pdf\" target=\"_blank\">Click to open PDF with multiple QC figures</a>
+   <a href=\"${project_name}_adjusted_QC.pdf\" target=\"_blank\">Click to open PDF with multiple QC figures if batch correction/adjusted counts</a>
 
 .. index:: QC analyses" > index.rst
 
