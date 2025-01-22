@@ -615,7 +615,11 @@ pattern_to_remove <- args[16] # if not provided, "no"
           #edgeR_object_norm_temp <- estimateTagwiseDisp(edgeR_object_norm_temp)
       } else { 
           Treat <- edgeR_object_tmp$samples$group
-          Time <- as.factor(unlist(strsplit(as.character(covariab),",")))
+          if(covariab_format == "fact"){
+            Time <- as.factor(unlist(strsplit(as.character(covariab),",")))
+          } else if(covariab_format == "num"){
+            Time <- as.numeric(unlist(strsplit(as.character(covariab),",")))
+          }
           design <- model.matrix(~0+Treat+Time)
           rownames(design) <- colnames(edgeR_object_norm_temp)
           edgeR_object_norm_temp <- estimateDisp(edgeR_object_norm_temp, design, robust=TRUE) # Preparing for one covariable following edgeR vignette new methods Nov2023          
