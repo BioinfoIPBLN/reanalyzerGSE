@@ -359,7 +359,7 @@ pattern_to_remove <- args[16] # if not provided, "no"
         next
       }
       system(paste0("sed -i -e 's/[^a-zA-Z0-9]/_/g' -e '/^$/s//_/' ",z))
-      cat("\n\nPerforming figures for "); print(i); print(z); print("Design:"); print(read.table(z)$V1) # Deal with the designs, also dealing with special characters
+      cat("\n\nPerforming figures for "); print(i); cat("\n\nDesign:"); print(z); print(read.table(z)$V1) # Deal with the designs, also dealing with special characters
       if (i %in% gene_counts_rpkm_to_plot$Gene_ID){
         a <- gene_counts_rpkm_to_plot[gene_counts_rpkm_to_plot$Gene_ID==i,-grep("Gene_ID",colnames(gene_counts_rpkm_to_plot))]
         a <- a[,gtools::mixedsort(colnames(a))]
@@ -488,7 +488,7 @@ pattern_to_remove <- args[16] # if not provided, "no"
   }
 
   cat(paste0("\n\nPDF barplots and violin plots done if required. Keep in mind you can also use the Expression Visualization App at https://bioinfoipbln.shinyapps.io/expressionvisualizationapp/."))
-  print("Genes highlighted are:");print(genes);print(paste0("Current date: ",date()))
+  cat("\n\nGenes highlighted are:");print(genes);print(paste0("Current date: ",date()))
 
 
 ###### Attempt of Differential Gene Expression Analyses... modified from Bioinfo Unit to use here:
