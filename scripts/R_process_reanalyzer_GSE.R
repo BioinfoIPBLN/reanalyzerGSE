@@ -508,6 +508,7 @@ pattern_to_remove <- args[16] # if not provided, "no"
     data$FDR[data$FDR==0] <- 1e-318
 
     ##Los 10 con mejor FC
+    colnames(data)[grep("logFC",colnames(data))] <- "logFC"
     real_DE<-data[data$FDR<=0.05,]
     selected_FC<-head(real_DE[order(abs(real_DE$logFC),decreasing = T),], 20)
     max_value=max(abs(real_DE$logFC))
@@ -687,7 +688,7 @@ pattern_to_remove <- args[16] # if not provided, "no"
         } else {
           fit <- glmQLFit(edgeR_object_norm_temp_to_process, design, robust=TRUE)
           contrast <- rep(0,dim(design)[2])
-          idxs_design <- rev(c(grep(list_combinations[[i]][1],colnames(design)),grep(list_combinations[[i]][2],colnames(design))))
+          idxs_design <- rev(c(grep(sub("__","",list_combinations[[i]][1]),colnames(design)),grep(sub("__","",list_combinations[[i]][2]),colnames(design))))
           if(length(idxs_design)!=2){cat(paste0("\n\nSomething is WRONG as one of your contrasts has been required to compare ",length(idxs_design)," conditions. Probably conflicting naming of biological conditions...\n\n"));stop("Exiting, please review the naming of the conditions...")}
           contrast[idxs_design] <- c(-1,1)
           qlf <- glmQLFTest(fit,contrast=contrast)
