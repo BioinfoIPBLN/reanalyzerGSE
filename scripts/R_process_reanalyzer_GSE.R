@@ -704,7 +704,9 @@ pattern_to_remove <- args[16] # if not provided, "no"
             Volcano(edgeR_results,paste(output_dir,"/DGE/Volcano_plot_",myLabel1,".pdf", sep=""),myLabel1)
           }
         }
-        save.image(file=paste0(output_dir,"/DGE/DGE_analysis_comp",i+existing,".RData"))
+        conflicts <- intersect(ls(envir = environment()), ls(envir = .GlobalEnv))
+        if (length(conflicts) > 0) {warning("The following objects will be overwritten in the global environment: ", paste(conflicts, collapse = ", "))}
+        list2env(as.list(environment()), envir = .GlobalEnv); save.image(file=paste0(output_dir,"/DGE/DGE_analysis_comp",i+existing,".RData"))
         write.table(edgeR_results$table,
                 file=paste0(output_dir,"/DGE/DGE_analysis_comp",i+existing,".txt"),quote = F,row.names = F, col.names = T,sep = "\t")
       }
@@ -880,7 +882,9 @@ if (venn_volcano!="no"){
     try(system("tar cf venn_diagrams.tar Venn_diagram* 2>/dev/null; rm Venn_diagram* 2>/dev/null"))
   }
 }
-save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
+conflicts <- intersect(ls(envir = environment()), ls(envir = .GlobalEnv))
+if (length(conflicts) > 0) {warning("The following objects will be overwritten in the global environment: ", paste(conflicts, collapse = ", "))}
+list2env(as.list(environment()), envir = .GlobalEnv); save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
 
 ###### WIP add DESeq2 as a full alternative to edgeR, for now, generate and provide/write independently the counts if the user ask for it:
 if (diff_soft=="DESeq2"){  
