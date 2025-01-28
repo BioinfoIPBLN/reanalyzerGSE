@@ -116,7 +116,7 @@ class IncludeMatchingFiles(SphinxDirective):
             head_tail_degs = pd.concat([sorted_degs.head(10), sorted_degs.tail(10)])
 
             # Add information to nodes
-            caption_node = nodes.paragraph(text=f\"Contents of {file_name}::download:`Open <{file_name}>`\n\")
+            caption_node = nodes.paragraph(text=f\"Contents of {file_name}::download:\`Open <{file_name}>\`\n\")
             deg_nodes.append(nodes.paragraph(text=f\"Contents of {file_name}:\"))            
             deg_nodes.append(nodes.paragraph(text=f\"{num_degs_up} DEGs up\"))
             deg_nodes.append(nodes.paragraph(text=f\"{num_degs_down} DEGs down\"))
