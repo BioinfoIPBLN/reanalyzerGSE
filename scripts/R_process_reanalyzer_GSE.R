@@ -528,7 +528,7 @@ pattern_to_remove <- args[16] # if not provided, "no"
     print(comp); print("Top 10 results (each sense):"); top2 <- top1[top1$table$FDR<=myFDR,3:6]
     if(dim(top2)[1] > 20){
       print(as.data.frame(top2)[order(as.data.frame(top2)$logFC)[c(as.numeric(dim(top2)[1]):as.numeric(dim(top2)[1]-10),1:10)],])
-    else {
+    } else {
       print(as.data.frame(top2)[order(as.data.frame(top2)$logFC),])
     }   
     if (venn_volcano!="no"){
