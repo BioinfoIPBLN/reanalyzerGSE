@@ -116,8 +116,8 @@ class IncludeMatchingFiles(SphinxDirective):
             head_tail_degs = pd.concat([sorted_degs.head(10), sorted_degs.tail(10)])
 
             # Add information to nodes
-            caption_node = nodes.paragraph(text=f\"Contents of {file_name}::download:\`Open <{file_name}>\`\n\")
-            deg_nodes.append(nodes.paragraph(text=f\"Contents of {file_name}:\"))            
+            caption_node = nodes.paragraph(text=f\"Contents of {file_name}:\")            
+            deg_nodes.append(nodes.paragraph(text=f\"Contents of {file_name}:\"))
             deg_nodes.append(nodes.paragraph(text=f\"{num_degs_up} DEGs up\"))
             deg_nodes.append(nodes.paragraph(text=f\"{num_degs_down} DEGs down\"))
             deg_nodes.append(nodes.paragraph(text=f\"Total number of DEGs: {num_degs_up + num_degs_down}\"))
@@ -127,6 +127,11 @@ class IncludeMatchingFiles(SphinxDirective):
             literal_node['language'] = \"text\"
             literal_node += nodes.Text(head_tail_degs.to_string(index=False, header=False))
             deg_nodes.append(literal_node)
+
+            # Add a download link (HTML)
+            download_html = f'<p><a href=\"{file_name}\" download=\"{file_name}\" class=\"btn btn-primary\">Download {file_name}</a></p>'
+            raw_node = nodes.raw(\"\", download_html, format=\"html\")
+            deg_nodes.append(raw_node)
 
         except Exception as e:
             error_node = nodes.paragraph(text=f\"Error processing DEGs in {file_name}: {e}\")
