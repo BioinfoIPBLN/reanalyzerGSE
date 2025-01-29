@@ -3,7 +3,7 @@ reanalyzerGSE is a pipeline to assist with and streamline transcriptomic analyse
 
 ## Installation
 We suggest alternatives for installation. Please choose one of:
-1) An apptainer/singularity container is provided...
+1) An apptainer/singularity container is provided... 
 DETAILS PENDING
 2) Another option is to use the folder 'external_software' and an installation wrapper, which contain some of the required software (i.e. miARma-seq), a script to install dependencies (mainly through miniconda and pip, 'external_software/installation/install.sh'), and a suggestion of the PATH to be set ('source_path.sh'). To perform a conda-based installation and setup everything required to run reanalyzerGSE, please execute:
 
