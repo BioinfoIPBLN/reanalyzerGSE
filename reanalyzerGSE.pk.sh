@@ -664,7 +664,12 @@ if [[ $debug_step == "all" || $debug_step == "step3b" ]]; then
 	### Reformat the logs by parallel...
 	for f in $(find $output_folder/$name -name "*_log_parallel.txt"); do awk -F"\t" 'NR==1; NR > 1{OFS="\t"; $3=strftime("%Y-%m-%d %H:%M:%S", $3); print $0}' $f > tmp && mv tmp $f; done
 
- 	echo -e "\nmiARma-seq DONE. Current date/time: $(date)"; time1=`date +%s`; echo -e "Elapsed time (secs): $((time1-start))"; echo -e "Elapsed time (hours): $(echo "scale=2; $((time1-start))/3600" | bc -l)\n"
+ 	### Clean genome index cache?
+  	if [ "$aligner" == "star" ] && [ "$aligner_index_cache" == "no" ]; then
+		STAR --runThreadN $cores --genomeDir $(find $output_folder/$name/ -name "star_log_parallel.txt" | xargs cat | grep "genomeDir" | sed 's,.*genomeDir ,,g;s, .*,,g' | sort | uniq) --genomeLoad Remove --outFileNamePrefix genomeloading.tmp && rm genomeloading.tmp
+	fi
+ 	
+	echo -e "\nmiARma-seq DONE. Current date/time: $(date)"; time1=`date +%s`; echo -e "Elapsed time (secs): $((time1-start))"; echo -e "Elapsed time (hours): $(echo "scale=2; $((time1-start))/3600" | bc -l)\n"
 	export debug_step="all"
 	echo -e "\n\nSTEP 3b: DONE\nCurrent date/time: $(date)\n\n"
 fi
@@ -858,11 +863,7 @@ if [[ $debug_step == "all" || $debug_step == "step9" ]]; then
 				rm -rf $(ls | egrep ".bam$") $TMPDIR
 			fi
 		done
-	fi
-
-	if [ "$aligner" == "star" ] && [ "$aligner_index_cache" == "no" ]; then
-		STAR --runThreadN $cores --genomeDir $(find $output_folder/$name/ -name "star_log_parallel.txt" | xargs cat | grep "genomeDir" | sed 's,.*genomeDir ,,g;s, .*,,g' | sort | uniq) --genomeLoad Remove --outFileNamePrefix genomeloading.tmp && rm genomeloading.tmp
-	fi
+	fi	
 
 	cd $output_folder/$name/ && rm $(find . -name "*_fdr_05.txt" -o -name "*_logneg.txt" -o -name "*_logpos.txt")
 	if [ "$convert_tables_excel" == "yes" ]; then
