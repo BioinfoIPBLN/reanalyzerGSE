@@ -3,7 +3,7 @@ args = commandArgs(trailingOnly=TRUE)
 path <- args[1]
 input_dir <- args[2]
 output_dir <- args[3]
-genes <- args[4]
+genes <- args[4] # If not provided, "none"
 filter_option <- args[5] # For now, bin or standard
 organism <- args[6]
 targets_file <- args[7] # if not provided, "no"
