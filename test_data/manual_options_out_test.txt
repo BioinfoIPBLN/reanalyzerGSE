@@ -1,0 +1,82 @@
+#### Input/output: 
+input=$PWD/seqs
+input_geo_reads=
+name=out_test
+output_folder=$PWD/out_test
+genes=Krt14,Rpl4
+TMPDIR_arg=
+
+#### Reference and databases:
+reference_genome=$PWD/GRCm39.primary_assembly.genome.fa
+reference_genome_index=
+annotation=$PWD/gencode.vM36.primary_assembly.basic.annotation.gtf
+transcripts=
+kraken2_databases=
+sortmerna_databases=
+databases_function=GO_Biological_Process_2023,GO_Molecular_Function_2023,GO_Cellular_Component_2023
+
+#### Metadata and sample info:
+design_custom_local=condA,condA,condB,condB
+design_custom=no
+organism=Mus_musculus
+taxonid=
+number_reads_to_subsample=
+batch_vector=
+batch_biological_covariates=
+covariables=
+covariables_format=
+target=
+
+#### Activate alternative modes:
+debug_step=all
+qc_raw_reads=yes
+full_differential_analyses=yes
+functional_enrichment_analyses=yes
+clusterProfiler_full=no
+batch=no
+bed_mode=no
+deconvolution=no
+perform_volcano_venn=yes
+aPEAR_execution=no
+tidy_tmp_files=no
+convert_tables_excel=no
+time_course=no
+network_analyses=no
+auto_panther_log=no
+
+#### Processing parameters:
+strand=reverse
+filter=bin
+optionsFeatureCounts_feat=exon
+optionsFeatureCounts_seq=gene_name
+aligner=star
+differential_expr_soft=edgeR
+fastp_mode=no
+fastp_adapter=no
+fastp_trimmnig=none
+time_course_std=1
+time_course_fuzz=0
+
+#### Filtering out samples/comparisons:
+GSM_filter=
+stop=no
+pattern_to_remove=none
+differential_expr_comparisons=no
+
+#### Functional enrichment/networking analyses
+clusterProfiler_method=fdr
+clusterProfiler_universe=detected
+clusterProfiler_minGSSize=10
+clusterProfiler_maxGSSize=500
+panther_method=FDR
+revigo_threshold_similarity=0.7
+
+#### Performance:
+cores=12
+cores_reads_to_subsample=10
+cores_index=10
+memory_max=34359738368
+number_parallel=4
+compression_level=9
+aligner_index_cache=no
+kraken2_fast=no
