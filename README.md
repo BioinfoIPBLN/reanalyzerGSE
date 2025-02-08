@@ -5,6 +5,7 @@ reanalyzerGSE is a pipeline to assist with and streamline transcriptomic analyse
 We suggest alternatives for installation. Please choose one of:
 
 1) An Apptainer/Singularity container (~2.5 GB) is provided. You can either:
+
 1.1) Use the .def file to create the .sif image by executing:
 ```
 git clone https://github.com/BioinfoIPBLN/reanalyzerGSE
@@ -15,6 +16,7 @@ apptainer build reanalyzerGSE/external_software/installation/reanalyzerGSE.sif r
 wget https://bit.ly/reana_apptainer_image -O reanalyzerGSE.sif
 ```
 
+
 2) Another option is to use the folder 'external_software', which contain some of the required software (i.e. miARma-seq), and within the 'external_software/installation' folder a wrapper script installs and configures all dependencies (mainly through miniconda and pip, 'external_software/installation/install.sh'). To perform a conda-based installation and setup everything required to run reanalyzerGSE, please execute:
 ```
 git clone https://github.com/BioinfoIPBLN/reanalyzerGSE
@@ -22,6 +24,7 @@ bash reanalyzerGSE/external_software/installation/install.sh 2>&1 | tee -a reana
 ```
 
 This should work if you already have miniconda3 installed, and also install miniconda3 within the reanalyzerGSE folder if not available or if you have kept it out of the PATH. Plese keep in mind that in the 'install.sh' script most of the versions of the tools installed by conda are frozen (by means of multiple '.yml' files corresponding to different environments), so please open an issue or try to install with conda if there are dependency-related problems or any software is not installed.
+
 
 3) The less recommended option is to manually install the required software.
 If you want to manually install the software, check out the list of required tools in the .def file (Apptainer/Singularity) or in the files '.yml' within the folder 'external_software/installation'. Please be aware that many scripts (bash, perl...) within the 'scripts' folder are also used, so you may need to manually change the interpreter in the corresponding statements (first line #!) to ensure that everything works in your system. You may also check out the 'install.sh' script to conform to other needs, such as making scripts executable ('chmod' command).
