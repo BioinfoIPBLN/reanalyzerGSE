@@ -78,5 +78,5 @@ cores_index=10
 memory_max=34359738368
 number_parallel=4
 compression_level=9
-aligner_index_cache=yes
+aligner_index_cache=no
 kraken2_fast=no
