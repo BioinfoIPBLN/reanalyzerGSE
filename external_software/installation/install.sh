@@ -2,7 +2,7 @@
 echo -e "\nThis is a wrapper script to install all reanalyzerGSE dependencies available through conda (multiple environments due to dependency conflicts), and others that are external, such as check_strandedness with pip.\n"
 echo -e "\nBy default, the script first checks if there's a conda executable in the PATH. If there is, it tries to install mamba in the active environment (it shouldn't change anything if already installed) and then reads four yml files to create new environments. If there is no conda installed, it tries to install latest conda version in the external_software folder and performs the same steps in the sentence before\n"
 echo -e "\nIf you want to use just conda instead of mamba, please use '-m conda'\n"
-
+ 
 ### Define arguments and variables
 ### A string with command options and an array with arguments
 options=$@
