@@ -9,7 +9,7 @@ We suggest alternatives for installation. Please choose one of:
 1.1) Use the .def file to create the .sif image by executing:
 ```
 git clone https://github.com/BioinfoIPBLN/reanalyzerGSE
-apptainer build reanalyzerGSE/external_software/installation/reanalyzerGSE.sif reanalyzerGSE/external_software/installation/reanalyzerGSE.def
+apptainer build reanalyzerGSE.sif reanalyzerGSE/external_software/installation/reanalyzerGSE.def
 ```
 1.2) Download the ready-to-use .sif image:
 ```
