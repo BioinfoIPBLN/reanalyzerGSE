@@ -13,7 +13,7 @@ for argument in $options; do
 
 ### Gather the parameters, default values, exit if essential not provided...
 	case $argument in
-		-h*) echo "reanalyzerGSE v3.0.0 - usage: reanalyzerGSE.pk.sh [options]
+		-h*) echo "reanalyzerGSE v3.0.1 - usage: reanalyzerGSE.pk.sh [options]
 	        -h | -help # Type this to get help
 	        -options | Provide the file containing the parameters to be used. You can adapt the file 'manual_options.txt' provided in the scripts folder, alternative to manually input in the command line all the options...)
 	        
@@ -42,7 +42,7 @@ for argument in $options; do
 	        -R | -number_reads_to_subsample # Information and number of reads to subsample to the sequences before the analyses (none by default, a path to the 'reads_numbers.txt' file from a previous execution and a number of reads must be provided, separated with comma, and proportions will be computed, with all samples being scaled to approximately, +- 10% of that number)
 	        -bv | -batch_vector # Comma-separated list of numbers for use as batch vector with Combat-seq
 	        -bc | -batch_biological_covariable # Comma-separated list of numbers for use as batch vector of covariables of biological interest with Combat-seq
-		-bf | -batch_format # Format of the provided batch variables ('num' for numeric/vector variables or 'fact' for factors, by default)
+			-bf | -batch_format # Format of the provided batch variables ('num' for numeric/vector variables or 'fact' for factors, by default)
 	        -C | -covariables # Please input a comma-separated list for the covariable that should be included in the limma model for removeBatchEffect or in the edgeR model for DGE (for now only one covariable allowed, for example an expected batch effect)
 	        -Cf | -covariables_format # Format of the provided covariate ('num' by default for numeric covariables, or 'fact' for factors)
 	        -T | -target # Protopical target file for attempts to differential gene expression analyses (containing filenames and covariates, automatically built if not provided)
@@ -178,7 +178,7 @@ if [ ! -z "$options_file" ]; then
 fi
 
 ##### Deal with defaults or with the user not providing some...
-if [ -z "$input" ] || [ -z "$output_folder" ] || [ -z "$cores" ] || [ -z "$reference_genome" ] || [ -z "$annotation" ]; then
+if { [ -z "$input" ] && [ -z "$input_geo_reads" ]; } || [ -z "$output_folder" ] || [ -z "$cores" ] || [ -z "$reference_genome" ] || [ -z "$annotation" ]; then
 	echo "Please check usage with 'reanalyzer_GSE_RNA_seq.sh -h'. At least one required argument has not been provided..."; exit 1
 fi
 
@@ -189,10 +189,17 @@ echo -e "\ncores=$cores\n"
 if [ -z "$name" ]; then
 	if [[ $input == G* ]]; then
 		arrIN=(${input//,/ }); name=$(for a in "${arrIN[@]}"; do echo "$a"; done | sort | tr '\n' '_' | sed 's,_$,,g')
+		echo -e "\nname=$name"
 	elif [[ $input == /* ]]; then
 		name=$(basename $input)
+		echo -e "\nname=$name"
 	else
 		echo "Please double check you have provided either a GEO ID (GSEXXXXXX) or a full pathway to input folder (/path/folder_name/) as the argument '-i'"; exit 1
+	fi
+else
+	if [[ $input == G* ]]; then
+		arrIN=(${input//,/ }); name=$(for a in "${arrIN[@]}"; do echo "$a"; done | sort | tr '\n' '_' | sed 's,_$,,g')
+		echo -e "\nOverwriting name because you are downloading from GEO...\nname=$name"
 	fi
 fi
 echo -e "\nname=$name\n"
