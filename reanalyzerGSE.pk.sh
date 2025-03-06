@@ -142,7 +142,7 @@ if [[ $debug_step == "all" || $debug_step == "step1a" ]]; then
 			mkdir -p $seqs_location
 			echo "Downloading the fastq files from SRR..."
 			if [ -z "$input_geo_reads" ]; then
-				download_sra_fq.sh $output_folder/$name/GEO_info/srr_ids.txt $seqs_location $(( number_parallel*2 )) $cores $compression_level
+				download_sra_fq.sh $output_folder/$name/GEO_info/srr_ids.txt $seqs_location $(( number_parallel*2 )) $cores
 	### Rename the fastq files (max length name 140 characters) or handle already downloaded datasets if provided:
 				cd $seqs_location
 				if [[ "$(cat $output_folder/$name/GEO_info/library_layout_info.txt)" == "SINGLE" ]]; then
