@@ -135,7 +135,7 @@ if [[ $debug_step == "all" || $debug_step == "step1a" ]]; then
 			echo "You have requested a stop to manually provide the SRR ids, or potentially modify other files that may have not been detected properly from GEO, and were not correct, or you just want to adapt some of them. Please double check or manually modify the files GEO_info/srr_ids.txt, samples_info.txt, sample_names.txt, phenodata_extracted.txt, library_layout_info.txt, organism.txt, design_files, etc. The pipeline is stopped. Please press space to continue or Ctrl + C to exit..."
 			read -n1 -s -r -p $'Press space to continue...\n' key
 			rm $output_folder/$name/possible_designs_all.txt
-			for i in $(ls $output_folder/$name/GEO_info| grep "full"); do echo $i >> $output_folder/$name/possible_designs_all.txt && cat $output_folder/$name/GEO_info/$i >> $output_folder/$name/possible_designs_all.txt && echo -e "\n" >> $output_folder/$name/possible_designs_all.txt; done
+			for i in $(ls $output_folder/$name/GEO_info | grep "full"); do echo $i >> $output_folder/$name/possible_designs_all.txt && cat $output_folder/$name/GEO_info/$i >> $output_folder/$name/possible_designs_all.txt && echo -e "\n" >> $output_folder/$name/possible_designs_all.txt; done
 			cat $output_folder/$name/GEO_info/phenodata_extracted.txt > $output_folder/$name/phenotypic_data_samples.txt
 		fi
 		if [ ! -d "$seqs_location" ]; then # I'm now removing the seqs_location at the beginning of this section, in the context of the new system of resuming by -Dm stepx, so this should always be done
