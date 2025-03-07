@@ -40,7 +40,7 @@ if [[ $debug_step == "all" || $debug_step == "step1" ]]; then
 			for i in $(zcat *_series_matrix.txt.gz | egrep 'SRP|Series_geo_accession' | sed 's,.*SRP,SRP,g' | sed 's,",,g' | sed 's,.*\t,,g' | grep SRP); do
 				mv $(ls | grep $i) $(ls | grep $i | sed 's,.txt,_,g')$(zcat *_series_matrix.txt.gz | egrep 'SRP|Series_geo_accession' | sed 's,.*SRP,SRP,g' | sed 's,",,g' | sed 's,.*\t,,g' | grep -B1 $i | grep GSE)".txt"
 			done
-		R_process_pysradb.R $input $output_folder
+			R_process_pysradb.R $input $output_folder
 		fi
 		R_download_GEO_info_process.R $input $output_folder
 		sed -i -r -e 's/[^[:alnum:]_\t]/_/g' -e 's/_\+/_/g' -e 's/(_[^_]*)\1+/\1/g' sample_names.txt
@@ -49,7 +49,6 @@ if [[ $debug_step == "all" || $debug_step == "step1" ]]; then
 			rm srx_ids.txt
 		fi
 		if test -f srr_ids.txt; then
-			for i in $(cat srr_ids.txt | shuf | head -2); do esearch -db sra -query $i | esummary | egrep "SINGLE|PAIRED" >> library_layout.txt; done && uniq library_layout.txt | sed 's/          //g;s/<//g;s/>//g;s\/\\g' > library_layout_info.txt && rm library_layout.txt
 			paste -d$'\t' srr_ids.txt sample_names.txt $(for f in $(ls | grep full); do echo $f" "$(sort $f | uniq -c | wc -l); done | grep -v " 1" | cut -d" " -f1 | head -1) > samples_info.txt # the third column is a design containing at least more than one element...
 			sed -i -r -e 's/[^[:alnum:]_\t]/_/g' -e 's/_\+/_/g' -e 's/(_[^_]*)\1+/\1/g' -e 's/_([0-9]+)/-\1/g' samples_info.txt # Should be redundant but make sure to remove special characters from the sample names and _1/_2... it's crucial for later steps such as fastqc and miarma-seq
 		fi
