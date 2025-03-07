@@ -319,7 +319,8 @@ if (file.exists(paste0(path,"/",GEO_ID_path,"/sample_info.txt"))){
 	sample_names <- sub("([+-])|[[:punct:]]","_",sample_names) # Make sure no commas in the name or spaces, and no instances of _1 or _2, important for miARma-seq later on
 	sample_names <- gsub("_2","-2",gsub("_1","-1",sample_names))
 	sample_names <- gsub(";","",sample_names)
-	sample_names <- unique(gsub("__","-_",sample_names))
+	# sample_names <- unique(gsub("__","-_",sample_names))
+	sample_names <- gsub("__","-_",sample_names)
 	
 	write.table(sample_names,
 		    file=paste(path,GEO_ID_path,"GEO_info","sample_names.txt",sep="/"),quote = F,row.names = F, col.names = F,sep = "\n")
