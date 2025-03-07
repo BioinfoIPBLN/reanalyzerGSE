@@ -291,6 +291,8 @@ if (file.exists(paste0(path,"/",GEO_ID_path,"/sample_info.txt"))){
 	# Remove some columns that can be typically ignored:
 	cols_to_ignore <- unique(c("column_label",
                     grep("AWS",colnames(info),val=T),
+		    grep("processed",colnames(info),val=T),
+		    grep("experiment_title_2|experiment_title_3|experiment_title_4",colnames(info),val=T),
                     grep("run_accession",grep("access",colnames(info),val=T),invert=T,val=T),
                     grep("run",grep("access",colnames(info),val=T),invert=T,val=T),
                     grep("url",colnames(info),val=T),
@@ -310,7 +312,7 @@ if (file.exists(paste0(path,"/",GEO_ID_path,"/sample_info.txt"))){
 	info_filt_2 <- as.data.frame(apply(info_filt_2,2,function(x){gsub("^gsm","GSM",x)}))
 	info_filt_2 <- as.data.frame(apply(info_filt_2,2,function(x){gsub("^srr","SRR",x)}))
 	info_filt_2 <- as.data.frame(apply(info_filt_2,2,function(x){gsub("[^a-zA-Z0-9_]","_",x)}))
-	info_filt_2 <- as.data.frame(apply(info_filt_2,2,function(x){gsub("[0-9]+","",x)}))
+	#info_filt_2 <- as.data.frame(apply(info_filt_2,2,function(x){gsub("[0-9]+","",x)}))
 	info_filt_2 <- as.data.frame(apply(info_filt_2,2,function(x){gsub("_+","_",x)}))
 				  
 	sample_names <- apply(info_filt_2,1,function(x){paste(x,collapse="_")})
