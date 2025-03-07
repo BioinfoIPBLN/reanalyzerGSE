@@ -27,6 +27,9 @@ cd $dest
 # parallel --verbose --joblog $dest/../download_sra_fq_log_parallel.txt -j $number_parallel download_sra_fq0.sh {} $cores_parallel $compression_level ::: $(cat $file)
 
 parallel --verbose --joblog $dest/../download_sra_fq_log_parallel.txt -j $number_parallel fastq-dl --accession {} --cpus $cores_parallel ::: $(cat $file)
+
+cut -f106 fastq-run-info.tsv | sed '1d' > $(dirname $file)/library_layout_info.txt
+
 rm fastq-run*
 
 
