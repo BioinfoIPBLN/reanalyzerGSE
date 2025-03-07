@@ -24,7 +24,7 @@ From: ubuntu:latest
     mkdir -p bin_external/lib
     wget -q https://ftp-trace.ncbi.nlm.nih.gov/sra/sdk/current/sratoolkit.current-ubuntu64.tar.gz && tar xzf sratoolkit.current-ubuntu64.tar.gz && mv sratoolkit*/bin/* bin_external/ && rm -rf sratoolkit*
     wget -q https://github.com/samtools/samtools/releases/download/1.21/samtools-1.21.tar.bz2 && tar xf samtools-1.21.tar.bz2 && cd samtools-1.21 && mkdir bin && ./configure -q --prefix=$PWD/bin && make -s && make -s install && cd .. && mv samtools*/bin/bin/* bin_external/ && rm -rf samtools*
-    yes n | sh -c "$(wget -q https://ftp.ncbi.nlm.nih.gov/entrez/entrezdirect/install-edirect.sh -O -)"    
+    # yes n | sh -c "$(wget -q https://ftp.ncbi.nlm.nih.gov/entrez/entrezdirect/install-edirect.sh -O -)"    
     wget -q http://opengene.org/fastp/fastp && chmod a+x ./fastp && mv fastp bin_external
     wget -q https://github.com/shenwei356/taxonkit/releases/download/v0.18.0/taxonkit_linux_amd64.tar.gz && tar xzf taxonkit_linux_amd64.tar.gz && rm taxonkit_linux_amd64.tar.gz && mv taxonkit bin_external/
     wget -q https://github.com/sortmerna/sortmerna/releases/download/v4.3.7/sortmerna-4.3.7-Linux.tar.gz && tar xzf sortmerna-4.3.7-Linux.tar.gz && mv sortmerna*/bin/* bin_external/ && rm -rf sortmerna*    
