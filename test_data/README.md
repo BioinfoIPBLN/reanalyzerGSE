@@ -45,6 +45,7 @@ wget -q https://bit.ly/reana_apptainer_image -O reanalyzerGSE.sif # Download the
 wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M36/GRCm39.primary_assembly.genome.fa.gz # Download reference genome
 wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M36/gencode.vM36.primary_assembly.basic.annotation.gtf.gz # Download reference genome annotation
 gzip -d *.gz # To uncompress the references
+wget https://github.com/BioinfoIPBLN/reanalyzerGSE/raw/refs/heads/main/test_data/manual_options_out_test_GEO.txt
 
 apptainer exec reanalyzerGSE.sif reanalyzerGSE.pk.sh -options manual_options_out_test_GEO.txt 2>&1 | tee -a out_test_GEO.log
 ```
