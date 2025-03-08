@@ -14,10 +14,10 @@ From: ubuntu:latest
       python-is-python3 python-dev-is-python3 python3-dev \
       locales libconfig-ini-perl libtemplate-plugin-posix-perl libscalar-list-utils-perl libwww-perl libdatetime-perl libstatistics-r-perl libconfig-inifiles-perl cpanminus > /dev/null && apt -qy autoremove --purge > /dev/null && apt -q clean && rm -rf /var/lib/apt/lists/*
 
-    locale-gen es_ES.UTF-8
-    update-locale LANG=es_ES.UTF-8
-    echo "export LANG=es_ES.UTF-8" >> ~/.bashrc
-    echo "export LC_ALL=es_ES.UTF-8" >> ~/.bashrc
+    locale-gen en_US.UTF-8
+    update-locale LANG=en_US.UTF-8
+    echo "export LANG=en_US.UTF-8" >> ~/.bashrc
+    echo "export LC_ALL=en_US.UTF-8" >> ~/.bashrc
     
     git clone -q https://github.com/BioinfoIPBLN/reanalyzerGSE && chmod +x /reanalyzerGSE/reanalyzerGSE.pk.sh && chmod +x /reanalyzerGSE/scripts/* && chmod +x /reanalyzerGSE/external_software/miARma-seq/miARma && rm -rf /reanalyzerGSE/test_data
     
