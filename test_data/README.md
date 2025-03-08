@@ -10,14 +10,13 @@ Depending on the installation method, you can either:
 
 ```
 wget -q https://bit.ly/reana_apptainer_image -O reanalyzerGSE.sif # Download the Apptainer image or use the one you created (see Installation instructions in main README)
-wget -q https://bit.ly/reana_test_data -O test_data.tar && tar xf test_data.tar --one-top-level && rm test_data.tar # Download test datasets
+wget -q https://bit.ly/reana_test_data -O test_data.tar && tar xf test_data.tar && rm test_data.tar # Download test datasets
 
-cd test_data
 wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M36/GRCm39.primary_assembly.genome.fa.gz # Download reference genome
 wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M36/gencode.vM36.primary_assembly.basic.annotation.gtf.gz # Download reference genome annotation
 gzip -d *.gz # To uncompress the references
 
-apptainer exec ../reanalyzerGSE.sif reanalyzerGSE.pk.sh -options manual_options_out_test.txt 2>&1 | tee -a out_test.log
+apptainer exec reanalyzerGSE.sif reanalyzerGSE.pk.sh -options manual_options_out_test.txt 2>&1 | tee -a out_test.log
 ```
 
 2) Use the conda-based installation
