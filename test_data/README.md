@@ -9,7 +9,7 @@ Depending on the installation method, you can either:
 1) Use the Apptainer image:
 
 ```
-wget -q https://bit.ly/reana_apptainer_image -O reanalyzerGSE.sif # Download the Apptainer image or use the one you created (see Installation instructions in main README)
+# wget -q https://bit.ly/reana_apptainer_image -O reanalyzerGSE.sif # Download the Apptainer image or use the one you created (see Installation instructions in main README)
 wget -q https://bit.ly/reana_test_data -O test_data.tar && tar xf test_data.tar && rm test_data.tar # Download test datasets
 
 wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M36/GRCm39.primary_assembly.genome.fa.gz # Download reference genome
@@ -40,7 +40,7 @@ Depending on the installation method, you can either:
 1) Use the Apptainer image:
 
 ```
-wget -q https://bit.ly/reana_apptainer_image -O reanalyzerGSE.sif # Download the Apptainer image or use the one you created (see Installation instructions in main README)
+# wget -q https://bit.ly/reana_apptainer_image -O reanalyzerGSE.sif # Download the Apptainer image or use the one you created (see Installation instructions in main README)
 
 wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M36/GRCm39.primary_assembly.genome.fa.gz # Download reference genome
 wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M36/gencode.vM36.primary_assembly.basic.annotation.gtf.gz # Download reference genome annotation
