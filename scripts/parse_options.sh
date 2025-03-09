@@ -1,6 +1,4 @@
 #!/bin/bash
-
-
 CURRENT_DIR_SCRIPTS=$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 export PATH=$CURRENT_DIR_SCRIPTS:$PATH; echo -e "\n\nAdding to PATH the scripts folder...$CURRENT_DIR_SCRIPTS"
 
@@ -189,10 +187,8 @@ echo -e "\ncores=$cores\n"
 if [ -z "$name" ]; then
 	if [[ $input == G* ]]; then
 		arrIN=(${input//,/ }); name=$(for a in "${arrIN[@]}"; do echo "$a"; done | sort | tr '\n' '_' | sed 's,_$,,g')
-		echo -e "\nname=$name"
 	elif [[ $input == /* ]]; then
 		name=$(basename $input)
-		echo -e "\nname=$name"
 	else
 		echo "Please double check you have provided either a GEO ID (GSEXXXXXX) or a full pathway to input folder (/path/folder_name/) as the argument '-i'"; exit 1
 	fi
