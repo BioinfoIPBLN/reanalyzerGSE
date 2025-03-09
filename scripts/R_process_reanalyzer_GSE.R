@@ -178,7 +178,7 @@ pattern_to_remove <- args[16] # if not provided, "no"
   edgeR_object <- DGEList(counts=gene_counts[,grep("Gene_ID|Length",colnames(gene_counts),invert=T)],
                    group=pheno$condition,
                    genes=gene_counts[,c(grep("Gene_ID",colnames(gene_counts)),grep("Length",colnames(gene_counts)))])
-  cat("\n\nPlease note that counts have been normalized and figures have been performed using the groups and samples:"); print(pheno$condition); print(grep("Gene_ID|Length",colnames(gene_counts),invert=T,val=T))
+  cat("\n\nPlease note that counts have been normalized and figures have been performed using the groups and samples:\n"); print(pheno$condition); print(grep("Gene_ID|Length",colnames(gene_counts),invert=T,val=T))
 
 ###### Filter counts:
   filter <- function(filter="standard",data,min_group=3){
