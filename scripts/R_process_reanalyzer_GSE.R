@@ -634,7 +634,7 @@ pattern_to_remove <- args[16] # if not provided, "no"
       # Process each combination
       list_combinations <- strsplit(unique(unlist(lapply(strsplit(apply(expand.grid(unique(condition), unique(condition)),1,function(x){paste(x,collapse="*****")}),"*****",fixed=T),function(x){if (x[1] != x[2]){paste(sort(x),collapse="*****")}}))),"*****",fixed=T)
       list_combinations <- lapply(list_combinations,function(x){if (sum(!startsWith(x,"__"))==2){paste0("__",x)} else {x}})
-      print("These are the combinations that will be analyzed in differential gene expression analyses, if you want to restrict or change these, please use the argument -Dec or -pR")
+      cat("\nThese are the combinations that will be analyzed in differential gene expression analyses, if you want to restrict or change these, please use the argument -Dec or -pR\n")
       if (restrict_comparisons!="no"){
         cat("You have manually provided a list. Reading the comma-separated list with the ordered comparisons that you want to perform...\n")
         cat("These are:\n")
@@ -720,7 +720,7 @@ pattern_to_remove <- args[16] # if not provided, "no"
   
   ## Computing house-keeping/hallmark genes:
     if (full_analyses!="no"){
-      print("Obtaining house-keeping genes...")
+      cat("\nObtaining house-keeping genes...\n")
       suppressMessages(library(NormqPCR,quiet = T,warn.conflicts = F))
       suppressMessages(library(limma,quiet = T,warn.conflicts = F))
       setwd(paste0(output_dir,"/DGE"))
