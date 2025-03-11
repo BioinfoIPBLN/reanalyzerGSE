@@ -11,7 +11,7 @@ for argument in $options; do
 
 ### Gather the parameters, default values, exit if essential not provided...
 	case $argument in
-		-h*) echo "reanalyzerGSE v3.0.1 - usage: reanalyzerGSE.pk.sh [options]
+		-h*) echo "reanalyzerGSE v3.1.0 - usage: reanalyzerGSE.pk.sh [options]
 	        -h | -help # Type this to get help
 	        -options | Provide the file containing the parameters to be used. You can adapt the file 'manual_options.txt' provided in the scripts folder, alternative to manually input in the command line all the options...)
 	        
