@@ -384,7 +384,9 @@ seqs_location=$output_folder/$name/raw_reads
 organism_argument=$organism
 number_reads=$number_reads_to_subsample
 perform_differential_analyses=$full_differential_analyses
-debug_step=$debug_module
+if [ -z "$debug_step" ]; then
+	debug_step=$debug_module
+fi
 minstd=$time_course_std
 mestimate=$time_course_fuzz
 rev_thr=$revigo_threshold_similarity

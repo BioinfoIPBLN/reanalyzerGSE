@@ -19,11 +19,12 @@ pattern_to_remove <- args[16] # if not provided, "no"
 
 ###### Load read counts, format, filter, start differential expression analyses, get RPKM, save...:
   cat("\nProcessing counts and getting figures...\n")
-  print(paste0(input_dir,". Current date: ",date()))
+  cat(paste0(input_dir,". Current date: ",date()))
   a <- lapply(paste0(input_dir,"/str_readcount_results/",list.files(paste0(input_dir,"/str_readcount_results"),pattern = ".tab$")),
               function(x){data.table::fread(x)[,c(1,7)]})
-  b <- data.table::fread(paste0(input_dir,"/Readcount_results/str-Size.tab"))
-  colnames(b)[1] <- "Geneid"
+  b <- as.data.frame(unique(data.table::rbindlist(lapply(paste0(input_dir,"/str_readcount_results/",list.files(paste0(input_dir,"/str_readcount_results"),pattern = ".tab$")),
+              function(x){data.table::fread(x)[,c(1,6)]}))))
+  cat("\nReads loaded...\n")
   b$Length[is.na(b$Length)] <- 0
   gene_counts <- Reduce(merge,a)
   colnames(gene_counts)[2:dim(gene_counts)[2]] <- gsub(".*_results/|_nat.*","",colnames(gene_counts)[2:dim(gene_counts)[2]])
