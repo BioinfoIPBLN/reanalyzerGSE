@@ -134,7 +134,7 @@ pattern_to_remove <- args[16] # if not provided, "no"
                 file=paste0(output_dir,"/counts_adjusted.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
   }  
 
-  pheno <- as.data.frame(data.table::fread(paste0(path,"/GEO_info/samples_info.txt"),head=F))
+  pheno <- read.table(paste0(path,"/GEO_info/samples_info.txt"),head=F)
   if(dim(pheno)[2]>2){
     pheno <- pheno[,2:3]
   }
