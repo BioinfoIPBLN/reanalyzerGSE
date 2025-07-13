@@ -32,7 +32,7 @@ cd $CURRENT_DIR; echo -e "\nThe current folder is $CURRENT_DIR\n"
 
 #### Setting permissions of executables:
 echo -e "\n\nSetting permissions...\n\n"
-chmod 775 $CURRENT_DIR/../../reanalyzerGSE.pk.sh
+chmod 775 $CURRENT_DIR/../../reanalyzerGSE.sh
 chmod 775 $CURRENT_DIR/../../scripts/*
 chmod 775 $CURRENT_DIR/../miARma-seq/miARma
 
