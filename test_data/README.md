@@ -16,7 +16,7 @@ wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M36/GR
 wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M36/gencode.vM36.primary_assembly.basic.annotation.gtf.gz # Download reference genome annotation
 gzip -d *.gz # To uncompress the references
 
-apptainer exec reanalyzerGSE.sif reanalyzerGSE.pk.sh -options manual_options_out_test.txt 2>&1 | tee -a out_test.log
+apptainer exec reanalyzerGSE.sif reanalyzerGSE.sh -options manual_options_out_test.txt 2>&1 | tee -a out_test.log
 ```
 
 2) Use the conda-based installation
@@ -29,7 +29,7 @@ wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M36/GR
 wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M36/gencode.vM36.primary_assembly.basic.annotation.gtf.gz # Download reference genome annotation
 gzip -d *.gz # To uncompress the references
 
-reanalyzerGSE.pk.sh -options manual_options_out_test.txt 2>&1 | tee -a out_test.log
+reanalyzerGSE.sh -options manual_options_out_test.txt 2>&1 | tee -a out_test.log
 ```
 
 ## Reanalysis of a GEO dataset:
@@ -47,7 +47,7 @@ wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M36/ge
 gzip -d *.gz # To uncompress the references
 wget https://github.com/BioinfoIPBLN/reanalyzerGSE/raw/refs/heads/main/test_data/manual_options_out_test_GEO.txt
 
-apptainer exec reanalyzerGSE.sif reanalyzerGSE.pk.sh -options manual_options_out_test_GEO.txt 2>&1 | tee -a out_test_GEO.log
+apptainer exec reanalyzerGSE.sif reanalyzerGSE.sh -options manual_options_out_test_GEO.txt 2>&1 | tee -a out_test_GEO.log
 ```
 
 2) Use the conda-based installation
@@ -60,6 +60,6 @@ wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M36/GR
 wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M36/gencode.vM36.primary_assembly.basic.annotation.gtf.gz # Download reference genome annotation
 gzip -d *.gz # To uncompress the references
 
-reanalyzerGSE.pk.sh -options manual_options_out_test_GEO.txt 2>&1 | tee -a out_test_GEO.log
+reanalyzerGSE.sh -options manual_options_out_test_GEO.txt 2>&1 | tee -a out_test_GEO.log
 ```
 
