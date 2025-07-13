@@ -8,7 +8,7 @@ From: ubuntu:latest
 
 %post
   # Install dependencies and software:    
-    apt update -qq > /dev/null && \
+    export DEBIAN_FRONTEND=noninteractive && apt update -qq > /dev/null && \
     apt install -qy --no-install-recommends wget software-properties-common dirmngr && \
     wget -qO- https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc | tee -a /etc/apt/trusted.gpg.d/cran_ubuntu_key.asc && \
     add-apt-repository "deb https://cloud.r-project.org/bin/linux/ubuntu $(lsb_release -cs)-cran40/" && \
