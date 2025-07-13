@@ -35,9 +35,9 @@ Please go to test_data/README and follow instructions.
 
 
 ## reanalyzerGSE arguments
-Please refer to the help page for futher details:
+Please refer to the help page for futher details. Please be aware that a txt containing arguments can be provided to '-options'
 ```
-reanalyzerGSE.pk.sh -h
+reanalyzerGSE.sh -h
 		-h | -help # Type this to get help
 	        -options | Provide the file containing the parameters to be used. You can adapt the file 'manual_options.txt' provided in the scripts folder, alternative to manually input in the command line all the options...)
 	        
@@ -126,7 +126,7 @@ reanalyzerGSE.pk.sh -h
 	        -K | -Kraken2_fast # Kraken2 fast mode, consisting on copying the Kraken2 database to /dev/shm (RAM) so execution is faster ('yes' or 'no' by default)
 ```
 
-Parameters are not positional. If you did not provide a required parameter, the pipeline may exit or use default values if possible (check the help page above, the log after execution, or the 'Arguments and variables' first section in the main script 'reanalyzerGSE.pk.sh'). For example, if the argument '-s' is not provided, strandness will be predicted using Salmon and how_are_we_stranded_here and transcript sequences would be required, so the pipeline would exit if not provided with the argument '-t'. Similarly, reference genome and annotation are likely going to be required for the alignment and quantifying steps (arguments '-r' and '-a').
+Parameters are not positional. If you did not provide a required parameter, the pipeline may exit or use default values if possible (check the help page above, the log after execution, or the 'Arguments and variables' first section in the main script 'reanalyzerGSE.sh'). For example, if the argument '-s' is not provided, strandness will be predicted using Salmon and how_are_we_stranded_here and transcript sequences would be required, so the pipeline would exit if not provided with the argument '-t'. Similarly, reference genome and annotation are likely going to be required for the alignment and quantifying steps (arguments '-r' and '-a').
 
 In general, from a folder containing raw sequences (.fastq.gz) or a GEO entry (GSEXXXXX) as input (argument '-i'), reanalyzerGSE is going to provide a standard transcriptomic analysis named with the argument '-n', in the folder provided by the argument '-o'. The argument '-p' provides the number of cores to be used when multithreading is possible, '-P' the number of files to be processed simultaneously when possible, leveraging GNU's parallel, and '-M' the maximum amount of RAM memory available (required mostly for the index generation and alignment step). If the reanalysis of a GEO entry is requested, all the samples in the database will be included by default. The parameter '-G' allows to restrict the analysis to some of them (providing GSMXXXXX ids), while '-S' interrupts the pipeline until the user has made manual changes to the downloaded files, and '-d' allows the user to input a custom experimental design, to be used instead of the automatically-detected one.
 
@@ -137,7 +137,7 @@ Please refer to the help page or open an issue for any further clarification.
 ## Comments
 Please cite this reference when using reanalyzerGSE for your publications:
 
-> Ruiz, J. L., Terrón-Camero, L. C., Castillo-González, J., Fernández-Rengel, I., Delgado, M., Gonzalez-Rey, E., & Andrés-León, E. (2023). reanalyzerGSE: tackling the everlasting lack of reproducibility and reanalyses in transcriptomics. bioRxiv, 2023-07.
+> Ruiz, J. L., Terrón-Camero, L. C., Castillo-González, J., Fernández-Rengel, I., Delgado, M., Gonzalez-Rey, E., & Andrés-León, E. (2023). reanalyzerGSE: tackling the everlasting lack of reproducibility and reanalyses in transcriptomics. bioRxiv, 2023-07. https://doi.org/10.1101/2023.07.12.548663
 
 ```
 @article{ruiz2023reanalyzergse,
