@@ -1,4 +1,4 @@
-### This is the previous README file from miARma-Seq. Within reanalyzerGSE, we have updated miARma to v2.0 (mainly to speed it up and boost its performance and memory management), and will be maintained it in this repo.
+### This is the previous README file from miARma-Seq. Within reanalyzerGSE, we have updated miARma to v2.0 (mainly to speed it up and boost its performance and memory management), and will be maintained in this repo.
 # miARma WebPage #
 This is a new repository created in Oct 2021 to store the source code and the guides from miARma-seq. The guides will be available soon in the wiki.
 
