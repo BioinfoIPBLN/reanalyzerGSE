@@ -8,7 +8,11 @@ From: ubuntu:latest
 
 %post
   # Install dependencies and software:    
-    apt update -q > /dev/null && apt install -qy --no-install-recommends fastqc pigz curl parallel wget zip make cmake bc bzip2 expat file cython3 git-all \
+    apt update -qq > /dev/null && \
+    apt install -qy --no-install-recommends software-properties-common dirmngr && \
+    wget -qO- https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc | tee -a /etc/apt/trusted.gpg.d/cran_ubuntu_key.asc && \
+    add-apt-repository "deb https://cloud.r-project.org/bin/linux/ubuntu $(lsb_release -cs)-cran40/" && \
+    apt install -qy --no-install-recommends fastqc pigz curl parallel wget zip make cmake bc bzip2 expat file cython3 git-all \
       software-properties-common libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev libxml2 libxml2-dev zlib1g-dev build-essential libcairo2-dev libncurses5-dev liblzma-dev libcurl4-openssl-dev libssl-dev libharfbuzz-dev libfribidi-dev libtbb12 \
       r-base r-base-dev pandoc \
       python-is-python3 python-dev-is-python3 python3-dev \
@@ -23,16 +27,16 @@ From: ubuntu:latest
     
     mkdir -p bin_external/lib
     wget -q https://ftp-trace.ncbi.nlm.nih.gov/sra/sdk/current/sratoolkit.current-ubuntu64.tar.gz && tar xzf sratoolkit.current-ubuntu64.tar.gz && mv sratoolkit*/bin/* bin_external/ && rm -rf sratoolkit*
-    wget -q https://github.com/samtools/samtools/releases/download/1.21/samtools-1.21.tar.bz2 && tar xf samtools-1.21.tar.bz2 && cd samtools-1.21 && mkdir bin && ./configure -q --prefix=$PWD/bin && make -s && make -s install && cd .. && mv samtools*/bin/bin/* bin_external/ && rm -rf samtools*
+    wget -q https://github.com/samtools/samtools/releases/download/1.22/samtools-1.22.tar.bz2 && tar xf samtools-*.tar.bz2 && cd samtools-* && mkdir bin && ./configure -q --prefix=$PWD/bin && make -s && make -s install && cd .. && mv samtools*/bin/bin/* bin_external/ && rm -rf samtools*
     yes n | sh -c "$(wget -q https://ftp.ncbi.nlm.nih.gov/entrez/entrezdirect/install-edirect.sh -O -)"    
     wget -q http://opengene.org/fastp/fastp && chmod a+x ./fastp && mv fastp bin_external
-    wget -q https://github.com/shenwei356/taxonkit/releases/download/v0.18.0/taxonkit_linux_amd64.tar.gz && tar xzf taxonkit_linux_amd64.tar.gz && rm taxonkit_linux_amd64.tar.gz && mv taxonkit bin_external/
-    wget -q https://github.com/sortmerna/sortmerna/releases/download/v4.3.7/sortmerna-4.3.7-Linux.tar.gz && tar xzf sortmerna-4.3.7-Linux.tar.gz && mv sortmerna*/bin/* bin_external/ && rm -rf sortmerna*    
+    wget -q https://github.com/shenwei356/taxonkit/releases/download/v0.20.0/taxonkit_linux_amd64.tar.gz && tar xzf taxonkit_linux_amd64.tar.gz && rm taxonkit_linux_amd64.tar.gz && mv taxonkit bin_external/
+    wget -q https://github.com/sortmerna/sortmerna/releases/download/v4.3.7/sortmerna-4.3.7-Linux.tar.gz && tar xzf sortmerna-*-Linux.tar.gz && mv sortmerna*/bin/* bin_external/ && rm -rf sortmerna*    
     wget -q https://github.com/COMBINE-lab/salmon/releases/download/v1.10.0/salmon-1.10.0_linux_x86_64.tar.gz && tar xzf salmon-1.10.0_linux_x86_64.tar.gz && mv salmon*/bin/* bin_external/ && rm -rf salmon*
-    wget -q https://github.com/pachterlab/kallisto/releases/download/v0.46.1/kallisto_linux-v0.46.1.tar.gz && tar xzf kallisto_linux-v0.46.1.tar.gz && mv kallisto/kallisto bin_external/ && rm -rf kallisto*
+    wget -q https://github.com/pachterlab/kallisto/releases/download/v0.51.1/kallisto_linux-v0.51.1.tar.gz && tar xzf kallisto_linux-*.tar.gz && mv kallisto/kallisto bin_external/ && rm -rf kallisto*
     wget -q https://github.com/alexdobin/STAR/releases/download/2.7.11b/STAR_2.7.11b.zip && unzip -qq STAR_2.7.11b.zip && mv STAR*/Linux_x86_64_static/* bin_external/ && rm -rf STAR*
     wget -q https://cloud.biohpc.swmed.edu/index.php/s/oTtGWbWjaxsQ2Ho/download && unzip -qq download && rm download && mv hisat*/hisat* bin_external/ && rm -rf hisat*
-    wget -q https://sourceforge.net/projects/subread/files/subread-2.0.8/subread-2.0.8-Linux-x86_64.tar.gz/download && tar -xzf download && rm download && mv subread*/bin/* bin_external/ && rm -rf subread*
+    wget -q https://sourceforge.net/projects/subread/files/subread-2.1.1/subread-2.1.1-Linux-x86_64.tar.gz/download && tar -xzf download && rm download && mv subread*/bin/* bin_external/ && rm -rf subread*
     wget -q https://bitbucket.org/kokonech/qualimap/downloads/qualimap_v2.3.zip && unzip -qq qualimap_v2.3.zip && sed -i 's/-XX:MaxPermSize/-XX:MaxMetaspaceSize/g' /qualimap_v2.3/qualimap && mv qualimap*/qualimap bin_external/ && mv qualimap*/qualimap.jar bin_external/ && mv qualimap*/lib/* bin_external/lib/ && rm -rf qualimap*
     
     git clone -q https://github.com/lh3/seqtk.git && cd seqtk && make -s && cd .. && mv seqtk/seqtk bin_external/ && rm -rf seqtk
@@ -45,21 +49,21 @@ From: ubuntu:latest
     wget -q http://security.ubuntu.com/ubuntu/pool/main/i/icu/libicu66_66.1-2ubuntu2_amd64.deb && dpkg -i libicu66_66.1-2ubuntu2_amd64.deb > /dev/null && rm libicu66_66.1-2ubuntu2_amd64.deb
     wget -q https://nz2.archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2.23_amd64.deb && dpkg -i libssl1.1_1.1.1f-1ubuntu2.23_amd64.deb > /dev/null && rm libssl1.1_1.1.1f-1ubuntu2.23_amd64.deb
     
-    /usr/bin/Rscript -e 'install.packages("BiocManager",repos="https://cloud.r-project.org", quiet = T)' > /dev/null && \
-    /usr/bin/Rscript -e 'BiocManager::install(c("GO.db", "biomaRt", "annotate", "impute", "preprocessCore", "AnnotationDbi"),update = FALSE, ask = FALSE,quiet=T,version="3.18")' > /dev/null && \
-    /usr/bin/Rscript -e 'install.packages(c("minpack.lm","rgl","robustbase","textshape","openxlsx","dichromat","imguR","xtable","mime","bitops","bit64","pkgconfig","openssl","nloptr","dplyr","data.table","gtools","stringr","ggplot2","ggpubr","ggrepel","reshape","umap","funr","rentrez","curl","jpeg","png","rbioapi","GOxploreR","devtools","plotly","VennDiagram","grDevices","colorspace","htmlwidgets","Hmisc","RColorBrewer","ggfortify","ggpmisc","ggdendro","cluster","factoextra","corrplot","WGCNA","tidyr","tools","parallel","writexl","optparse","Rcpp"),repos="https://cloud.r-project.org", quiet = T)' > /dev/null && \
-    /usr/bin/Rscript -e 'remotes::install_github("ctlab/fgsea",quiet=T)' > /dev/null && \
-    /usr/bin/Rscript -e 'install.packages("https://cran.r-project.org/src/contrib/Archive/qpcR/qpcR_1.4-1.tar.gz",repos = NULL, type = "source", quiet=T)' > /dev/null
-    /usr/bin/Rscript -e 'BiocManager::install(c("ComplexHeatmap","GSVA","GEOquery","scRecover","limma","affy","GenomeInfoDb","edgeR","DESeq2","NormqPCR","qpdf","sva","genefilter","M3C","clusterProfiler","Mfuzz","STRINGdb","enrichplot","pathview","DOSE","ReactomePA","org.Hs.eg.db","org.Mm.eg.db","GOfuncR","rrvgo","AnnotationHub","Repitools","GenomicFeatures","Repitools","rtracklayer"),update = FALSE, ask = FALSE, quiet=T, version="3.18")' > /dev/null && \
-    /usr/bin/Rscript -e 'devtools::install_github(c("kkang7/CDSeq_R_Package","vqf/nVennR","wjawaid/enrichR","ievaKer/aPEAR"),upgrade="never",quiet=T)' > /dev/null && \
-    /usr/bin/Rscript -e 'install.packages(c("https://cran.r-project.org/src/contrib/Archive/autoGO/autoGO_0.9.1.tar.gz","https://cran.r-project.org/src/contrib/Archive/maptools/maptools_1.1-8.tar.gz"),repos = NULL, type = "source", quiet=T)' > /dev/null
+    /usr/bin/Rscript -e 'install.packages("BiocManager",repos="https://cloud.r-project.org", quiet = T); \
+                         BiocManager::install(c("GO.db", "biomaRt", "annotate", "impute", "preprocessCore", "AnnotationDbi"),update = FALSE, ask = FALSE,quiet=T,version="3.18"); \
+                         install.packages(c("minpack.lm","rgl","robustbase","textshape","openxlsx","dichromat","imguR","xtable","mime","bitops","bit64","pkgconfig","openssl","nloptr","dplyr","data.table","gtools","stringr","ggplot2","ggpubr","ggrepel","reshape","umap","funr","rentrez","curl","jpeg","png","rbioapi","GOxploreR","devtools","plotly","VennDiagram","grDevices","colorspace","htmlwidgets","Hmisc","RColorBrewer","ggfortify","ggpmisc","ggdendro","cluster","factoextra","corrplot","WGCNA","tidyr","tools","parallel","writexl","optparse","Rcpp"),repos="https://cloud.r-project.org", quiet = T); \
+                         remotes::install_github("ctlab/fgsea",quiet=T); \
+                         install.packages("https://cran.r-project.org/src/contrib/Archive/qpcR/qpcR_1.4-1.tar.gz",repos = NULL, type = "source", quiet=T); \
+                         BiocManager::install(c("ComplexHeatmap","GSVA","GEOquery","scRecover","limma","affy","GenomeInfoDb","edgeR","DESeq2","NormqPCR","qpdf","sva","genefilter","M3C","clusterProfiler","Mfuzz","STRINGdb","enrichplot","pathview","DOSE","ReactomePA","org.Hs.eg.db","org.Mm.eg.db","GOfuncR","rrvgo","AnnotationHub","Repitools","GenomicFeatures","Repitools","rtracklayer"),update = FALSE, ask = FALSE, quiet=T, version="3.18"); \
+                         devtools::install_github(c("kkang7/CDSeq_R_Package","vqf/nVennR","wjawaid/enrichR","ievaKer/aPEAR"),upgrade="never",quiet=T); \
+                         install.packages(c("https://cran.r-project.org/src/contrib/Archive/autoGO/autoGO_0.9.1.tar.gz","https://cran.r-project.org/src/contrib/Archive/maptools/maptools_1.1-8.tar.gz"),repos = NULL, type = "source", quiet=T)' > /dev/null
 
 
 
   # Python
-    wget -q https://bootstrap.pypa.io/get-pip.py && python3 get-pip.py --break-system-packages > /dev/null && rm get-pip.py
-    python3 -m pip install --no-cache-dir --upgrade --break-system-packages pip setuptools wheel > /dev/null
-    python3 -m pip install --no-cache-dir --upgrade --break-system-packages pysradb fastq-dl recentrifuge biopython how_are_we_stranded_here statistics sphinx RSeQC six multiqc brotlipy numpy pysam scipy networkx pandas matplotlib python-igraph deeptools > /dev/null
+    wget -q https://bootstrap.pypa.io/get-pip.py && python3 get-pip.py --break-system-packages > /dev/null && rm get-pip.py && \
+    python3 -m pip install --no-cache-dir --upgrade --break-system-packages pip setuptools wheel > /dev/null && \
+    python3 -m pip install --no-cache-dir --upgrade --break-system-packages pysradb fastq-dl recentrifuge biopython how_are_we_stranded_here statistics sphinx RSeQC six multiqc brotlipy numpy pysam scipy networkx pandas matplotlib python-igraph deeptools > /dev/null && \
     python3 -m pip install --no-cache-dir --upgrade --break-system-packages --ignore-installed packaging pyparsing > /dev/null
 
     git clone -q https://github.com/netZoo/netZooPy.git && cd netZooPy && python3 -m pip install --no-cache-dir --break-system-packages . > /dev/null && cd .. && rm -rf netZooPy*
