@@ -19,7 +19,7 @@ From: ubuntu:latest
     echo "export LANG=en_US.UTF-8" >> ~/.bashrc
     echo "export LC_ALL=en_US.UTF-8" >> ~/.bashrc
     
-    git clone -q https://github.com/BioinfoIPBLN/reanalyzerGSE && chmod +x /reanalyzerGSE/reanalyzerGSE.pk.sh && chmod +x /reanalyzerGSE/scripts/* && chmod +x /reanalyzerGSE/external_software/miARma-seq/miARma && rm -rf /reanalyzerGSE/test_data
+    git clone -q https://github.com/BioinfoIPBLN/reanalyzerGSE && chmod +x /reanalyzerGSE/reanalyzerGSE.sh && chmod +x /reanalyzerGSE/scripts/* && chmod +x /reanalyzerGSE/external_software/miARma-seq/miARma && rm -rf /reanalyzerGSE/test_data
     
     mkdir -p bin_external/lib
     wget -q https://ftp-trace.ncbi.nlm.nih.gov/sra/sdk/current/sratoolkit.current-ubuntu64.tar.gz && tar xzf sratoolkit.current-ubuntu64.tar.gz && mv sratoolkit*/bin/* bin_external/ && rm -rf sratoolkit*
