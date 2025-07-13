@@ -134,6 +134,10 @@ An improved version of miARma-seq has been included in reanalyzerGSE and used by
 
 Please refer to the help page or open an issue for any further clarification.
 
+## Output:
+The output folder contains all results in a structure format. Quality control results, amongst others, are aggregate in a MultiQC HTML report. The results by miARma-seq (i.e. quantification and alignment) are container in the folder 'miARma_out'. The folder "final_results" contain all final results and tables, including a Sphynx HTML report guiding users through the output.
+
+
 ## Comments
 Please cite this reference when using reanalyzerGSE for your publications:
 
