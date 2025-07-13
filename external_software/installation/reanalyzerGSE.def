@@ -1,7 +1,6 @@
 # This is a definition file for an Apptainer container with the reanalyzerGSE pipeline and their dependencies properly installed
 # This is not using multiple conda environments as the preferred second option, but trying to download/installe/compile all of the require binaries
 
-# Keep in mind that eventually it may be necessary to change locales depending on the system or the Bioconductor release (currently 3.18 because the latest r-base in default ubuntu repos is v4.3.3)
 
 Bootstrap: docker
 From: ubuntu:latest
