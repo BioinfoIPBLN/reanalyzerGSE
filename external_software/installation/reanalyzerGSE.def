@@ -7,15 +7,15 @@ From: ubuntu:latest
 
 %post
   # Install dependencies and software:    
-    export DEBIAN_FRONTEND=noninteractive && apt update -qq > /dev/null && \
-    apt install -qy --no-install-recommends wget software-properties-common dirmngr && \
+    apt-get update -qq > /dev/null && \
+    apt-get install -qy --no-install-recommends wget software-properties-common dirmngr apt-utils && \
     wget -qO- https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc | tee -a /etc/apt/trusted.gpg.d/cran_ubuntu_key.asc && \
     add-apt-repository "deb https://cloud.r-project.org/bin/linux/ubuntu $(lsb_release -cs)-cran40/" && \
-    apt install -qy --no-install-recommends fastqc pigz curl parallel zip make cmake bc bzip2 expat file cython3 git-all \
-      software-properties-common libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev libxml2 libxml2-dev zlib1g-dev build-essential libcairo2-dev libncurses5-dev liblzma-dev libcurl4-openssl-dev libssl-dev libharfbuzz-dev libfribidi-dev libtbb12 \
+    apt-get install -qy --no-install-recommends fastqc pigz curl parallel zip make cmake bc bzip2 expat file cython3 git-all \
+      software-properties-common libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev libxml2 libxml2-dev zlib1g-dev build-essential gcc g++ libcairo2-dev libncurses5-dev liblzma-dev libcurl4-openssl-dev libssl-dev libharfbuzz-dev libfribidi-dev libtbb12 \
       r-base r-base-dev pandoc \
       python-is-python3 python-dev-is-python3 python3-dev \
-      locales libconfig-ini-perl libtemplate-plugin-posix-perl libscalar-list-utils-perl libwww-perl libdatetime-perl libstatistics-r-perl libconfig-inifiles-perl cpanminus > /dev/null && apt -qy autoremove --purge > /dev/null && apt -q clean && rm -rf /var/lib/apt/lists/*
+      locales libconfig-ini-perl libtemplate-plugin-posix-perl libscalar-list-utils-perl libwww-perl libdatetime-perl libstatistics-r-perl libconfig-inifiles-perl cpanminus > /dev/null && apt-get -qy autoremove --purge > /dev/null && apt-get -q clean && rm -rf /var/lib/apt/lists/*
 
     locale-gen en_US.UTF-8
     update-locale LANG=en_US.UTF-8
@@ -48,7 +48,7 @@ From: ubuntu:latest
     wget -q http://security.ubuntu.com/ubuntu/pool/main/i/icu/libicu66_66.1-2ubuntu2_amd64.deb && dpkg -i libicu66_66.1-2ubuntu2_amd64.deb > /dev/null && rm libicu66_66.1-2ubuntu2_amd64.deb
     wget -q https://nz2.archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2.23_amd64.deb && dpkg -i libssl1.1_1.1.1f-1ubuntu2.23_amd64.deb > /dev/null && rm libssl1.1_1.1.1f-1ubuntu2.23_amd64.deb
     
-    #/usr/bin/Rscript -e 'install.packages("BiocManager",repos="https://cloud.r-project.org", quiet = T); 
+    /usr/bin/Rscript -e 'install.packages("BiocManager",repos="https://cloud.r-project.org", quiet = T); 
                          BiocManager::install(c("GO.db", "biomaRt", "annotate", "impute", "preprocessCore", "AnnotationDbi"),update = FALSE, ask = FALSE,quiet=T); 
                          install.packages(c("minpack.lm","rgl","robustbase","textshape","openxlsx","dichromat","xtable","mime","bitops","bit64","pkgconfig","openssl","nloptr","dplyr","data.table","gtools","stringr","ggplot2","ggpubr","ggrepel","reshape","umap","funr","rentrez","curl","jpeg","png","rbioapi","GOxploreR","devtools","plotly","VennDiagram","colorspace","htmlwidgets","Hmisc","RColorBrewer","ggfortify","ggpmisc","ggdendro","cluster","factoextra","corrplot","WGCNA","tidyr","writexl","optparse","Rcpp"),repos="https://cloud.r-project.org", quiet = T); 
                          remotes::install_github("ctlab/fgsea",quiet=T); 
@@ -75,8 +75,8 @@ From: ubuntu:latest
 
 
   # Cleaning:
-    apt remove -qy --auto-remove software-properties-common build-essential libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev libxml2-dev libcairo2-dev libncurses5-dev liblzma-dev libcurl4-openssl-dev libssl-dev libharfbuzz-dev libfribidi-dev > /dev/null
-    apt -q clean > /dev/null && apt -qy autoremove --purge > /dev/null
+    apt-get remove -qy --auto-remove software-properties-common build-essential libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev libxml2-dev libcairo2-dev libncurses5-dev liblzma-dev libcurl4-openssl-dev libssl-dev libharfbuzz-dev libfribidi-dev > /dev/null
+    apt-get -q clean > /dev/null && apt-get -qy autoremove --purge > /dev/null
     python3 -m pip cache purge > /dev/null
     rm -rf /root/.cpanm /usr/bin/include /usr/lib/*.a /root/.cache
 
