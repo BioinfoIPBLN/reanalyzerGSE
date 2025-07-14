@@ -8,9 +8,10 @@ From: ubuntu:latest
 %post
   # Install dependencies and software:    
     apt-get update -qq > /dev/null && \
-    apt-get install -qy --no-install-recommends wget software-properties-common dirmngr apt-utils pkg-config && \
+    apt-get install -qy --no-install-recommends apt-utils > /dev/null && \
+    apt-get install -qy --no-install-recommends wget software-properties-common dirmngr pkg-config > /dev/null && \
     wget -qO- https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc | tee -a /etc/apt/trusted.gpg.d/cran_ubuntu_key.asc && \
-    add-apt-repository "deb https://cloud.r-project.org/bin/linux/ubuntu $(lsb_release -cs)-cran40/" && \
+    add-apt-repository "deb https://cloud.r-project.org/bin/linux/ubuntu $(lsb_release -cs)-cran40/" > /dev/null && \
     apt-get install -qy --no-install-recommends fastqc pigz curl parallel zip make cmake bc bzip2 expat file cython3 git-all \
       software-properties-common libfreetype6-dev libtiff5-dev libjpeg-dev libxml2 libxml2-dev zlib1g-dev build-essential gcc g++ libcairo2-dev libncurses5-dev liblzma-dev libcurl4-openssl-dev libssl-dev libharfbuzz-dev libfribidi-dev libtbb12 \
       locales libmagick++-dev libmagickwand-dev libmagickcore-dev imagemagick libpng-dev libpng-tools libpng16-16 libssl-dev libcurl4-openssl-dev libconfig-ini-perl libtemplate-plugin-posix-perl libscalar-list-utils-perl libwww-perl libdatetime-perl libstatistics-r-perl libconfig-inifiles-perl \
