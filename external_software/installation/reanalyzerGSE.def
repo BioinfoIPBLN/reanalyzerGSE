@@ -40,7 +40,7 @@ From: ubuntu:latest
     wget -q https://bitbucket.org/kokonech/qualimap/downloads/qualimap_v2.3.zip && unzip -qq qualimap_v2.3.zip && sed -i 's/-XX:MaxPermSize/-XX:MaxMetaspaceSize/g' /qualimap_v2.3/qualimap && mv qualimap*/qualimap bin_external/ && mv qualimap*/qualimap.jar bin_external/ && mv qualimap*/lib/* bin_external/lib/ && rm -rf qualimap*
     
     git clone -q https://github.com/lh3/seqtk.git && cd seqtk && make -s && cd .. && mv seqtk/seqtk bin_external/ && rm -rf seqtk
-    git clone -q https://github.com/DerrickWood/kraken2 && cd kraken2 && mkdir bin && ./install_kraken2.sh $PWD/bin > /dev/null && cd .. && mv kraken2/bin/* bin_external/ && rm -rf kraken*
+    git clone -q https://github.com/DerrickWood/kraken2 && cd kraken2 && mkdir bin && ./install_kraken2.sh $PWD/bin &> /dev/null && cd .. && mv kraken2/bin/* bin_external/ && rm -rf kraken*
     git clone -q https://github.com/jenniferlu717/KrakenTools && cd KrakenTools && chmod +x * && cd .. && mv KrakenTools/* bin_external/ && rm -rf KrakenTools
 
 
