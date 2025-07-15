@@ -6,7 +6,7 @@ Bootstrap: docker
 From: ubuntu:latest
 
 %post
-  # Install dependencies and software:    
+  # Install dependencies and software:
     export DEBIAN_FRONTEND=noninteractive && apt-get update -qq > /dev/null && \
     apt-get install -qy --no-install-recommends apt-utils wget software-properties-common dirmngr pkg-config > /dev/null && \
     wget -qO- https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc | tee -a /etc/apt/trusted.gpg.d/cran_ubuntu_key.asc && \
@@ -59,7 +59,7 @@ From: ubuntu:latest
 
   # Python
     wget -q https://bootstrap.pypa.io/get-pip.py && python3 get-pip.py --break-system-packages > /dev/null && rm get-pip.py && \
-    python3 -m pip install -q --no-cache-dir --upgrade --break-system-packages pip setuptools wheel > /dev/null && \    
+    python3 -m pip install -q --no-cache-dir --upgrade --break-system-packages pip setuptools wheel > /dev/null && \
     python3 -m pip install -q --no-cache-dir --break-system-packages pysradb fastq-dl recentrifuge biopython how_are_we_stranded_here statistics sphinx RSeQC six multiqc brotlipy pysam scipy networkx pandas matplotlib python-igraph deeptools pyparsing git+https://github.com/netZoo/netZooPy.git
 
 
