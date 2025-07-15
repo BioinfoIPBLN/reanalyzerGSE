@@ -58,10 +58,9 @@ From: ubuntu:latest
 
 
   # Python
-    wget -q https://bootstrap.pypa.io/get-pip.py && python3 get-pip.py --break-system-packages > /dev/null && rm get-pip.py && \
-    python3 -m pip install -q --no-cache-dir --upgrade --break-system-packages pip setuptools wheel > /dev/null && \
-    python3 -m pip install -q --no-cache-dir --break-system-packages pysradb fastq-dl recentrifuge biopython how_are_we_stranded_here statistics sphinx RSeQC six multiqc brotlipy pysam scipy networkx pandas matplotlib python-igraph deeptools pyparsing git+https://github.com/netZoo/netZooPy.git
-
+    wget -q https://bootstrap.pypa.io/get-pip.py && python3 get-pip.py --break-system-packages --root-user-action ignore > /dev/null && rm get-pip.py && \
+    pip install -q --no-cache-dir --break-system-packages --root-user-action ignore pysradb fastq-dl recentrifuge biopython how_are_we_stranded_here statistics sphinx RSeQC six multiqc brotlipy pysam scipy networkx pandas packaging matplotlib python-igraph pyparsing git+https://github.com/netZoo/netZooPy.git > /dev/null
+    pip install -q --no-cache-dir --break-system-packages --root-user-action ignore deeptools > /dev/null || true
 
 
   # Perl   
