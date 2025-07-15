@@ -73,7 +73,7 @@ From: ubuntu:latest
     apt-get remove -qy --auto-remove software-properties-common build-essential gcc g++ make cmake libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev libxml2-dev libcairo2-dev libncurses5-dev liblzma-dev libcurl4-openssl-dev libssl-dev libharfbuzz-dev libfribidi-dev libmagick++-dev libmagickwand-dev libmagickcore-dev r-base-dev python3-dev cython3 pkg-config dirmngr apt-utils wget > /dev/null && \
     apt-get -qy autoremove --purge > /dev/null && apt-get -q clean > /dev/null && \
     python3 -m pip cache purge > /dev/null && \
-    rm -rf /var/lib/apt/lists/* /root/.cpanm /root/.cache /tmp/* /var/tmp/* /usr/share/doc/* /usr/share/man/* /usr/share/locale/* /usr/lib/*/include /usr/lib/*/*.a /usr/include/* /var/cache/apt/* /root/.wget-hsts
+    rm -rf /var/lib/apt/lists/* /root/.cpanm /root/.cache /var/tmp/* /usr/share/doc/* /usr/share/man/* /usr/share/locale/* /usr/lib/*/include /usr/lib/*/*.a /usr/include/* /var/cache/apt/* /root/.wget-hsts
 
 
 
