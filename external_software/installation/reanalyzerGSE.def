@@ -25,7 +25,6 @@ From: ubuntu:latest
       python-is-python3 python-dev-is-python3 python3-dev python3-pip python3-deeptools > /dev/null && apt-get -qy autoremove --purge > /dev/null && apt-get -q clean && rm -rf /var/lib/apt/lists/*
 
 
-    export DEBIAN_FRONTEND=noninteractive && apt-get update -qq > /dev/null && apt-get install --reinstall -yq --no-install-recommends build-essential libc6-dev linux-libc-dev libcurl4-openssl-dev libsqlite3-dev libopenblas-dev libstdc++-13-dev g++ zlib1g-dev > /dev/null
     curl -fsSL https://pyenv.run | bash > /dev/null
         
     git clone -q https://github.com/BioinfoIPBLN/reanalyzerGSE && chmod +x /reanalyzerGSE/reanalyzerGSE.sh && chmod +x /reanalyzerGSE/scripts/* && chmod +x /reanalyzerGSE/external_software/miARma-seq/miARma && rm -rf /reanalyzerGSE/test_data
@@ -49,7 +48,7 @@ From: ubuntu:latest
     git clone -q https://github.com/jenniferlu717/KrakenTools && cd KrakenTools && chmod +x * && cd .. && mv KrakenTools/* bin_external/ && rm -rf KrakenTools
 
 
-
+  export DEBIAN_FRONTEND=noninteractive && apt-get update -qq > /dev/null && apt-get install --reinstall -yq --no-install-recommends build-essential libc6-dev linux-libc-dev libcurl4-openssl-dev libsqlite3-dev libopenblas-dev libstdc++-13-dev g++ zlib1g-dev > /dev/null
   # R (note maptools is very old and deprecated and could not be compiled... so the ubuntu version can be installed)
     /usr/bin/Rscript -e 'install.packages("pak",repos="https://cloud.r-project.org", quiet = T);
                          pak::pkg_install(c(
