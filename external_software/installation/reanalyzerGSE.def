@@ -58,7 +58,7 @@ From: ubuntu:latest
 
 
   # Python
-    pip install --break-system-packages --root-user-action ignore pysradb fastq-dl biopython openpyxl how_are_we_stranded_here statistics sphinx RSeQC multiqc brotlipy pysam scipy networkx pandas matplotlib python-igraph pyparsing git+https://github.com/netZoo/netZooPy.git ignore six markdown packaging markupsafe
+    pip install -q --break-system-packages --root-user-action ignore pysradb fastq-dl biopython openpyxl how_are_we_stranded_here statistics sphinx RSeQC multiqc brotlipy pysam scipy networkx pandas matplotlib python-igraph pyparsing git+https://github.com/netZoo/netZooPy.git ignore six markdown packaging markupsafe
 
 
   # Perl   
