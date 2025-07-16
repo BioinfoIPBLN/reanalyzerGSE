@@ -50,7 +50,7 @@ From: ubuntu:latest
 
   export DEBIAN_FRONTEND=noninteractive && apt-get update -qq > /dev/null && apt-get install --reinstall -yq --no-install-recommends build-essential libc6-dev linux-libc-dev libcurl4-openssl-dev libsqlite3-dev libopenblas-dev libstdc++-13-dev g++ zlib1g-dev > /dev/null
   # R (note maptools is very old and deprecated and could not be compiled... so the ubuntu version can be installed)
-    /usr/bin/Rscript -e 'install.packages("pak",repos="https://cloud.r-project.org", quiet = T);
+    /usr/bin/Rscript -e 'install.packages(c("remotes","pak"),repos="https://cloud.r-project.org", quiet = T); remotes::install_github("bnprks/BPCells/r", dependencies = T, quiet = T, upgrade = "never");
                          pak::pkg_install(c(
                                           "bit64",
                                           "bitops", "cluster", "colorspace", "corrplot", "curl", "data.table", 
