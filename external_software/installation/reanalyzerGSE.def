@@ -6,15 +6,15 @@ Bootstrap: docker
 From: ubuntu:latest
 
 %post
-  
+  # Install dependencies and software:
+  export DEBIAN_FRONTEND=noninteractive && apt-get update -qq > /dev/null && \
+    apt-get install -qy --no-install-recommends apt-utils wget software-properties-common dirmngr pkg-config locales > /dev/null
+
     locale-gen en_US.UTF-8
     update-locale LANG=en_US.UTF-8
     echo "export LANG=en_US.UTF-8" >> ~/.bashrc
     echo "export LC_ALL=en_US.UTF-8" >> ~/.bashrc
 
-  # Install dependencies and software:
-    export DEBIAN_FRONTEND=noninteractive && apt-get update -qq > /dev/null && \
-    apt-get install -qy --no-install-recommends apt-utils wget software-properties-common dirmngr pkg-config > /dev/null && \
     wget -qO- https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc | tee -a /etc/apt/trusted.gpg.d/cran_ubuntu_key.asc && \
     add-apt-repository "deb https://cloud.r-project.org/bin/linux/ubuntu $(lsb_release -cs)-cran40/" > /dev/null && \
     apt-get install -qy --no-install-recommends fastqc pigz curl parallel zip make cmake bc bzip2 expat file cython3 git-all \
