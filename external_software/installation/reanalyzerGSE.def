@@ -52,7 +52,7 @@ From: ubuntu:latest
   # R (note maptools is very old and deprecated and could not be compiled... so the ubuntu version can be installed)
     /usr/bin/Rscript -e 'install.packages("pak",repos="https://cloud.r-project.org", quiet = T); 
                          options(pak.timeout = 600); pak::pkg_install(c("remotes", "lifecycle", "stringi", "vctrs", "Rcpp", "lifecycle", "stringr", "tibble", "dplyr", "tidyr", "readr", "ggplot2", "scales", "patchwork", "scattermore", "ggrepel", "hexbin", "RcppEigen"), ask = FALSE, dependencies = T);
-                         remotes::install_github("bnprks/BPCells/r", dependencies = T, quiet = T, upgrade = "never");
+                         remotes::install_github("bnprks/BPCells/r", dependencies = F, quiet = T, upgrade = "never");
                          pak::pkg_install(c(
                                                         "bit64",
                                                         "bitops", "cluster", "colorspace", "corrplot", "curl", "data.table", 
