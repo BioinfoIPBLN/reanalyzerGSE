@@ -82,11 +82,11 @@ From: ubuntu:latest
                                                         "url::https://cran.r-project.org/src/contrib/Archive/gsmoothr/gsmoothr_0.1.7.tar.gz",
                                                         "url::https://cran.r-project.org/src/contrib/Archive/imguR/imguR_1.0.3.tar.gz",
                                                         "url::https://cran.r-project.org/src/contrib/Archive/qpcR/qpcR_1.4-1.tar.gz"), ask = FALSE, dependencies = NA); 
-                         pak::pkg_install("kkang7/CDSeq_R_Package", ask = FALSE, dependencies = FALSE)'
+                         pak::pkg_install("kkang7/CDSeq_R_Package", ask = FALSE, dependencies = FALSE); pak::cache_clean()'
 
 
 
-  # Python
+  # Python (note deeptools installed as a system package above, because of dependency hell...)
     pip install -q --break-system-packages --root-user-action ignore pysradb fastq-dl biopython openpyxl how_are_we_stranded_here statistics sphinx RSeQC multiqc brotlipy pysam scipy networkx pandas matplotlib python-igraph pyparsing git+https://github.com/netZoo/netZooPy.git ignore six markdown packaging markupsafe
 
     export PATH="$HOME/.pyenv/bin:$PATH" && pyenv install 3.11.1 && pyenv virtualenv 3.11.1 recentr && eval "$(pyenv init -)" && eval "$(pyenv virtualenv-init -)" && pyenv activate recentr && \
