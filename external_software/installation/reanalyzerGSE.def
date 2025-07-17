@@ -6,8 +6,10 @@ Bootstrap: docker
 From: ubuntu:latest
 
 %post
+    export TMPDIR=/tmp/build # Required for fakeroot installation without sudo privileges
+    mkdir -p $TMPDIR
   # Install dependencies and software:
-  export DEBIAN_FRONTEND=noninteractive && apt-get update -qq > /dev/null && \
+    export DEBIAN_FRONTEND=noninteractive && apt-get update -qq > /dev/null && \
     apt-get install -qy --no-install-recommends apt-utils wget software-properties-common dirmngr pkg-config locales > /dev/null
 
     locale-gen en_US.UTF-8
