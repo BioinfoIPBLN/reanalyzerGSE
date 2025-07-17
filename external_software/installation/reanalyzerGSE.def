@@ -29,35 +29,35 @@ From: ubuntu:latest
         
     git clone -q https://github.com/BioinfoIPBLN/reanalyzerGSE && chmod +x /reanalyzerGSE/reanalyzerGSE.sh && chmod +x /reanalyzerGSE/scripts/* && chmod +x /reanalyzerGSE/external_software/miARma-seq/miARma && rm -rf /reanalyzerGSE/test_data
     
-    mkdir -p bin_external/lib
-    wget -q https://ftp-trace.ncbi.nlm.nih.gov/sra/sdk/current/sratoolkit.current-ubuntu64.tar.gz && tar xzf sratoolkit.current-ubuntu64.tar.gz && mv sratoolkit*/bin/* bin_external/ && rm -rf sratoolkit*
-    wget -q https://github.com/samtools/samtools/releases/download/1.22/samtools-1.22.tar.bz2 && tar xf samtools-*.tar.bz2 && cd samtools-* && mkdir bin && ./configure -q --prefix=$PWD/bin && make -s && make -s install && cd .. && mv samtools*/bin/bin/* bin_external/ && rm -rf samtools*
+    mkdir -p /bin_external//lib
+    wget -q https://ftp-trace.ncbi.nlm.nih.gov/sra/sdk/current/sratoolkit.current-ubuntu64.tar.gz && tar xzf sratoolkit.current-ubuntu64.tar.gz && mv sratoolkit*/bin/* /bin_external// && rm -rf sratoolkit*
+    wget -q https://github.com/samtools/samtools/releases/download/1.22/samtools-1.22.tar.bz2 && tar xf samtools-*.tar.bz2 && cd samtools-* && mkdir bin && ./configure -q --prefix=$PWD/bin && make -s && make -s install && cd .. && mv samtools*/bin/bin/* /bin_external// && rm -rf samtools*
     yes n | sh -c "$(wget -q https://ftp.ncbi.nlm.nih.gov/entrez/entrezdirect/install-edirect.sh -O -)"    
-    wget -q http://opengene.org/fastp/fastp && chmod a+x ./fastp && mv fastp bin_external
-    wget -q https://github.com/shenwei356/taxonkit/releases/download/v0.20.0/taxonkit_linux_amd64.tar.gz && tar xzf taxonkit_linux_amd64.tar.gz && rm taxonkit_linux_amd64.tar.gz && mv taxonkit bin_external/
-    wget -q https://github.com/sortmerna/sortmerna/releases/download/v4.3.7/sortmerna-4.3.7-Linux.tar.gz && tar xzf sortmerna-*-Linux.tar.gz && mv sortmerna*/bin/* bin_external/ && rm -rf sortmerna*    
-    wget -q https://github.com/COMBINE-lab/salmon/releases/download/v1.10.0/salmon-1.10.0_linux_x86_64.tar.gz && tar xzf salmon-1.10.0_linux_x86_64.tar.gz && mv salmon*/bin/* bin_external/ && rm -rf salmon*
-    wget -q https://github.com/pachterlab/kallisto/releases/download/v0.51.1/kallisto_linux-v0.51.1.tar.gz && tar xzf kallisto_linux-*.tar.gz && mv kallisto/kallisto bin_external/ && rm -rf kallisto*
-    wget -q https://github.com/alexdobin/STAR/releases/download/2.7.11b/STAR_2.7.11b.zip && unzip -qq STAR_2.7.11b.zip && mv STAR*/Linux_x86_64_static/* bin_external/ && rm -rf STAR*
-    wget -q https://cloud.biohpc.swmed.edu/index.php/s/oTtGWbWjaxsQ2Ho/download && unzip -qq download && rm download && mv hisat*/hisat* bin_external/ && rm -rf hisat*
-    wget -q https://sourceforge.net/projects/subread/files/subread-2.1.1/subread-2.1.1-Linux-x86_64.tar.gz/download && tar -xzf download && rm download && mv subread*/bin/* bin_external/ && rm -rf subread*
-    wget -q https://bitbucket.org/kokonech/qualimap/downloads/qualimap_v2.3.zip && unzip -qq qualimap_v2.3.zip && sed -i 's/-XX:MaxPermSize/-XX:MaxMetaspaceSize/g' /qualimap_v2.3/qualimap && mv qualimap*/qualimap bin_external/ && mv qualimap*/qualimap.jar bin_external/ && mv qualimap*/lib/* bin_external/lib/ && rm -rf qualimap*
+    wget -q http://opengene.org/fastp/fastp && chmod a+x ./fastp && mv fastp /bin_external/
+    wget -q https://github.com/shenwei356/taxonkit/releases/download/v0.20.0/taxonkit_linux_amd64.tar.gz && tar xzf taxonkit_linux_amd64.tar.gz && rm taxonkit_linux_amd64.tar.gz && mv taxonkit /bin_external//
+    wget -q https://github.com/sortmerna/sortmerna/releases/download/v4.3.7/sortmerna-4.3.7-Linux.tar.gz && tar xzf sortmerna-*-Linux.tar.gz && mv sortmerna*/bin/* /bin_external// && rm -rf sortmerna*    
+    wget -q https://github.com/COMBINE-lab/salmon/releases/download/v1.10.0/salmon-1.10.0_linux_x86_64.tar.gz && tar xzf salmon-1.10.0_linux_x86_64.tar.gz && mv salmon*/bin/* /bin_external// && rm -rf salmon*
+    wget -q https://github.com/pachterlab/kallisto/releases/download/v0.51.1/kallisto_linux-v0.51.1.tar.gz && tar xzf kallisto_linux-*.tar.gz && mv kallisto/kallisto /bin_external// && rm -rf kallisto*
+    wget -q https://github.com/alexdobin/STAR/releases/download/2.7.11b/STAR_2.7.11b.zip && unzip -qq STAR_2.7.11b.zip && mv STAR*/Linux_x86_64_static/* /bin_external// && rm -rf STAR*
+    wget -q https://cloud.biohpc.swmed.edu/index.php/s/oTtGWbWjaxsQ2Ho/download && unzip -qq download && rm download && mv hisat*/hisat* /bin_external// && rm -rf hisat*
+    wget -q https://sourceforge.net/projects/subread/files/subread-2.1.1/subread-2.1.1-Linux-x86_64.tar.gz/download && tar -xzf download && rm download && mv subread*/bin/* /bin_external// && rm -rf subread*
+    wget -q https://bitbucket.org/kokonech/qualimap/downloads/qualimap_v2.3.zip && unzip -qq qualimap_v2.3.zip && sed -i 's/-XX:MaxPermSize/-XX:MaxMetaspaceSize/g' /qualimap_v2.3/qualimap && mv qualimap*/qualimap /bin_external// && mv qualimap*/qualimap.jar /bin_external// && mv qualimap*/lib/* /bin_external//lib/ && rm -rf qualimap*
     
-    git clone -q https://github.com/lh3/seqtk.git && cd seqtk && make -s && cd .. && mv seqtk/seqtk bin_external/ && rm -rf seqtk
-    git clone -q https://github.com/DerrickWood/kraken2 && cd kraken2 && mkdir bin && ./install_kraken2.sh $PWD/bin &> /dev/null && cd .. && mv kraken2/bin/* bin_external/ && rm -rf kraken*
-    git clone -q https://github.com/jenniferlu717/KrakenTools && cd KrakenTools && chmod +x * && cd .. && mv KrakenTools/* bin_external/ && rm -rf KrakenTools
+    git clone -q https://github.com/lh3/seqtk.git && cd seqtk && make -s && cd .. && mv seqtk/seqtk /bin_external// && rm -rf seqtk
+    git clone -q https://github.com/DerrickWood/kraken2 && cd kraken2 && mkdir bin && ./install_kraken2.sh $PWD/bin &> /dev/null && cd .. && mv kraken2/bin/* /bin_external// && rm -rf kraken*
+    git clone -q https://github.com/jenniferlu717/KrakenTools && cd KrakenTools && chmod +x * && cd .. && mv KrakenTools/* /bin_external// && rm -rf KrakenTools
 
 
   export DEBIAN_FRONTEND=noninteractive && apt-get update -qq > /dev/null && apt-get install --reinstall -yq --no-install-recommends build-essential libc6-dev linux-libc-dev libcurl4-openssl-dev libsqlite3-dev libopenblas-dev libstdc++-13-dev g++ zlib1g-dev gfortran libblas-dev liblapack-dev libhdf5-dev pkg-config > /dev/null
   # R (note maptools is very old and deprecated and could not be compiled... so the ubuntu version can be installed)
     /usr/bin/Rscript -e 'install.packages(c("pak"),repos="https://cloud.r-project.org", quiet = T); 
-                         options(pak.timeout = 600); pak::pkg_install(c("devtools", "foreach","iterators", "glue", "rlang", "magrittr", "stringi", "vctrs", "ggplot2", "Rcpp", "scales", "vroom", "tzdb"), ask = FALSE, dependencies = NA);
-                         pak::pkg_install(c("remotes", "lifecycle", "stringr", "tibble", "dplyr", "tidyr", "readr", "scattermore", "ggrepel", "hexbin", "RcppEigen"), ask = FALSE, dependencies = F);
+                         options(pak.timeout = 600); pak::pkg_install(c("devtools", "foreach","iterators", "glue", "rlang", "magrittr", "stringi", "vctrs", "ggplot2", "Rcpp", "scales", "vroom", "tzdb", "dplyr"), ask = FALSE, dependencies = NA);
+                         pak::pkg_install(c("remotes", "lifecycle", "stringr", "tibble", "tidyr", "readr", "scattermore", "ggrepel", "hexbin", "RcppEigen"), ask = FALSE, dependencies = F);
                          remotes::install_github("bnprks/BPCells/r", dependencies = F, quiet = T, upgrade = "never");
                          pak::pkg_install(c(
                                                         "bit64",
                                                         "bitops", "cluster", "colorspace", "corrplot", "curl", "data.table", 
-                                                        "dichromat", "dirmult", "doParallel", "dplyr", "factoextra", 
+                                                        "dichromat", "dirmult", "doParallel", "factoextra", 
                                                         "foreach", "funr", "ggdendro", "ggfortify", "ggplot2", "ggpmisc", 
                                                         "ggpubr", "ggrepel", "gtools", "harmony", "Hmisc", "htmlwidgets", 
                                                         "iterators", "jpeg", "magrittr", "matrixStats", "mime", "minpack.lm", 
@@ -108,7 +108,7 @@ From: ubuntu:latest
 
 
 %environment    
-    export PATH="/root/edirect:/reanalyzerGSE:/reanalyzerGSE/scripts:/reanalyzerGSE/external_software/miARma-seq/:/bin_external:/root/.local/bin:/bin:/:/root/.pyenv/shims/:$PATH"
+    export PATH="/root/edirect:/reanalyzerGSE:/reanalyzerGSE/scripts:/reanalyzerGSE/external_software/miARma-seq/:/bin_external/:/root/.local/bin:/bin:/:/root/.pyenv/shims/:$PATH"
 
 
 
