@@ -51,7 +51,7 @@ From: ubuntu:latest
   export DEBIAN_FRONTEND=noninteractive && apt-get update -qq > /dev/null && apt-get install --reinstall -yq --no-install-recommends build-essential libc6-dev linux-libc-dev libcurl4-openssl-dev libsqlite3-dev libopenblas-dev libstdc++-13-dev g++ zlib1g-dev gfortran libblas-dev liblapack-dev libhdf5-dev pkg-config > /dev/null
   # R (note maptools is very old and deprecated and could not be compiled... so the ubuntu version can be installed)
     /usr/bin/Rscript -e 'install.packages(c("pak"),repos="https://cloud.r-project.org", quiet = T); 
-                         options(pak.timeout = 600); pak::pkg_install(c("devtools", "foreach","iterators", "glue", "rlang", "magrittr", "stringi", "vctrs", "ggplot2", "Rcpp", "scales", "vroom", "tzdb"), ask = FALSE, dependencies = T);
+                         options(pak.timeout = 600); pak::pkg_install(c("devtools", "foreach","iterators", "glue", "rlang", "magrittr", "stringi", "vctrs", "ggplot2", "Rcpp", "scales", "vroom", "tzdb"), ask = FALSE, dependencies = NA);
                          pak::pkg_install(c("remotes", "lifecycle", "stringr", "tibble", "dplyr", "tidyr", "readr", "scattermore", "ggrepel", "hexbin", "RcppEigen"), ask = FALSE, dependencies = F);
                          remotes::install_github("bnprks/BPCells/r", dependencies = F, quiet = T, upgrade = "never");
                          pak::pkg_install(c(
@@ -81,7 +81,7 @@ From: ubuntu:latest
                                                         "url::https://cran.r-project.org/src/contrib/Archive/autoGO/autoGO_0.9.1.tar.gz",
                                                         "url::https://cran.r-project.org/src/contrib/Archive/gsmoothr/gsmoothr_0.1.7.tar.gz",
                                                         "url::https://cran.r-project.org/src/contrib/Archive/imguR/imguR_1.0.3.tar.gz",
-                                                        "url::https://cran.r-project.org/src/contrib/Archive/qpcR/qpcR_1.4-1.tar.gz"), ask = FALSE, dependencies = TRUE); 
+                                                        "url::https://cran.r-project.org/src/contrib/Archive/qpcR/qpcR_1.4-1.tar.gz"), ask = FALSE, dependencies = NA); 
                          pak::pkg_install("kkang7/CDSeq_R_Package", ask = FALSE, dependencies = FALSE)'
 
 
