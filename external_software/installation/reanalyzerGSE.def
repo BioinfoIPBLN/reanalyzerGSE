@@ -19,10 +19,10 @@ From: ubuntu:latest
 
     wget -qO- https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc | tee -a /etc/apt/trusted.gpg.d/cran_ubuntu_key.asc && \
     add-apt-repository "deb https://cloud.r-project.org/bin/linux/ubuntu $(lsb_release -cs)-cran40/" > /dev/null && \
-    apt-get install -qy --no-install-recommends fastqc pigz curl parallel zip make cmake bc bzip2 expat file cython3 git-all isa-l \
+    apt-get install -qy --no-install-recommends fastqc pigz curl parallel zip make cmake bc bzip2 expat file cython3 git-all libisal2 \
       software-properties-common libfreetype6-dev libtiff5-dev libjpeg-dev libxml2 libxml2-dev zlib1g-dev gcc libcairo2-dev libncurses5-dev liblzma-dev libssl-dev libharfbuzz-dev libfribidi-dev libtbb12 \
       locales libmagick++-dev libmagickwand-dev libmagickcore-dev imagemagick libpng-dev libpng-tools libpng16-16 libssl-dev libconfig-ini-perl libtemplate-plugin-posix-perl libscalar-list-utils-perl libwww-perl \
-      libdatetime-perl libstatistics-r-perl libconfig-inifiles-perl libdeflate \
+      libdatetime-perl libstatistics-r-perl libconfig-inifiles-perl libdeflate0 libdeflate-dev libisal2-dev \
       cpanminus \
       r-base r-base-dev pandoc r-cran-maptools \
       python-is-python3 python-dev-is-python3 python3-dev python3-pip python3-deeptools > /dev/null && apt-get -qy autoremove --purge > /dev/null && apt-get -q clean && rm -rf /var/lib/apt/lists/*
