@@ -46,7 +46,7 @@ From: ubuntu:latest
     wget -q https://sourceforge.net/projects/subread/files/subread-2.1.1/subread-2.1.1-Linux-x86_64.tar.gz/download && tar -xzf download && rm download && mv subread*/bin/* /bin_external/ && rm -rf subread*
     wget -q https://bitbucket.org/kokonech/qualimap/downloads/qualimap_v2.3.zip && unzip -qq qualimap_v2.3.zip && sed -i 's/-XX:MaxPermSize/-XX:MaxMetaspaceSize/g' qualimap_v2.3/qualimap && mv qualimap*/qualimap /bin_external/ && mv qualimap_v2.3/qualimap.jar /bin_external/ && mv qualimap_v2.3/lib/* /bin_external/lib/ && rm -rf qualimap*
     git clone -q https://github.com/lh3/seqtk.git && cd seqtk && make -s && cd .. && mv seqtk/seqtk /bin_external/ && rm -rf seqtk
-    git clone -q https://github.com/DerrickWood/kraken2 && mkdir -p kraken2/bin && ./kraken2/install_kraken2.sh $PWD/kraken2/bin &> /dev/null && mv kraken2/bin/* /bin_external/ && rm -rf kraken*
+    git clone -q https://github.com/DerrickWood/kraken2 && mkdir -p kraken2/bin && ./kraken2/install_kraken2.sh $PWD/kraken2/bin &> /dev/null && mv $PWD/kraken2/bin/* /bin_external/ && rm -rf kraken2*
     git clone -q https://github.com/jenniferlu717/KrakenTools && cd KrakenTools && chmod +x * && cd .. && mv KrakenTools/* /bin_external/ && rm -rf KrakenTools
 
 
