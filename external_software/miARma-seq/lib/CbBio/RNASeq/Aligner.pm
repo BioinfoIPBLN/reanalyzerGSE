@@ -2752,18 +2752,20 @@ sub hisat2{
 				$hisatpardef.= " --rna-strandness F";
 			}
 			print STDOUT "\tHISAT 2 :: ".date()." Checking $file for hisat2 (single-end) analysis\n" if($verbose);
-			$command="if [ \$(ls ".$projectdir.$output_dir." | wc -l) -eq 0 ]; then mkdir -p ".$projectdir.$output_dir." && cd ".$projectdir.$output_dir." && unset DISPLAY && \
-   				  parallel --verbose --joblog ".$projectdir."/hisat2_log_parallel.txt -j ".$parallelnumber." 'echo {} && hisat2 -q -t --seed 123 --very-sensitive ".$hisatpardef." -x ".$hisat2idx_final." -U \$(cat ".$tmp_file." | xargs dirname | uniq)/{} --met-file {}.metrics --un-conc-gz {}_no_aligned.fastq.gz | \
-	 			  samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_nat_str_.bam##idx##{}_nat_str_.bam.bai - && echo {}_nat_str_.bam && export _JAVA_OPTIONS=\"-Xms5g -Xmx".$memorylimit_div_mb."m -Djava.io.tmpdir=\$PWD\" && \
-       				  qualimap bamqc -bam {}_nat_str_.bam -nt ".$threads." -gff ".$gtf." -c -outdir \$PWD/bamqc_results/{}_nat_str_.bam --java-mem-size=".$memorylimit_div_mb."m &>> qc.log || true && \
-	     			  if [[ \"".$gtf."\" == *.gtf ]]; then qualimap rnaseq -bam {}_nat_str_.bam -gtf ".$gtf." -outdir \$PWD/rnaseqqc_results/{}_nat_str_.bam &>> qc.log || true; fi && \
-	   			  bamCoverage -b {}_nat_str_.bam -o {}_nat_str_.bam.bw -of bigwig -bs 10 -p ".$threads." --normalizeUsing RPKM &>> bamCoverage.log' ::: \$(cat ".$tmp_file." | awk -F '/' '{print \$NF}') && \
-	 			  cd ".$projectdir.$output_dir." && for f in \$( ls | egrep '.bam\$' ); do echo -e \"\$f\t\$PWD/bamqc_results/\$f\" >> \$PWD/bamqc_results/list_multi.txt; done && mkdir -p \$PWD/samtools_results/ && \
-       				  parallel --verbose -j ".$parallelnumber." 'samtools flagstat -@ ".$threads." {} > \$PWD/samtools_results/{}_flagstat.txt && samtools stats -@ ".$threads." {} > \$PWD/samtools_results/{}_stats.txt' ::: \$( ls | egrep '.bam\$' ) && export _JAVA_OPTIONS=\"-Xms5g -Xmx".$memorylimit_in_mb."m -Djava.io.tmpdir=\$PWD\" && \
-	     			  qualimap multi-bamqc -d \$PWD/bamqc_results/list_multi.txt -outdir \$PWD/multibamqc_results/ &>> qc.log || true && \
-	   			  multiBamSummary bins -p ".$indexthreads." --bamfiles \$( ls | egrep '.bam\$' ) -out deeptools_all_bams.npz && \
-	 			  plotCorrelation --corData deeptools_all_bams.npz --corMethod spearman --plotFile deeptools_all_bams.npz_correlation_spearman.pdf --whatToPlot heatmap --skipZeros --plotTitle \"Spearman Correlation\" --outFileCorMatrix deeptools_all_bams.npz_correlation_spearman_scores.tab --plotNumbers && plotCorrelation --corData deeptools_all_bams.npz --corMethod pearson --plotFile deeptools_all_bams.npz_correlation_pearson.pdf --whatToPlot heatmap --skipZeros --plotTitle \"Pearson Correlation\" --outFileCorMatrix deeptools_all_bams.npz_correlation_pearson_scores.tab --plotNumbers && \
-       				  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA.pdf --outFileNameData deeptools_all_bams.npz_PCA.tab && plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_2.pdf --outFileNameData deeptools_all_bams.npz_PCA_2.tab --rowCenter && plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_3.pdf --outFileNameData deeptools_all_bams.npz_PCA_3.tab --transpose; fi";
+			$command=qq{if [ \$(ls $projectdir$output_dir | wc -l) -eq 0 ]; then mkdir -p $projectdir$output_dir && cd $projectdir$output_dir && unset DISPLAY
+	   				  parallel --verbose --joblog ${projectdir}/hisat2_log_parallel.txt -j $parallelnumber 'echo {} && hisat2 -q -t --seed 123 --very-sensitive $hisatpardef -x $hisat2idx_final -U \$(cat $tmp_file | xargs dirname | uniq)/{} --met-file {}.metrics --un-conc-gz {}_no_aligned.fastq.gz | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_nat_str_.bam##idx##{}_nat_str_.bam.bai -
+	  				  echo {}_nat_str_.bam && export _JAVA_OPTIONS=\"-Xms5g -Xmx"${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD\"
+	       				  qualimap bamqc -bam {}_nat_str_.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_nat_str_.bam --java-mem-size=${memorylimit_div_mb}m &>> qc.log || true
+		     			  if [[ \"$gtf\" == *.gtf ]]; then qualimap rnaseq -bam {}_nat_str_.bam -gtf $gtf -outdir \$PWD/rnaseqqc_results/{}_nat_str_.bam &>> qc.log || true; fi
+		   			  bamCoverage -b {}_nat_str_.bam -o {}_nat_str_.bam.bw -of bigwig -bs 10 -p $threads --normalizeUsing RPKM &>> bamCoverage.log' ::: \$(cat $tmp_file | awk -F '/' '{print \$NF}')
+		 			  cd $projectdir$output_dir && for f in \$( ls | egrep '.bam\$' ); do echo -e \"\$f\t\$PWD/bamqc_results/\$f\" >> \$PWD/bamqc_results/list_multi.txt; done && mkdir -p \$PWD/samtools_results/
+	       				  parallel --verbose -j $parallelnumber 'samtools flagstat -@ $threads {} > \$PWD/samtools_results/{}_flagstat.txt && samtools stats -@ $threads {} > \$PWD/samtools_results/{}_stats.txt' ::: \$( ls | egrep '.bam\$' )
+	      				  export _JAVA_OPTIONS=\"-Xms5g -Xmx${memorylimit_in_mb}m -Djava.io.tmpdir=\$PWD\"
+		     			  qualimap multi-bamqc -d \$PWD/bamqc_results/list_multi.txt -outdir \$PWD/multibamqc_results/ &>> qc.log || true
+		   			  multiBamSummary bins -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz
+		 			  plotCorrelation --corData deeptools_all_bams.npz --corMethod spearman --plotFile deeptools_all_bams.npz_correlation_spearman.pdf --whatToPlot heatmap --skipZeros --plotTitle \"Spearman Correlation\" --outFileCorMatrix deeptools_all_bams.npz_correlation_spearman_scores.tab --plotNumbers && plotCorrelation --corData deeptools_all_bams.npz --corMethod pearson --plotFile deeptools_all_bams.npz_correlation_pearson.pdf --whatToPlot heatmap --skipZeros --plotTitle \"Pearson Correlation\" --outFileCorMatrix deeptools_all_bams.npz_correlation_pearson_scores.tab --plotNumbers
+	       				  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA.pdf --outFileNameData deeptools_all_bams.npz_PCA.tab && plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_2.pdf --outFileNameData deeptools_all_bams.npz_PCA_2.tab --rowCenter && plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_3.pdf --outFileNameData deeptools_all_bams.npz_PCA_3.tab --transpose
+	     			  fi};
 		}
 		
 		#Bowtie execution with verbose option
