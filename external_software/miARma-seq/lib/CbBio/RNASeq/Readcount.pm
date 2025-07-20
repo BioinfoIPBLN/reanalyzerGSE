@@ -195,7 +195,7 @@ sub featureCount{
 	   			    fi};
 			#commandef is the command will be executed by system composed of the results directory creation 
 			#and the htseq_count execution. The error data will be printed on the run.log file
-			$commanddef="if [ \$(ls \$(find -L $projectdir -type f -name '*.bam' | xargs dirname | uniq) | egrep '.bam\$' | egrep -c '_1.fastq.gz|_2.fastq.gz|_R1.fastq.gz|_R2.fastq.gz') -gt 0 ]; then
+			$commanddef=qq{if [ \$(ls \$(find -L $projectdir -type f -name '*.bam' | xargs dirname | uniq) | egrep '.bam\$' | egrep -c '_1.fastq.gz|_2.fastq.gz|_R1.fastq.gz|_R2.fastq.gz') -gt 0 ]; then
    				       cd \$(find -L $projectdir -type f -name '*.bam' | xargs dirname | uniq)
 	    			       for i in \$(ls | egrep '.bam\$|.fastq.gz\$'); do 
 	     			       mv \$i \$(echo \$i | sed 's/_1.fastq.gz//' | sed 's/_2.fastq.gz//' | sed 's/_R1.fastq.gz//' | sed 's/_R2.fastq.gz//'); done
