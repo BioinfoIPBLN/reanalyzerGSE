@@ -76,7 +76,7 @@ if (exists("orgDB")){
 
   ### Build a master table for all the genes with quantified normalized expression in the project:
   annot <- suppressMessages(suppressWarnings(AnnotationDbi::select(eval(parse(text=orgDB)),
-    keys = read.delim(list.files(path=path,recursive=T, include.dirs=T, full.names=T,pattern="^RPKM_counts_genes.txt")[1])$Gene_ID,
+    keys = convert_ids(read.delim(list.files(path=path,recursive=T, include.dirs=T, full.names=T,pattern="^RPKM_counts_genes.txt")[1])$Gene_ID,mode),
     columns = c("ALIAS","GENENAME","GOALL"),
     keytype = 'SYMBOL')))
 
