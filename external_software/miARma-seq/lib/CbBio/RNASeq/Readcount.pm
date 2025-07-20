@@ -187,18 +187,20 @@ sub featureCount{
 			$tmp_file="/".$projectdir."/Pre_fastqc_results/list_of_files.txt";
 			#htseq-count execution command
 			$command=qq{if [ \$(ls $projectdir$output_dir | wc -l) -eq 0 ]; then
-   				  parallel --verbose --joblog $projectdir}/featureCounts_log_parallel.txt -j ".$parallelnumber." 'featureCounts ".$htseqpardef." -a ".$database." -o ".$projectdir.$output_dir."{}_1.fastq.gz_nat_str_Aligned.sortedByCoord.out.tab \$(find -L ".$projectdir." -type f -name \"*.bam\" | grep {}_) >> ".$logfile." 2>&1' ::: \$(cat ".$tmp_file." | sed 's,_1.fastq.gz*,,g' | sed 's,_2.fastq.gz*,,g' | sed 's,_R1.fastq.gz*,,g' | sed 's,_R2.fastq.gz*,,g' | sort | uniq | awk -F '/' '{print \$NF}'); fi && \
-	 			  cd ".$projectdir." && mkdir -p \$PWD/../multiqc_out && if [ \$(ls \$PWD/../multiqc_out | wc -l) -eq 0 ]; then \
-       				  echo 'Gathering all QC reports with MultiQC' && \
-	     			  multiqc -f \$PWD/../../ -n multiqc_report -o \$PWD/../multiqc_out -p -q > multiqc.log 2>&1
-	   			 fi};
+   				       parallel --verbose --joblog ${projectdir}/featureCounts_log_parallel.txt -j $parallelnumber 'featureCounts $htseqpardef -a $database -o ${projectdir}/${output_dir}/{}_1.fastq.gz_nat_str_Aligned.sortedByCoord.out.tab \$(find -L $projectdir -type f -name \"*.bam\" | grep {}_) >> $logfile 2>&1' ::: \$(cat $tmp_file | sed 's,_1.fastq.gz*,,g' | sed 's,_2.fastq.gz*,,g' | sed 's,_R1.fastq.gz*,,g' | sed 's,_R2.fastq.gz*,,g' | sort | uniq | awk -F '/' '{print \$NF}')
+	 			    fi
+	 			    cd $projectdir && mkdir -p \$PWD/../multiqc_out && if [ \$(ls \$PWD/../multiqc_out | wc -l) -eq 0 ]; then
+       				       echo 'Gathering all QC reports with MultiQC'
+	     			       multiqc -f \$PWD/../../ -n multiqc_report -o \$PWD/../multiqc_out -p -q > \$PWD/../multiqc_out/multiqc.log 2>&1
+	   			    fi};
 			#commandef is the command will be executed by system composed of the results directory creation 
 			#and the htseq_count execution. The error data will be printed on the run.log file
-			$commanddef="if [ \$(ls \$(find -L ".$projectdir." -type f -name '*.bam' | xargs dirname | uniq) | egrep '.bam\$' | egrep -c '_1.fastq.gz|_2.fastq.gz|_R1.fastq.gz|_R2.fastq.gz') -gt 0 ];then \
-   				     cd \$(find -L ".$projectdir." -type f -name '*.bam' | xargs dirname | uniq) && \
-	    			     for i in \$(ls | egrep '.bam\$|.fastq.gz\$'); do \
-	     			     mv \$i \$(echo \$i | sed 's/_1.fastq.gz//' | sed 's/_2.fastq.gz//' | sed 's/_R1.fastq.gz//' | sed 's/_R2.fastq.gz//'); done; fi && \
-	      			     mkdir -p ".$projectdir.$output_dir." ;".$command." 2>> ".$logfile;;
+			$commanddef="if [ \$(ls \$(find -L $projectdir -type f -name '*.bam' | xargs dirname | uniq) | egrep '.bam\$' | egrep -c '_1.fastq.gz|_2.fastq.gz|_R1.fastq.gz|_R2.fastq.gz') -gt 0 ]; then
+   				       cd \$(find -L $projectdir -type f -name '*.bam' | xargs dirname | uniq)
+	    			       for i in \$(ls | egrep '.bam\$|.fastq.gz\$'); do 
+	     			       mv \$i \$(echo \$i | sed 's/_1.fastq.gz//' | sed 's/_2.fastq.gz//' | sed 's/_R1.fastq.gz//' | sed 's/_R2.fastq.gz//'); done
+				     fi
+	      			     mkdir -p $projectdir$output_dir && $command 2>> $logfile};
 	
 			#Opening the run.log and printing the execution data
 			open (LOG,">> ".$logfile) || die $!;
