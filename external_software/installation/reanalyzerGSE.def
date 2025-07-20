@@ -50,7 +50,7 @@ From: ubuntu:latest
     git clone -q https://github.com/jenniferlu717/KrakenTools && cd KrakenTools && chmod +x * && cd .. && mv KrakenTools/* /bin_external/ && rm -rf KrakenTools
 
 
-  export DEBIAN_FRONTEND=noninteractive && apt-get update -qq > /dev/null && apt-get install --reinstall -yq --no-install-recommends build-essential libc6-dev linux-libc-dev libcurl4-openssl-dev libsqlite3-dev libopenblas-dev libstdc++-13-dev g++ zlib1g-dev gfortran libblas-dev liblapack-dev libhdf5-dev pkg-config > /dev/null
+  export DEBIAN_FRONTEND=noninteractive && apt-get update -qq > /dev/null && apt-get install --reinstall -yq --no-install-recommends build-essential libc6-dev linux-libc-dev libcurl4-openssl-dev libsqlite3-dev libopenblas-dev libstdc++-13-dev g++ zlib1g-dev gfortran libblas-dev liblapack-dev libhdf5-dev pkg-config libmagick++-dev > /dev/null
   # R (note maptools is very old and deprecated and could not be compiled... so the ubuntu version can be installed)
     /usr/bin/Rscript -e 'install.packages(c("pak"),repos="https://cloud.r-project.org", quiet = T); 
                          options(pak.timeout = 600); pak::pkg_install(c("devtools", "foreach","iterators", "glue", "rlang", "magrittr", "stringi", "vctrs", "ggplot2", "Rcpp", "scales", "vroom", "tzdb", "dplyr", "magick"), ask = FALSE, dependencies = NA);
