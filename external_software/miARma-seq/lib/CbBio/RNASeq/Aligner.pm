@@ -2716,10 +2716,10 @@ sub hisat2{
 	      							  parallel --verbose --joblog ${projectdir}/hisat2_log_parallel.txt -j $parallelnumber 'echo {} && hisat2 -q -t --seed 123 --very-sensitive $hisatpardef -x $hisat2idx_final -1 \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz -2 \$(cat $tmp_file | xargs dirname | uniq)/{}_2.fastq.gz --met-file {}.metrics --un-conc-gz {}_no_aligned.fastq.gz | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_nat_str_.bam##idx##{}_nat_str_.bam.bai - && echo {}_nat_str_.bam
 				    				  export _JAVA_OPTIONS=\"-Xms5g -Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD\"
 				 				  qualimap bamqc -bam {}_nat_str_.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_nat_str_.bam --java-mem-size=${memorylimit_div_mb}m >> qc1.log 2>&1 || true
-		  						  if [[ \"$gtf\" == *.gtf ]]; then qualimap rnaseq -bam {}_nat_str_.bam -gtf $gtf -pe -outdir \$PWD/rnaseqqc_results/{}_nat_str_.bam >> qc2.log 2>&1 || true; fi
+		  						  if [[ \"$gtf\" == *.gtf ]]; then qualimap rnaseq -bam {}_nat_str_.bam -gtf $gtf -pe -outdir \$PWD/rnaseqqc_results/{}_nat_str_.bam --java-mem-size=${memorylimit_div_mb}m >> qc2.log 2>&1 || true; fi
 		   						  bamCoverage -b {}_nat_str_.bam -o {}_nat_str_.bam.bw -of bigwig -bs 10 -p $threads --normalizeUsing RPKM &>> bamCoverage.log
 		    						  samtools flagstat -@ $threads {} > {}_nat_str_.bam.flagstat && samtools stats -@ $threads {} > {}_nat_str_.bam.stats' ::: \$(cat $tmp_file | sed 's,_1.fastq.gz*,,g' | sed 's,_2.fastq.gz*,,g' | sed 's,_R1.fastq.gz*,,g' | sed 's,_R2.fastq.gz*,,g' | sort | uniq | awk -F '/' '{print \$NF}')
-		     						  cd $projectdir$output_dir && for f in \$( ls | egrep '.bam\$' ); do echo -e \"\$f\t\$PWD/bamqc_results/\$f\" >> \$PWD/bamqc_results/list_multi.txt; done
+		     						  cd $projectdir$output_dir && for f in \$( ls | egrep '.bam\$' ); do echo \$f"\t"\$PWD/bamqc_results/\$f >> \$PWD/bamqc_results/list_multi.txt; done
 		      						  mkdir -p \$PWD/samtools_results/ && parallel --verbose -j $parallelnumber 'samtools flagstat -@ $threads {} > \$PWD/samtools_results/{}_flagstat.txt
 		       						  samtools stats -@ $threads {} > \$PWD/samtools_results/{}_stats.txt' ::: \$( ls | egrep '.bam\$' )
 		 						  export _JAVA_OPTIONS=\"-Xms5g -Xmx${memorylimit_in_mb}m -Djava.io.tmpdir=\$PWD\"
@@ -2756,9 +2756,9 @@ sub hisat2{
 	   				  parallel --verbose --joblog ${projectdir}/hisat2_log_parallel.txt -j $parallelnumber 'echo {} && hisat2 -q -t --seed 123 --very-sensitive $hisatpardef -x $hisat2idx_final -U \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz --met-file {}.metrics --un-conc-gz {}_no_aligned.fastq.gz | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_nat_str_.bam##idx##{}_nat_str_.bam.bai -
 	  				  echo {}_nat_str_.bam && export _JAVA_OPTIONS=\"-Xms5g -Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD\"
 	       				  qualimap bamqc -bam {}_nat_str_.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_nat_str_.bam --java-mem-size=${memorylimit_div_mb}m >> qc1.log 2>&1 || true
-		     			  if [[ \"$gtf\" == *.gtf ]]; then qualimap rnaseq -bam {}_nat_str_.bam -gtf $gtf -outdir \$PWD/rnaseqqc_results/{}_nat_str_.bam >> qc2.log 2>&1 || true; fi
+		     			  if [[ \"$gtf\" == *.gtf ]]; then qualimap rnaseq -bam {}_nat_str_.bam -gtf $gtf -outdir \$PWD/rnaseqqc_results/{}_nat_str_.bam --java-mem-size=${memorylimit_div_mb}m >> qc2.log 2>&1 || true; fi
 		   			  bamCoverage -b {}_nat_str_.bam -o {}_nat_str_.bam.bw -of bigwig -bs 10 -p $threads --normalizeUsing RPKM &>> bamCoverage.log' ::: \$(cat $tmp_file | sed 's,_1.fastq.gz*,,g;s,_R1.fastq.gz*,,g' | sort | uniq | awk -F '/' '{print \$NF}')
-		 			  cd $projectdir$output_dir && for f in \$( ls | egrep '.bam\$' ); do echo -e \"\$f\t\$PWD/bamqc_results/\$f\" >> \$PWD/bamqc_results/list_multi.txt; done && mkdir -p \$PWD/samtools_results/
+		 			  cd $projectdir$output_dir && for f in \$( ls | egrep '.bam\$' ); do echo \$f"\t"\$PWD/bamqc_results/\$f >> \$PWD/bamqc_results/list_multi.txt; done && mkdir -p \$PWD/samtools_results/
 	       				  parallel --verbose -j $parallelnumber 'samtools flagstat -@ $threads {} > \$PWD/samtools_results/{}_flagstat.txt && samtools stats -@ $threads {} > \$PWD/samtools_results/{}_stats.txt' ::: \$( ls | egrep '.bam\$' )
 	      				  export _JAVA_OPTIONS=\"-Xms5g -Xmx${memorylimit_in_mb}m -Djava.io.tmpdir=\$PWD\"
 		     			  qualimap multi-bamqc -d \$PWD/bamqc_results/list_multi.txt -outdir \$PWD/multibamqc_results/ >> qc3.log 2>&1 || true
