@@ -4,7 +4,7 @@ reanalyzerGSE is a pipeline to assist with and streamline transcriptomic analyse
 ## Installation
 We suggest alternatives for installation. Please choose one of:
 
-1) An Apptainer/Singularity container (~2.5 GB) is provided. You can either:
+1) An Apptainer/Singularity container (~3 GB) is provided. You can either:
 
 1.1) Use the .def file to create the .sif image by executing:
 ```
