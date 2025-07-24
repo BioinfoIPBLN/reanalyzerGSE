@@ -304,7 +304,7 @@ if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
 			read -r design_input
 		else
 			design_input=$design_custom_local
-			echo -e "The used conditions are:\n$(echo $design_input | sed 's_,_\n_g;s,/,\n\n,g')"
+			echo -e "The used conditions are (must match the list above):\n$(echo $design_input | sed 's_,_\n_g;s,/,\n\n,g')"
 		fi
 		mkdir -p $output_folder/$name/GEO_info/
 		paste <(ls $seqs_location | egrep '.fq|.fastq' | sed "s/_1.fastq.gz//" | sed "s/_2.fastq.gz//" | uniq) <(paste -d'_' <(ls $seqs_location | egrep '.fq|.fastq' | egrep '.fq|.fastq' | sed "s/_1.fastq.gz//" | sed "s/_2.fastq.gz//" | uniq) <(echo $design_input | sed 's*/*\t*g'| cut -f1 | sed 's*,*\n*g')) <(echo $design_input | sed 's*/*\t*g'| cut -f1 | sed 's*,*\n*g') > $output_folder/$name/GEO_info/samples_info.txt
