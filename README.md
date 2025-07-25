@@ -42,7 +42,7 @@ reanalyzerGSE.sh -h
 	        -options | Provide the file containing the parameters to be used. You can adapt the file 'manual_options.txt' provided in the scripts folder, alternative to manually input in the command line all the options...)
 	        
 	        #### Input/output: 
-	        -i | -input # GEO_ID (GSEXXXXXX, separated by comma if more than one), or folder containing raw reads (please provide full absolute path, e.g. /path/folder_name/, containing only fastq.gz files and not folders, links or any other item), or almost any accession from ENA/SRA to download .fastq from (any of the ids with the prefixes PRJEB,PRJNA,PRJDB,ERP,DRP,SRP,SAMD,SAME,SAMN,ERS,DRS,SRS,ERX,DRX,SRX,ERR,DRR,SRR, please separated by commas if more than one id as input)
+	        -i | -input # GEO_ID (GSEXXXXXX, separated by comma if more than one), or folder containing raw reads (please provide full absolute path, e.g. /path/folder_name/, containing only fastq.gz files and not folders, links or any other item, and please rename samples with meaningful names if possible), or almost any accession from ENA/SRA to download .fastq from (any of the ids with the prefixes PRJEB,PRJNA,PRJDB,ERP,DRP,SRP,SAMD,SAME,SAMN,ERS,DRS,SRS,ERX,DRX,SRX,ERR,DRR,SRR, please separated by commas if more than one id as input)
 	        -iG | -input_GEO_reads # If you want to combine downloading metadata from GEO with reads from GEO or any database already downloaded, maybe from a previous attempt, please provide an absolute path
 	        -n | -name # Name of the project/folder to create and store results
 	        -o | -output_folder # Destination folder
@@ -66,13 +66,13 @@ reanalyzerGSE.sh -h
 	        -R | -number_reads_to_subsample # Information and number of reads to subsample to the sequences before the analyses (none by default, a path to the 'reads_numbers.txt' file from a previous execution and a number of reads must be provided, separated with comma, and proportions will be computed, with all samples being scaled to approximately, +- 10% of that number)
 	        -bv | -batch_vector # Comma-separated list of numbers for use as batch vector with Combat-seq
 	        -bc | -batch_biological_covariable # Comma-separated list of numbers for use as batch vector of covariables of biological interest with Combat-seq
-		-bf | -batch_format # Format of the provided batch variables ('num' for numeric/vector variables or 'fact' for factors, by default)
+			-bf | -batch_format # Format of the provided batch variables ('num' for numeric/vector variables or 'fact' for factors, by default)
 	        -C | -covariables # Please input a comma-separated list for the covariable that should be included in the limma model for removeBatchEffect or in the edgeR model for DGE (for now only one covariable allowed, for example an expected batch effect)
 	        -Cf | -covariables_format # Format of the provided covariate ('num' by default for numeric covariables, or 'fact' for factors)
 	        -T | -target # Protopical target file for attempts to differential gene expression analyses (containing filenames and covariates, automatically built if not provided)
 	
 	        #### Activate alternative modes:
-	        -Dm | -debug_module # For debugging, step to remove the content of the corresponding folders and to resume a failed or incomplete run without repeating (one of 'step1', 'step1a', 'step1b', 'step1c', 'step2', 'step3a', 'step3b', 'step4', 'step5', 'step6', 'step7', 'step8', 'step9', or 'all' to execute everything, by default)
+	        -Dm | -debug_module # For debugging, step to remove the content of the corresponding folders and to resume a failed or incomplete run without repeating (one of 'step1', 'step1a', 'step1b', 'step1c', 'step2', 'step3a', 'step3b', 'step4', 'step5', 'step6', 'step7', 'step8', step9', or 'all' to execute everything, by default)
 	        -q | -qc_raw_reads # Whether to perform quality control on the raw reads ('yes' by default, or 'no')
 	        -fd | -full_differential_analyses # Whether to perform full differential enrichment analyses (for example including computation of DEGs or Venn diagrams, 'no' or 'yes', by default)
 	        -fe | -functional_enrichment_analyses # Whether to perform functional enrichment analyses ('no' or 'yes', by default)
