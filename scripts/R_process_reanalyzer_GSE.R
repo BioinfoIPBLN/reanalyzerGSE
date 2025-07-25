@@ -134,7 +134,13 @@ pattern_to_remove <- args[16] # if not provided, "no"
                 file=paste0(output_dir,"/counts_adjusted.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
   }  
 
-  pheno <- read.table(paste0(path,"/GEO_info/samples_info.txt"),head=F)
+  tryCatch({
+    pheno <- read.table(paste0(path,"/GEO_info/samples_info.txt"),head=F)
+  }, error = function(e) {
+    print("The sample information at /GEO_info/samples_info.txt could not be read. Did you input corresponding groups for all samples?")
+    stop(e)
+  }
+           
   if(dim(pheno)[2]>2){
     pheno <- pheno[,2:3]
   }
