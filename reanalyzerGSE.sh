@@ -417,9 +417,9 @@ if [ "$fastp_trimming" != "none" ]; then
 	cd $output_folder/$name/fastp_out
 	IFS=', ' read -r -a arrfastp <<< "$fastp_trimming"
 	if [[ "$(cat $output_folder/$name/GEO_info/library_layout_info.txt)" == "SINGLE" ]]; then
-		for f in $(ls -d $seqs_location/*); do fastp --in1 $f --out1 $f\_fastp --dont_overwrite --dont_eval_duplication  --trim_front1 "${arrfastp[0]}" --trim_tail1 "${arrfastp[1]}" --thread $cores; done
+		for f in $(ls -d $seqs_location/*); do fastp --in1 $f --out1 $f\_fastp --dont_overwrite --dont_eval_duplication  --trim_front1 "${arrfastp[0]}" --trim_tail1 "${arrfastp[1]}" --thread $cores -z $compression_level; done
 	elif [[ "$(cat $output_folder/$name/GEO_info/library_layout_info.txt)" == "PAIRED" ]]; then
-		for f in $(ls -d $seqs_location/* | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq); do fastp --in1 $f\_1.fastq.gz --in2 $f\_2.fastq.gz --out1 $f\_1.fastq.gz_fastp --out2 $f\_1.fastq.gz_fastp --dont_overwrite --dont_eval_duplication  --trim_front1 "${arrfastp[0]}" --trim_tail1 "${arrfastp[1]}" --thread $cores; done
+		for f in $(ls -d $seqs_location/* | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq); do fastp --in1 $f\_1.fastq.gz --in2 $f\_2.fastq.gz --out1 $f\_1.fastq.gz_fastp --out2 $f\_1.fastq.gz_fastp --dont_overwrite --dont_eval_duplication  --trim_front1 "${arrfastp[0]}" --trim_tail1 "${arrfastp[1]}" --thread $cores -z $compression_level; done
 	fi
 fi
 
