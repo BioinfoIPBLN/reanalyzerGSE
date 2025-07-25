@@ -137,7 +137,7 @@ pattern_to_remove <- args[16] # if not provided, "no"
   tryCatch({
     pheno <- read.table(paste0(path,"/GEO_info/samples_info.txt"),head=F)
   }, error = function(e) {
-    print("The sample information at /GEO_info/samples_info.txt could not be read. Did you input corresponding groups for all samples?")
+    print("The sample information at /GEO_info/samples_info.txt could not be read. Did you input corresponding groups for all samples? Did you use any uncommon naming of the samples? Please double check, exiting...")
     stop(e)
   }
            
