@@ -16,7 +16,7 @@ for argument in $options; do
 	        -options | Provide the file containing the parameters to be used. You can adapt the file 'manual_options.txt' provided in the scripts folder, alternative to manually input in the command line all the options...)
 	        
 	        #### Input/output: 
-	        -i | -input # GEO_ID (GSEXXXXXX, separated by comma if more than one), or folder containing raw reads (please provide full absolute path, e.g. /path/folder_name/, containing only fastq.gz files and not folders, links or any other item), or almost any accession from ENA/SRA to download .fastq from (any of the ids with the prefixes PRJEB,PRJNA,PRJDB,ERP,DRP,SRP,SAMD,SAME,SAMN,ERS,DRS,SRS,ERX,DRX,SRX,ERR,DRR,SRR, please separated by commas if more than one id as input)
+	        -i | -input # GEO_ID (GSEXXXXXX, separated by comma if more than one), or folder containing raw reads (please provide full absolute path, e.g. /path/folder_name/, containing only fastq.gz files and not folders, links or any other item, and please rename samples with meaningful names if possible), or almost any accession from ENA/SRA to download .fastq from (any of the ids with the prefixes PRJEB,PRJNA,PRJDB,ERP,DRP,SRP,SAMD,SAME,SAMN,ERS,DRS,SRS,ERX,DRX,SRX,ERR,DRR,SRR, please separated by commas if more than one id as input)
 	        -iG | -input_GEO_reads # If you want to combine downloading metadata from GEO with reads from GEO or any database already downloaded, maybe from a previous attempt, please provide an absolute path
 	        -n | -name # Name of the project/folder to create and store results
 	        -o | -output_folder # Destination folder
