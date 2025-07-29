@@ -480,12 +480,12 @@ if [[ $debug_step == "all" || $debug_step == "step2" ]]; then
 	fi
 	if [ ! -z "$sortmerna_databases" ]; then
 		echo -e "\n\nSTEP 2: Decontamination starting with sortmerna...\nCurrent date/time: $(date)\n\n"
-  		if [ ! -d "$output_folder/$name/indexes/$(basename $sortmerna_databases)_sortmerna_index" ]; then
+  		mkdir -p $output_folder/$name/sortmerna_out $seqs_location\_sortmerna $output_folder/$name/indexes/$(basename $sortmerna_databases)_sortmerna_index; cd $seqs_location\_sortmerna
+    		if [ ! -d "$output_folder/$name/indexes/$(basename $sortmerna_databases)_sortmerna_index" ]; then
 			echo "Indexing the provided $sortmerna_databases ..."
    			sortmerna --index 1 --ref $sortmerna_databases --workdir $output_folder/$name/indexes/$(basename $sortmerna_databases)_sortmerna_index --threads $cores &>> $output_folder/$name/sortmerna_out/index.log
 		fi
-		mkdir -p $output_folder/$name/sortmerna_out; mkdir -p $seqs_location\_sortmerna; cd $seqs_location\_sortmerna
-  		rm -rf $seqs_location\_sortmerna/* $output_folder/$name/sortmerna_out/* # I'm now removing also at the beginning of this section, in the context of the new system of resuming by -Dm stepx, so this should always be done
+		rm -rf $seqs_location\_sortmerna/* $output_folder/$name/sortmerna_out/* # I'm now removing also at the beginning of this section, in the context of the new system of resuming by -Dm stepx, so this should always be done
     		
 		# with the argument --paired_out, only the pairs where both reads are coincident (aligning to rRNA or not, are included in the results)
 		# I don't include it, so the numbers are exactly the ones in the log, and the properly paired reads can be dealt with later on the mapping
