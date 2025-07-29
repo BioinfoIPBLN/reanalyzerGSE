@@ -498,7 +498,7 @@ if [[ $debug_step == "all" || $debug_step == "step2" ]]; then
 			rm -rf $(ls | egrep "_sortmerna_out$")
 		fi
 		fastqc -t $cores *.fq.gz
-  		mkdir out_noRNA; cd out_noRNA; for f in (ls ../* | grep no_RNA*.fq.gz); do ln -sf $f $(echo $f | sed 's,.fq.gz,.fastq.gz,g'); done; export $seqs_location=$seqs_location\_sortmerna/out_noRNA
+  		mkdir out_noRNA; cd out_noRNA; for f in $(ls ../* | grep no_RNA*.fq.gz); do ln -sf $f $(echo $f | sed 's,.fq.gz,.fastq.gz,g'); done; export $seqs_location=$seqs_location\_sortmerna/out_noRNA
   		echo -e "\n\nSTEP 2: DONE\nCurrent date/time: $(date)\n\n"
  	fi
 	export debug_step="all"
