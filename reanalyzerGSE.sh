@@ -480,9 +480,9 @@ if [[ $debug_step == "all" || $debug_step == "step2" ]]; then
 	fi
 	if [ ! -z "$sortmerna_databases" ]; then
 		echo -e "\n\nSTEP 2: Decontamination starting with sortmerna...\nCurrent date/time: $(date)\n\n"
-  		if [ ! -d "$CURRENT_DIR/indexes/$(basename $sortmerna_databases)_sortmerna_index" ]; then
+  		if [ ! -d "$output_folder/$name/indexes/$(basename $sortmerna_databases)_sortmerna_index" ]; then
 			echo "Indexing the provided $sortmerna_databases ..."
-   			sortmerna --index 1 --ref $sortmerna_databases --workdir $CURRENT_DIR/indexes/$(basename $sortmerna_databases)_sortmerna_index --threads $cores &>> $output_folder/$name/sortmerna_out/index.log
+   			sortmerna --index 1 --ref $sortmerna_databases --workdir $output_folder/$name/indexes/$(basename $sortmerna_databases)_sortmerna_index --threads $cores &>> $output_folder/$name/sortmerna_out/index.log
 		fi
 		mkdir -p $output_folder/$name/sortmerna_out; mkdir -p $seqs_location\_sortmerna; cd $seqs_location\_sortmerna
   		rm -rf $seqs_location\_sortmerna/* $output_folder/$name/sortmerna_out/* # I'm now removing also at the beginning of this section, in the context of the new system of resuming by -Dm stepx, so this should always be done
@@ -491,10 +491,10 @@ if [[ $debug_step == "all" || $debug_step == "step2" ]]; then
 		# I don't include it, so the numbers are exactly the ones in the log, and the properly paired reads can be dealt with later on the mapping
 		echo -e "\nExecuting sortmerna and fastqc of the new reads...\n"
 		if [[ $(find $output_folder/$name -name library_layout_info.txt | xargs cat) == "PAIRED" ]]; then
-			for f in $(ls $seqs_location | egrep ".fastq$|.fq$|.fastq.gz$|.fq.gz$" | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq); do echo "Processing $f"; sortmerna --idx-dir $CURRENT_DIR/indexes/$(basename $sortmerna_databases)_sortmerna_index/idx --ref $sortmerna_databases --reads $seqs_location/${f}_1.fastq.gz --reads $seqs_location/${f}_2.fastq.gz --workdir ${f}_sortmerna_out --fastx --threads $cores --out2 --aligned ${f}_rRNA --other ${f}_no_rRNA -v &>> $output_folder/$name/sortmerna_out/${f}_out.log; done
+			for f in $(ls $seqs_location | egrep ".fastq$|.fq$|.fastq.gz$|.fq.gz$" | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq); do echo "Processing $f"; sortmerna --idx-dir $output_folder/$name/indexes/$(basename $sortmerna_databases)_sortmerna_index/idx --ref $sortmerna_databases --reads $seqs_location/${f}_1.fastq.gz --reads $seqs_location/${f}_2.fastq.gz --workdir ${f}_sortmerna_out --fastx --threads $cores --out2 --aligned ${f}_rRNA --other ${f}_no_rRNA -v &>> $output_folder/$name/sortmerna_out/${f}_out.log; done
 			rm -rf $(ls | egrep "_sortmerna_out$")
 		elif [[ $(find $output_folder/$name -name library_layout_info.txt | xargs cat) == "SINGLE" ]]; then
-			for f in $(ls $seqs_location | egrep ".fastq$|.fq$|.fastq.gz$|.fq.gz$"); do echo "Processing $f"; sortmerna --idx-dir $CURRENT_DIR/indexes/$(basename $sortmerna_databases)_sortmerna_index/idx --ref $sortmerna_databases --reads $seqs_location/$f --workdir ${f}_sortmerna_out --fastx --threads $cores --aligned ${f}_rRNA --other ${f}_no_rRNA -v &>> $output_folder/$name/sortmerna_out/${f}_out.log; done
+			for f in $(ls $seqs_location | egrep ".fastq$|.fq$|.fastq.gz$|.fq.gz$"); do echo "Processing $f"; sortmerna --idx-dir $output_folder/$name/indexes/$(basename $sortmerna_databases)_sortmerna_index/idx --ref $sortmerna_databases --reads $seqs_location/$f --workdir ${f}_sortmerna_out --fastx --threads $cores --aligned ${f}_rRNA --other ${f}_no_rRNA -v &>> $output_folder/$name/sortmerna_out/${f}_out.log; done
 			rm -rf $(ls | egrep "_sortmerna_out$")
 		fi
 		fastqc -t $cores *.fq.gz
