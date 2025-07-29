@@ -391,9 +391,9 @@ if [ "$fastp_mode" == "yes" ]; then
  	mkdir -p $output_folder/$name/fastp_out
 	cd $output_folder/$name/fastp_out
 	if [[ "$(find $output_folder/$name -name library_layout_info.txt | xargs cat)" == "SINGLE" ]]; then
-		for f in $(ls -d $seqs_location/*); do echo "Processed $f"; fastp --in1 $f --out1 $f\_fastp.fastq.gz --dont_overwrite --dont_eval_duplication --disable_adapter_trimming --thread $cores; done
+		for f in $(ls -d $seqs_location/*); do echo "Processing $f"; fastp --in1 $f --out1 $f\_fastp.fastq.gz --dont_overwrite --dont_eval_duplication --disable_adapter_trimming --thread $cores -h $(basename $f)\_report.html -j $(basename $f)\_report.json &>> $(basename $f)\_fastp_out.log; done
 	elif [[ "$(find $output_folder/$name -name library_layout_info.txt | xargs cat)" == "PAIRED" ]]; then
-		for f in $(ls -d $seqs_location/* | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq); do echo "Processed $f"; fastp --in1 $f\_1.fastq.gz --in2 $f\_2.fastq.gz --out1 $f\_1.fastq.gz_fastp.fastq.gz --out2 $f\_2.fastq.gz_fastp.fastq.gz --dont_overwrite --dont_eval_duplication --disable_adapter_trimming --thread $cores -h $(basename $f)\_report.html -j $(basename $f)\_report.json &>> $(basename $f)\_fastp_out.log; done
+		for f in $(ls -d $seqs_location/* | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq); do echo "Processing $f"; fastp --in1 $f\_1.fastq.gz --in2 $f\_2.fastq.gz --out1 $f\_1.fastq.gz_fastp.fastq.gz --out2 $f\_2.fastq.gz_fastp.fastq.gz --dont_overwrite --dont_eval_duplication --disable_adapter_trimming --thread $cores -h $(basename $f)\_report.html -j $(basename $f)\_report.json &>> $(basename $f)\_fastp_out.log; done
 	fi
 fi
 
@@ -402,18 +402,18 @@ if [ "$fastp_adapter" == "yes" ]; then
  	mkdir -p $output_folder/$name/fastp_out
 	cd $output_folder/$name/fastp_out
 	if [[ "$(find $output_folder/$name -name library_layout_info.txt | xargs cat)" == "SINGLE" ]]; then
-		for f in $(ls -d $seqs_location/*); do echo "Processed $f"; fastp --in1 $f --out1 $f\_fastp.fastq.gz --dont_overwrite --dont_eval_duplication --thread $cores; done
+		for f in $(ls -d $seqs_location/*); do echo "Processing $f"; fastp --in1 $f --out1 $f\_fastp.fastq.gz --dont_overwrite --dont_eval_duplication --thread $cores -h $(basename $f)\_report.html -j $(basename $f)\_report.json &>> $(basename $f)\_fastp_out.log; done
 	elif [[ "$(find $output_folder/$name -name library_layout_info.txt | xargs cat)" == "PAIRED" ]]; then
-		for f in $(ls -d $seqs_location/* | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq); do echo "Processed $f"; fastp --in1 $f\_1.fastq.gz --in2 $f\_2.fastq.gz --out1 $f\_1.fastq.gz_fastp.fastq.gz --out2 $f\_2.fastq.gz_fastp.fastq.gz --dont_overwrite --dont_eval_duplication --detect_adapter_for_pe --thread $cores -h $(basename $f)\_report.html -j $(basename $f)\_report.json &>> $(basename $f)\_fastp_out.log; done
+		for f in $(ls -d $seqs_location/* | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq); do echo "Processing $f"; fastp --in1 $f\_1.fastq.gz --in2 $f\_2.fastq.gz --out1 $f\_1.fastq.gz_fastp.fastq.gz --out2 $f\_2.fastq.gz_fastp.fastq.gz --dont_overwrite --dont_eval_duplication --detect_adapter_for_pe --thread $cores -h $(basename $f)\_report.html -j $(basename $f)\_report.json &>> $(basename $f)\_fastp_out.log; done
 	fi
 elif [[ $fastp_adapter == /* ]]; then
 	echo -e "\n\nSTEP 1: Preprocessing with fastp to remove adapters...\nCurrent date/time: $(date)\n\n"
  	mkdir -p $output_folder/$name/fastp_out
 	cd $output_folder/$name/fastp_out
 	if [[ "$(find $output_folder/$name -name library_layout_info.txt | xargs cat)" == "SINGLE" ]]; then
-		for f in $(ls -d $seqs_location/*); do echo "Processed $f"; fastp --in1 $f --out1 $f\_fastp.fastq.gz --dont_overwrite --dont_eval_duplication --adapter_fasta $fastp_adapter --thread $cores; done
+		for f in $(ls -d $seqs_location/*); do echo "Processing $f"; fastp --in1 $f --out1 $f\_fastp.fastq.gz --dont_overwrite --dont_eval_duplication --adapter_fasta $fastp_adapter --thread $cores -h $(basename $f)\_report.html -j $(basename $f)\_report.json &>> $(basename $f)\_fastp_out.log; done
 	elif [[ "$(find $output_folder/$name -name library_layout_info.txt | xargs cat)" == "PAIRED" ]]; then
-		for f in $(ls -d $seqs_location/* | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq); do echo "Processed $f"; fastp --in1 $f\_1.fastq.gz --in2 $f\_2.fastq.gz --out1 $f\_1.fastq.gz_fastp.fastq.gz --out2 $f\_2.fastq.gz_fastp.fastq.gz --dont_overwrite --dont_eval_duplication --adapter_fasta $fastp_adapter --thread $cores -h $(basename $f)\_report.html -j $(basename $f)\_report.json &>> $(basename $f)\_fastp_out.log; done
+		for f in $(ls -d $seqs_location/* | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq); do echo "Processing $f"; fastp --in1 $f\_1.fastq.gz --in2 $f\_2.fastq.gz --out1 $f\_1.fastq.gz_fastp.fastq.gz --out2 $f\_2.fastq.gz_fastp.fastq.gz --dont_overwrite --dont_eval_duplication --adapter_fasta $fastp_adapter --thread $cores -h $(basename $f)\_report.html -j $(basename $f)\_report.json &>> $(basename $f)\_fastp_out.log; done
 	fi
 fi
 
@@ -423,14 +423,15 @@ if [ "$fastp_trimming" != "none" ]; then
 	cd $output_folder/$name/fastp_out
 	IFS=', ' read -r -a arrfastp <<< "$fastp_trimming"
 	if [[ "$(find $output_folder/$name -name library_layout_info.txt | xargs cat)" == "SINGLE" ]]; then
-		for f in $(ls -d $seqs_location/*); do echo "Processed $f"; fastp --in1 $f --out1 $f\_fastp.fastq.gz --dont_overwrite --dont_eval_duplication  --trim_front1 "${arrfastp[0]}" --trim_tail1 "${arrfastp[1]}" --thread $cores -z $compression_level; done
+		for f in $(ls -d $seqs_location/*); do echo "Processing $f"; fastp --in1 $f --out1 $f\_fastp.fastq.gz --dont_overwrite --dont_eval_duplication  --trim_front1 "${arrfastp[0]}" --trim_tail1 "${arrfastp[1]}" --thread $cores -z $compression_level -h $(basename $f)\_report.html -j $(basename $f)\_report.json &>> $(basename $f)\_fastp_out.log; done
 	elif [[ "$(find $output_folder/$name -name library_layout_info.txt | xargs cat)" == "PAIRED" ]]; then
-		for f in $(ls -d $seqs_location/* | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq); do echo "Processed $f"; fastp --in1 $f\_1.fastq.gz --in2 $f\_2.fastq.gz --out1 $f\_1.fastq.gz_fastp.fastq.gz --out2 $f\_2.fastq.gz_fastp.fastq.gz --dont_overwrite --dont_eval_duplication  --trim_front1 "${arrfastp[0]}" --trim_tail1 "${arrfastp[1]}" --thread $cores -z $compression_level -h $(basename $f)\_report.html -j $(basename $f)\_report.json &>> $(basename $f)\_fastp_out.log; done
+		for f in $(ls -d $seqs_location/* | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq); do echo "Processing $f"; fastp --in1 $f\_1.fastq.gz --in2 $f\_2.fastq.gz --out1 $f\_1.fastq.gz_fastp.fastq.gz --out2 $f\_2.fastq.gz_fastp.fastq.gz --dont_overwrite --dont_eval_duplication  --trim_front1 "${arrfastp[0]}" --trim_tail1 "${arrfastp[1]}" --thread $cores -z $compression_level -h $(basename $f)\_report.html -j $(basename $f)\_report.json &>> $(basename $f)\_fastp_out.log; done
 	fi
 fi
 
 if [ $(ls -d $seqs_location/* | grep -c _fastp.fastq.gz) -gt 0 ]; then
 	for f in $(ls -d $seqs_location/* | grep _fastp.fastq.gz); do mv $f $(echo $f | sed 's,.fastq.gz_fastp.fastq.gz,.fastq.gz,g'); done
+ 	echo "Files in $seqs_location have been successfully processed by fastp!"
 fi
 
 
@@ -480,22 +481,25 @@ if [[ $debug_step == "all" || $debug_step == "step2" ]]; then
 	if [ ! -z "$sortmerna_databases" ]; then
 		echo -e "\n\nSTEP 2: Decontamination starting with sortmerna...\nCurrent date/time: $(date)\n\n"
   		if [ ! -d "$CURRENT_DIR/indexes/$(basename $sortmerna_databases)_sortmerna_index" ]; then
-			sortmerna --index 1 --ref $sortmerna_databases --workdir $CURRENT_DIR/indexes/$(basename $sortmerna_databases)_sortmerna_index --threads $cores
+			echo "Indexing the provided $sortmerna_databases ..."
+   			sortmerna --index 1 --ref $sortmerna_databases --workdir $CURRENT_DIR/indexes/$(basename $sortmerna_databases)_sortmerna_index --threads $cores &>> $output_folder/$name/sortmerna_out/index.log
 		fi
-		rm -rf $seqs_location\_sortmerna # I'm now removing the seqs_location at the beginning of this section, in the context of the new system of resuming by -Dm stepx, so this should always be done
-		mkdir -p $seqs_location\_sortmerna; cd $seqs_location\_sortmerna
+		mkdir -p $output_folder/$name/sortmerna_out; mkdir -p $seqs_location\_sortmerna; cd $seqs_location\_sortmerna
+  		rm -rf $seqs_location\_sortmerna/* $output_folder/$name/sortmerna_out/* # I'm now removing also at the beginning of this section, in the context of the new system of resuming by -Dm stepx, so this should always be done
+    		
 		# with the argument --paired_out, only the pairs where both reads are coincident (aligning to rRNA or not, are included in the results)
 		# I don't include it, so the numbers are exactly the ones in the log, and the properly paired reads can be dealt with later on the mapping
 		echo -e "\nExecuting sortmerna and fastqc of the new reads...\n"
 		if [[ $(find $output_folder/$name -name library_layout_info.txt | xargs cat) == "PAIRED" ]]; then
-			for f in $(ls $seqs_location | egrep ".fastq$|.fq$|.fastq.gz$|.fq.gz$" | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq); do sortmerna --idx-dir $CURRENT_DIR/indexes/$(basename $sortmerna_databases)_sortmerna_index/idx --ref $sortmerna_databases --reads $seqs_location/${f}_1.fastq.gz --reads $seqs_location/${f}_2.fastq.gz --workdir ${f}_sortmerna_out --fastx --threads $cores --out2 --aligned ${f}_rRNA --other ${f}_no_rRNA -v; done
+			for f in $(ls $seqs_location | egrep ".fastq$|.fq$|.fastq.gz$|.fq.gz$" | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq); do echo "Processing $f"; sortmerna --idx-dir $CURRENT_DIR/indexes/$(basename $sortmerna_databases)_sortmerna_index/idx --ref $sortmerna_databases --reads $seqs_location/${f}_1.fastq.gz --reads $seqs_location/${f}_2.fastq.gz --workdir ${f}_sortmerna_out --fastx --threads $cores --out2 --aligned ${f}_rRNA --other ${f}_no_rRNA -v &>> $output_folder/$name/sortmerna_out/${f}_out.log; done
 			rm -rf $(ls | egrep "_sortmerna_out$")
 		elif [[ $(find $output_folder/$name -name library_layout_info.txt | xargs cat) == "SINGLE" ]]; then
-			for f in $(ls $seqs_location | egrep ".fastq$|.fq$|.fastq.gz$|.fq.gz$"); do sortmerna --idx-dir $CURRENT_DIR/indexes/$(basename $sortmerna_databases)_sortmerna_index/idx --ref $sortmerna_databases --reads $seqs_location/$f --workdir ${f}_sortmerna_out --fastx --threads $cores --aligned ${f}_rRNA --other ${f}_no_rRNA -v; done
+			for f in $(ls $seqs_location | egrep ".fastq$|.fq$|.fastq.gz$|.fq.gz$"); do echo "Processing $f"; sortmerna --idx-dir $CURRENT_DIR/indexes/$(basename $sortmerna_databases)_sortmerna_index/idx --ref $sortmerna_databases --reads $seqs_location/$f --workdir ${f}_sortmerna_out --fastx --threads $cores --aligned ${f}_rRNA --other ${f}_no_rRNA -v &>> $output_folder/$name/sortmerna_out/${f}_out.log; done
 			rm -rf $(ls | egrep "_sortmerna_out$")
 		fi
-		for f in $(ls | grep "rRNA" | egrep ".fastq|.fq"); do fastqc -t $cores $f; done
-		echo -e "\n\nSTEP 2: DONE\nCurrent date/time: $(date)\n\n"
+		fastqc -t $cores *.fq.gz
+  		mkdir out_noRNA; cd out_noRNA; for f in (ls ../* | grep no_RNA*.fq.gz); do ln -sf $f $(echo $f | sed 's,.fq.gz,.fastq.gz,g'); done; export $seqs_location=$seqs_location\_sortmerna/out_noRNA
+  		echo -e "\n\nSTEP 2: DONE\nCurrent date/time: $(date)\n\n"
  	fi
 	export debug_step="all"
 fi
