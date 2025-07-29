@@ -387,9 +387,9 @@ fi
 if [ "$fastp_mode" == "yes" ]; then
 	mkdir -p $output_folder/$name/fastp_out
 	cd $output_folder/$name/fastp_out
-	if [[ "$(cat $output_folder/$name/GEO_info/library_layout_info.txt)" == "SINGLE" ]]; then
+	if [[ "$(find $output_folder/$name -name library_layout_info.txt | xargs cat)" == "SINGLE" ]]; then
 		for f in $(ls -d $seqs_location/*); do fastp --in1 $f --out1 $f\_fastp --dont_overwrite --dont_eval_duplication --disable_adapter_trimming --thread $cores; done
-	elif [[ "$(cat $output_folder/$name/GEO_info/library_layout_info.txt)" == "PAIRED" ]]; then
+	elif [[ "$(find $output_folder/$name -name library_layout_info.txt | xargs cat)" == "PAIRED" ]]; then
 		for f in $(ls -d $seqs_location/* | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq); do fastp --in1 $f\_1.fastq.gz --in2 $f\_2.fastq.gz --out1 $f\_1.fastq.gz_fastp --out2 $f\_1.fastq.gz_fastp --dont_overwrite --dont_eval_duplication --disable_adapter_trimming --thread $cores; done
 	fi
 fi
@@ -397,17 +397,17 @@ fi
 if [ "$fastp_adapter" == "yes" ]; then
 	mkdir -p $output_folder/$name/fastp_out
 	cd $output_folder/$name/fastp_out
-	if [[ "$(cat $output_folder/$name/GEO_info/library_layout_info.txt)" == "SINGLE" ]]; then
+	if [[ "$(find $output_folder/$name -name library_layout_info.txt | xargs cat)" == "SINGLE" ]]; then
 		for f in $(ls -d $seqs_location/*); do fastp --in1 $f --out1 $f\_fastp --dont_overwrite --dont_eval_duplication --thread $cores; done
-	elif [[ "$(cat $output_folder/$name/GEO_info/library_layout_info.txt)" == "PAIRED" ]]; then
+	elif [[ "$(find $output_folder/$name -name library_layout_info.txt | xargs cat)" == "PAIRED" ]]; then
 		for f in $(ls -d $seqs_location/* | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq); do fastp --in1 $f\_1.fastq.gz --in2 $f\_2.fastq.gz --out1 $f\_1.fastq.gz_fastp --out2 $f\_1.fastq.gz_fastp --dont_overwrite --dont_eval_duplication --detect_adapter_for_pe --thread $cores; done
 	fi
 elif [[ $fastp_adapter == /* ]]; then
 	mkdir -p $output_folder/$name/fastp_out
 	cd $output_folder/$name/fastp_out
-	if [[ "$(cat $output_folder/$name/GEO_info/library_layout_info.txt)" == "SINGLE" ]]; then
+	if [[ "$(find $output_folder/$name -name library_layout_info.txt | xargs cat)" == "SINGLE" ]]; then
 		for f in $(ls -d $seqs_location/*); do fastp --in1 $f --out1 $f\_fastp --dont_overwrite --dont_eval_duplication --adapter_fasta $fastp_adapter --thread $cores; done
-	elif [[ "$(cat $output_folder/$name/GEO_info/library_layout_info.txt)" == "PAIRED" ]]; then
+	elif [[ "$(find $output_folder/$name -name library_layout_info.txt | xargs cat)" == "PAIRED" ]]; then
 		for f in $(ls -d $seqs_location/* | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq); do fastp --in1 $f\_1.fastq.gz --in2 $f\_2.fastq.gz --out1 $f\_1.fastq.gz_fastp --out2 $f\_1.fastq.gz_fastp --dont_overwrite --dont_eval_duplication --adapter_fasta $fastp_adapter --thread $cores; done
 	fi
 fi
@@ -416,9 +416,9 @@ if [ "$fastp_trimming" != "none" ]; then
 	mkdir -p $output_folder/$name/fastp_out
 	cd $output_folder/$name/fastp_out
 	IFS=', ' read -r -a arrfastp <<< "$fastp_trimming"
-	if [[ "$(cat $output_folder/$name/GEO_info/library_layout_info.txt)" == "SINGLE" ]]; then
+	if [[ "$(find $output_folder/$name -name library_layout_info.txt | xargs cat)" == "SINGLE" ]]; then
 		for f in $(ls -d $seqs_location/*); do fastp --in1 $f --out1 $f\_fastp --dont_overwrite --dont_eval_duplication  --trim_front1 "${arrfastp[0]}" --trim_tail1 "${arrfastp[1]}" --thread $cores -z $compression_level; done
-	elif [[ "$(cat $output_folder/$name/GEO_info/library_layout_info.txt)" == "PAIRED" ]]; then
+	elif [[ "$(find $output_folder/$name -name library_layout_info.txt | xargs cat)" == "PAIRED" ]]; then
 		for f in $(ls -d $seqs_location/* | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq); do fastp --in1 $f\_1.fastq.gz --in2 $f\_2.fastq.gz --out1 $f\_1.fastq.gz_fastp --out2 $f\_1.fastq.gz_fastp --dont_overwrite --dont_eval_duplication  --trim_front1 "${arrfastp[0]}" --trim_tail1 "${arrfastp[1]}" --thread $cores -z $compression_level; done
 	fi
 fi
