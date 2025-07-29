@@ -18,10 +18,10 @@ fi
 
 ###### STEP 1. Download info from GEO and organize metadata and so:
 if [[ $debug_step == "all" || $debug_step == "step1" ]]; then
-	echo -e "\n\nSTEP 1: Starting...\nCurrent date/time: $(date)\n\n"
 	rm -rf $output_folder/*
 	if [[ $input == G* ]]; then
-	### Download info:
+		echo -e "\n\nSTEP 1: Starting...\nCurrent date/time: $(date)\n\n"
+ 	### Download info:
 		echo -e "\nDownloading info from GEO for $input...\n"
 		R_download_GEO_info.R $input $output_folder
 		arrIN=(${input//,/ })
@@ -119,18 +119,19 @@ if [[ $debug_step == "all" || $debug_step == "step1" ]]; then
 			echo -e "$organism\nPlease request on the next run a stop with parameter '-S' and modify manually the file GEO_info/organism.txt if not required...\n"
 		fi
 		echo -e "\nSTEP 1 DONE. Current time: $(date)\n"
-	fi
+	
+ 	fi
+  	echo -e "\n\nSTEP 1: DONE\nCurrent date/time: $(date)\n\n"
 	export debug_step="all"
-	echo -e "\n\nSTEP 1: DONE\nCurrent date/time: $(date)\n\n"
 fi
 
 
-###### STEP 1a. Download and process fastq files from the GEO ID provided:
+###### STEP 1. Download and process fastq files from the GEO ID provided:
 if [[ $debug_step == "all" || $debug_step == "step1a" ]]; then
-	echo -e "\n\nSTEP 1a: Starting...\nCurrent date/time: $(date)\n\n"
 	rm -rf $seqs_location
 	mkdir -p $TMPDIR
 	if [[ $input == G* ]]; then
+ 		echo -e "\n\nSTEP 1: Downloading from the $input id provided...\nCurrent date/time: $(date)\n\n"
 		if [ "$stop" == "yes" ]; then
 			echo "You have requested a stop to manually provide the SRR ids, or potentially modify other files that may have not been detected properly from GEO, and were not correct, or you just want to adapt some of them. Please double check or manually modify the files GEO_info/srr_ids.txt, samples_info.txt, sample_names.txt, phenodata_extracted.txt, library_layout_info.txt, organism.txt, design_files, etc. The pipeline is stopped. Please press space to continue or Ctrl + C to exit..."
 			read -n1 -s -r -p $'Press space to continue...\n' key
@@ -227,18 +228,18 @@ if [[ $debug_step == "all" || $debug_step == "step1a" ]]; then
 			pigz --best -p $cores * # gz was lost with seqtk sample
 			echo -e "\nSubsampling (+-10%) completed...\n"
 		fi
-	fi
+		echo -e "\n\nSTEP 1: DONE\nCurrent date/time: $(date)\n\n"
+ 	fi
 	export debug_step="all"
-	echo -e "\n\nSTEP 1a: DONE\nCurrent date/time: $(date)\n\n"
 fi
 
 
-### STEP 1b. Process if not required to download from NCBI/GEO the metadata and raw reads provided locally:
+### STEP 1. Process if not required to download from NCBI/GEO the metadata and raw reads provided locally:
 if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
-	echo -e "\n\nSTEP 1b: Starting...\nCurrent date/time: $(date)\n\n"
 	mkdir -p $TMPDIR
 	if [[ $input == /* ]]; then
-		seqs_location=$output_folder/$name/raw_reads
+		echo -e "\n\nSTEP 1b: Preparing the raw reads and metadata provided locally...\nCurrent date/time: $(date)\n\n"
+  		seqs_location=$output_folder/$name/raw_reads
 		rm -rf $seqs_location # I'm now removing the seqs_location at the beginning of this section, in the context of the new system of resuming by -Dm stepx, so this should always be done
 		if [ ! -d "$seqs_location" ]; then
 			mkdir -p $seqs_location
@@ -327,17 +328,17 @@ if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
 			echo "Organism used is $organism"
 		fi
 		echo $organism > $output_folder/$name/GEO_info/organism.txt
-	fi
+		echo -e "\n\nSTEP 1b: DONE\nCurrent date/time: $(date)\n\n"
+ 	fi
 	export debug_step="all"
-	echo -e "\n\nSTEP 1b: DONE\nCurrent date/time: $(date)\n\n"
 fi
 
 
-### STEP 1c. Process if required to download from manually provided ids from databases
+### STEP 1. Process if required to download from manually provided ids from databases
 if [[ $debug_step == "all" || $debug_step == "step1c" ]]; then
-	echo -e "\n\nSTEP 1c: Starting...\nCurrent date/time: $(date)\n\n"
 	if [[ $input == P* || $input == E* || $input == D* || $input == S* ]]; then
-		seqs_location=$output_folder/$name/raw_reads
+		echo -e "\n\nSTEP 1: Downloading from the $input id provided...\nCurrent date/time: $(date)\n\n"
+  		seqs_location=$output_folder/$name/raw_reads
 		rm -rf $seqs_location # I'm now removing the seqs_location at the beginning of this section, in the context of the new system of resuming by -Dm stepx, so this should always be done
 		number_ids=$(echo $input | tr ',' '\n' | wc -l)
 		if [ $number_ids -le $number_parallel ]; then
@@ -351,16 +352,17 @@ if [[ $debug_step == "all" || $debug_step == "step1c" ]]; then
 			echo $input | tr ',' '\n' | parallel -j $number_parallel --max-args 1 'if [ $(echo {} | egrep -c "PRJEB|PRJNA|PRJDB|ERX|DRX|SRX|ERP|DRP|SRP") -eq 1 ]; then fastq-dl --cpus $cores_parallel --accession {}; fi && 
 		 																		   if [ $(echo {} | egrep -c "ERS|DRS|SRS|SAMD|SAME|SAMN|ERR|DRR|SRR") -eq 1 ]; then fastq-dl --provider sra --cpus $cores_parallel --accession {}; fi'
 		fi
-	fi
+		echo -e "\n\nSTEP 1: DONE\nCurrent date/time: $(date)\n\n"
+ 	fi
 	export debug_step="all"
-	echo -e "\n\nSTEP 1c: DONE\nCurrent date/time: $(date)\n\n"
 fi
 
 
-### STEP 1d. Deal with batch correction... The user has to use certain arguments to manually provide a list or do it interactively:
-if [[ $debug_step == "all" ]]; then
+### STEP 1. Deal with batch correction... The user has to use certain arguments to manually provide a list or do it interactively:
+if [[ $debug_step == "all" || $debug_step == "step1d" ]]; then
 	if [ "$batch" == "yes" ]; then
-		if [ -z "$batch_vector" ]; then
+		echo -e "\n\nSTEP 1: Preparing batch effect correction...\nCurrent date/time: $(date)\n\n"
+  		if [ -z "$batch_vector" ]; then
 			echo -e "This is the content of $seqs_location:\n$(ls -l $seqs_location | awk '{ print $9 }' | tail -n +2)\n"
 			echo -n "Based on the list above, please input a comma-separated list for the vector for batch separation (use only numbers, and if these are paired-end, only once per pair of reads):"
 			read -r batch_vector
@@ -376,16 +378,17 @@ if [[ $debug_step == "all" ]]; then
 	fi
 	if [ ! -z "$covariables" ]; then
  		echo $covariables > $output_folder/$name/GEO_info/covariables.txt
-  	fi
+  	fi	
 fi
 
-### STEP 1d. Give info of NCBI's current genome:
-	Rscript -e "genomes <- rentrez::entrez_summary(db='genome', id=rentrez::entrez_search(db='genome', term='${organism}[orgn]')\$ids);cat(paste(paste0('\n\nNCBI current genome info: ', date()),genomes\$assembly_name,genomes\$assembly_accession,genomes\$create_date,'\n',sep='\n'))"
-	organism=$(cat $output_folder/$name/GEO_info/organism.txt | sed 's/ \+/_/g;s/__*/_/g') # Get again the organism in case it has been manually modified... and without spaces...
+### STEP 1. Give info of NCBI's current genome:
+Rscript -e "organism <- '${organism}'; assemblies <- rentrez::entrez_summary(db='assembly', id=rentrez::entrez_search(db='assembly', term=paste0(organism, '[orgn]'))\$ids[1]); cat(paste(paste0('\n\nNCBI current assembly info: ', date()), assemblies\$assemblyname, assemblies\$assemblyaccession, assemblies\$submissiondate, '\n', sep='\n'))"
+organism=$(cat $output_folder/$name/GEO_info/organism.txt | sed 's/ \+/_/g;s/__*/_/g') # Get again the organism in case it has been manually modified... and without spaces...
 
-### STEP 1d. Deal with fastp if required:
+### STEP 1. Deal with fastp if required:
 if [ "$fastp_mode" == "yes" ]; then
-	mkdir -p $output_folder/$name/fastp_out
+	echo -e "\n\nSTEP 1: Preprocessing with fastp...\nCurrent date/time: $(date)\n\n"
+ 	mkdir -p $output_folder/$name/fastp_out
 	cd $output_folder/$name/fastp_out
 	if [[ "$(find $output_folder/$name -name library_layout_info.txt | xargs cat)" == "SINGLE" ]]; then
 		for f in $(ls -d $seqs_location/*); do fastp --in1 $f --out1 $f\_fastp --dont_overwrite --dont_eval_duplication --disable_adapter_trimming --thread $cores; done
@@ -395,7 +398,8 @@ if [ "$fastp_mode" == "yes" ]; then
 fi
 
 if [ "$fastp_adapter" == "yes" ]; then
-	mkdir -p $output_folder/$name/fastp_out
+	echo -e "\n\nSTEP 1: Preprocessing with fastp to remove adapters...\nCurrent date/time: $(date)\n\n"
+ 	mkdir -p $output_folder/$name/fastp_out
 	cd $output_folder/$name/fastp_out
 	if [[ "$(find $output_folder/$name -name library_layout_info.txt | xargs cat)" == "SINGLE" ]]; then
 		for f in $(ls -d $seqs_location/*); do fastp --in1 $f --out1 $f\_fastp --dont_overwrite --dont_eval_duplication --thread $cores; done
@@ -403,7 +407,8 @@ if [ "$fastp_adapter" == "yes" ]; then
 		for f in $(ls -d $seqs_location/* | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq); do fastp --in1 $f\_1.fastq.gz --in2 $f\_2.fastq.gz --out1 $f\_1.fastq.gz_fastp --out2 $f\_2.fastq.gz_fastp --dont_overwrite --dont_eval_duplication --detect_adapter_for_pe --thread $cores; done
 	fi
 elif [[ $fastp_adapter == /* ]]; then
-	mkdir -p $output_folder/$name/fastp_out
+	echo -e "\n\nSTEP 1: Preprocessing with fastp to remove adapters...\nCurrent date/time: $(date)\n\n"
+ 	mkdir -p $output_folder/$name/fastp_out
 	cd $output_folder/$name/fastp_out
 	if [[ "$(find $output_folder/$name -name library_layout_info.txt | xargs cat)" == "SINGLE" ]]; then
 		for f in $(ls -d $seqs_location/*); do fastp --in1 $f --out1 $f\_fastp --dont_overwrite --dont_eval_duplication --adapter_fasta $fastp_adapter --thread $cores; done
@@ -413,7 +418,8 @@ elif [[ $fastp_adapter == /* ]]; then
 fi
 
 if [ "$fastp_trimming" != "none" ]; then
-	mkdir -p $output_folder/$name/fastp_out
+	echo -e "\n\nSTEP 1: Preprocessing with fastp and trimming...\nCurrent date/time: $(date)\n\n"
+ 	mkdir -p $output_folder/$name/fastp_out
 	cd $output_folder/$name/fastp_out
 	IFS=', ' read -r -a arrfastp <<< "$fastp_trimming"
 	if [[ "$(find $output_folder/$name -name library_layout_info.txt | xargs cat)" == "SINGLE" ]]; then
@@ -426,9 +432,9 @@ fi
 
 ### STEP 2. Decontamination if required:
 if [[ $debug_step == "all" || $debug_step == "step2" ]]; then
-	echo -e "\n\nSTEP 2: Starting...\nCurrent date/time: $(date)\n\n"
 	if [ ! -z "$kraken2_databases" ]; then
-  		rm -rf $output_folder/$name/raw_reads_k2 # I'm now removing the seqs_location at the beginning of this section, in the context of the new system of resuming by -Dm stepx, so this should always be done
+  		echo -e "\n\nSTEP 2: Decontamination starting with Kraken2...\nCurrent date/time: $(date)\n\n"
+    		rm -rf $output_folder/$name/raw_reads_k2 # I'm now removing the seqs_location at the beginning of this section, in the context of the new system of resuming by -Dm stepx, so this should always be done
 		mkdir -p $output_folder/$name/raw_reads_k2
 		cd $output_folder/$name/raw_reads_k2
 
@@ -465,9 +471,11 @@ if [[ $debug_step == "all" || $debug_step == "step2" ]]; then
 			for f in $(ls | egrep ".kraken2_output.txt$"); do extract_kraken_reads.py -k $f -s1 $(echo $f | sed 's,.kraken2_output.txt,,g')\_1.fastq.gz -s2 $(echo $f | sed 's,.kraken2_output.txt,,g')\_2.fastq.gz -o $seqs_location\_k2/$f\_1.fastq.gz -o2 $seqs_location\_k2/$f\_2.fastq.gz -t $taxonid -r $(echo $f | sed 's,.kraken2_output.txt,,g').report.txt --include-children &>> extract_kraken2_log_out.txt; done
 		fi
 		for f in $(ls | grep "k2" | egrep ".fastq.gz$"); do fastqc -t $cores $f; done
+  		echo -e "\n\nSTEP 2: DONE\nCurrent date/time: $(date)\n\n"
 	fi
 	if [ ! -z "$sortmerna_databases" ]; then
-		if [ ! -d "$CURRENT_DIR/indexes/$(basename $sortmerna_databases)_sortmerna_index" ]; then
+		echo -e "\n\nSTEP 2: Decontamination starting with sortmerna...\nCurrent date/time: $(date)\n\n"
+  		if [ ! -d "$CURRENT_DIR/indexes/$(basename $sortmerna_databases)_sortmerna_index" ]; then
 			sortmerna --index 1 --ref $sortmerna_databases --workdir $CURRENT_DIR/indexes/$(basename $sortmerna_databases)_sortmerna_index --threads $cores
 		fi
 		rm -rf $seqs_location\_sortmerna # I'm now removing the seqs_location at the beginning of this section, in the context of the new system of resuming by -Dm stepx, so this should always be done
@@ -483,15 +491,16 @@ if [[ $debug_step == "all" || $debug_step == "step2" ]]; then
 			rm -rf $(ls | egrep "_sortmerna_out$")
 		fi
 		for f in $(ls | grep "rRNA" | egrep ".fastq|.fq"); do fastqc -t $cores $f; done
-	fi
+		echo -e "\n\nSTEP 2: DONE\nCurrent date/time: $(date)\n\n"
+ 	fi
 	export debug_step="all"
-	echo -e "\n\nSTEP 2: DONE\nCurrent date/time: $(date)\n\n"
 fi
 
 
 ### STEP3a. Prepare the data and info for running miARma-seq:
 if [[ $debug_step == "all" || $debug_step == "step3a" ]]; then
 	echo -e "\n\nSTEP 3a: Starting...\nCurrent date/time: $(date)\n\n"
+ 	echo -e "Preparing miARma-seq execution"
 	cd $output_folder/$name/
 	rm -rf mi*
 	mkdir -p $TMPDIR
@@ -686,6 +695,7 @@ if [[ $debug_step == "all" || $debug_step == "step4" ]]; then
 		IFS=', ' read -r -a array <<< "$annotation"
 	fi
 	echo -e "\n\nSTEP 4: Starting...\nCurrent date/time: $(date)\n\n"
+ 	echo -e "Processing output of miARma-seq, QC figures, plots, DGE if requested..."
 	IFS=', ' read -r -a array2 <<< "$filter"
 	for index in "${!array[@]}"; do
 		annotation_file=${array[index]}
@@ -708,16 +718,16 @@ fi
 
 
 ### STEP 5. Time course analyses if required
-if [[ $debug_step == "all" || $debug_step == "step5" ]]; then
-	echo -e "\n\nSTEP 5: Starting...\nCurrent date/time: $(date)\n\n"
+if [[ $debug_step == "all" || $debug_step == "step5" ]]; then	
 	for index in "${!array[@]}"; do
 		if [[ "$time_course" == "yes" ]]; then
-			echo -e "\nPerforming time course analyses."
+			echo -e "\n\nSTEP 5: Starting...\nCurrent date/time: $(date)\n\n"
+   			echo -e "\nPerforming time course analyses."
 			R_process_time_course.R $output_folder/$name/final_results_reanalysis$index/ DGE_analysis_comp1.RData edgeR_object_norm $minstd $mestimate
+   			echo -e "\n\nSTEP 5: DONE\nCurrent date/time: $(date)\n\n"
 		fi
 	done
-	export debug_step="all"
-	echo -e "\n\nSTEP 5: DONE\nCurrent date/time: $(date)\n\n"
+	export debug_step="all"	
 fi
 
 
@@ -739,7 +749,6 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 		IFS=', ' read -r -a array <<< "$annotation"
 	fi
 
-	echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
 	for index in "${!array[@]}"; do
 		cd $output_folder/$name/final_results_reanalysis$index/DGE/
 		rm -rf $(find . -type d \( -name "*_autoGO" -o -name "*_clusterProfiler" -o -name "*_panther" -o -name "*funct_enr*" \)) $(find . -type f \( -name "*_autoGO" -o -name "*_clusterProfiler" -o -name "*_panther" -o -name "*funct_enr*" \)) # So it's redone if resuming
@@ -749,13 +758,16 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 		if [[ "$organism" == "Mus_musculus" || "$organism" == "Homo_sapiens" || "$organism" == "Mus musculus" || "$organism" == "Homo sapiens" ]]; then
 			if [[ $network_analyses == "yes" ]]; then
 				mkdir -p network_analyses && rm -rf network_analyses/* && cd network_analyses
-				echo -e "\nPerforming network analyses...\n"
+				echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
+    				echo -e "\nPerforming network analyses...\n"
 				R_network_analyses.R $output_folder/$name/final_results_reanalysis$index/DGE/ $output_folder/$name/final_results_reanalysis$index/RM_counts_genes.txt "^DGE_analysis_comp[0-9]+.txt$" $taxonid &> network_analyses_funct_enrichment.log
 			fi
 			if [[ "$functional_enrichment_analyses" == "no" ]]; then
-				echo -e "\nSkipping functional enrichment analyses\n"
+				echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
+    				echo -e "\nSkipping functional enrichment analyses\n"
 			else
-				echo -e "\nPerforming functional enrichment analyses for DEGs. The results up to this point are ready to use (including DEGs and expression, that are only lacking annotation). This step of funtional enrichment analyses may take long if many significant DEGs, comparisons, or analyses...\n"
+				echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
+    				echo -e "\nPerforming functional enrichment analyses for DEGs. The results up to this point are ready to use (including DEGs and expression, that are only lacking annotation). This step of funtional enrichment analyses may take long if many significant DEGs, comparisons, or analyses...\n"
 				cd $output_folder/$name/final_results_reanalysis$index/DGE/
 				ls | egrep "^DGE_analysis_comp[0-9]+.txt$" | parallel --joblog R_clusterProfiler_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_clusterProfiler_analyses_parallel.R $PWD $organism "1" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution '^{}$' $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_{}_funct_enrichment.log"
 				echo -e "\nPerforming autoGO and Panther execution... this may take long if many genes or comparisons...\n"
@@ -767,10 +779,11 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 				fi
 			fi
 		else
-			echo "Organism is $organism... Functional analyses apart from human/mouse is not fully supported yet"
+			echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
+   			echo "Organism is $organism... Functional analyses apart from human/mouse is not fully supported yet"
 			if [ $(egrep -c "GO:|Ontology|tology_term|tology term" $annotation_file) -gt 0 ]; then
 				cd $output_folder/$name/final_results_reanalysis$index/DGE/
-				echo "However, an automatic approach based on clusterProfiler's enrichr function and automatically extracted GO terms from the annotation can be attempted for DEGs..."
+				echo "However, an automatic approach based on clusterProfiler's enrichr function and automatically extracted GO terms from the annotation can be applied for DEGs..."
 				paste <(egrep "GO:|,GO:|Ontology|tology_term|tology term" $annotation_file | sed 's,.*ID=,,g;s,.*Parent=,,g;s,;.*,,g') <(egrep "GO:|,GO:|Ontology|tology_term|tology term" $annotation_file | sed 's,.*tology_term=,,g') | sort -t $'\t' -k1,1 -k2,2 | awk -F'\t' '!a[$1,$2]++' | awk -F'\t' '{ a[$1] = (a[$1] ? a[$1]","$2 : $2); } END { for (i in a) print i"\t"a[i]; }' | awk -F '\t' '{n=split($2,a,","); for (i=1; i<=n; i++) print $1,a[i]}' | uniq > $output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annotation_file).automatically_extracted_GO_terms.txt
 				annotation_go=$output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annotation_file).automatically_extracted_GO_terms.txt
 				sed -i '1s/^/source_id Computed_GO_Process_IDs\n/' $annotation_go
@@ -826,7 +839,7 @@ fi
 
 ###### STEP 8. Tidy up, prepare for storage if final results have been created and the number of aligned files is equal to the numbers of samples, rename folders, convert tables to xlsx if required... etc
 # Compress the folders
-if [[ $debug_step == "all" || $debug_step == "step9" ]]; then
+if [[ $debug_step == "all" || $debug_step == "step8" ]]; then
 	echo -e "\n\nSTEP 8: Starting...\nCurrent date/time: $(date)\n\n"
 	echo -e "\n\nTidying up, removing empty folders, temp files, compressing...\n\n"
 	for index in "${!array[@]}"; do
@@ -876,8 +889,9 @@ fi
 
 
 ###### STEP 9. Sum up results in a sphinx report
-if [[ $debug_step == "all" || $debug_step == "step8" ]]; then
+if [[ $debug_step == "all" || $debug_step == "step9" ]]; then
 	sphinx_report.sh $output_folder/$name $name
+ 	echo -e "\n\nSTEP 9: Final report DONE\nCurrent date/time: $(date)\n\n"
 fi
 
 echo -e "\n\n\nALL STEPS DONE! Best wishes\n\n\n"
