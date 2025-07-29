@@ -499,7 +499,7 @@ if [[ $debug_step == "all" || $debug_step == "step2" ]]; then
 		fi
 		fastqc -q -t $cores *.fq.gz
   		mkdir out_noRNA; cd out_noRNA; ln -sf ../*no_rRNA*.fq.gz .; for f in $(ls); do mv $f $(basename $f | sed 's,.fq.gz,.fastq.gz,g;s,_fwd,_1,g;s,_rev,_2,g;s,_no_rRNA,,g'); done
-    		export $seqs_location=$seqs_location\_sortmerna/out_noRNA
+    		export seqs_location=$seqs_location\_sortmerna/out_noRNA
   		echo -e "\n\nSTEP 2: DONE\nCurrent date/time: $(date)\n\n"
  	fi
 	export debug_step="all"
