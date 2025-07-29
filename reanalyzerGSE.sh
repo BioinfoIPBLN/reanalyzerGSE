@@ -475,7 +475,7 @@ if [[ $debug_step == "all" || $debug_step == "step2" ]]; then
 		elif [[ $(find $output_folder/$name -name library_layout_info.txt | xargs cat) == "PAIRED" ]]; then
 			for f in $(ls | egrep ".kraken2_output.txt$"); do extract_kraken_reads.py -k $f -s1 $(echo $f | sed 's,.kraken2_output.txt,,g')\_1.fastq.gz -s2 $(echo $f | sed 's,.kraken2_output.txt,,g')\_2.fastq.gz -o $seqs_location\_k2/$f\_1.fastq.gz -o2 $seqs_location\_k2/$f\_2.fastq.gz -t $taxonid -r $(echo $f | sed 's,.kraken2_output.txt,,g').report.txt --include-children &>> extract_kraken2_log_out.txt; done
 		fi
-		for f in $(ls | grep "k2" | egrep ".fastq.gz$"); do fastqc -t $cores $f; done
+		for f in $(ls | grep "k2" | egrep ".fastq.gz$"); do fastqc -q -t $cores $f; done
   		echo -e "\n\nSTEP 2: DONE\nCurrent date/time: $(date)\n\n"
 	fi
 	if [ ! -z "$sortmerna_databases" ]; then
@@ -497,7 +497,7 @@ if [[ $debug_step == "all" || $debug_step == "step2" ]]; then
 			for f in $(ls $seqs_location | egrep ".fastq$|.fq$|.fastq.gz$|.fq.gz$"); do echo "Processing $f"; sortmerna --idx-dir $output_folder/$name/indexes/$(basename $sortmerna_databases)_sortmerna_index/idx --ref $sortmerna_databases --reads $seqs_location/$f --workdir ${f}_sortmerna_out --fastx --threads $cores --aligned ${f}_rRNA --other ${f}_no_rRNA -v &>> $seqs_location\_sortmerna/${f}_out.log; done
 			rm -rf $(ls | egrep "_sortmerna_out$")
 		fi
-		fastqc -t $cores *.fq.gz
+		fastqc -q -t $cores *.fq.gz
   		mkdir out_noRNA; cd out_noRNA; ln -sf ../*no_rRNA*.fq.gz .; for f in $(ls); do mv $f $(basename $f | sed 's,.fq.gz,.fastq.gz,g;s,_fwd,_1,g;s,_rev,_2,g;s,_no_rRNA,,g'); done
     		export $seqs_location=$seqs_location\_sortmerna/out_noRNA
   		echo -e "\n\nSTEP 2: DONE\nCurrent date/time: $(date)\n\n"
