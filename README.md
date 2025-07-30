@@ -132,11 +132,12 @@ In general, from a folder containing raw sequences (.fastq.gz) or a GEO entry (G
 
 An improved version of miARma-seq has been included in reanalyzerGSE and used by default (subfolder 'external_software'). Amognst others, reanalyzerGSE also includes a module to perform batch correction (the design matrix must be provided in a prompt after using the flag '-b'), the possibility to use multiple thresholds when filtering out low expressed genes (argument '-f'), and a module to output plots from the differential gene expression analyses, highlighting the genes provided with the argument '-g'.
 
-Please refer to the help page or open an issue for any further clarification.
+Please refer to the help manual ('-h') or open an [issue](https://github.com/BioinfoIPBLN/reanalyzerGSE/issues) for any further clarification.
 
 ## Output:
 The output folder contains all results in a structure format. Quality control results, amongst others, are aggregate in a MultiQC HTML report. The results by miARma-seq (i.e. quantification and alignment) are container in the folder 'miARma_out'. The folder "final_results" contain all final results and tables, including a Sphynx HTML report guiding users through the output.
 
+Please refer to the [wiki](https://github.com/BioinfoIPBLN/reanalyzerGSE/wiki) or open an [issue](https://github.com/BioinfoIPBLN/reanalyzerGSE/issues) for any further clarification.
 
 ## Comments
 Please cite this reference when using reanalyzerGSE for your publications:
