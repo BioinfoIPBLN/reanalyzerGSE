@@ -48,6 +48,7 @@ pattern_to_remove <- args[16] # if not provided, "no"
   dir.create(output_dir,showWarnings=F)
   write.table(gene_counts[,c(grep("Gene_ID",colnames(gene_counts)),grep("Length",colnames(gene_counts)),grep("Gene_ID|Length",colnames(gene_counts),invert=T))],
               file=paste0(output_dir,"/Raw_counts_genes.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
+ 
   # CDSeq preliminary deconvolution:
   if (cdseq_exec!="no"){
     suppressMessages(library(CDSeq,quiet = T,warn.conflicts = F))
@@ -66,6 +67,53 @@ pattern_to_remove <- args[16] # if not provided, "no"
     result_cdseq$estProp; cat("\n\n")
   }
 
+  # Deal with phenotypic data/samples info:
+  tryCatch({
+    pheno <- read.table(paste0(path,"/GEO_info/samples_info.txt"),head=F)
+  }, error = function(e) {
+    print("The sample information at /GEO_info/samples_info.txt could not be read. Did you input corresponding groups for all samples? Did you use any uncommon naming of the samples? Please double check, exiting...")
+    stop(e)
+  })
+           
+  if(dim(pheno)[2]>2){
+    pheno <- pheno[,2:3]
+  }
+  colnames(pheno) <- c("sample","condition")
+  pheno <- pheno[gtools::mixedorder(pheno$sample),]
+  # Ensure reordering based on GSM* or SRR* if present in the names of pheno:
+  if (length(grep("GSM[0-9]",pheno$sample))!=0){
+    idx <- pheno$sample[unlist(lapply(strsplit(pheno$sample,"_+"),function(x){any(startsWith(x,"GSM"))}))]
+    pheno <- pheno[match(idx[gtools::mixedorder(unlist(lapply(strsplit(idx[unlist(lapply(strsplit(idx,"_|__"),function(x){any(startsWith(x,"GSM"))}))],"_+"),function(x){grep("^GSM",x,val=T)})))],pheno$sample),]
+  }
+  if (length(grep("SRR[0-9]",pheno$sample))!=0){
+    idx <- pheno$sample[unlist(lapply(strsplit(pheno$sample,"_+"),function(x){any(startsWith(x,"SRR"))}))]
+    pheno <- pheno[match(idx[gtools::mixedorder(unlist(lapply(strsplit(idx[unlist(lapply(strsplit(idx,"_|__"),function(x){any(startsWith(x,"SRR"))}))],"_+"),function(x){grep("^SRR",x,val=T)})))],pheno$sample),]
+  } else {
+    # If there are not SRR nor GSM in the names (and then likely this has not been a download from database but local analyses with raw_data), ordering is also required... (not required mixed order and so, so the printed lists are in the same order)
+    pheno <- pheno[order(pheno$sample),]
+    # Should be redundant because done above, but make suer to order also gene_counts if this has not been a download from database but local analyses with raw_data (and then not SRR or GSM in sample name):
+    gene_counts <- gene_counts[,c(order(colnames(gene_counts)[grep("Gene_ID|Length",colnames(gene_counts),invert=T)]),grep("Gene_ID|Length",colnames(gene_counts)))]
+  }
+
+  layout <- read.table(list.files(pattern = "library_layout_info.txt", recursive = TRUE, full.names=T, path=path))$V1
+  # Make sure that in the case of paired studies I'm taking the correct groups:
+  if (file.exists(paste0(path,"/GEO_info/library_layout_info.txt")) & (dim(pheno)[1] > dim(gene_counts)[2]-2) & layout=="PAIRED"){
+    pheno$sample <- gsub("_SRR.*","",pheno$sample)
+    pheno <- unique(pheno)
+    print("Readjusting pheno in this paired study...")
+  }
+  # Also fix the designs if required:
+  for (z in list.files(pattern = "design_possible_full", recursive = TRUE, full.names=T, path=paste0(path,"/GEO_info"))){
+    if (file.exists(paste0(path,"/GEO_info/library_layout_info.txt")) & (as.numeric(system(paste0("cat ",z," | wc -l"),intern=T)) > dim(gene_counts)[2]-2) & layout=="PAIRED"){
+        tmp_condition <- read.table(z,head=F,blank.lines.skip=FALSE)$V1
+        x=1:length(tmp_condition)
+        tmp_condition <- tmp_condition[x%%2==1]
+        write.table(tmp_condition,
+              file=z,quote = F,row.names = F, col.names = F,sep = "\n")
+        print("Fixing designs in this paired study...")
+    }
+  }
+
 ###### Batch effect correction/count adjustment if requested:
   # First check if covariable has been provided, and then that will be used with limma's removeBatchEffect() to perform an adjustment. 
   # If batch has also been provided, then it will be overwritten immediately below, as ComBat_seq is the preferred method
@@ -77,7 +125,8 @@ pattern_to_remove <- args[16] # if not provided, "no"
     } else if(covariab_format == "num"){
       cov <- as.numeric(unlist(strsplit(as.character(covariab),",")))      
     }    
-    adjusted_counts <- limma::removeBatchEffect(x=count_matrix,covariates=cov)    
+    cat("\nProcessing counts (log scale + pseudocount of 0.1) with limma::removeBatchEffect...\nApplied the covariates and group:\n"); print(data.frame(group=pheno$condition,covar=cov))
+    adjusted_counts <- limma::removeBatchEffect(x=log(count_matrix+0.1),covariates=cov, group=pheno$condition)
   }
   if (file.exists(paste0(path,"/GEO_info/batch_vector.txt")) && !file.exists(paste0(path,"/GEO_info/batch_biological_variables.txt"))){
     count_matrix <- as.matrix(gene_counts[,grep("Gene_ID|Length",colnames(gene_counts),invert=T)])
@@ -133,52 +182,6 @@ pattern_to_remove <- args[16] # if not provided, "no"
     write.table(adjusted_counts,
                 file=paste0(output_dir,"/counts_adjusted.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
   }  
-
-  tryCatch({
-    pheno <- read.table(paste0(path,"/GEO_info/samples_info.txt"),head=F)
-  }, error = function(e) {
-    print("The sample information at /GEO_info/samples_info.txt could not be read. Did you input corresponding groups for all samples? Did you use any uncommon naming of the samples? Please double check, exiting...")
-    stop(e)
-  }
-           
-  if(dim(pheno)[2]>2){
-    pheno <- pheno[,2:3]
-  }
-  colnames(pheno) <- c("sample","condition")
-  pheno <- pheno[gtools::mixedorder(pheno$sample),]
-  # Ensure reordering based on GSM* or SRR* if present in the names of pheno:
-  if (length(grep("GSM[0-9]",pheno$sample))!=0){
-    idx <- pheno$sample[unlist(lapply(strsplit(pheno$sample,"_+"),function(x){any(startsWith(x,"GSM"))}))]
-    pheno <- pheno[match(idx[gtools::mixedorder(unlist(lapply(strsplit(idx[unlist(lapply(strsplit(idx,"_|__"),function(x){any(startsWith(x,"GSM"))}))],"_+"),function(x){grep("^GSM",x,val=T)})))],pheno$sample),]
-  }
-  if (length(grep("SRR[0-9]",pheno$sample))!=0){
-    idx <- pheno$sample[unlist(lapply(strsplit(pheno$sample,"_+"),function(x){any(startsWith(x,"SRR"))}))]
-    pheno <- pheno[match(idx[gtools::mixedorder(unlist(lapply(strsplit(idx[unlist(lapply(strsplit(idx,"_|__"),function(x){any(startsWith(x,"SRR"))}))],"_+"),function(x){grep("^SRR",x,val=T)})))],pheno$sample),]
-  } else {
-    # If there are not SRR nor GSM in the names (and then likely this has not been a download from database but local analyses with raw_data), ordering is also required... (not required mixed order and so, so the printed lists are in the same order)
-    pheno <- pheno[order(pheno$sample),]
-    # Should be redundant because done above, but make suer to order also gene_counts if this has not been a download from database but local analyses with raw_data (and then not SRR or GSM in sample name):
-    gene_counts <- gene_counts[,c(order(colnames(gene_counts)[grep("Gene_ID|Length",colnames(gene_counts),invert=T)]),grep("Gene_ID|Length",colnames(gene_counts)))]
-  }
-
-  layout <- read.table(list.files(pattern = "library_layout_info.txt", recursive = TRUE, full.names=T, path=path))$V1
-  # Make sure that in the case of paired studies I'm taking the correct groups:
-  if (file.exists(paste0(path,"/GEO_info/library_layout_info.txt")) & (dim(pheno)[1] > dim(gene_counts)[2]-2) & layout=="PAIRED"){
-    pheno$sample <- gsub("_SRR.*","",pheno$sample)
-    pheno <- unique(pheno)
-    print("Readjusting pheno in this paired study...")
-  }
-  # Also fix the designs if required:
-  for (z in list.files(pattern = "design_possible_full", recursive = TRUE, full.names=T, path=paste0(path,"/GEO_info"))){
-    if (file.exists(paste0(path,"/GEO_info/library_layout_info.txt")) & (as.numeric(system(paste0("cat ",z," | wc -l"),intern=T)) > dim(gene_counts)[2]-2) & layout=="PAIRED"){
-        tmp_condition <- read.table(z,head=F,blank.lines.skip=FALSE)$V1
-        x=1:length(tmp_condition)
-        tmp_condition <- tmp_condition[x%%2==1]
-        write.table(tmp_condition,
-              file=z,quote = F,row.names = F, col.names = F,sep = "\n")
-        print("Fixing designs in this paired study...")
-    }
-  }
 
 ###### Get edgeR object and normalized counts:
   suppressMessages(library(edgeR,quiet = T,warn.conflicts = F))  
