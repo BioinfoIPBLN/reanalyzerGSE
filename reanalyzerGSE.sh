@@ -797,7 +797,7 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 				annotation_go=$output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annotation_file).automatically_extracted_GO_terms.txt
 				sed -i '1s/^/source_id Computed_GO_Process_IDs\n/' $annotation_go
 				if [ -s "$annotation_go" ]; then
-					R_clusterProfiler_enrichr.R $annotation_go $output_folder/$name/final_results_reanalysis$index/RM_counts_genes.txt $output_folder/$name/final_results_reanalysis$index/DGE "^DGE_analysis_comp[0-9]+.txt$" &> clusterProfiler_enrichr_funct_enrichment.log
+					R_clusterProfiler_enrichr.R $annotation_go $output_folder/$name/final_results_reanalysis$index/RPKM_counts_genes.txt $output_folder/$name/final_results_reanalysis$index/DGE "^DGE_analysis_comp[0-9]+.txt$" &> clusterProfiler_enrichr_funct_enrichment.log
 					echo "DONE. Please double check the attempt of executing enrichr with automatically detected GO terms from the annotation"
 				fi
 			else
