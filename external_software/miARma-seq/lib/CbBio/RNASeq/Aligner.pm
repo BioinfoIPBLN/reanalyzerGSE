@@ -2370,7 +2370,7 @@ sub miRDeep{
 		 or die "miRDeep ERROR :: system args failed: $? ($commanddef_novo)";
 
 		#Clean all temporary files by miRDeep
-		my $clean_cmd= "mv result_*.csv $projectdir/$output_dir/$name\.xls  rm -rf $miARmaPath/dir_* $miARmaPath/*.bed $miARmaPath/*.html $miARmaPath/mirna_results_* $miARmaPath/expression_analyses $miARmaPath/mapper.log $miARmaPath/bowtie.log $miARmaPath/error_* $miARmaPath/mirdeep_runs";
+		my $clean_cmd= "mv result_*.csv $projectdir/$output_dir/$name\.xls; rm -rf $miARmaPath/dir_* $miARmaPath/*.bed $miARmaPath/*.html $miARmaPath/mirna_results_* $miARmaPath/expression_analyses $miARmaPath/mapper.log $miARmaPath/bowtie.log $miARmaPath/error_* $miARmaPath/mirdeep_runs";
 		print LOG "miRDeep :: ".date()." $clean_cmd\n";
 		system($clean_cmd) == 0
 		 or die "miRDeep ERROR :: system args failed: $? ($clean_cmd)";
