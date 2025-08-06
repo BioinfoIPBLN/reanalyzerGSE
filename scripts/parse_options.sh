@@ -69,7 +69,7 @@ for argument in $options; do
 	        -Os | -options_featureCounts_seq # The seqid type to use to count in featureCounts (default 'gene_name')
 	        -A | -aligner # Aligner software to use ('hisat2' or 'star', by default)
 	        -Des | -differential_expr_software # Software to be used in the differential expression analyses ('edgeR' by default, or 'DESeq2')
-	        -fp | -fastp_mode # Whether to perform fastp analyses over the raw reads in default mode, except for adapter trimming and end trimming ('yes' or 'no', by default)
+	        -fp | -fastp_mode # Whether to perform quality filtering on the raw reads by fastp ('yes' or 'no', by default)
 	        -fpa | -fastp_adapter # Whether to perform adapter trimming on the raw reads by fastp ('yes' or 'no', by default, to perform automatic trimming, or a path to a fasta file to perform trimming of its sequences)
 	        -fpt | -fastp_trimming # Whether to trim the raw reads by fastp ('none' by default, if two numbers separated by comma, the indicated number of bases will be trimmed from the front and tail, respectively)
 	        -std | -time_course_std # Standard deviation threshold to filter in time course analyses (numeric, 1 by default)
