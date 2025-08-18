@@ -206,7 +206,7 @@ pattern_to_remove <- args[16] # if not provided, "no"
     }
     else if(filter == "filterbyexpr"){
       print("Applying filterByExpr by edgeR together with the grouping...")
-      keep <- filterByExpr(y,group=data$samples$group)
+      keep <- filterByExpr(data,group=data$samples$group)
       data <- data[keep,]
     }
     else{
