@@ -60,7 +60,7 @@ From: ubuntu:latest
                                                         "bit64",
                                                         "bitops", "cluster", "colorspace", "corrplot", "curl", "data.table", 
                                                         "dichromat", "dirmult", "doParallel", "factoextra", 
-                                                        "funr", "ggdendro", "ggfortify", "ggpmisc", 
+                                                        "funr", "ggdendro", "ggfortify", "ggpmisc", "ggupset",
                                                         "ggpubr", "gtools", "harmony", "Hmisc", "htmlwidgets", 
                                                         "jpeg", "matrixStats", "mime", "minpack.lm", 
                                                         "nloptr", "openxlsx", "openssl", "optparse", "pheatmap", "pkgconfig", 
