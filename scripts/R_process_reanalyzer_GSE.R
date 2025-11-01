@@ -340,7 +340,7 @@ pattern_to_remove <- args[16] # if not provided, "no"
     colnames(gene_counts_rpkm_adjusted_log)[1] <- "Gene_ID"
     write.table(gene_counts_rpkm_adjusted_log,
           file=paste0(output_dir,"/RPKM_counts_adjusted_genes_log2_0.1.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
-    tpm_counts <- rpkm_to_tpm(gene_counts_rpkm_adjusted_to_write[,grep("Gene_ID",colnames(gene_counts_rpkm_to_write),invert=T)]); rownames(tpm_counts) <- gene_counts_rpkm_adjusted_to_write$Gene_ID
+    tpm_counts <- rpkm_to_tpm(gene_counts_rpkm_adjusted_to_write[,grep("Gene_ID",colnames(gene_counts_rpkm_adjusted_to_write),invert=T)]); rownames(tpm_counts) <- gene_counts_rpkm_adjusted_to_write$Gene_ID
     write.table(tpm_counts,
                 file=paste0(output_dir,"/TPM_counts_adjusted_genes.txt"),quote = F,row.names = T, col.names = T,sep = "\t")
     write.table(log2(tpm_counts+0.1),
