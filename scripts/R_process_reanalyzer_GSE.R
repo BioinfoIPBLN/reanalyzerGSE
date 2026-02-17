@@ -788,9 +788,10 @@ pattern_to_remove <- args[16] # if not provided, "no"
           if (pattern_to_remove!="none"){
             RPKM <- RPKM[,grep(pattern_to_remove,colnames(RPKM),invert=T)]
           }
-          a <- data.frame(Type=sub("_Rep.*","",sub("(.*)_.*", "\\1",colnames(RPKM))))
+          a <- data.frame(Type=colnames(RPKM))
+          a$Type <- sub("(.*)-.*", "\\1",sub("_Rep.*","",sub("(.*)_.*", "\\1",a$Type)))
           rownames(a) <- colnames(RPKM)
-          print("Obtaining targets from colum names removing everything after the last underline... This is the result, please double check as it may be the source of errors...")
+          print("Obtaining targets from colum names removing everything after the last underline or hyphen... This is the result, please double check as it may be the source of errors...")
           print(a)
           write.table(a,
                       file="temp_targets.txt",quote = F,row.names = T, col.names = T,sep = "\t")
