@@ -39,7 +39,7 @@ Please refer to the help page for futher details. Please be aware that a txt con
 ```
 reanalyzerGSE.sh -h
 		-h | -help # Type this to get help
-	        -options | Provide the file containing the parameters to be used. You can adapt the file 'manual_options.txt' provided in the scripts folder, alternative to manually input in the command line all the options...)
+	        -options | Provide a YAML configuration file containing the parameters to be used. You can adapt the file 'config_template.yaml' provided in the scripts folder. CLI arguments override values from the YAML file.)
 	        
 	        #### Input/output: 
 	        -i | -input # GEO_ID (GSEXXXXXX, separated by comma if more than one), or folder containing raw reads (please provide full absolute path, e.g. /path/folder_name/, containing only fastq.gz files and not folders, links or any other item, and please rename samples with meaningful names if possible), or almost any accession from ENA/SRA to download .fastq from (any of the ids with the prefixes PRJEB,PRJNA,PRJDB,ERP,DRP,SRP,SAMD,SAME,SAMN,ERS,DRS,SRS,ERX,DRX,SRX,ERR,DRR,SRR, please separated by commas if more than one id as input)
@@ -115,6 +115,12 @@ reanalyzerGSE.sh -h
 	        -Pm | -panther_method # Method for adjusting p.value in panther analyses via rbioapi (one of 'NONE','BONFERRONI', or 'FDR', by default)
 	        -rev | -revigo_threshold_similarity # Similarity threshold for Revigo summaries of GO terms (0-1, suggested values are 0.9, 0.7, 0.5, 0.4 for large, medium, small, and tiny levels of similarity, respectively, being default 0.7
 	
+	        #### BAM filtering (post-alignment):
+	        -mQ | -bam_mapq_threshold # Min MAPQ for samtools view -q and featureCounts -Q (0 = use default)
+	        -Fex | -bam_exclude_flags # samtools -F flags to exclude, e.g. '4' (unmapped), '256' (secondary), '2308' (combined)
+	        -Freq | -bam_require_flags # samtools -f flags to require, e.g. '2' (proper pair)
+	        -Fdup | -bam_dedup # Duplicate removal: 'no' (default), 'samtools' (markdup -r), 'picard' (REMOVE_DUPLICATES), 'picard_optical' (REMOVE_SEQUENCING_DUPLICATES)
+	
 	        #### Performance:
 	        -p | -cores # Number of cores
 	        -cR | -cores_reads_to_subsample # Cores to use in subsampling by seqtk (10 by default)
@@ -126,7 +132,7 @@ reanalyzerGSE.sh -h
 	        -K | -Kraken2_fast # Kraken2 fast mode, consisting on copying the Kraken2 database to /dev/shm (RAM) so execution is faster ('yes' or 'no' by default)
 ```
 
-Parameters are not positional. If you did not provide a required parameter, the pipeline may exit or use default values if possible (check the help page above, the log after execution, or the 'Arguments and variables' first section in the main script 'reanalyzerGSE.sh'). For example, if the argument '-s' is not provided, strandness will be predicted using Salmon and how_are_we_stranded_here and transcript sequences would be required, so the pipeline would exit if not provided with the argument '-t'. Similarly, reference genome and annotation are likely going to be required for the alignment and quantifying steps (arguments '-r' and '-a').
+Parameters are not positional. If you did not provide a required parameter, the pipeline may exit or use default values if possible (check the help page above, the log after execution, or the 'Arguments and variables' first section in the main script 'reanalyzerGSE.sh'). For example, if the argument '-s' is not provided, strandness will be predicted using Salmon and transcript sequences would be required, so the pipeline would exit if not provided with the argument '-t'. Similarly, reference genome and annotation are likely going to be required for the alignment and quantifying steps (arguments '-r' and '-a').
 
 In general, from a folder containing raw sequences (.fastq.gz) or a GEO entry (GSEXXXXX) as input (argument '-i'), reanalyzerGSE is going to provide a standard transcriptomic analysis named with the argument '-n', in the folder provided by the argument '-o'. The argument '-p' provides the number of cores to be used when multithreading is possible, '-P' the number of files to be processed simultaneously when possible, leveraging GNU's parallel, and '-M' the maximum amount of RAM memory available (required mostly for the index generation and alignment step). If the reanalysis of a GEO entry is requested, all the samples in the database will be included by default. The parameter '-G' allows to restrict the analysis to some of them (providing GSMXXXXX ids), while '-S' interrupts the pipeline until the user has made manual changes to the downloaded files, and '-d' allows the user to input a custom experimental design, to be used instead of the automatically-detected one.
 

@@ -41,7 +41,7 @@ for (f in list.files(pattern = pattern_search)){
   e <- a[a$PValue < 0.05 & a$logFC<0,]
   if (dim(b)[1]!=0){
     write.table(b,file=paste0(gsub(".txt","",f),"_pval_05.txt"),col.names = F,row.names = F,quote = F,sep="\t")  
-    write.table(b$Gene_ID,file=paste0(gsub(".txt","",f),"_pval_05.txt_Gene_IDs"),col.names = F,row.names = F,quote = F,sep="\n")  
+    write.table(b$Gene_ID,file=paste0(gsub(".txt","",f),"_pval_05_Gene_IDs.txt"),col.names = F,row.names = F,quote = F,sep="\n")  
   }
   if (dim(d)[1]!=0){
     write.table(d,file=paste0(gsub(".txt","",f),"_pval_05_logpos.txt"),col.names = F,row.names = F,quote = F,sep="\t")
@@ -56,7 +56,7 @@ for (f in list.files(pattern = pattern_search)){
 for (file in list.files(path = path, pattern = "_Gene_IDs\\.txt$")){
   print(paste0("Processing ",file," ..."))
   elements_interest <- data.table::fread(paste0(file),head=F)$V1
-  a <- as.data.frame(data.table::fread(paste0(annotation),fill=T)[,1:2])
+  a <- as.data.frame(data.table::fread(paste0(annotation),head=T,fill=T)[,1:2])
   a$source_id <- gsub(":.*","",a$source_id)
   colnames(a)[2] <- "Computed_GO_Process_IDs"
   b <- GOfuncR::get_names(a$Computed_GO_Process_IDs)
