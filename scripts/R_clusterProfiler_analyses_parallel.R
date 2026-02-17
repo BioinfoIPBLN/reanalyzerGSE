@@ -24,7 +24,6 @@ suppressMessages(library(pathview,quiet = T,warn.conflicts = F))
 suppressMessages(library(enrichplot,quiet = T,warn.conflicts = F))
 suppressMessages(library(parallel,quiet = T,warn.conflicts = F))
 suppressMessages(library(ggplot2,quiet = T,warn.conflicts = F))
-suppressMessages(library(GOxploreR,quiet = T,warn.conflicts = F))
 suppressMessages(library(aPEAR,quiet = T,warn.conflicts = F))
 
 print(paste0("Trying to use as many as ",cores," cores, but if many subsets of genes/comparisons, please expect a lenghty process of at least a few hours"))

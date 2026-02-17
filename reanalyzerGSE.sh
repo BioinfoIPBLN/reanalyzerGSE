@@ -119,8 +119,7 @@ if [[ $debug_step == "all" || $debug_step == "step1" ]]; then
 			echo -e "$organism\nPlease request on the next run a stop with parameter '-S' and modify manually the file GEO_info/organism.txt if not required...\n"
 		fi
 		echo -e "\nSTEP 1 DONE. Current time: $(date)\n"
-	
- 	fi
+	fi
   	echo -e "\n\nSTEP 1: DONE\nCurrent date/time: $(date)\n\n"
 	export debug_step="all"
 fi
@@ -235,6 +234,63 @@ fi
 
 
 ### STEP 1. Process if not required to download from NCBI/GEO the metadata and raw reads provided locally:
+
+### STEP 1a_bis. Alignment Removal (Host Filtering)
+if [[ $debug_step == "all" || $debug_step == "step1a_bis" ]]; then
+    if [ ! -z "$alignment_removal" ]; then
+        echo -e "\n\nSTEP 1a_bis: Alignment Removal (Host Filtering)...\nCurrent date/time: $(date)\n\n"
+        
+        # Define output directory for clean reads
+        clean_seqs_location=$output_folder/$name/clean_reads_no_host
+        mkdir -p $clean_seqs_location
+        mkdir -p $output_folder/$name/indexes
+
+        # Check/Build HISAT2 index for the removal genome
+        removal_index_name=$(basename $alignment_removal)_hisat2_idx
+        removal_index_path=$output_folder/$name/indexes/$removal_index_name
+        
+        if [ ! -f "${removal_index_path}.1.ht2" ]; then
+            echo "Building HISAT2 index for alignment removal: $alignment_removal"
+            hisat2-build -p $cores $alignment_removal $removal_index_path > $output_folder/$name/indexes/hisat2_build_removal.log 2>&1
+        fi
+
+        echo "Mapping reads against removal genome and extracting unmapped..."
+        cd $seqs_location
+
+        # Detect pairs or single
+        if [ $(ls | egrep -c "_1.fastq.gz$") -gt 0 ]; then
+             # Paired-end
+             for f in $(ls | egrep "_1.fastq.gz$" | sed 's,_1.fastq.gz,,g'); do
+                 echo "Processing $f..."
+                 hisat2 -p $cores -x $removal_index_path \
+                    -1 ${f}_1.fastq.gz -2 ${f}_2.fastq.gz \
+                    --un-conc-gz $clean_seqs_location/${f}_%.fastq.gz \
+                    --summary-file $clean_seqs_location/${f}_removal_summary.txt \
+                    > /dev/null
+                 
+                 # Rename output to match expected format (_1.fastq.gz instead of _1.fastq.gz) - hisat2 output fits usually but let's ensure
+                 mv $clean_seqs_location/${f}_1.fastq.gz $clean_seqs_location/${f}_1.fastq.gz 2>/dev/null || true 
+                 mv $clean_seqs_location/${f}_2.fastq.gz $clean_seqs_location/${f}_2.fastq.gz 2>/dev/null || true
+             done
+        else
+             # Single-end
+             for f in $(ls | egrep ".fastq.gz$"); do
+                 echo "Processing $f..."
+                 hisat2 -p $cores -x $removal_index_path \
+                    -U $f \
+                    --un-gz $clean_seqs_location/$f \
+                    --summary-file $clean_seqs_location/${f}_removal_summary.txt \
+                    > /dev/null
+             done
+        fi
+
+        # Update seqs_location to point to clean reads
+        echo -e "\nAlignment removal completed. Updating sequences location to: $clean_seqs_location\n"
+        seqs_location=$clean_seqs_location
+        export seqs_location
+    fi
+fi
+
 if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
 	mkdir -p $TMPDIR
 	if [[ $input == /* ]]; then
@@ -248,6 +304,16 @@ if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
 				exit 1
 			fi
 			for f in $(ls -d $input/*); do ln -sf $f $seqs_location/$(basename $f | sed 's,fq,fastq,g;s,_R1.fastq,_1.fastq,g;s,_R2.fastq,_2.fastq,g'); done
+			if [ ! -z "$input_filter_regex" ]; then
+				echo -e "\nFiltering input files with regex: $input_filter_regex\n"
+				cd $seqs_location
+				ls | egrep -v "$input_filter_regex" | xargs rm
+				if [ $(ls | wc -l) -eq 0 ]; then
+					echo "Error: No files matched the regex '$input_filter_regex'. Exiting..."
+					exit 1
+				fi
+				cd - > /dev/null
+			fi
 			echo -e "\nProcessing the provided fastq files, renaming to _1.fastq and _2.fastq if necessary...\n"
 		fi
 	 	cd $seqs_location
@@ -382,7 +448,7 @@ if [[ $debug_step == "all" || $debug_step == "step1d" ]]; then
 fi
 
 ### STEP 1. Give info of NCBI's current genome:
-Rscript -e "organism <- '${organism}'; assemblies <- rentrez::entrez_summary(db='assembly', id=rentrez::entrez_search(db='assembly', term=paste0(organism, '[orgn]'))\$ids[1]); cat(paste(paste0('\n\nNCBI current assembly info: ', date()), assemblies\$assemblyname, assemblies\$assemblyaccession, assemblies\$submissiondate, '\n', sep='\n'))"
+Rscript -e "organism <- '${organism}'; tryCatch({ ids <- rentrez::entrez_search(db='assembly', term=paste0(organism, '[orgn]'))\$ids; if(length(ids)==0) stop('No ids'); assemblies <- rentrez::entrez_summary(db='assembly', id=ids[1]); cat(paste(paste0('\n\nNCBI current assembly info: ', date()), assemblies\$assemblyname, assemblies\$assemblyaccession, assemblies\$submissiondate, '\n', sep='\n')) }, error=function(e) cat(paste0('\n\nNo genome information found in NCBI for: ', organism, '\n\n')))"
 organism=$(cat $output_folder/$name/GEO_info/organism.txt | sed 's/ \+/_/g;s/__*/_/g') # Get again the organism in case it has been manually modified... and without spaces...
 
 ### STEP 1. Deal with fastp if required:
@@ -486,7 +552,6 @@ if [[ $debug_step == "all" || $debug_step == "step2" ]]; then
    			sortmerna --index 1 --ref $sortmerna_databases --workdir $output_folder/$name/indexes/$(basename $sortmerna_databases)_sortmerna_index --threads $cores &>> $output_folder/$name/indexes/sortmerna_index.log
 		fi
 		rm -rf $seqs_location\_sortmerna/* # I'm now removing also at the beginning of this section, in the context of the new system of resuming by -Dm stepx, so this should always be done
-    		
 		# with the argument --paired_out, only the pairs where both reads are coincident (aligning to rRNA or not, are included in the results)
 		# I don't include it, so the numbers are exactly the ones in the log, and the properly paired reads can be dealt with later on the mapping
 		echo -e "\nExecuting sortmerna and fastqc of the new reads...\n"
@@ -528,24 +593,26 @@ if [[ $debug_step == "all" || $debug_step == "step3a" ]]; then
 				salmon index -p $cores -t $transcripts -i $output_folder/$name/indexes/${organism}_salmon_idx --tmpdir $TMPDIR &> $output_folder/$name/indexes/${organism}_salmon_idx.log
 				salmon_idx=$output_folder/$name/indexes/${organism}_salmon_idx
 			fi
-			kall_idx=$CURRENT_DIR/indexes/${organism}_kallisto_idx
-			if [ ! -s "$kall_idx" ]; then
-				kallisto index -i $output_folder/$name/indexes/${organism}_kallisto_idx $transcripts &> $output_folder/$name/indexes/${organism}_kallisto_idx.log
-				kall_idx=$output_folder/$name/indexes/${organism}_kallisto_idx
-			fi
-			echo -e "\nPredicting strandness on two random sample...\n"
-			mkdir -p $output_folder/$name/strand_prediction/salmon_out; mkdir -p $output_folder/$name/strand_prediction/how_are_we_stranded_here_out
+
+			mkdir -p $output_folder/$name/strand_prediction/salmon_out
 			if [[ $(find $output_folder/$name -name library_layout_info.txt | xargs cat) == "SINGLE" ]]; then
-				salmon quant -i $salmon_idx -l A -r $seqs_location/$(ls $seqs_location | l | head -1) -p $cores -o $output_folder/$name/strand_prediction/salmon_out/ --skipQuant &> $output_folder/$name/strand_prediction/salmon_out/salmon_out.log
-				cd $output_folder/$name/strand_prediction/how_are_we_stranded_here_out; check_strandedness --gtf $(echo $annotation | sed 'sa,.*aag') --transcripts $transcripts --reads_1 $seqs_location/$(ls $seqs_location | shuf | head -1) --kallisto_index $kall_idx --print_commands &> check_strandedness_out.log
+				rand_sample=$(ls $seqs_location | shuf | head -1)
+				echo -e "\nPredicting strandness with salmon on random sample: $rand_sample\n"
+				salmon quant -i $salmon_idx -l A -r $seqs_location/$rand_sample -p $cores -o $output_folder/$name/strand_prediction/salmon_out/ --skipQuant &> $output_folder/$name/strand_prediction/salmon_out/salmon_out.log
 			elif [[ $(find $output_folder/$name -name library_layout_info.txt | xargs cat) == "PAIRED" ]]; then
 				rand_sample_root=$(ls $seqs_location | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq | shuf | head -1)
+				rand_sample="${rand_sample_root}_1.fastq.gz / ${rand_sample_root}_2.fastq.gz"
+				echo -e "\nPredicting strandness with salmon on random sample: $rand_sample\n"
 				salmon quant -i $salmon_idx -l A -1 $seqs_location/${rand_sample_root}_1.fastq.gz -2 $seqs_location/${rand_sample_root}_2.fastq.gz -p $cores -o $output_folder/$name/strand_prediction/salmon_out/ --skipQuant &> $output_folder/$name/strand_prediction/salmon_out/salmon_out.log
-				rand_sample_root=$(ls $seqs_location | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq | shuf | head -1)
-				cd $output_folder/$name/strand_prediction/how_are_we_stranded_here_out; check_strandedness --gtf $(echo $annotation | sed 'sa,.*aag') --transcripts $transcripts --reads_1 $seqs_location/${rand_sample_root}_1.fastq.gz --reads_2 $seqs_location/${rand_sample_root}_2.fastq.gz --kallisto_index $kall_idx --print_commands &> check_strandedness_out.log
 			fi
-			cd $output_folder/$name/strand_prediction/salmon_out/
-			salmon_strand=$(grep -r "Automatically detected most likely library type as " | sed 's,.*Automatically detected most likely library type as ,,g' | sort | uniq)
+			salmon_meta=$output_folder/$name/strand_prediction/salmon_out/aux_info/meta_info.json
+			salmon_strand=$(python3 -c "import json; d=json.load(open('$salmon_meta')); print(d['library_types'][0])" 2>/dev/null)
+			salmon_json=$output_folder/$name/strand_prediction/salmon_out/lib_format_counts.json
+			if [ -f "$salmon_json" ]; then
+				salmon_compat_ratio=$(python3 -c "import json; d=json.load(open('$salmon_json')); print(d.get('compatible_fragment_ratio', 'N/A'))" 2>/dev/null)
+			else
+				salmon_compat_ratio="N/A"
+			fi
 			if [[ "$salmon_strand" == "SR" || "$salmon_strand" == "ISR" ]]; then
 				strand="reverse"
 			elif [[ "$salmon_strand" == "SF" || "$salmon_strand" == "ISF" ]]; then
@@ -553,17 +620,16 @@ if [[ $debug_step == "all" || $debug_step == "step3a" ]]; then
 			elif [[ "$salmon_strand" == "U" || "$salmon_strand" == "IU" ]]; then
 				strand="no"
 			fi
-			strand_second_opinion=$(cat $output_folder/$name/strand_prediction/how_are_we_stranded_here_out/check_strandedness_out.log | egrep "Data is likely |Data does not fall into" | sed 's,*Data is likely ,,g;s/([^)]*)//g')
-			cd $output_folder/$name	
-			echo "Salmon prediction 1: $salmon_strand" > $output_folder/$name/strand_info.txt
-			echo "Salmon prediction 2: $strand" >> $output_folder/$name/strand_info.txt
-			echo -e "how_are_we_stranded_here prediction: $strand_second_opinion" >> $output_folder/$name/strand_info.txt
+			cd $output_folder/$name
+			echo "Salmon library type: $salmon_strand" > $output_folder/$name/strand_info.txt
+			echo "Strandedness: $strand" >> $output_folder/$name/strand_info.txt
+			echo "Compatible fragment ratio: $salmon_compat_ratio" >> $output_folder/$name/strand_info.txt
+			echo "Sample used: $rand_sample" >> $output_folder/$name/strand_info.txt
 			if [ $(egrep -c "reverse|yes|no" $output_folder/$name/strand_info.txt) -gt 0 ]; then
-				echo "Please double check carefully, based on the kit used in the library preparation, the paper, the GEO entry... because this is crucial for quantification. Please rerun with the argument '-s' in the unlikely case that the prediction by salmon is not correct, or if the second opinion by how_are_we_stranded_here is different (if transcripts from GENCODE or any particular format are used, the latter option may fail to identify the data type though)"
+				echo "Please double check carefully, based on the kit used in the library preparation, the paper, the GEO entry... because this is crucial for quantification. Please rerun with the argument '-s' in the unlikely case that the prediction by salmon is not correct"
 				cat $output_folder/$name/strand_info.txt
-				rm $(find $output_folder/$name/strand_prediction/how_are_we_stranded_here_out -type f -name "*.bam")
 			else
-				echo "Salmon to detect strandedness seems to have failed. This is not acceptable, plese double check or provide the parameter -s. Exiting..."
+				echo -e "Salmon to detect strandedness seems to have failed. This is not acceptable, please double check or provide the parameter -s. Exiting...\nThe random sample used was: $rand_sample"
 				exit 1
 			fi
 		else
@@ -629,12 +695,35 @@ if [[ $debug_step == "all" || $debug_step == "step3a" ]]; then
 					sed -i "s,indexname=,indexname=${organism}_hisat2_idx,g" miarma$index.ini
 					sed -i "s,indexdir=,indexdir=$output_folder/$name/indexes/,g" miarma$index.ini
 				fi
+			elif [[ "$aligner" == "kallisto" ]]; then
+				sed -i "s,aligner=star,aligner=kallisto,g" miarma$index.ini
+				if [ -z "$reference_genome_index" ]; then
+					sed -i "s,indexname=,indexname=${organism}_$(basename ${reference_genome%.*})_$(basename ${gff%.*})_kallisto_idx,g" miarma$index.ini
+					sed -i "s,indexdir=,indexdir=$output_folder/$name/indexes/,g" miarma$index.ini
+				else
+					sed -i "s,kallistoindex=,kallistoindex=$reference_genome_index,g" miarma$index.ini
+					sed -i "s,indexname=,indexname=${organism}_kallisto_idx,g" miarma$index.ini
+					sed -i "s,indexdir=,indexdir=$output_folder/$name/indexes/,g" miarma$index.ini
+				fi
 			fi
 			if [ ! -z "$optionsFeatureCounts_seq" ]; then
 				sed -i "s,seqid=gene_name,seqid=${array2[index]},g" miarma$index.ini
 			fi
 			if [ ! -z "$optionsFeatureCounts_feat" ]; then
 				sed -i "s,featuretype=exon,featuretype=${array3[index]},g" miarma$index.ini
+			fi
+			if [ "$bam_mapq_threshold" -gt 0 ] 2>/dev/null; then
+				sed -i "s,quality=10,quality=$bam_mapq_threshold,g" miarma$index.ini
+				sed -i "s,bam_mapq_threshold=,bam_mapq_threshold=$bam_mapq_threshold,g" miarma$index.ini
+			fi
+			if [ ! -z "$bam_require_flags" ]; then
+				sed -i "s,bam_require_flags=,bam_require_flags=$bam_require_flags,g" miarma$index.ini
+			fi
+			if [ ! -z "$bam_exclude_flags" ]; then
+				sed -i "s,bam_exclude_flags=,bam_exclude_flags=$bam_exclude_flags,g" miarma$index.ini
+			fi
+			if [ ! -z "$bam_dedup" ]; then
+				sed -i "s,bam_dedup=no,bam_dedup=$bam_dedup,g" miarma$index.ini
 			fi
 			# Final renaming of fastq raw files if SRR present in the filename:
 			if [ $(ls $seqs_location | grep -c SRR) -gt 0 ]; then
@@ -648,7 +737,7 @@ fi
 
 
 ### STEP3b. Running miARma-seq:
-# 2024: I've modified miARma RNA-seq mode to leverage GNU's parallel and increase speed, introduce limit RAM in aligners and multithreading index, replace the shebang with #!/usr/bin/env perl so it uses the PATH's/environment's one, etc...
+# miARma RNA-seq mode was modified to leverage GNU's parallel and increase speed, introduce limit RAM in aligners and multithreading index, replace the shebang with #!/usr/bin/env perl so it uses the PATH's/environment's one, etc...
 # Eventually, WIP nicludes to also improve and integrate the rest of modules of miARma, such as adapter cutting, stats, miRNAs...
 if [[ $debug_step == "all" || $debug_step == "step3b" ]]; then
 	echo -e "\n\nSTEP 3b: Starting...\nCurrent date/time: $(date)\n\n"
@@ -659,7 +748,9 @@ if [[ $debug_step == "all" || $debug_step == "step3b" ]]; then
 		organism=$(cat $output_folder/$name/GEO_info/organism.txt | sed 's, ,_,g;s,_+,_,g')
 	fi
 
-	echo "Please double check all the parameters above, in particular the stranded or the reference genome files and annotation used. Proceeding with miARma execution in..."
+	echo -e "\n\nmiARma configuration:\n"
+        cat miarma$index.ini
+	echo -e "\n\n\n Please double check all the parameters above for miARma, in particular the stranded or the reference genome files and annotation used. Proceeding with miARma execution in..."
 	secs=$((1 * 15))
 	dir=$output_folder/$name/miARma_out0
 	while [ $secs -gt 0 ]; do
@@ -676,7 +767,7 @@ if [[ $debug_step == "all" || $debug_step == "step3b" ]]; then
 		if [ "$qc_raw_reads" == "no" ]; then
 			mkdir -p $output_folder/$name/miARma_out$index/Pre_fastqc_results/_skip_
 		fi
-		$miarma_path/miARma miarma$index.ini
+		$miarma_path/miARma miarma$index.ini 
 	done
 
 	### Reformat the logs by parallel...
@@ -686,7 +777,7 @@ if [[ $debug_step == "all" || $debug_step == "step3b" ]]; then
   	if [ "$aligner" == "star" ] && [ "$aligner_index_cache" == "no" ]; then
 		STAR --runThreadN $cores --genomeDir $(find $output_folder/$name/ -name "star_log_parallel.txt" | xargs cat | grep "genomeDir" | sed 's,.*genomeDir ,,g;s, .*,,g' | sort | uniq) --genomeLoad Remove --outFileNamePrefix genomeloading.tmp
 	fi
- 	
+
 	echo -e "\nmiARma-seq DONE. Current date/time: $(date)"; time1=`date +%s`; echo -e "Elapsed time (secs): $((time1-start))"; echo -e "Elapsed time (hours): $(echo "scale=2; $((time1-start))/3600" | bc -l)\n"
 	export debug_step="all"
 	echo -e "\n\nSTEP 3b: DONE\nCurrent date/time: $(date)\n\n"
@@ -790,18 +881,66 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 		else
 			echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
    			echo "Organism is $organism... Functional analyses apart from human/mouse is not fully supported yet"
-			if [ $(egrep -c "GO:|Ontology|tology_term|tology term" $annotation_file) -gt 0 ]; then
+			# Determine which annotation file to use for functional enrichment
+			annot_enrichm=""
+			if [ ! -z "$non_reference_funct_enrichm" ]; then
+				echo "Using provided non-reference functional enrichment file: $non_reference_funct_enrichm"
+				annot_enrichm="$non_reference_funct_enrichm"
+			elif [ $(egrep -c "GO:|Ontology|tology_term|tology term" $annotation_file) -gt 0 ]; then
+				echo "Using main annotation file for functional enrichment: $annotation_file"
+				annot_enrichm="$annotation_file"
+			fi
+
+			if [ ! -z "$annot_enrichm" ]; then
 				cd $output_folder/$name/final_results_reanalysis$index/DGE/
-				echo "However, an automatic approach based on clusterProfiler's enrichr function and automatically extracted GO terms from the annotation can be applied for DEGs..."
-				paste <(egrep "GO:|,GO:|Ontology|tology_term|tology term" $annotation_file | sed 's,.*ID=,,g;s,.*Parent=,,g;s,;.*,,g') <(egrep "GO:|,GO:|Ontology|tology_term|tology term" $annotation_file | sed 's,.*tology_term=,,g') | sort -t $'\t' -k1,1 -k2,2 | awk -F'\t' '!a[$1,$2]++' | awk -F'\t' '{ a[$1] = (a[$1] ? a[$1]","$2 : $2); } END { for (i in a) print i"\t"a[i]; }' | awk -F '\t' '{n=split($2,a,","); for (i=1; i<=n; i++) print $1,a[i]}' | uniq > $output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annotation_file).automatically_extracted_GO_terms.txt
-				annotation_go=$output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annotation_file).automatically_extracted_GO_terms.txt
+				echo "An automatic approach based on clusterProfiler's enrichr function and automatically extracted GO terms from the annotation can be applied for DEGs..."
+				
+				# Check if input is GAF (Gene Association File)
+				if [[ "$annot_enrichm" == *.gaf ]] || [[ "$annot_enrichm" == *.gaf.gz ]]; then
+					echo "Detected GAF format. Extracting Gene IDs and GO terms..."
+					# GAF 2.1 format: Column 2 is DB Object ID (Gene ID), Column 5 is GO ID.
+					# Handle .gz or plain text
+					if [[ "$annot_enrichm" == *.gz ]]; then
+						cat_cmd="zcat"
+					else
+						cat_cmd="cat"
+					fi
+					
+					# Extract cols 2 and 5, skip comments (!), minimal cleaning
+					$cat_cmd "$annot_enrichm" | grep -v "^!" | cut -f 2,5 | sort -u > $output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annot_enrichm).automatically_extracted_GO_terms.txt
+					
+				elif [[ "$annot_enrichm" == *.gmt ]] || [[ "$annot_enrichm" == *.gmt.gz ]]; then
+					echo "Detected GMT format. Transforming to GeneID-TermID format..."
+					# GMT format: TermID <tab> Description <tab> Gene1 <tab> Gene2 ...
+					# We need: GeneID <tab> TermID
+					if [[ "$annot_enrichm" == *.gz ]]; then
+						cat_cmd="zcat"
+					else
+						cat_cmd="cat"
+					fi
+					
+					# Process GMT: 
+					# 1. Read line
+					# 2. Extract Term (col 1)
+					# 3. Iterate from col 3 to end (Gene IDs)
+					# 4. Print "GeneID \t TermID"
+					$cat_cmd "$annot_enrichm" | awk -F'\t' '{term=$1; for(i=3;i<=NF;i++) print $i"\t"term}' | sort -u > $output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annot_enrichm).automatically_extracted_GO_terms.txt
+
+				else
+					# Assume GFF/GTF/GFF3
+					echo "Detected GFF/GTF format. Extracting Gene IDs and GO terms..."
+					paste <(egrep "GO:|,GO:|Ontology|tology_term|tology term" $annot_enrichm | sed 's,.*ID=,,g;s,.*Parent=,,g;s,;.*,,g') <(egrep "GO:|,GO:|Ontology|tology_term|tology term" $annot_enrichm | sed 's,.*tology_term=,,g') | sort -t $'\t' -k1,1 -k2,2 | awk -F'\t' '!a[$1,$2]++' | awk -F'\t' '{ a[$1] = (a[$1] ? a[$1]","$2 : $2); } END { for (i in a) print i"\t"a[i]; }' | awk -F '\t' '{n=split($2,a,","); for (i=1; i<=n; i++) print $1,a[i]}' | uniq > $output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annot_enrichm).automatically_extracted_GO_terms.txt
+				fi
+
+				annotation_go=$output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annot_enrichm).automatically_extracted_GO_terms.txt
 				sed -i '1s/^/source_id Computed_GO_Process_IDs\n/' $annotation_go
+				
 				if [ -s "$annotation_go" ]; then
 					R_clusterProfiler_enrichr.R $annotation_go $output_folder/$name/final_results_reanalysis$index/RPKM_counts_genes.txt $output_folder/$name/final_results_reanalysis$index/DGE "^DGE_analysis_comp[0-9]+.txt$" &> clusterProfiler_enrichr_funct_enrichment.log
 					echo "DONE. Please double check the attempt of executing enrichr with automatically detected GO terms from the annotation"
 				fi
 			else
-				echo "For $organism and the annotation $annotation_file, it does not seem there's GO or functional information available..."
+				echo "For $organism and the annotation $annotation_file (or provided enrichment file), it does not seem there's GO or functional information available..."
 			fi
 		fi
 		cd $output_folder/$name/final_results_reanalysis$index/DGE/

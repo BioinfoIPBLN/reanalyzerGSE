@@ -456,6 +456,10 @@ sub run_miARma{
 				print STDERR date() . " Inside [Aligner] fasta and bwaiindex are excluyent, discarding fasta parameter\n";
 				$do_index=undef;
 			}
+			if($do_index and $cfg->val("Aligner","kallistoindex") ne "" and lc($cfg->val("Aligner","aligner")) eq "kallisto"){
+				print STDERR date() . " Inside [Aligner] fasta and kallistoindex are excluyent, discarding fasta parameter\n";
+				$do_index=undef;
+			}
 			
 			if($do_index){
 				if($cfg->exists("Aligner","indexname") ne ""){
@@ -468,6 +472,7 @@ sub run_miARma{
 					  	indexname=>$cfg->val("Aligner","indexname"),
 					  	starindex=>$cfg->val("Aligner","starindex") || undef,
 					  	hisat2index=>$cfg->val("Aligner","hisat2index") || undef,
+					  	kallistoindex=>$cfg->val("Aligner","kallistoindex") || undef,
 					    indexdir=>$cfg->val("Aligner","indexdir") || undef,
 						miARmaPath=>$miARmaPath,
 						threads=>$cfg->val("General","threads") || 1,
@@ -685,6 +690,7 @@ sub run_miARma{
 						bwaindex=>$cfg->val("Aligner","bwaindex") || undef,
 						hisat2index=>$cfg->val("Aligner","hisat2index") || undef,
 						starindex=>$cfg->val("Aligner","starindex") || undef,
+						kallistoindex=>$cfg->val("Aligner","kallistoindex") || undef,
 						indexname=>$cfg->val("Aligner","indexname") || undef,
 						indexdir=>$cfg->val("Aligner","indexdir") || undef,
 						logfile=>$log_file||$cfg->val("General","logfile"),
@@ -699,6 +705,7 @@ sub run_miARma{
 						tophatParameters=>$cfg->val("Aligner","tophatParameters") || undef,
 						hisat2parameters=>$cfg->val("Aligner","hisat2parameters") || undef,
 						starparameters=>$cfg->val("Aligner","starparameters") || undef,
+						kallistoparameters=>$cfg->val("Aligner","kallistoparameters") || undef,
 						miRDeeparameters=>$cfg->val("Aligner","miRDeeparameters") || undef,
 						miARmaPath=>$miARmaPath,
 						organism=>$cfg->val("General","organism")|| undef,
@@ -711,6 +718,10 @@ sub run_miARma{
 						tophat_multihits=>$cfg->val("Aligner","tophat_multihits") || undef,
 						read_mismatches=>$cfg->val("Aligner","tophat_read_mismatches") || undef,
 						tophat_aligner=>$cfg->val("Aligner","tophat_aligner") || undef,
+						bam_require_flags=>$cfg->val("Aligner","bam_require_flags") || undef,
+						bam_exclude_flags=>$cfg->val("Aligner","bam_exclude_flags") || undef,
+						bam_mapq_threshold=>$cfg->val("Aligner","bam_mapq_threshold") || undef,
+						bam_dedup=>$cfg->val("Aligner","bam_dedup") || "no",
 						strand=>$cfg->val("General","strand")|| "yes",
 					);
 					push(@alignes,$file);
@@ -729,7 +740,7 @@ sub run_miARma{
 		}
 	}
 	#Count features
-	if($cfg->SectionExists("ReadCount")==1){
+	if($cfg->SectionExists("ReadCount")==1 and lc($cfg->val("Aligner","aligner")) ne "kallisto"){
 		#Mandatory parameters: read folder
 		if($cfg->exists("ReadCount","database") eq "" or ($cfg->val("ReadCount","database") eq "")){
 			print STDERR "\nERROR " . date() . " database parameter in Section [ReadCount] is missing/unfilled. Please check documentation\n";

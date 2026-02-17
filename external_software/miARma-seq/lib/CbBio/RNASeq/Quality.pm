@@ -141,7 +141,12 @@ sub FastQC{
 		print LST join("\n", @good_files);
 		close LST;		
 		#Fastqc execution command with a defined number of threads and the output directory
-		$command="if [ \$(ls ".$projectdir.$output_dir." | wc -l) -eq 1 ]; then mkdir -p ".$tmp_dir." && parallel --verbose --joblog ".$projectdir."/fastqc_log_parallel.txt -j ".$multiplied_parallel." fastqc -q --noextract -o ".$projectdir.$output_dir." {} ::: \$(cat ".$tmp_file."); fi";
+		$command=qq{if [ \$(ls $projectdir$output_dir | wc -l) -eq 1 ]; then 
+				mkdir -p $tmp_dir && 
+				parallel --verbose --joblog ${projectdir}/fastqc_log_parallel.txt -j $multiplied_parallel \\
+				'fastqc -q --noextract -o ${projectdir}${output_dir} {}' ::: \$(cat $tmp_file); 
+			fi};
+
 		#commandef is the command will be executed by system composed of the results directory creation
 		#and the fastqc execution. The error data will be redirected to the run.log file
 		$commanddef="mkdir -p ".$projectdir.$output_dir." ; ".$command." >> ".$logfile." 2>&1";
@@ -420,6 +425,7 @@ sub QC_EdgeR{
 	#Arguments provided by user are collected by %args. File, dir, projectdir, targetfile, label, filter
 	#logfile is mandatory arguments while cpmvalue, repthreshold, verbose and Rdir are optional.
 	my %args=@_;
+	my $miARmaPath=$args{"miARmaPath"};
 	my $file=$args{"file"}; #name of the tab file which contains the number of reads from the htseq analysis
 	my $dir=$args{"dir"}; #the path of the directory which contains the files. This directory will be configured as working directory for R
 	my $projectdir=$args{"projectdir"}; #Path of the directory where will be saved the QC report.
@@ -468,7 +474,7 @@ sub QC_EdgeR{
 		#Declaring R instructions for the quality control analysis. QC_EdgeR R function is needed 
 		my $cmds = <<EOF;
 		setwd("$dir")
-		source("http://valkyrie.us.es/CbBio/RNASeq/R-Scripts/QC_EdgeR.R") 
+		source("$miARmaPath/lib/CbBio/RNASeq/R-Scripts/QC_EdgeR.R") 
 		filenames<-QC_EdgeR("$projectdir","$dir", "$file", "$targetfile", "$label", "$filter", $cpmvalue, $repthreshold)
 EOF
 		

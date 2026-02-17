@@ -6,6 +6,4 @@ dependencies:
  - python==3.6.13
  - kallisto==0.44
  - rseqc
- - pip 
- - pip:
-   - how_are_we_stranded_here
+ - pip

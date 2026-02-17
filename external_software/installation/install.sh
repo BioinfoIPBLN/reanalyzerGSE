@@ -1,5 +1,5 @@
 #!/bin/bash
-echo -e "\nThis is a wrapper script to install all reanalyzerGSE dependencies available through conda (multiple environments due to dependency conflicts), and others that are external, such as check_strandedness with pip.\n"
+echo -e "\nThis is a wrapper script to install all reanalyzerGSE dependencies available through conda (multiple environments due to dependency conflicts), and others that are external.\n"
 echo -e "\nBy default, the script first checks if there's a conda executable in the PATH. If there is, it tries to install mamba in the active environment (it shouldn't change anything if already installed) and then reads four yml files to create new environments. If there is no conda installed, it tries to install latest conda version in the external_software folder and performs the same steps in the sentence before\n"
 echo -e "\nIf you want to use just conda instead of mamba, please use '-m conda'\n"
  
@@ -104,6 +104,7 @@ $conda_envs_path/reanalyzerGSE/bin/pip -q install deeptools
 
 echo -e "\n\nSoft linking some software so only one environment/path has to be used...\n\n"
 cd $conda_envs_path/reanalyzerGSE/bin
+ln -sf $conda_envs_path/reanalyzerGSE/bin/yq .
 ln -sf $conda_envs_path/reanalyzerGSE_2/bin/featureCounts .
 ln -sf $conda_envs_path/reanalyzerGSE_2/bin/salmon .
 ln -sf $conda_envs_path/reanalyzerGSE_2/bin/seqtk .
@@ -120,18 +121,13 @@ ln -sf $conda_envs_path/reanalyzerGSE_3/bin/qualimap .
 ln -sf $conda_envs_path/reanalyzerGSE_3/bin/multiqc .
 ln -sf $conda_envs_path/reanalyzerGSE_3/bin/pandoc .
 ln -sf $conda_envs_path/reanalyzerGSE_3/bin/rcf .
-ln -sf $conda_envs_path/reanalyzerGSE_4/bin/check_strandedness .
-ln -sf $conda_envs_path/reanalyzerGSE_4/bin/gff32gtf .
-ln -sf $conda_envs_path/reanalyzerGSE_4/bin/gtf2bed .
 ln -sf $conda_envs_path/reanalyzerGSE_4/bin/infer_experiment.py .
 ln -sf $conda_envs_path/reanalyzerGSE_4/bin/kallisto .
 ln -sf $conda_envs_path/reanalyzerGSE_5/bin/perl .
 ln -sf $conda_envs_path/reanalyzerGSE_5/bin/fastp .
 ln -sf $conda_envs_path/reanalyzerGSE_5/bin/netzoopy .
 
-echo -e "\nSmall fix on check_strandedness...\n"
-cd $(dirname $(find $conda_envs_path/reanalyzerGSE_4 -name check_strandedness.py))
-rm check_strandedness.py; wget -q https://github.com/signalbash/how_are_we_stranded_here/raw/master/how_are_we_stranded_here/check_strandedness.py; chmod 775 check_strandedness.py
+
 
 # echo -e "\n\nInstalling the perl modules required for miARma-Seq via cpanm...\n\n"
 # curl -s -L https://cpanmin.us/ -o cpanm; chmod +x cpanm
@@ -139,7 +135,7 @@ rm check_strandedness.py; wget -q https://github.com/signalbash/how_are_we_stran
 cd $conda_envs_path/reanalyzerGSE_3/bin
 export PATH=$conda_envs_path/reanalyzerGSE_3/bin/:$PATH
 echo -e "\n\nInstalling the CRAN's package 'autoGO' and some other dependencies, not available through conda as of yet... This manual installation implies that the version of the installed R packages are not frozen. So, not likely, but please do keep in mind that this may be a source of errors in the mid-term if newer versions of the R packages are installed...\n\n"
-$conda_envs_path/reanalyzerGSE_3/bin/Rscript -e 'suppressMessages({install.packages(c("jpeg","autoGO","GOxploreR","aPEAR", "rbioapi"),repos="https://cloud.r-project.org",quiet=T)})' &> /dev/null # Avoid the very extensive logs being printed out, please remove suppressMessages and "&> /dev/null" to double check if installation fails...
+$conda_envs_path/reanalyzerGSE_3/bin/Rscript -e 'suppressMessages({install.packages(c("jpeg","autoGO","aPEAR", "rbioapi"),repos="https://cloud.r-project.org",quiet=T)})' &> /dev/null # Avoid the very extensive logs being printed out, please remove suppressMessages and "&> /dev/null" to double check if installation fails...
 $conda_envs_path/reanalyzerGSE_3/bin/Rscript -e 'install.packages("https://cran.r-project.org/src/contrib/Archive/nVennR/nVennR_0.2.3.tar.gz", repos = NULL, type = "source")' &> /dev/null # Avoid the very extensive logs being printed out, please remove suppressMessages and "&> /dev/null" to double check if installation fails...
 $conda_envs_path/reanalyzerGSE_3/bin/Rscript -e 'packages <- c("nVennR","autoGO", "GOxploreR", "aPEAR", "rbioapi"); for (pkg in packages) { if(requireNamespace(pkg, quietly=TRUE)){cat(pkg,"is installed...\n")} else {cat("\n",pkg, "is NOT installed.\n")}}'
 

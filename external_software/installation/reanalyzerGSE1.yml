@@ -40,6 +40,7 @@ dependencies:
   - htslib=1.17=h6bc39ce_0
   - icu=70.1=h27087fc_0
   - idna=3.4=pyhd8ed1ab_0
+  - jq
   - jpeg=9e=h0b41bf4_3
   - keyutils=1.6.1=h166bdaf_0
   - krb5=1.20.1=hf9c8cef_0
@@ -101,6 +102,7 @@ dependencies:
   - perl-xml-namespacesupport=1.11=0
   - perl-xml-sax=0.99=0
   - perl-xml-sax-base=1.08=0
+  - picard
   - pigz=2.6=h27826a3_0
   - pip=23.0=pyhd8ed1ab_0
   - pixman=0.40.0=h36c2ea0_0
@@ -155,6 +157,7 @@ dependencies:
   - xorg-xproto=7.0.31=h7f98852_1007
   - xz=5.2.6=h166bdaf_0
   - yaml-cpp=0.7.0=h27087fc_2
+  - yq
   - zlib=1.2.13=h166bdaf_4
   - zstandard=0.19.0=py311hbe0fcd7_1
   - zstd=1.5.2=h3eb15da_6

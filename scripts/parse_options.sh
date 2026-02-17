@@ -13,7 +13,7 @@ for argument in $options; do
 	case $argument in
 		-h*) echo "reanalyzerGSE v3.2.0 - usage: reanalyzerGSE.sh [options]
 	        -h | -help # Type this to get help
-	        -options | Provide the file containing the parameters to be used. You can adapt the file 'manual_options.txt' provided in the scripts folder, alternative to manually input in the command line all the options...)
+	        -options | Provide a YAML configuration file containing the parameters to be used. You can adapt the file 'config_template.yaml' provided in the scripts folder. CLI arguments override values from the YAML file.)
 	        
 	        #### Input/output: 
 	        -i | -input # GEO_ID (GSEXXXXXX, separated by comma if more than one), or folder containing raw reads (please provide full absolute path, e.g. /path/folder_name/, containing only fastq.gz files and not folders, links or any other item, and please rename samples with meaningful names if possible), or almost any accession from ENA/SRA to download .fastq from (any of the ids with the prefixes PRJEB,PRJNA,PRJDB,ERP,DRP,SRP,SAMD,SAME,SAMN,ERS,DRS,SRS,ERX,DRX,SRX,ERR,DRR,SRR, please separated by commas if more than one id as input)
@@ -31,6 +31,7 @@ for argument in $options; do
 	        -Dk | -kraken2_databases # Folder (absolute pathway) containing the database that should be used by Kraken2 (any input here, e.g. 'standard_eupathdb_48_kraken2_db', would activate the kraken2-based decontamination step)
 	        -Ds | -sortmerna_databases # The database (absolute pathway) that should be used by SortMeRNA (any input here, e.g. '/path/to/rRNA_databases/smr_v4.3_sensitive_db.fasta', would activate the sortmerna-based rRNA removal step)
 	        -Df | -databases_function # Manually provide a comma separated list of databases to be used in automatic functional enrichment analyses of DEGs (check out the R package autoGO::choose_database(), but the most popular GO terms are used by default)
+	        -nrf | -non_reference_funct_enrichm # Pathway to a file containing functional annotation (GAF, GFF, or GTF) to be used for functional enrichment when the organism is not Human or Mouse. If provided, this overrides the default behavior of using the main annotation file.
 	
 	        #### Metadata and sample info:
 	        -D | -design_custom_local # Specifying here the experimental design for the local dataset (by default an interactive prompt will ask for a comma-separated list of the same length than the number of samples, if you want to avoid that manual input please provide the list in this argument. If more than one design to provide, please input comma-separated list separed by a '/', without spaces. Please avoid naming that would match the same pattern in grep, e.g. XXXX and XXXX_TREAT)
@@ -68,6 +69,9 @@ for argument in $options; do
 	        -Of | -options_featureCounts_feat # The feature type to use to count in featureCounts (default 'exon')
 	        -Os | -options_featureCounts_seq # The seqid type to use to count in featureCounts (default 'gene_name')
 	        -A | -aligner # Aligner software to use ('hisat2' or 'star', by default)
+	        input_filter_regex=""
+        alignment_removal=""
+        cores=8
 	        -Des | -differential_expr_software # Software to be used in the differential expression analyses ('edgeR' by default, or 'DESeq2')
 	        -fp | -fastp_mode # Whether to perform quality filtering on the raw reads by fastp ('yes' or 'no', by default)
 	        -fpa | -fastp_adapter # Whether to perform adapter trimming on the raw reads by fastp ('yes' or 'no', by default, to perform automatic trimming, or a path to a fasta file to perform trimming of its sequences)
@@ -89,7 +93,15 @@ for argument in $options; do
 	        -Pm | -panther_method # Method for adjusting p.value in panther analyses via rbioapi (one of 'NONE','BONFERRONI', or 'FDR', by default)
 	        -rev | -revigo_threshold_similarity # Similarity threshold for Revigo summaries of GO terms (0-1, suggested values are 0.9, 0.7, 0.5, 0.4 for large, medium, small, and tiny levels of similarity, respectively, being default 0.7
 	
+	        #### BAM filtering (post-alignment):
+	        -mQ | -bam_mapq_threshold # Min MAPQ for samtools view -q and featureCounts -Q (0 = use default)
+	        -Fex | -bam_exclude_flags # samtools -F flags to exclude, e.g. '4' (unmapped), '256' (secondary), '2308' (combined)
+	        -Freq | -bam_require_flags # samtools -f flags to require, e.g. '2' (proper pair)
+	        -Fdup | -bam_dedup # Duplicate removal: 'no' (default), 'samtools' (markdup -r), 'picard' (REMOVE_DUPLICATES), 'picard_optical' (REMOVE_SEQUENCING_DUPLICATES)
+	
 	        #### Performance:
+	        -regex | -input_filter_regex # Regex to filter input files in local mode (e.g. "Sample_A|Sample_B")
+	        -Ar | -alignment_removal # Fasta file to map against and remove aligned reads (e.g. host genome)
 	        -p | -cores # Number of cores
 	        -cR | -cores_reads_to_subsample # Cores to use in subsampling by seqtk (10 by default)
 	        -pi | -cores_index # Number of cores for genome indexing in aligning step (by default, same than -p)
@@ -103,6 +115,8 @@ for argument in $options; do
 		-n) name=${arguments[index]} ;;
 		-o) output_folder=${arguments[index]} ;;
 		-p) cores=${arguments[index]} ;;
+        -regex | -input_filter_regex) input_filter_regex=${arguments[index]} ;;
+        -Ar | -alignment_removal) alignment_removal=${arguments[index]} ;;
 		-pi) cores_index=${arguments[index]} ;;
 		-M) memory_max=${arguments[index]} ;;
 		-s) strand=${arguments[index]} ;;
@@ -116,6 +130,7 @@ for argument in $options; do
 		-d) design_custom=${arguments[index]} ;;
 		-D) design_custom_local=${arguments[index]} ;;
 		-Df) databases_function=${arguments[index]} ;;
+		-nrf) non_reference_funct_enrichm=${arguments[index]} ;;
 		-b) batch=${arguments[index]} ;;
 		-bv) batch_vector=${arguments[index]} ;;
 		-bc) batch_biological_covariates=${arguments[index]} ;;
@@ -167,12 +182,32 @@ for argument in $options; do
 		-cR) cores_reads_to_subsample=${arguments[index]} ;;
 		-pR) pattern_to_remove=${arguments[index]} ;;
 		-apl) auto_panther_log=${arguments[index]} ;;
+		-mQ) bam_mapq_threshold=${arguments[index]} ;;
+		-Fex) bam_exclude_flags=${arguments[index]} ;;
+		-Freq) bam_require_flags=${arguments[index]} ;;
+		-Fdup) bam_dedup=${arguments[index]} ;;
+		-nrf) non_reference_funct_enrichm=${arguments[index]} ;;
 	esac
 done
 
-##### From the external_options file...
+##### From the YAML configuration file...
 if [ ! -z "$options_file" ]; then
-	source $options_file
+	if ! command -v yq &> /dev/null; then
+		echo "Error: yq is required to parse YAML config files but was not found in PATH. Please install yq."; exit 1
+	fi
+	if [ ! -f "$options_file" ]; then
+		echo "Error: Config file '$options_file' not found."; exit 1
+	fi
+	echo -e "\nLoading configuration from YAML file: $options_file\n"
+	while IFS='=' read -r key val; do
+		# Skip empty keys or null values
+		[ -z "$key" ] && continue
+		[ "$val" = "null" ] && continue
+		# Only set if not already defined by CLI arguments (CLI takes priority)
+		if [ -z "${!key}" ]; then
+			export "$key=$val"
+		fi
+	done < <(yq -r 'to_entries[] | select(.value != null) | "\(.key)=\(.value)"' "$options_file")
 fi
 
 ##### Deal with defaults or with the user not providing some...
@@ -376,6 +411,18 @@ if [ -z "$auto_panther_log" ]; then
 fi
 if [ -z "$cores_reads_to_subsample" ]; then
 	cores_reads_to_subsample=10
+fi
+if [ -z "$bam_mapq_threshold" ]; then
+	bam_mapq_threshold=0
+fi
+if [ -z "$bam_exclude_flags" ]; then
+	bam_exclude_flags=""
+fi
+if [ -z "$bam_require_flags" ]; then
+	bam_require_flags=""
+fi
+if [ -z "$bam_dedup" ]; then
+	bam_dedup="no"
 fi
 
 seqs_location=$output_folder/$name/raw_reads

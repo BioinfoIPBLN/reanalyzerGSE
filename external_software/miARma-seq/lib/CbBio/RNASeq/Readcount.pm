@@ -179,29 +179,33 @@ sub featureCount{
 			# 	exit;
 			# }
 			#Checking the processation of the sample to classify it correctly
-			$name =~ /.*_([a-z]{2,3}_bw[1-2]|his|str)/;
+			$name =~ /.*_([a-z]{2,3}_bw[1-2]|his|str|hisat2|STAR)/;
 			my $prefix=$1;
+			# Map prefix to clean output directory name
+			if ($prefix eq 'his' || $prefix eq 'hisat2') { $prefix = 'hisat2'; }
+			elsif ($prefix eq 'str' || $prefix eq 'STAR') { $prefix = 'star'; }
+			
 			my $output_dir="/".$prefix."_readcount_results/";
 			my $tmp_file;
 			my $parallelnumber=$args{"parallelnumber"} || 5;
-			$tmp_file="/".$projectdir."/Pre_fastqc_results/list_of_files.txt";
+			$tmp_file=$projectdir."/Pre_fastqc_results/list_of_files.txt";
 			#htseq-count execution command
+			# JLR: Refactored for robustness, modern filenames, and bash environment
 			$command=qq{if [ \$(ls $projectdir$output_dir | wc -l) -eq 0 ]; then
-   				       parallel --verbose --joblog ${projectdir}/featureCounts_log_parallel.txt -j $parallelnumber 'featureCounts $htseqpardef -a $database -o ${projectdir}/${output_dir}/{}_1.fastq.gz_nat_str_Aligned.sortedByCoord.out.tab \$(find -L $projectdir -type f -name \"*.bam\" | grep {}_) >> $logfile 2>&1' ::: \$(cat $tmp_file | sed 's,_1.fastq.gz*,,g' | sed 's,_2.fastq.gz*,,g' | sed 's,_R1.fastq.gz*,,g' | sed 's,_R2.fastq.gz*,,g' | sort | uniq | awk -F '/' '{print \$NF}')
+   				       unset DISPLAY && export PARALLEL_SHELL=/bin/bash
+   				       parallel --verbose --joblog ${projectdir}/featureCounts_log_parallel.txt -j $parallelnumber \\
+   				       'featureCounts $htseqpardef -a $database -o ${projectdir}/${output_dir}/{}_${prefix}_readcount.tab \\
+   				       \$(find -L $projectdir -type f \\( -name "{}_hisat2.bam" -o -name "{}_STAR.bam" -o -name "{}*.bam" \\) | head -n 1) >> $logfile 2>&1' \\
+   				       ::: \$(cat $tmp_file | sed -E 's,_(R)?[12].fastq.gz.*,,g' | sort | uniq | awk -F '/' '{print \$NF}')
 	 			    fi
 	 			    cd $projectdir && mkdir -p \$PWD/../multiqc_out && if [ \$(ls \$PWD/../multiqc_out | wc -l) -eq 0 ]; then
        				       echo 'Gathering all QC reports with MultiQC'
 	     			       multiqc -f \$PWD/../../ -n multiqc_report -o \$PWD/../multiqc_out -p -q > \$PWD/../multiqc_out/multiqc.log 2>&1
 	   			    fi};
-			#commandef is the command will be executed by system composed of the results directory creation 
-			#and the htseq_count execution. The error data will be printed on the run.log file
-			$commanddef=qq{if [ \$(ls \$(find -L $projectdir -type f -name '*.bam' | xargs dirname | uniq) | egrep '.bam\$' | egrep -c '_1.fastq.gz|_2.fastq.gz|_R1.fastq.gz|_R2.fastq.gz') -gt 0 ]; then
-   				       cd \$(find -L $projectdir -type f -name '*.bam' | xargs dirname | uniq)
-	    			       for i in \$(ls | egrep '.bam\$|.fastq.gz\$'); do 
-	     			       mv \$i \$(echo \$i | sed 's/_1.fastq.gz//' | sed 's/_2.fastq.gz//' | sed 's/_R1.fastq.gz//' | sed 's/_R2.fastq.gz//'); done
-				     fi
-	      			     mkdir -p $projectdir$output_dir && $command 2>> $logfile};
-	
+			
+			# Simplified execution without legacy renaming hacks
+			$commanddef=qq{mkdir -p $projectdir$output_dir && $command 2>> $logfile};
+			
 			#Opening the run.log and printing the execution data
 			open (LOG,">> ".$logfile) || die $!;
 			print LOG "SEQCOUNT :: " . date() . " Reading counts from $file\n";
@@ -325,17 +329,37 @@ sub featureFormat{
 				#Fileparse is used to obtain the name of the file
 				my $name=fileparse($file, qr{\.tab$});
 				#Obtaining the process info from the file name and the original name of the file
-				$name =~ /(.*)_([a-z]{2,3}_bw[1-2]|his|str)/;
-				my $originalname=$1;
-				my $suffix=$2;
+				#Obtaining the process info from the file name and the original name of the file
+				my $originalname;
+				my $suffix;
+				
+				if ($name =~ /(.*)_(hisat2|star)_readcount$/i) {
+					$originalname = $1;
+					$suffix = lc($2);
+				} elsif ($name =~ /(.*)_([a-z]{2,3}_bw[1-2]|his|str)/) {
+					# Legacy support
+					$originalname = $1;
+					$suffix = $2;
+					if ($suffix eq 'his') { $suffix = 'hisat2'; } # Normalize legacy 'his'
+					if ($suffix eq 'str') { $suffix = 'star'; }   # Normalize legacy 'str'
+				} else {
+					# Fallback: try to deduce from directory name if possible, or use unknown
+					$originalname = $name;
+					$suffix = "unknown";
+				}
+				
 				#Saving the Suffix with process information in a hash
 				$process->{$suffix}++;
 				$files->{$originalname}++;
 				#Opening each file of the array
-				# JLR addition...
-				my $count = ($file =~ s/_1.fastq.gz_nat/_1.fastq.gz_nat/g);
-				my $lencount = (length $count);
-				$file =~ s/_nat/_1.fastq.gz_nat/g if($lencount == 0); # JLR I added this quick fix to solve troubles in case of using GSEXXXX input or raw reads inputs... 
+				# JLR: Cleaned up legacy filename modification logic which shouldn't be needed for new files
+				# My new filenames don't match the old patterns so they are safe.
+				# Keeping legacy check just in case but wrapped
+				if ($name !~ /_readcount$/) {
+					my $count = ($file =~ s/_1.fastq.gz_nat/_1.fastq.gz_nat/g);
+					my $lencount = (length $count);
+					$file =~ s/_nat/_1.fastq.gz_nat/g if($lencount == 0); 
+				} 
 				open (FILE, $file) or die "SEQCOUNTFORMAT ERROR :: ".date()."Can't open '$file': $!";
 				#Reading the file. Each line contains the number of the miRNA, a tab and the number of reads
 				while(<FILE>){
@@ -1377,6 +1401,7 @@ sub featureSummary{
 			open(TAB,$file) || warn "Can't find $file\n";
 			my $filename=fileparse($file);
 			$filename=~s/\.tab$//g;
+			$filename=~s/_readcount$//g; # JLR: Strip suffix to match BAM filename in summary
 			while(<TAB>){
 			 	chomp;
 				if($_ !~ /^#/ and $_ !~ /^Geneid/){

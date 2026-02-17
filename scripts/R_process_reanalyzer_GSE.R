@@ -17,18 +17,67 @@ full_analyses <- args[14] # if not provided, "yes"
 venn_volcano <- args[15] # if not provided, "none"
 pattern_to_remove <- args[16] # if not provided, "no"
 
-###### Load read counts, format, filter, start differential expression analyses, get RPKM, save...:
+###### Load read counts, format, filter, start differential expression analyses, get normalized counts, save...:
   cat("\nProcessing counts and getting figures...\n")
   cat(paste0(input_dir,". Current date: ",date()))
-  a <- lapply(paste0(input_dir,"/str_readcount_results/",list.files(paste0(input_dir,"/str_readcount_results"),pattern = ".tab$")),
-              function(x){data.table::fread(x)[,c(1,7)]})
-  b <- as.data.frame(unique(data.table::rbindlist(lapply(paste0(input_dir,"/str_readcount_results/",list.files(paste0(input_dir,"/str_readcount_results"),pattern = ".tab$")),
-              function(x){data.table::fread(x)[,c(1,6)]}))))
-  cat("\nReads loaded...\n")
-  b$Length[is.na(b$Length)] <- 0
-  gene_counts <- Reduce(merge,a)
-  colnames(gene_counts)[2:dim(gene_counts)[2]] <- gsub(".*_results/|_nat.*","",colnames(gene_counts)[2:dim(gene_counts)[2]])
-  gene_counts <- as.data.frame(merge(gene_counts,b))
+  
+  # Check for available readcount directories
+  rc_dirs <- list.files(input_dir, pattern = "_readcount_results$", full.names = TRUE, include.dirs = TRUE)
+  kallisto_dir <- paste0(input_dir, "/kallisto_results")
+  gene_counts <- NULL
+  if (dir.exists(kallisto_dir)) {
+      cat(paste0("\nFound Kallisto results at: ", kallisto_dir, "\n"))
+      files <- list.files(kallisto_dir, pattern = "abundance.tsv", recursive = TRUE, full.names = TRUE)
+      if (length(files) == 0) stop("No abundance.tsv files found in kallisto_results")
+      
+      cat(paste0("Loading ", length(files), " Kallisto abundance files...\n"))
+      
+      # Load counts
+      # 1=target_id, 4=est_counts
+      a <- lapply(files, function(x) {
+          dt <- data.table::fread(x, select = c(1,4))
+          # Sample name is the directory name
+          colnames(dt) <- c("Geneid", basename(dirname(x))) 
+          return(dt)
+      })
+      
+      # Load lengths from first file (1=target_id, 2=length) - assuming constant across samples
+      b <- data.table::fread(files[1], select = c(1,2))
+      colnames(b) <- c("Geneid", "Length")
+      
+      gene_counts <- Reduce(function(x,y) merge(x,y,by="Geneid", all=TRUE), a)
+      gene_counts <- merge(gene_counts, b, by="Geneid", all.x=TRUE)
+      
+      # Replace NA with 0 for counts
+      gene_counts[is.na(gene_counts)] <- 0
+      
+      # Ensure Length is not 0 (Kallisto length should be fine, but just in case)
+      gene_counts$Length[gene_counts$Length == 0] <- 1
+      
+      cat("\nKallisto reads loaded (Transcript level)...\n")
+      
+  } else if (length(rc_dirs) > 0) {
+    rc_dir <- rc_dirs[1]
+    if (length(rc_dirs) > 1) {
+      cat(paste0("\nWarning: Multiple readcount directories found. Using: ", rc_dir, "\n"))
+    }
+    
+    cat(paste0("\nReading counts from: ", rc_dir, "\n"))
+
+    a <- lapply(paste0(rc_dir,"/",list.files(rc_dir,pattern = ".tab$")),
+                function(x){data.table::fread(x)[,c(1,7)]})
+    b <- as.data.frame(unique(data.table::rbindlist(lapply(paste0(rc_dir,"/",list.files(rc_dir,pattern = ".tab$")),
+                function(x){data.table::fread(x)[,c(1,6)]}))))
+    cat("\nReads loaded...\n")
+    b$Length[is.na(b$Length)] <- 0
+    gene_counts <- Reduce(merge,a)
+    colnames(gene_counts)[2:dim(gene_counts)[2]] <- gsub(".*_results/|_readcount\\.tab$|_nat.*|_hisat2_readcount\\.tab$|_star_readcount\\.tab$","",colnames(gene_counts)[2:dim(gene_counts)[2]])
+    gene_counts <- as.data.frame(merge(gene_counts,b))
+  } else {
+    stop(paste0("No readcount results directory found in ", input_dir))
+  }
+  
+
   rownames(gene_counts) <- gene_counts$Geneid
   gene_counts <- gene_counts[,-1]
   gene_counts$Gene_ID <- stringr::str_to_title(rownames(gene_counts))

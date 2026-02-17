@@ -144,7 +144,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
     text(bar_mids[i], y_pos, labels = x$samples$lib.size[i], cex = 0.8, pos = 3)
   }
   
-  if(length(grep("_skip_",list.files(path=input_dir,full.names=T,recursive=T)))==0){
+  if(length(grep("_skip_",list.files(path=input_dir,full.names=T,recursive=T)))==0 & length(grep("_stats.txt",list.files(path=input_dir,full.names=T,recursive=T)))>0){
     ### Figures with the number of reads
     reads <- c()
     files <- grep("_stats.txt",list.files(path=input_dir,full.names=T,recursive=T),val=T)

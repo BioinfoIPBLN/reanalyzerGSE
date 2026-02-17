@@ -12,7 +12,7 @@ require Exporter;
 #Export package system
 $|=1;
 @ISA=qw(Exporter);
-@EXPORT=qw(bowtie1_index bowtie1 bowtie2_index bowtie2 IndexGeneration ReadAligment bwa tophat ReadSummary hisat2 hisat2_index star star_index);
+@EXPORT=qw(bowtie1_index bowtie1 bowtie2_index bowtie2 IndexGeneration ReadAligment bwa tophat ReadSummary hisat2 hisat2_index star star_index kallisto kallisto_index);
 
 use strict;
 use DateTime;
@@ -198,6 +198,20 @@ sub IndexGeneration{
 	  		#Saving the path of the new bowtie2 index
 	  		push(@index, $bwaindex);
 		}
+		elsif(lc($aligner) eq "kallisto"){
+			#Calling kallisto_index function
+			my $kallisto_idx=kallisto_index(
+	  			fasta=>$fasta,
+	  			dir=>$dir,
+	  			logfile=>$logfile,
+	  			indexname=>$indexname,
+	  			kallistoindex=>$args{"kallistoindex"}, # pass if available
+	  			indexdir=>$indexdir,
+				miARmaPath=>$miARmaPath
+	  		);
+	  		#Saving the path of the new index
+	  		push(@index, $kallisto_idx);
+		}
 		else{
 			die("INDEX_GENERATION ERROR:: ".date()."Provided aligner argument ($aligner) has an invalid value. Allowed values for this parameters: Bowtie1, Bowtie2 and Bowtie1-Bowtie2/Bowtie2-Bowtie1");
 		}
@@ -274,6 +288,10 @@ sub IndexGeneration{
   	 [bowtie1parameters] Other bowtie parameters to perform the analysis using the bowtie1 recommended syntaxis
   	 [bowtie2parameters] Other bowtie parameters to perform the analysis using the bowtie2 recommended syntaxis
   	 [verbose] Option to show the execution data on the screen   
+  	 [bam_require_flags] samtools -f flags to require (e.g. 2 for proper pair)
+  	 [bam_exclude_flags] samtools -F flags to exclude (e.g. 4 for unmapped)
+  	 [bam_mapq_threshold] Min MAPQ score threshold
+  	 [bam_dedup] Deduplication method (no, samtools, picard, picard_optical)
   Returntype : File at directory bowtie1_results and/or bowtie2_results according to the aligner selected for the analysis.
   Also returns the path of the output file 
   Requeriments: bowtie1 function requires for a correct analysis:
@@ -305,6 +323,11 @@ sub ReadAligment{
 	my $indexthreads=$args{"indexthreads"} || 2;
 	my $memorylimit=$args{"memorylimit"} || 200000000;
 	my $readlength=$args{"readlength"} || 75;
+	# BAM filtering args
+	my $bam_require_flags=$args{"bam_require_flags"};
+	my $bam_exclude_flags=$args{"bam_exclude_flags"};
+	my $bam_mapq_threshold=$args{"bam_mapq_threshold"};
+	my $bam_dedup=$args{"bam_dedup"};
 	#Declaring the variables to collect the path of the new files
 	my $output_file1;
 	my $output_file2;
@@ -792,7 +815,11 @@ sub ReadAligment{
 					adapter=>$adapter,	
 					Seqtype=>$Seqtype,
 					strand=>$args{"strand"},
-					GTF=>$GTF
+					GTF=>$GTF,
+					bam_require_flags=>$bam_require_flags,
+					bam_exclude_flags=>$bam_exclude_flags,
+					bam_mapq_threshold=>$bam_mapq_threshold,
+					bam_dedup=>$bam_dedup
 		  		);
 		  		return($output_file2);
 			}
@@ -837,8 +864,52 @@ sub ReadAligment{
 					miARmaPath=>$miARmaPath,
 					adapter=>$adapter,	
 					Seqtype=>$Seqtype,
-					GTF=>$GTF
-								
+					Seqtype=>$Seqtype,
+					GTF=>$GTF,
+					bam_require_flags=>$bam_require_flags,
+					bam_exclude_flags=>$bam_exclude_flags,
+					bam_mapq_threshold=>$bam_mapq_threshold,
+					bam_dedup=>$bam_dedup
+		  		);
+		  		return($output_file2);
+			}
+			elsif(lc($aligner) eq "kallisto"){
+				#Collecting specific kallisto index
+				my $kallistoindex=$args{"kallistoindex"}; 
+				my $indexname=$args{"indexname"};
+				my $indexdir=$args{"indexdir"};
+				
+				my $threads=undef;
+				my $kallistoparameters=undef;
+				my $Seqtype;
+				
+				if(defined($args{"threads"})){
+					$threads=$args{"threads"}; 
+				}
+				if(defined($args{"kallistoparameters"})){
+					$kallistoparameters=$args{"kallistoparameters"};
+				}
+				if(defined($args{"Seqtype"})){
+					$Seqtype=$args{"Seqtype"};
+				}else{
+					$Seqtype="SingleEnd";
+				}
+				
+				$output_file2=kallisto( 
+					file=>$file,
+					threads=>$threads,
+					parallelnumber=>$parallelnumber,
+					kallistoindex=>$kallistoindex,
+					indexname=>$indexname,
+					indexdir=>$indexdir,
+					verbose=>$verbose, 
+					logfile=>$logfile, 
+					statsfile=>$statsfile, 
+					kallistoparameters=>$kallistoparameters,
+					projectdir=>$projectdir,
+					miARmaPath=>$miARmaPath,
+					adapter=>$adapter,	
+					Seqtype=>$Seqtype
 		  		);
 		  		return($output_file2);
 			}
@@ -2640,6 +2711,11 @@ sub hisat2{
 	my $memorylimit=$args{"memorylimit"} || 200000000;
 	my $readlength=$args{"readlength"} || 75;
 	my $gtf=$args{"GTF"}; #gtf_file
+	# BAM filtering args
+	my $bam_require_flags=$args{"bam_require_flags"};
+	my $bam_exclude_flags=$args{"bam_exclude_flags"};
+	my $bam_mapq_threshold=$args{"bam_mapq_threshold"};
+	my $bam_dedup=$args{"bam_dedup"};
 	
 	#Variable declaration and describing results directory 
 	my $commanddef;
@@ -2674,7 +2750,7 @@ sub hisat2{
 			$output_file_bw2=~s/_1(.+)/$1/g;
 		}
 		else{
-			$output_file_bw2=$projectdir.$output_dir.$name."_nat_his";
+			$output_file_bw2=$projectdir.$output_dir.$name."_hisat2";
 			$output_file_bw2=~s/_R1(.+)/$1/g;
 			$output_file_bw2=~s/_1(.+)/$1/g;
 		}
@@ -2699,6 +2775,31 @@ sub hisat2{
 			my $memorylimit_div_mb = int($memorylimit_in_mb / ($parallelnumber + 1));
 			my $threads_sort = int($threads / 2);
 			my $memorylimit_div_mb_sort_cores = int($memorylimit_div_mb / ($threads / 2));
+			
+			# Build pipeline command for PE
+			my $filter_part = "";
+			if ($bam_require_flags || $bam_exclude_flags || $bam_mapq_threshold) {
+				$filter_part = " | samtools view -u ";
+				if ($bam_mapq_threshold) { $filter_part .= "-q $bam_mapq_threshold "; }
+				if ($bam_require_flags) { $filter_part .= "-f $bam_require_flags "; }
+				if ($bam_exclude_flags) { $filter_part .= "-F $bam_exclude_flags "; }
+				$filter_part .= "- ";
+			}
+			
+			my $samtools_pipeline_pe = "";
+			if (defined $bam_dedup && $bam_dedup eq "samtools") {
+				$samtools_pipeline_pe = $filter_part . " | samtools sort -n -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M - " .
+					" | samtools fixmate -m - - " .
+					" | samtools sort -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M - " .
+					" | samtools markdup -r --write-index - {}_hisat2.bam##idx##{}_hisat2.bam.bai ";
+			} elsif (defined $bam_dedup && ($bam_dedup eq "picard" || $bam_dedup eq "picard_optical")) {
+				my $p_opts = ($bam_dedup eq "picard_optical") ? "REMOVE_SEQUENCING_DUPLICATES=true" : "REMOVE_DUPLICATES=true";
+				$samtools_pipeline_pe = $filter_part . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_hisat2.bam##idx##{}_hisat2.bam.bai - && " .
+					" picard MarkDuplicates I={}_hisat2.bam O={}_hisat2.dedup.bam M={}_hisat2.dup_metrics.txt $p_opts VALIDATION_STRINGENCY=LENIENT QUIET=true && " .
+					" mv {}_hisat2.dedup.bam {}_hisat2.bam && samtools index {}_hisat2.bam";
+			} else {
+				$samtools_pipeline_pe = $filter_part . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_hisat2.bam##idx##{}_hisat2.bam.bai - ";
+			}
    			
 			if($file =~ /.*_R?1\.f.*/){
 				#it contains the _1 label
@@ -2712,21 +2813,43 @@ sub hisat2{
 				if(-e $mate_file){
 					if($file ne $mate_file){						
 						$command=qq{if [ \$(ls $projectdir$output_dir | wc -l) -eq 0 ]; then
-      								  mkdir -p $projectdir$output_dir && cd $projectdir$output_dir && unset DISPLAY
-	      							  parallel --verbose --joblog ${projectdir}/hisat2_log_parallel.txt -j $parallelnumber 'echo {} && hisat2 -q -t --seed 123 --very-sensitive $hisatpardef -x $hisat2idx_final -1 \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz -2 \$(cat $tmp_file | xargs dirname | uniq)/{}_2.fastq.gz --met-file {}.metrics --un-conc-gz {}_no_aligned.fastq.gz | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_nat_str_.bam##idx##{}_nat_str_.bam.bai - && echo {}_nat_str_.bam
-				    				  export _JAVA_OPTIONS=\"-Xms5g -Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD\"
-				 				  qualimap bamqc -bam {}_nat_str_.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_nat_str_.bam --java-mem-size=${memorylimit_div_mb}m >> qc1.log 2>&1 || true
-		  						  if [[ \"$gtf\" == *.gtf ]]; then qualimap rnaseq -bam {}_nat_str_.bam -gtf $gtf -pe -outdir \$PWD/rnaseqqc_results/{}_nat_str_.bam --java-mem-size=${memorylimit_div_mb}m >> qc2.log 2>&1 || true; fi
-		   						  bamCoverage -b {}_nat_str_.bam -o {}_nat_str_.bam.bw -of bigwig -bs 10 -p $threads --normalizeUsing RPKM &>> bamCoverage.log
-		    						  samtools flagstat -@ $threads {} > {}_nat_str_.bam.flagstat && samtools stats -@ $threads {} > {}_nat_str_.bam.stats' ::: \$(cat $tmp_file | sed 's,_1.fastq.gz*,,g' | sed 's,_2.fastq.gz*,,g' | sed 's,_R1.fastq.gz*,,g' | sed 's,_R2.fastq.gz*,,g' | sort | uniq | awk -F '/' '{print \$NF}')
+      								  mkdir -p $projectdir$output_dir && cd $projectdir$output_dir && unset DISPLAY && export PARALLEL_SHELL=/bin/bash
+	      							  parallel --verbose --joblog ${projectdir}/hisat2_log_parallel.txt -j $parallelnumber \\
+	      							  'hisat2 -q -t --seed 123 --very-sensitive $hisatpardef -x $hisat2idx_final \\
+	      							    -1 \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \\
+	      							    -2 \$(cat $tmp_file | xargs dirname | uniq)/{}_2.fastq.gz \\
+	      							    --met-file {}.metrics --un-conc-gz {}_no_aligned.fastq.gz \\
+	      							  $samtools_pipeline_pe && \\
+	      							  echo Done...{}_hisat2.bam && \\
+	      							  export _JAVA_OPTIONS=\"-Xms5g -Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD\" && \\
+	      							  qualimap bamqc -bam {}_hisat2.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_hisat2.bam --java-mem-size=${memorylimit_div_mb}m >> qc1.log 2>&1 || true && \\
+	      							  case \"$gtf\" in *.gtf) qualimap rnaseq -bam {}_hisat2.bam -gtf $gtf -pe -outdir \$PWD/rnaseqqc_results/{}_hisat2.bam --java-mem-size=${memorylimit_div_mb}m >> qc2.log 2>&1 || true ;; esac && \\
+	      							  bamCoverage -b {}_hisat2.bam -o {}_hisat2.bam.bw -of bigwig -bs 10 -p $threads --normalizeUsing RPKM &>> bamCoverage.log && \\
+	      							  samtools flagstat -@ $threads {}_hisat2.bam > {}_hisat2.bam.flagstat && \\
+	      							  samtools stats -@ $threads {}_hisat2.bam > {}_hisat2.bam.stats' \\
+	      							  ::: \$(cat $tmp_file | sed -E 's,_(R)?[12]\.fastq\.gz.*,,g' | sort | uniq | awk -F '/' '{print \$NF}')
+
 		     						  cd $projectdir$output_dir && for f in \$( ls | egrep '.bam\$' ); do echo \$f"\t"\$PWD/bamqc_results/\$f >> \$PWD/bamqc_results/list_multi.txt; done
-		      						  mkdir -p \$PWD/samtools_results/ && parallel --verbose -j $parallelnumber 'samtools flagstat -@ $threads {} > \$PWD/samtools_results/{}_flagstat.txt
+		      						  mkdir -p \$PWD/samtools_results/ && parallel --verbose -j $parallelnumber 'samtools flagstat -@ $threads {} > \$PWD/samtools_results/{}_flagstat.txt && \\
 		       						  samtools stats -@ $threads {} > \$PWD/samtools_results/{}_stats.txt' ::: \$( ls | egrep '.bam\$' )
+
 		 						  export _JAVA_OPTIONS=\"-Xms5g -Xmx${memorylimit_in_mb}m -Djava.io.tmpdir=\$PWD\"
-								  qualimap multi-bamqc -d \$PWD/bamqc_results/list_multi.txt -outdir \$PWD/multibamqc_results/ >> qc3.log 2>&1 || true
-		 						  multiBamSummary bins -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz
-		  						  plotCorrelation --corData deeptools_all_bams.npz --corMethod spearman --plotFile deeptools_all_bams.npz_correlation_spearman.pdf --whatToPlot heatmap --skipZeros --plotTitle \"Spearman Correlation\" --outFileCorMatrix deeptools_all_bams.npz_correlation_spearman_scores.tab --plotNumbers && plotCorrelation --corData deeptools_all_bams.npz --corMethod pearson --plotFile deeptools_all_bams.npz_correlation_pearson.pdf --whatToPlot heatmap --skipZeros --plotTitle \"Pearson Correlation\" --outFileCorMatrix deeptools_all_bams.npz_correlation_pearson_scores.tab --plotNumbers
-		   						  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA.pdf --outFileNameData deeptools_all_bams.npz_PCA.tab && plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_2.pdf --outFileNameData deeptools_all_bams.npz_PCA_2.tab --rowCenter && plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_3.pdf --outFileNameData deeptools_all_bams.npz_PCA_3.tab --transpose 
+								  qualimap multi-bamqc -d \$PWD/bamqc_results/list_multi.txt -outdir \$PWD/multibamqc_results/ >> qc3.log 2>&1 || true && \\
+								  
+								  CONTIG_COUNT=\$(samtools view -H \$(ls *.bam | shuf | head -1) | grep -c "^\@SQ")
+                                                                  if [ \$CONTIG_COUNT -gt 1000 ]; then
+                                                                    echo "Genome has \$CONTIG_COUNT contigs (>1000), using top 100 largest contigs" | tee qc4.log
+                                                                    samtools idxstats \$(ls *.bam | shuf | head -1) | sort -k2,2nr | head -100 | awk '{print \$1"\\t0\\t"\$2}' > top100_regions.bed
+                                                                    multiBamSummary BED-file --BED top100_regions.bed -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz >> qc4.log 2>&1
+                                                                  else
+                                                                    multiBamSummary bins -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz >> qc4.log 2>&1
+                                                                  fi
+
+		  						  plotCorrelation --corData deeptools_all_bams.npz --corMethod spearman --plotFile deeptools_all_bams.npz_correlation_spearman.pdf --whatToPlot heatmap --skipZeros --plotTitle \"Spearman Correlation\" --outFileCorMatrix deeptools_all_bams.npz_correlation_spearman_scores.tab --plotNumbers >> qc4.log 2>&1
+		  						  plotCorrelation --corData deeptools_all_bams.npz --corMethod pearson --plotFile deeptools_all_bams.npz_correlation_pearson.pdf --whatToPlot heatmap --skipZeros --plotTitle \"Pearson Correlation\" --outFileCorMatrix deeptools_all_bams.npz_correlation_pearson_scores.tab --plotNumbers >> qc4.log 2>&1
+		   						  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA.pdf --outFileNameData deeptools_all_bams.npz_PCA.tab && \\ >> qc4.log 2>&1
+		   						  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_2.pdf --outFileNameData deeptools_all_bams.npz_PCA_2.tab --rowCenter && \\ >> qc4.log 2>&1
+		   						  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_3.pdf --outFileNameData deeptools_all_bams.npz_PCA_3.tab --transpose  >> qc4.log 2>&1
 	    						    fi};
 					}
 				}
@@ -2751,21 +2874,71 @@ sub hisat2{
 			elsif(lc($strand) eq "yes"){
 				$hisatpardef.= " --rna-strandness F";
 			}
+			
+			# Build pipeline command for SE
+			my $filter_part_se = "";
+			if ($bam_require_flags || $bam_exclude_flags || $bam_mapq_threshold) {
+				$filter_part_se = " | samtools view -u ";
+				if ($bam_mapq_threshold) { $filter_part_se .= "-q $bam_mapq_threshold "; }
+				if ($bam_require_flags) { $filter_part_se .= "-f $bam_require_flags "; }
+				if ($bam_exclude_flags) { $filter_part_se .= "-F $bam_exclude_flags "; }
+				$filter_part_se .= "- ";
+			}
+
+			my $samtools_pipeline_se = "";
+			if (defined $bam_dedup && $bam_dedup eq "samtools") {
+				$samtools_pipeline_se = $filter_part_se . " | samtools sort -n -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M - " .
+					" | samtools fixmate -m - - " .
+					" | samtools sort -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M - " .
+					" | samtools markdup -r --write-index - {}_hisat2.bam##idx##{}_hisat2.bam.bai ";
+			} elsif (defined $bam_dedup && ($bam_dedup eq "picard" || $bam_dedup eq "picard_optical")) {
+				my $p_opts = ($bam_dedup eq "picard_optical") ? "REMOVE_SEQUENCING_DUPLICATES=true" : "REMOVE_DUPLICATES=true";
+				$samtools_pipeline_se = $filter_part_se . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_hisat2.bam##idx##{}_hisat2.bam.bai - && " .
+					" picard MarkDuplicates I={}_hisat2.bam O={}_hisat2.dedup.bam M={}_hisat2.dup_metrics.txt $p_opts VALIDATION_STRINGENCY=LENIENT QUIET=true && " .
+					" mv {}_hisat2.dedup.bam {}_hisat2.bam && samtools index {}_hisat2.bam";
+			} else {
+				$samtools_pipeline_se = $filter_part_se . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_hisat2.bam##idx##{}_hisat2.bam.bai - ";
+			}
 			print STDOUT "\tHISAT 2 :: ".date()." Checking $file for hisat2 (single-end) analysis\n" if($verbose);
-			$command=qq{if [ \$(ls $projectdir$output_dir | wc -l) -eq 0 ]; then mkdir -p $projectdir$output_dir && cd $projectdir$output_dir && unset DISPLAY
-	   				  parallel --verbose --joblog ${projectdir}/hisat2_log_parallel.txt -j $parallelnumber 'echo {} && hisat2 -q -t --seed 123 --very-sensitive $hisatpardef -x $hisat2idx_final -U \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz --met-file {}.metrics --un-conc-gz {}_no_aligned.fastq.gz | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_nat_str_.bam##idx##{}_nat_str_.bam.bai -
-	  				  echo {}_nat_str_.bam && export _JAVA_OPTIONS=\"-Xms5g -Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD\"
-	       				  qualimap bamqc -bam {}_nat_str_.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_nat_str_.bam --java-mem-size=${memorylimit_div_mb}m >> qc1.log 2>&1 || true
-		     			  if [[ \"$gtf\" == *.gtf ]]; then qualimap rnaseq -bam {}_nat_str_.bam -gtf $gtf -outdir \$PWD/rnaseqqc_results/{}_nat_str_.bam --java-mem-size=${memorylimit_div_mb}m >> qc2.log 2>&1 || true; fi
-		   			  bamCoverage -b {}_nat_str_.bam -o {}_nat_str_.bam.bw -of bigwig -bs 10 -p $threads --normalizeUsing RPKM &>> bamCoverage.log' ::: \$(cat $tmp_file | sed 's,_1.fastq.gz*,,g;s,_R1.fastq.gz*,,g' | sort | uniq | awk -F '/' '{print \$NF}')
-		 			  cd $projectdir$output_dir && for f in \$( ls | egrep '.bam\$' ); do echo \$f"\t"\$PWD/bamqc_results/\$f >> \$PWD/bamqc_results/list_multi.txt; done && mkdir -p \$PWD/samtools_results/
-	       				  parallel --verbose -j $parallelnumber 'samtools flagstat -@ $threads {} > \$PWD/samtools_results/{}_flagstat.txt && samtools stats -@ $threads {} > \$PWD/samtools_results/{}_stats.txt' ::: \$( ls | egrep '.bam\$' )
-	      				  export _JAVA_OPTIONS=\"-Xms5g -Xmx${memorylimit_in_mb}m -Djava.io.tmpdir=\$PWD\"
-		     			  qualimap multi-bamqc -d \$PWD/bamqc_results/list_multi.txt -outdir \$PWD/multibamqc_results/ >> qc3.log 2>&1 || true
-		   			  multiBamSummary bins -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz
-		 			  plotCorrelation --corData deeptools_all_bams.npz --corMethod spearman --plotFile deeptools_all_bams.npz_correlation_spearman.pdf --whatToPlot heatmap --skipZeros --plotTitle \"Spearman Correlation\" --outFileCorMatrix deeptools_all_bams.npz_correlation_spearman_scores.tab --plotNumbers && plotCorrelation --corData deeptools_all_bams.npz --corMethod pearson --plotFile deeptools_all_bams.npz_correlation_pearson.pdf --whatToPlot heatmap --skipZeros --plotTitle \"Pearson Correlation\" --outFileCorMatrix deeptools_all_bams.npz_correlation_pearson_scores.tab --plotNumbers
-	       				  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA.pdf --outFileNameData deeptools_all_bams.npz_PCA.tab && plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_2.pdf --outFileNameData deeptools_all_bams.npz_PCA_2.tab --rowCenter && plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_3.pdf --outFileNameData deeptools_all_bams.npz_PCA_3.tab --transpose
-	     			  fi};
+						$command=qq{if [ \$(ls $projectdir$output_dir | wc -l) -eq 0 ]; then
+      								  mkdir -p $projectdir$output_dir && cd $projectdir$output_dir && unset DISPLAY && export PARALLEL_SHELL=/bin/bash
+	      							  parallel --verbose --joblog ${projectdir}/hisat2_log_parallel.txt -j $parallelnumber \\
+	      							  'hisat2 -q -t --seed 123 --very-sensitive $hisatpardef -x $hisat2idx_final \\
+	      							    -U \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \\
+	      							    -U \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \\
+	      							    --met-file {}.metrics --un-conc-gz {}_no_aligned.fastq.gz \\
+	      							  $samtools_pipeline_se && \\
+	      							  echo Done...{}_hisat2.bam && \\
+	      							  export _JAVA_OPTIONS=\"-Xms5g -Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD\" && \\
+	      							  qualimap bamqc -bam {}_hisat2.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_hisat2.bam --java-mem-size=${memorylimit_div_mb}m >> qc1.log 2>&1 || true && \\
+	      							  case \"$gtf\" in *.gtf) qualimap rnaseq -bam {}_hisat2.bam -gtf $gtf -outdir \$PWD/rnaseqqc_results/{}_hisat2.bam --java-mem-size=${memorylimit_div_mb}m >> qc2.log 2>&1 || true ;; esac && \\
+	      							  bamCoverage -b {}_hisat2.bam -o {}_hisat2.bam.bw -of bigwig -bs 10 -p $threads --normalizeUsing RPKM &>> bamCoverage.log && \\
+	      							  samtools flagstat -@ $threads {}_hisat2.bam > {}_hisat2.bam.flagstat && \\
+	      							  samtools stats -@ $threads {}_hisat2.bam > {}_hisat2.bam.stats' \\
+	      							  ::: \$(cat $tmp_file | sed -E 's,_(R)?1\.fastq\.gz.*,,g' | sort | uniq | awk -F '/' '{print \$NF}')
+
+		     						  cd $projectdir$output_dir && for f in \$( ls | egrep '.bam\$' ); do echo \$f"\t"\$PWD/bamqc_results/\$f >> \$PWD/bamqc_results/list_multi.txt; done && \\
+		      						  mkdir -p \$PWD/samtools_results/ && parallel --verbose -j $parallelnumber 'samtools flagstat -@ $threads {} > \$PWD/samtools_results/{}_flagstat.txt && \\
+		       						  samtools stats -@ $threads {} > \$PWD/samtools_results/{}_stats.txt' ::: \$( ls | egrep '.bam\$' )
+
+		 						  export _JAVA_OPTIONS=\"-Xms5g -Xmx${memorylimit_in_mb}m -Djava.io.tmpdir=\$PWD\"
+								  qualimap multi-bamqc -d \$PWD/bamqc_results/list_multi.txt -outdir \$PWD/multibamqc_results/ >> qc3.log 2>&1 || true && \\
+
+								  CONTIG_COUNT=\$(samtools view -H \$(ls *.bam | shuf | head -1) | grep -c "^\@SQ")
+                                                                  if [ \$CONTIG_COUNT -gt 1000 ]; then
+                                                                    echo "Genome has \$CONTIG_COUNT contigs (>1000), using top 100 largest contigs" | tee qc4.log
+                                                                    samtools idxstats \$(ls *.bam | shuf | head -1) | sort -k2,2nr | head -100 | awk '{print \$1"\\t0\\t"\$2}' > top100_regions.bed
+                                                                    multiBamSummary BED-file --BED top100_regions.bed -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz >> qc4.log 2>&1
+                                                                  else
+                                                                    multiBamSummary bins -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz >> qc4.log 2>&1
+                                                                  fi
+
+		  						  plotCorrelation --corData deeptools_all_bams.npz --corMethod spearman --plotFile deeptools_all_bams.npz_correlation_spearman.pdf --whatToPlot heatmap --skipZeros --plotTitle \"Spearman Correlation\" --outFileCorMatrix deeptools_all_bams.npz_correlation_spearman_scores.tab --plotNumbers >> qc4.log 2>&1
+		  						  plotCorrelation --corData deeptools_all_bams.npz --corMethod pearson --plotFile deeptools_all_bams.npz_correlation_pearson.pdf --whatToPlot heatmap --skipZeros --plotTitle \"Pearson Correlation\" --outFileCorMatrix deeptools_all_bams.npz_correlation_pearson_scores.tab --plotNumbers >> qc4.log 2>&1
+		   						  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA.pdf --outFileNameData deeptools_all_bams.npz_PCA.tab && \\ >> qc4.log 2>&1
+		   						  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_2.pdf --outFileNameData deeptools_all_bams.npz_PCA_2.tab --rowCenter && \\ >> qc4.log 2>&1
+		   						  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_3.pdf --outFileNameData deeptools_all_bams.npz_PCA_3.tab --transpose  >> qc4.log 2>&1
+	    						    fi};
 		}
 		
 		#Bowtie execution with verbose option
@@ -3052,8 +3225,11 @@ sub star{
 	my $memorylimit=$args{"memorylimit"} || 200000000;
 	my $readlength=$args{"readlength"} || 75;
 	my $gtf=$args{"GTF"}; #gtf_file
-	
-	#Variable declaration and describing results directory 
+	# BAM filtering args
+	my $bam_require_flags=$args{"bam_require_flags"};
+	my $bam_exclude_flags=$args{"bam_exclude_flags"};
+	my $bam_mapq_threshold=$args{"bam_mapq_threshold"};
+	my $bam_dedup=$args{"bam_dedup"};
 	my $commanddef;
 	my $output_dir="/star_results/";
 	my $starpardef;
@@ -3087,7 +3263,7 @@ sub star{
 			$output_file_bw2=~s/_1(.+)/$1/g;
 		}
 		else{
-			$output_file_bw2=$projectdir.$output_dir.$name."_nat_str_";
+			$output_file_bw2=$projectdir.$output_dir.$name."_STAR";
 			$output_file_bw2=~s/_R1(.+)/$1/g;
 			$output_file_bw2=~s/_1(.+)/$1/g;
 		}
@@ -3097,9 +3273,58 @@ sub star{
 		my $memorylimit_div_mb = int($memorylimit_in_mb / ($parallelnumber + 1));
 		my $threads_sort = int($threads / 2);
 		my $memorylimit_div_mb_sort_cores = int($memorylimit_div_mb / ($threads / 2));
+		
+		# Build pipeline command for STAR PE
+		my $filter_part = " | samtools view -h -S "; # Start with samtools view -S for SAM input
+		if ($bam_require_flags || $bam_exclude_flags || $bam_mapq_threshold) {
+			if ($bam_mapq_threshold) { $filter_part .= "-q $bam_mapq_threshold "; }
+			if ($bam_require_flags) { $filter_part .= "-f $bam_require_flags "; }
+			if ($bam_exclude_flags) { $filter_part .= "-F $bam_exclude_flags "; }
+		}
+		$filter_part .= "- ";
+		
+		my $samtools_pipeline_pe = "";
+		if (defined $bam_dedup && $bam_dedup eq "samtools") {
+			$samtools_pipeline_pe = $filter_part . " | samtools sort -n -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M - " .
+				" | samtools fixmate -m - - " .
+				" | samtools sort -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M - " .
+				" | samtools markdup -r --write-index - {}_STAR.bam##idx##{}_STAR.bam.bai ";
+		} elsif (defined $bam_dedup && ($bam_dedup eq "picard" || $bam_dedup eq "picard_optical")) {
+			my $p_opts = ($bam_dedup eq "picard_optical") ? "REMOVE_SEQUENCING_DUPLICATES=true" : "REMOVE_DUPLICATES=true";
+			$samtools_pipeline_pe = $filter_part . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_STAR.bam##idx##{}_STAR.bam.bai - && " .
+				" picard MarkDuplicates I={}_STAR.bam O={}_STAR.dedup.bam M={}_STAR.dup_metrics.txt $p_opts VALIDATION_STRINGENCY=LENIENT QUIET=true && " .
+				" mv {}_STAR.dedup.bam {}_STAR.bam && samtools index {}_STAR.bam";
+		} else {
+			$samtools_pipeline_pe = $filter_part . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_STAR.bam##idx##{}_STAR.bam.bai - ";
+		}
+		
 		my $command;
 		my $tmp_file;		
-		$tmp_file="/".$projectdir."/Pre_fastqc_results/list_of_files.txt";		
+		$tmp_file="/".$projectdir."/Pre_fastqc_results/list_of_files.txt";
+		
+		# Build pipeline command for STAR SE
+		my $filter_part_se = " | samtools view -h -S "; # Start with samtools view -S for SAM input
+		if ($bam_require_flags || $bam_exclude_flags || $bam_mapq_threshold) {
+			if ($bam_mapq_threshold) { $filter_part_se .= "-q $bam_mapq_threshold "; }
+			if ($bam_require_flags) { $filter_part_se .= "-f $bam_require_flags "; }
+			if ($bam_exclude_flags) { $filter_part_se .= "-F $bam_exclude_flags "; }
+		}
+		$filter_part_se .= "- ";
+
+		my $samtools_pipeline_se = "";
+		if (defined $bam_dedup && $bam_dedup eq "samtools") {
+			$samtools_pipeline_se = $filter_part_se . " | samtools sort -n -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M - " .
+				" | samtools fixmate -m - - " .
+				" | samtools sort -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M - " .
+				" | samtools markdup -r --write-index - {}_STAR.bam##idx##{}_STAR.bam.bai ";
+		} elsif (defined $bam_dedup && ($bam_dedup eq "picard" || $bam_dedup eq "picard_optical")) {
+			my $p_opts = ($bam_dedup eq "picard_optical") ? "REMOVE_SEQUENCING_DUPLICATES=true" : "REMOVE_DUPLICATES=true";
+			$samtools_pipeline_se = $filter_part_se . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_STAR.bam##idx##{}_STAR.bam.bai - && " .
+				" picard MarkDuplicates I={}_STAR.bam O={}_STAR.dedup.bam M={}_STAR.dup_metrics.txt $p_opts VALIDATION_STRINGENCY=LENIENT QUIET=true && " .
+				" mv {}_STAR.dedup.bam {}_STAR.bam && samtools index {}_STAR.bam";
+		} else {
+			$samtools_pipeline_se = $filter_part_se . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_STAR.bam##idx##{}_STAR.bam.bai - ";
+		}
 
 		if(lc($Seqtype) eq "pairedend" or lc($Seqtype) eq "paired" or lc($Seqtype) eq "paired-end"){
 			print STDOUT "\tSTAR :: ".date()." Checking $file for star (paired-end) analysis\n" if($verbose);
@@ -3126,18 +3351,30 @@ sub star{
 							#none
 						}						
 						$command=qq{if [ \$(ls $projectdir$output_dir | wc -l) -eq 0 ]; then
-					                          mkdir -p $projectdir$output_dir && cd $projectdir$output_dir
+					                          mkdir -p $projectdir$output_dir && cd $projectdir$output_dir && export PARALLEL_SHELL=/bin/bash
 					                          name_lists=\$(cat $tmp_file | sed 's,_1.fastq.gz*,,g' | sed 's,_2.fastq.gz*,,g' | sed 's,_R1.fastq.gz*,,g' | sed 's,_R2.fastq.gz*,,g' | sort | uniq | awk -F '/' '{ print \$NF }') && unset DISPLAY
 					                          STAR --runThreadN $indexthreads --genomeDir $staridx_final --genomeLoad LoadAndExit --outFileNamePrefix $projectdir${output_dir}genomeloading.tmp2 && rm -rf $projectdir${output_dir}genomeloading.tmp*
-					                          parallel --verbose --joblog ${projectdir}/star_log_parallel.txt -j $parallelnumber 'STAR --runMode alignReads --genomeDir $staridx_final --genomeLoad LoadAndKeep --readFilesIn \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \$(cat $tmp_file | xargs dirname | uniq)/{}_2.fastq.gz --outFileNamePrefix $projectdir${output_dir}{}_nat_str_ $starpardef --outStd SAM | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_nat_str_Aligned.out.bam##idx##{}_nat_str_Aligned.out.bam.bai -' ::: \$(echo \$name_lists)
-					                          parallel --verbose --joblog ${projectdir}/starprocess_log_parallel.txt -j $parallelnumber 'export _JAVA_OPTIONS="-Xms5g -Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD" && qualimap bamqc -bam $projectdir${output_dir}/{}_nat_str_Aligned.out.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_nat_str_Aligned.out.bam --java-mem-size="${memorylimit_div_mb}m" >> qc1.log 2>&1 || true
-					                          qualimap rnaseq -bam $projectdir${output_dir}/{}_nat_str_Aligned.out.bam -gtf $gtf -pe -outdir \$PWD/rnaseqqc_results/{}_nat_str_Aligned.out.bam --java-mem-size="${memorylimit_div_mb}m" >> qc2.log 2>&1 || true
-					                          bamCoverage -b {}_nat_str_Aligned.out.bam -o {}_nat_str_Aligned.out.bam.bw -of bigwig -bs 10 -p $threads --normalizeUsing RPKM' ::: \$(echo \$name_lists)
+					                          parallel --verbose --joblog ${projectdir}/star_log_parallel.txt -j $parallelnumber 'STAR --runMode alignReads --genomeDir $staridx_final --genomeLoad LoadAndKeep --readFilesIn \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \$(cat $tmp_file | xargs dirname | uniq)/{}_2.fastq.gz --outFileNamePrefix $projectdir${output_dir}{}_STAR_ $starpardef --outStd SAM $samtools_pipeline_pe && echo Done...{}_STAR.bam' ::: \$(echo \$name_lists)
+					                          parallel --verbose --joblog ${projectdir}/starprocess_log_parallel.txt -j $parallelnumber 'export _JAVA_OPTIONS="-Xms5g -Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD" && qualimap bamqc -bam $projectdir${output_dir}/{}_STAR.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_STAR.bam --java-mem-size="${memorylimit_div_mb}m" >> qc1.log 2>&1 || true
+					                          qualimap rnaseq -bam $projectdir${output_dir}/{}_STAR.bam -gtf $gtf -pe -outdir \$PWD/rnaseqqc_results/{}_STAR.bam --java-mem-size="${memorylimit_div_mb}m" >> qc2.log 2>&1 || true
+					                          bamCoverage -b {}_STAR.bam -o {}_STAR.bam.bw -of bigwig -bs 10 -p $threads --normalizeUsing RPKM' ::: \$(echo \$name_lists)
 					                          for f in \$( ls | egrep '.bam\$' ); do echo \$f"\t"\$PWD/bamqc_results/\$f >> \$PWD/bamqc_results/list_multi.txt; done && mkdir -p \$PWD/samtools_results/ && parallel --verbose -j $parallelnumber 'samtools flagstat -@ $threads {} > \$PWD/samtools_results/{}_flagstat.txt && samtools stats -@ $threads {} > \$PWD/samtools_results/{}_stats.txt' ::: \$( ls | egrep '.bam\$' )
-					                          export _JAVA_OPTIONS="-Xms5g -Xmx${memorylimit_in_mb}m -Djava.io.tmpdir=\$PWD" && qualimap multi-bamqc -d \$PWD/bamqc_results/list_multi.txt -outdir \$PWD/multibamqc_results/ >> qc3.log 2>&1 || true
-					                          multiBamSummary bins -p $indexthreads --bamfiles \$( ls | egrep '.bam\$' ) -out deeptools_all_bams.npz
-					                          plotCorrelation --corData deeptools_all_bams.npz --corMethod spearman --plotFile deeptools_all_bams.npz_correlation_spearman.pdf --whatToPlot heatmap --skipZeros --plotTitle "Spearman Correlation" --outFileCorMatrix deeptools_all_bams.npz_correlation_spearman_scores.tab --plotNumbers && plotCorrelation --corData deeptools_all_bams.npz --corMethod pearson --plotFile deeptools_all_bams.npz_correlation_pearson.pdf --whatToPlot heatmap --skipZeros --plotTitle "Pearson Correlation" --outFileCorMatrix deeptools_all_bams.npz_correlation_pearson_scores.tab --plotNumbers
-					                          plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA.pdf --outFileNameData deeptools_all_bams.npz_PCA.tab && plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_2.pdf --outFileNameData deeptools_all_bams.npz_PCA_2.tab --rowCenter && plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_3.pdf --outFileNameData deeptools_all_bams.npz_PCA_3.tab --transpose
+					                          export _JAVA_OPTIONS="-Xms5g -Xmx${memorylimit_in_mb}m -Djava.io.tmpdir=\$PWD" && qualimap multi-bamqc -d \$PWD/bamqc_results/list_multi.txt -outdir \$PWD/multibamqc_results/ >> qc3.log 2>&1 || true && \\
+					                          
+								  CONTIG_COUNT=\$(samtools view -H \$(ls *.bam | shuf | head -1) | grep -c "^\@SQ")
+                                                                  if [ \$CONTIG_COUNT -gt 1000 ]; then
+                                                                    echo "Genome has \$CONTIG_COUNT contigs (>1000), using top 100 largest contigs" | tee qc4.log
+                                                                    samtools idxstats \$(ls *.bam | shuf | head -1) | sort -k2,2nr | head -100 | awk '{print \$1"\\t0\\t"\$2}' > top100_regions.bed
+                                                                    multiBamSummary BED-file --BED top100_regions.bed -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz >> qc4.log 2>&1
+                                                                  else
+                                                                    multiBamSummary bins -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz >> qc4.log 2>&1
+                                                                  fi
+
+					                          plotCorrelation --corData deeptools_all_bams.npz --corMethod spearman --plotFile deeptools_all_bams.npz_correlation_spearman.pdf --whatToPlot heatmap --skipZeros --plotTitle "Spearman Correlation" --outFileCorMatrix deeptools_all_bams.npz_correlation_spearman_scores.tab --plotNumbers
+								  plotCorrelation --corData deeptools_all_bams.npz --corMethod pearson --plotFile deeptools_all_bams.npz_correlation_pearson.pdf --whatToPlot heatmap --skipZeros --plotTitle "Pearson Correlation" --outFileCorMatrix deeptools_all_bams.npz_correlation_pearson_scores.tab --plotNumbers >> qc4.log 2>&1
+					                          plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA.pdf --outFileNameData deeptools_all_bams.npz_PCA.tab
+								  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_2.pdf --outFileNameData deeptools_all_bams.npz_PCA_2.tab --rowCenter
+								  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_3.pdf --outFileNameData deeptools_all_bams.npz_PCA_3.tab --transpose >> qc4.log 2>&1
 					                    fi};
 					}
 				}
@@ -3166,19 +3403,56 @@ sub star{
 			else{
 				#none
 			}
+
+			# Build pipeline command for STAR SE
+			my $filter_part_se = " | samtools view -h -S "; # Start with samtools view -S for SAM input
+			if ($bam_require_flags || $bam_exclude_flags || $bam_mapq_threshold) {
+				if ($bam_mapq_threshold) { $filter_part_se .= "-q $bam_mapq_threshold "; }
+				if ($bam_require_flags) { $filter_part_se .= "-f $bam_require_flags "; }
+				if ($bam_exclude_flags) { $filter_part_se .= "-F $bam_exclude_flags "; }
+			}
+			$filter_part_se .= "- ";
+
+			my $samtools_pipeline_se = "";
+			if (defined $bam_dedup && $bam_dedup eq "samtools") {
+				$samtools_pipeline_se = $filter_part_se . " | samtools sort -n -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M - " .
+					" | samtools fixmate -m - - " .
+					" | samtools sort -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M - " .
+					" | samtools markdup -r --write-index - {}_STAR.bam##idx##{}_STAR.bam.bai ";
+			} elsif (defined $bam_dedup && ($bam_dedup eq "picard" || $bam_dedup eq "picard_optical")) {
+				my $p_opts = ($bam_dedup eq "picard_optical") ? "REMOVE_SEQUENCING_DUPLICATES=true" : "REMOVE_DUPLICATES=true";
+				$samtools_pipeline_se = $filter_part_se . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_STAR.bam##idx##{}_STAR.bam.bai - && " .
+					" picard MarkDuplicates I={}_STAR.bam O={}_STAR.dedup.bam M={}_STAR.dup_metrics.txt $p_opts VALIDATION_STRINGENCY=LENIENT QUIET=true && " .
+					" mv {}_STAR.dedup.bam {}_STAR.bam && samtools index {}_STAR.bam";
+			} else {
+				$samtools_pipeline_se = $filter_part_se . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_STAR.bam##idx##{}_STAR.bam.bai - ";
+			}
+
 			$command=qq{if [ \$(ls $projectdir$output_dir | wc -l) -eq 0 ]; then
 		                          mkdir -p $projectdir$output_dir && cd $projectdir$output_dir
-		                          name_lists=\$(cat $tmp_file | awk -F '/' '{ print \$NF }') && unset DISPLAY
+		                          name_lists=\$(cat $tmp_file | awk -F '/' '{ print \$NF }') && unset DISPLAY && export PARALLEL_SHELL=/bin/bash
 		                          STAR --runThreadN $indexthreads --genomeDir $staridx_final --genomeLoad LoadAndExit --outFileNamePrefix $projectdir${output_dir}genomeloading.tmp2 && rm -rf $projectdir${output_dir}genomeloading.tmp*
-					  parallel --verbose --joblog ${projectdir}/star_log_parallel.txt -j $parallelnumber 'STAR --runMode alignReads --genomeDir $staridx_final --genomeLoad LoadAndKeep --readFilesIn \$(cat $tmp_file | xargs dirname | uniq)/{} --outFileNamePrefix $projectdir${output_dir}{}_nat_str_ $starpardef --outStd SAM | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_nat_str_Aligned.out.bam##idx##{}_nat_str_Aligned.out.bam.bai -' ::: \$(echo \$name_lists)
-					  parallel --verbose --joblog ${projectdir}/starprocess_log_parallel.txt -j $parallelnumber 'export _JAVA_OPTIONS="-Xms5g -Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD" && qualimap bamqc -bam $projectdir${output_dir}/{}_nat_str_Aligned.out.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_nat_str_Aligned.out.bam --java-mem-size="${memorylimit_div_mb}m" >> qc1.log 2>&1 || true
-		                          qualimap rnaseq -bam $projectdir${output_dir}/{}_nat_str_Aligned.out.bam -gtf $gtf -outdir \$PWD/rnaseqqc_results/{}_nat_str_Aligned.out.bam --java-mem-size="${memorylimit_div_mb}m" >> qc2.log 2>&1 || true
-		                          bamCoverage -b {}_nat_str_Aligned.out.bam -o {}_nat_str_Aligned.out.bam.bw -of bigwig -bs 10 -p $threads --normalizeUsing RPKM' ::: \$(echo \$name_lists)
+					  parallel --verbose --joblog ${projectdir}/star_log_parallel.txt -j $parallelnumber 'STAR --runMode alignReads --genomeDir $staridx_final --genomeLoad LoadAndKeep --readFilesIn \$(cat $tmp_file | xargs dirname | uniq)/{} --outFileNamePrefix $projectdir${output_dir}{}_STAR_ $starpardef --outStd SAM $samtools_pipeline_se && echo Done...{}_STAR.bam' ::: \$(echo \$name_lists)
+					  parallel --verbose --joblog ${projectdir}/starprocess_log_parallel.txt -j $parallelnumber 'export _JAVA_OPTIONS="-Xms5g -Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD" && qualimap bamqc -bam $projectdir${output_dir}/{}_STAR.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_STAR.bam --java-mem-size="${memorylimit_div_mb}m" >> qc1.log 2>&1 || true
+		                          qualimap rnaseq -bam $projectdir${output_dir}/{}_STAR.bam -gtf $gtf -outdir \$PWD/rnaseqqc_results/{}_STAR.bam --java-mem-size="${memorylimit_div_mb}m" >> qc2.log 2>&1 || true
+		                          bamCoverage -b {}_STAR.bam -o {}_STAR.bam.bw -of bigwig -bs 10 -p $threads --normalizeUsing RPKM' ::: \$(echo \$name_lists)
 		                          for f in \$( ls | egrep '.bam\$' ); do echo \$f"\t"\$PWD/bamqc_results/\$f >> \$PWD/bamqc_results/list_multi.txt; done && mkdir -p \$PWD/samtools_results/ && parallel --verbose -j $parallelnumber 'samtools flagstat -@ $threads {} > \$PWD/samtools_results/{}_flagstat.txt && samtools stats -@ $threads {} > \$PWD/samtools_results/{}_stats.txt' ::: \$( ls | egrep '.bam\$' )
-		                          export _JAVA_OPTIONS="-Xms5g -Xmx${memorylimit_in_mb}m -Djava.io.tmpdir=\$PWD" && qualimap multi-bamqc -d \$PWD/bamqc_results/list_multi.txt -outdir \$PWD/multibamqc_results/ >> qc3.log 2>&1 || true
-		                          multiBamSummary bins -p $indexthreads --bamfiles \$( ls | egrep '.bam\$' ) -out deeptools_all_bams.npz
-		                          plotCorrelation --corData deeptools_all_bams.npz --corMethod spearman --plotFile deeptools_all_bams.npz_correlation_spearman.pdf --whatToPlot heatmap --skipZeros --plotTitle "Spearman Correlation" --outFileCorMatrix deeptools_all_bams.npz_correlation_spearman_scores.tab --plotNumbers && plotCorrelation --corData deeptools_all_bams.npz --corMethod pearson --plotFile deeptools_all_bams.npz_correlation_pearson.pdf --whatToPlot heatmap --skipZeros --plotTitle "Pearson Correlation" --outFileCorMatrix deeptools_all_bams.npz_correlation_pearson_scores.tab --plotNumbers
-		                          plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA.pdf --outFileNameData deeptools_all_bams.npz_PCA.tab && plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_2.pdf --outFileNameData deeptools_all_bams.npz_PCA_2.tab --rowCenter && plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_3.pdf --outFileNameData deeptools_all_bams.npz_PCA_3.tab --transpose
+		                          export _JAVA_OPTIONS="-Xms5g -Xmx${memorylimit_in_mb}m -Djava.io.tmpdir=\$PWD" && qualimap multi-bamqc -d \$PWD/bamqc_results/list_multi.txt -outdir \$PWD/multibamqc_results/ >> qc3.log 2>&1 || true && \\
+		                          
+					  CONTIG_COUNT=\$(samtools view -H \$(ls *.bam | shuf | head -1) | grep -c "^\@SQ")
+                                          if [ \$CONTIG_COUNT -gt 1000 ]; then
+                                             echo "Genome has \$CONTIG_COUNT contigs (>1000), using top 100 largest contigs" | tee qc4.log
+                                             samtools idxstats \$(ls *.bam | shuf | head -1) | sort -k2,2nr | head -100 | awk '{print \$1"\\t0\\t"\$2}' > top100_regions.bed
+                                             multiBamSummary BED-file --BED top100_regions.bed -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz >> qc4.log 2>&1
+                                          else
+                                             multiBamSummary bins -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz >> qc4.log 2>&1
+                                          fi
+
+		                          plotCorrelation --corData deeptools_all_bams.npz --corMethod spearman --plotFile deeptools_all_bams.npz_correlation_spearman.pdf --whatToPlot heatmap --skipZeros --plotTitle "Spearman Correlation" --outFileCorMatrix deeptools_all_bams.npz_correlation_spearman_scores.tab --plotNumbers >> qc4.log 2>&1 && \\
+		                          plotCorrelation --corData deeptools_all_bams.npz --corMethod pearson --plotFile deeptools_all_bams.npz_correlation_pearson.pdf --whatToPlot heatmap --skipZeros --plotTitle "Pearson Correlation" --outFileCorMatrix deeptools_all_bams.npz_correlation_pearson_scores.tab --plotNumbers >> qc4.log 2>&1 && \\
+		                          plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA.pdf --outFileNameData deeptools_all_bams.npz_PCA.tab >> qc4.log 2>&1 && \\
+		                          plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_2.pdf --outFileNameData deeptools_all_bams.npz_PCA_2.tab --rowCenter >> qc4.log 2>&1 && \\
+		                          plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_3.pdf --outFileNameData deeptools_all_bams.npz_PCA_3.tab --transpose >> qc4.log 2>&1
 		                    fi};
 		}
 		
@@ -3601,3 +3875,322 @@ sub date{
 }
 1;
 
+
+=head2 kallisto_index
+
+  Example    : 
+  kallisto_index(
+  fasta=>"genome.fasta",
+  dir=>".",
+  logfile=>"run.log",
+  indexname=>"hg19"
+  );
+  Description: kallisto_index is a function to create the corresponding index for the alignment 
+  of the reads with kallisto. The corresponding index genomes will be saved on the provided by the user.
+  Input parameters: 
+Mandatory parameters:
+   [dir] Input directory where new index will be saved
+   [fasta] Path of the genomic fasta sequence to build the index
+   [logfile] Path of run.log file where execution data will be saved
+   [indexname] Name to write in the index files
+  Returntype : Directory with index genome and the path of the new index 
+  Requeriments: kallisto_index function requires for a correct analysis:
+  - Perl v5.10.0 or higher software correctly installed
+  - Kallisto software correctly installed
+  - Input genomic sequence on fasta format  
+  Exceptions : none
+  Caller     : web drawing code
+  Status     : Stable
+
+=cut
+
+
+sub kallisto_index{
+
+	#Arguments provided by user are collected by %args. Dir, path of fasta file, indexname and logfile
+	# are mandatory arguments.
+	my %args=@_;
+	my $miARmaPath=$args{"miARmaPath"};
+	my $arch=`uname`;
+	chomp($arch);
+	
+	if ($ENV{PATH}) {
+		$ENV{PATH} .= ":$miARmaPath/bin/".$arch."/kallisto/";
+	}
+	else {
+		$ENV{PATH} = "$miARmaPath/bin/".$arch."/kallisto/";
+	}
+	#First, check that kallisto is in path:
+	my @kallisto_bin=`which kallisto`;
+	#Executing the command
+	if(scalar(@kallisto_bin)<1){
+		die "KALLISTO_INDEX ERROR :: system args failed: $? : Is kallisto installed and exported to \$PATH ?";
+	}
+	my $fasta=$args{"fasta"}; #the path of genome sequence in fasta format
+	my $dir=$args{"dir"}; #directory to create the genomeindex directory where new index will be saved
+	my $logfile=$args{"logfile"}; #path of the logfile to write the execution data
+	my $indexname=$args{"indexname"};
+	my $kallistoindex=$args{"kallistoindex"};
+	my $indexdir=$args{"indexdir"};
+
+	
+	#Variable declaration
+	my $index_output;
+	my $command;
+	my $commanddef;	
+	my $kallistoidx_final;
+
+	#Check kallistoindex_final
+	if($kallistoindex ne ""){
+		$kallistoidx_final=$kallistoindex;
+	}		
+	else{
+		$kallistoidx_final=$indexdir.$indexname;
+	}
+
+	#Checking the mandatory arguments
+	if ($fasta and $dir and $logfile){
+		if(-e $kallistoidx_final){
+             		print STDERR date()." Index $kallistoidx_final already exists. Skipping generation.\n";
+		     	open (LOG,">> ".$logfile) || die "KALLISTO_INDEX ERROR :: Can't open $logfile: $!";
+			print LOG "KALLISTO_INDEX :: ".date()." Index $kallistoidx_final already exists. Skipping generation.\n";
+			close LOG;
+			return($kallistoidx_final);
+        	}
+
+		print STDERR date()." Generating the index genome from $fasta with kallisto...\n";
+		
+		my $command="kallisto index -i ".$kallistoidx_final." $fasta";
+		
+		$commanddef="mkdir -p ".$dir."; ".$command ." >> ".$logfile." 2>&1";
+		#Printing the date and command execution on the run.log file
+		open (LOG,">> ".$logfile) || die "KALLISTO_INDEX ERROR :: Can't open $logfile: $!";
+		print LOG "KALLISTO_INDEX :: ".date()." Executing $commanddef\n";
+		#Executing the command or if system can't be executed die showing the error.
+		system($commanddef) == 0
+		or die "KALLISTO_INDEX ERROR :: system args failed: $? ($commanddef)";
+		close LOG;
+		#Returning the path of the new kallisto index 
+		return($kallistoidx_final);
+	}
+	else
+	{
+		#Registering the error
+   		open(LOG,">> ".$logfile) || die "KALLISTO_INDEX ERROR :: Can't open $logfile: $!";
+    		print LOG "KALLISTO_INDEX ERROR :: ".date()." Directory ($dir), logfile($logfile) and/or fasta file($fasta) have not been provided";
+    		close LOG;
+
+		#If mandatory parameters have not been provided program will die and show error message
+		warn ("KALLISTO_INDEX ERROR:: ".date()." Directory ($dir), logfile($logfile) and/or fasta file($fasta) have not been provided");
+		help_kallisto_index();
+	}	
+
+	sub help_kallisto_index{
+	    my $usage = qq{
+		  	$0 
+			Needed parameters:
+			[dir] Input directory where new index will be saved
+  	 		[fasta] Path of the genomic fasta sequence to build the index
+  	 		[logfile] Path of run.log file where execution data will be saved
+  	 		[indexname] Name to write in the index files
+						             
+			Examples:
+			kallisto_index(fasta=>"genome.fasta", dir=>".", logfile=>"run.log", indexname=>"hg19");
+
+	};
+
+	print STDERR $usage;
+	exit(); 
+	}
+}
+
+=head2 kallisto
+
+  Example    : 
+  kallisto( 
+	file=>"./file.fastq",
+	threads=>"4",
+	kallistoindex=>"./hg19",
+	verbose=>"verbose", 
+	logfile=>"run.log", 
+	statsfile=>"stats.log", 
+	projectdir=>"."
+  )
+  Description: Kallisto quantifies transcripts.
+  Input parameters: 
+	Mandatory parameters:
+  	 [file] Name of the file which is going to be align (fasta/fastq format)
+  	 [logfile] Path of run.log file where execution data will be saved
+  	 [statsfile] Path of stats.log file where stats data will be saved
+  	 [kallistoindex]  Indexed genome
+  	 [projectdir] Directory where kallisto_results directory will be created
+  	 Optional parameters:
+  	 [threads] Optional number of threads to perform the analysis
+  	 [verbose] Option to show the execution data on the screen   
+  Returntype : Directory at directory kallisto_results.
+  Requeriments: kallisto function requires for a correct analysis:
+  	- Perl v5.10.0 or higher software correctly installed
+  	- Kallisto 
+  	- Input files on fastq format on the provided directory 
+  Exceptions : none
+  Caller     : web drawing code
+  Status     : Stable
+
+=cut
+
+sub kallisto{
+	my %args=@_;
+	my $miARmaPath=$args{"miARmaPath"};
+	my $arch=`uname`;
+	chomp($arch);
+	
+	if ($ENV{PATH}) {
+		$ENV{PATH} .= ":$miARmaPath/bin/".$arch."/kallisto/";
+	}
+	else {
+		$ENV{PATH} = "$miARmaPath/bin/".$arch."/kallisto/";
+	}
+	
+	#First, check that kallisto is in path:
+	my @kallisto_bin=`which kallisto`;
+	#Executing the command
+	if(scalar(@kallisto_bin)<1){
+		die "KALLISTO ERROR ::system args failed: $? : Is kallisto installed and exported to \$PATH ?";
+	}
+
+	my $file=$args{"file"}; 
+	my $kallistoindex=$args{"kallistoindex"} || undef; 
+	my $indexname=$args{"indexname"};
+	my $indexdir=$args{"indexdir"}; 
+	my $threads=$args{"threads"}; 
+	my $logfile=$args{"logfile"}; 
+	my $verbose=$args{"verbose"}; 
+	my $statsfile=$args{"statsfile"}; 
+	my $projectdir=$args{"projectdir"}; 
+	my $Seqtype=$args{"Seqtype"}; 
+	my $adapter=$args{"adapter"}; 
+	my $parallelnumber=$args{"parallelnumber"} || 2;
+	
+    	my $kallistoparameters = $args{"kallistoparameters"} || "";
+
+	my $output_dir="/kallisto_results/";
+	my $kallistoidx_final;
+	
+    	#Check kallistoindex_final
+	if(defined($args{"kallistoindex"}) && $args{"kallistoindex"} ne ""){
+		$kallistoidx_final=$kallistoindex;
+	}		
+	else{
+		$kallistoidx_final=$indexdir.$indexname;
+	}
+
+	my $commanddef;
+	
+	#Checking the mandatory parameters
+	if ($file and $projectdir and $logfile and $statsfile){ 
+		my $name=fileparse($file, qr{\.f.*});
+		my $output_file_kallisto=$projectdir.$output_dir.$name;
+		
+		# Strip read suffixes from output name
+		$output_file_kallisto =~ s/_R1.*//;
+		$output_file_kallisto =~ s/_1\..*//; 
+
+        	my $command;
+		my $tmp_file="/".$projectdir."/Pre_fastqc_results/list_of_files.txt";
+		
+		if(lc($Seqtype) =~ /paired/){
+			print STDOUT "\tKALLISTO :: ".date()." Checking $file for kallisto (paired-end) analysis\n" if($verbose);
+			
+			#Check if the file is a paired-end file
+			if($file =~ /.*_R?1\.f.*/){
+				#it contains the _1 label
+				my $mate_file=$file;
+				if($file =~ /.*_R1\.f.*/){
+					$mate_file =~ s/_R1\.f(.+)/_R2\.f$1/g;
+				}
+				else{
+					$mate_file =~ s/_1\.f(.+)/_2\.f$1/g;
+				}
+				if(-e $mate_file){
+					if($file ne $mate_file){
+                        		# Build parallel command for PE
+                        		$command=qq{if [ \$(ls $projectdir$output_dir | wc -l) -eq 0 ]; then
+                                      mkdir -p $projectdir$output_dir && cd $projectdir$output_dir && export PARALLEL_SHELL=/bin/bash
+                                      name_lists=\$(cat $tmp_file | sed 's,_1.fastq.gz*,,g' | sed 's,_2.fastq.gz*,,g' | sed 's,_R1.fastq.gz*,,g' | sed 's,_R2.fastq.gz*,,g' | sort | uniq | awk -F '/' '{ print \$NF }') && unset DISPLAY
+                                      
+                                      parallel --verbose --joblog ${projectdir}/kallisto_log_parallel.txt -j $parallelnumber 'kallisto quant -i $kallistoidx_final -o $projectdir${output_dir}{} -t $threads --bootstrap-samples 10 --seed 42 $kallistoparameters \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \$(cat $tmp_file | xargs dirname | uniq)/{}_2.fastq.gz && echo Done...{}' ::: \$(echo \$name_lists)
+                                    fi};
+					}
+				}
+				else{
+					print STDERR "ERROR:: You have requested a Paired-End analysis, so for the file $file a $mate_file file is needed\n";
+					return(); 
+				}
+			}
+			else{
+				return(); 
+			}
+		}
+		else{
+			print STDOUT "\tKALLISTO :: ".date()." Checking $file for kallisto (single-end) analysis\n" if($verbose);
+            
+            		# Default params for SE if not present
+            		if ($kallistoparameters !~ /-l/ && $kallistoparameters !~ /--fragment-length/) {
+                  		$kallistoparameters .= " -l 200 -s 20 "; 
+                  		print STDERR "WARNING: Kallisto single-end requires -l and -s. Using defaults -l 200 -s 20.\n";
+             		}
+
+             		$command=qq{if [ \$(ls $projectdir$output_dir | wc -l) -eq 0 ]; then
+                                  mkdir -p $projectdir$output_dir && cd $projectdir$output_dir && export PARALLEL_SHELL=/bin/bash
+                                  name_lists=\$(cat $tmp_file | awk -F '/' '{ print \$NF }') && unset DISPLAY
+                                  
+                                  parallel --verbose --joblog ${projectdir}/kallisto_log_parallel.txt -j $parallelnumber 'kallisto quant -i $kallistoidx_final -o $projectdir${output_dir}{} --single -t $threads --bootstrap-samples 10 --seed 42 $kallistoparameters \$(cat $tmp_file | xargs dirname | uniq)/{} && echo Done...{}' ::: \$(echo \$name_lists)
+                                fi};
+		}
+		
+		# Execution block 
+		open (STATS,">> ".$statsfile) || die "KALLISTO ERROR :: Can't open $statsfile: $!";
+		print STATS "KALLISTO :: File:".$file."\n";
+		$commanddef= "mkdir -p ".$projectdir.$output_dir." ;".$command." >> ".$logfile." 2>&1";
+		
+        	#Logging
+		open (LOG,">> ".$logfile) || die "KALLISTO ERROR :: Can't open $logfile: $!";
+		print LOG "KALLISTO :: ".date()." Executing $commanddef\n";
+		close LOG;
+		
+		if($verbose){
+			print STDOUT "\tKALLISTO :: ".date()." Executing $commanddef\n";
+		}
+		
+		system($commanddef) == 0
+		 or die "KALLISTO ERROR :: system args failed: $? ($commanddef)";
+		close STATS;
+		
+		return ($output_file_kallisto);		
+	}
+	else
+	{
+   		open(LOG,">> ".$logfile) || die "KALLISTO ERROR :: Can't open $logfile: $!";
+    		print LOG "KALLISTO :: ".date()." File($file), logfile($logfile), projectdir ($projectdir), statsfile($statsfile) and/or index($kallistoindex) have not been provided";
+    		close LOG;
+		warn ("KALLISTO :: ".date()." File($file), logfile($logfile), projectdir ($projectdir), statsfile($statsfile) and/or index($kallistoindex) have not been provided");
+		help_kallisto();
+	}
+	
+	sub help_kallisto{
+	    my $usage = qq{
+		  	$0 
+			Needed parameters:
+			[file] Name of the file which is going to be align (fasta/fastq format)
+  	 		[logfile] Path of run.log file where execution data will be saved
+  	 		[statsfile] Path of stats.log file where stats data will be saved
+  	 		[kallistoindex]  Indexed genome
+  	 		[projectdir] Directory where kallisto_results directory will be created
+						             
+			Examples:
+			kallisto( ... );
+	};
+	print STDERR $usage;
+	exit();
+	}
+}

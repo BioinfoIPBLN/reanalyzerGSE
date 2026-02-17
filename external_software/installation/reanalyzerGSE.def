@@ -1,116 +1,307 @@
-# This is a definition file for an Apptainer container with the reanalyzerGSE pipeline and their dependencies properly installed
-# This is not using multiple conda environments as the preferred second option, but trying to download/installe/compile all of the require binaries
-
-
 Bootstrap: docker
-From: ubuntu:latest
+From: ubuntu:24.04
 
 %post
-    export TMPDIR=/tmp/build # Required for fakeroot installation without sudo privileges
+    # --------------------------------------------------------------------------
+    # 1. System Setup & Dependencies
+    # --------------------------------------------------------------------------
+    export DEBIAN_FRONTEND=noninteractive
+    export LC_ALL=en_US.UTF-8
+    export LANG=en_US.UTF-8
+    export TMPDIR=$APPTAINER_TMPDIR/build
     mkdir -p $TMPDIR
-  # Install dependencies and software:
-    export DEBIAN_FRONTEND=noninteractive && apt-get update -qq > /dev/null && \
-    apt-get install -qy --no-install-recommends apt-utils wget software-properties-common dirmngr pkg-config locales > /dev/null
 
-    locale-gen en_US.UTF-8
-    update-locale LANG=en_US.UTF-8
-    echo "export LANG=en_US.UTF-8" >> ~/.bashrc
-    echo "export LC_ALL=en_US.UTF-8" >> ~/.bashrc
+    # Update and Install Dependencies
+    apt-get update -qq && \
+    apt-get install -qy --no-install-recommends \
+      wget curl ca-certificates gnupg2 dirmngr locales \
+      software-properties-common procps git git-all build-essential \
+      gcc g++ gfortran make cmake bc \
+      libcurl4-openssl-dev libssl-dev libxml2-dev libxml2 zlib1g-dev \
+      libfontconfig1-dev libharfbuzz-dev libfribidi-dev \
+      libfreetype6-dev libpng-dev libpng-tools libpng16-16 libtiff-dev libtiff5-dev libjpeg-dev \
+      libmagick++-dev libmagickwand-dev libmagickcore-dev imagemagick \
+      libopenblas-dev liblapack-dev libcairo2-dev libncurses5-dev \
+      libbz2-dev liblzma-dev libtbb12 libdeflate0 libdeflate-dev libisal2 libisal-dev \
+      libhdf5-dev libgl1-mesa-dev libglu1-mesa \
+      python3-dev python3-pip python3-venv python3-setuptools python-is-python3 picard-tools \
+      cython3 \
+      fastqc pigz parallel zip unzip bzip2 expat file jq \
+      default-jre-headless \
+    && locale-gen en_US.UTF-8 \
+    && update-locale LANG=en_US.UTF-8
 
-    wget -qO- https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc | tee -a /etc/apt/trusted.gpg.d/cran_ubuntu_key.asc && \
-    add-apt-repository "deb https://cloud.r-project.org/bin/linux/ubuntu $(lsb_release -cs)-cran40/" > /dev/null && \
-    apt-get install -qy --no-install-recommends fastqc pigz curl parallel zip make cmake bc bzip2 expat file cython3 git-all libisal2 \
-      software-properties-common libfreetype6-dev libtiff5-dev libjpeg-dev libxml2 libxml2-dev zlib1g-dev gcc libcairo2-dev libncurses5-dev liblzma-dev libssl-dev libharfbuzz-dev libfribidi-dev libtbb12 \
-      locales libmagick++-dev libmagickwand-dev libmagickcore-dev imagemagick libpng-dev libpng-tools libpng16-16 libssl-dev libconfig-ini-perl libtemplate-plugin-posix-perl libscalar-list-utils-perl libwww-perl \
-      libdatetime-perl libstatistics-r-perl libconfig-inifiles-perl libdeflate0 libdeflate-dev libisal-dev libcurl4-openssl-dev \
-      cpanminus \
-      r-base r-base-dev pandoc r-cran-maptools \
-      python-is-python3 python-dev-is-python3 python3-dev python3-pip python3-deeptools > /dev/null && apt-get -qy autoremove --purge > /dev/null && apt-get -q clean && rm -rf /var/lib/apt/lists/*
 
-
-    curl -fsSL https://pyenv.run | bash > /dev/null
-        
-    git clone -q https://github.com/BioinfoIPBLN/reanalyzerGSE && chmod +x /reanalyzerGSE/reanalyzerGSE.sh && chmod +x /reanalyzerGSE/scripts/* && chmod +x /reanalyzerGSE/external_software/miARma-seq/miARma && rm -rf /reanalyzerGSE/test_data
-    
+    # Link picard-tools to picard if installed via apt
+    ln -sf /usr/bin/picard-tools /usr/bin/picard || true
+    # --------------------------------------------------------------------------
     mkdir -p /bin_external/lib
-    wget -q https://ftp-trace.ncbi.nlm.nih.gov/sra/sdk/current/sratoolkit.current-ubuntu64.tar.gz && tar xzf sratoolkit.current-ubuntu64.tar.gz && mv sratoolkit*/bin/* /bin_external/ && rm -rf sratoolkit*
-    wget -q https://github.com/samtools/samtools/releases/download/1.22.1/samtools-1.22.1.tar.bz2 && tar xf samtools-1.22.1.tar.bz2 && cd samtools-1.22.1 && mkdir bin && ./configure -q --prefix=$PWD/bin && make -s && make -s install && cd .. && mv samtools-1.22.1/bin/bin/* /bin_external/ && rm -rf samtools*
-    yes n | sh -c "$(wget -q https://ftp.ncbi.nlm.nih.gov/entrez/entrezdirect/install-edirect.sh -O -)"    
-    wget http://opengene.org/fastp/fastp && chmod a+x ./fastp
-    wget -q https://github.com/shenwei356/taxonkit/releases/download/v0.20.0/taxonkit_linux_amd64.tar.gz && tar xzf taxonkit_linux_amd64.tar.gz && rm taxonkit_linux_amd64.tar.gz && mv taxonkit /bin_external/
-    wget -q https://github.com/sortmerna/sortmerna/releases/download/v4.3.7/sortmerna-4.3.7-Linux.tar.gz && tar xzf sortmerna-*-Linux.tar.gz && mv sortmerna*/bin/* /bin_external/ && rm -rf sortmerna*    
-    wget -q https://github.com/COMBINE-lab/salmon/releases/download/v1.10.0/salmon-1.10.0_linux_x86_64.tar.gz && tar xzf salmon-1.10.0_linux_x86_64.tar.gz && mv salmon*/bin/* /bin_external/ && rm -rf salmon*
-    wget -q https://github.com/pachterlab/kallisto/releases/download/v0.51.1/kallisto_linux-v0.51.1.tar.gz && tar xzf kallisto_linux-*.tar.gz && mv kallisto/kallisto /bin_external/ && rm -rf kallisto*
-    wget -q https://github.com/alexdobin/STAR/releases/download/2.7.11b/STAR_2.7.11b.zip && unzip -qq STAR_2.7.11b.zip && mv STAR*/Linux_x86_64_static/* /bin_external/ && rm -rf STAR*
-    wget -q https://cloud.biohpc.swmed.edu/index.php/s/oTtGWbWjaxsQ2Ho/download && unzip -qq download && rm download && mv hisat*/hisat* /bin_external/ && rm -rf hisat*
-    wget -q https://sourceforge.net/projects/subread/files/subread-2.1.1/subread-2.1.1-Linux-x86_64.tar.gz/download && tar -xzf download && rm download && mv subread*/bin/* /bin_external/ && rm -rf subread*
-    wget -q https://bitbucket.org/kokonech/qualimap/downloads/qualimap_v2.3.zip && unzip -qq qualimap_v2.3.zip && sed -i 's/-XX:MaxPermSize/-XX:MaxMetaspaceSize/g' qualimap_v2.3/qualimap && mv qualimap*/qualimap /bin_external/ && mv qualimap_v2.3/qualimap.jar /bin_external/ && mv qualimap_v2.3/lib/* /bin_external/lib/ && rm -rf qualimap*
-    git clone -q https://github.com/lh3/seqtk.git && cd seqtk && make -s && cd .. && mv seqtk/seqtk /bin_external/ && rm -rf seqtk
-    git clone -q https://github.com/DerrickWood/kraken2 && mkdir -p kraken2/bin && ./kraken2/install_kraken2.sh $PWD/kraken2/bin &> /dev/null && mv $PWD/kraken2/bin/* /bin_external/ && rm -rf kraken2*
-    git clone -q https://github.com/jenniferlu717/KrakenTools && cd KrakenTools && chmod +x * && cd .. && mv KrakenTools/* /bin_external/ && rm -rf KrakenTools
+    cd $TMPDIR && rm -rf *
 
-
-  export DEBIAN_FRONTEND=noninteractive && apt-get update -qq > /dev/null && apt-get install --reinstall -yq --no-install-recommends build-essential gcc-multilib libc6-dev linux-libc-dev libcurl4-openssl-dev libsqlite3-dev libopenblas-dev libstdc++-13-dev g++ zlib1g-dev gfortran libblas-dev liblapack-dev libhdf5-dev pkg-config libmagick++-dev > /dev/null
-  # R (note maptools is very old and deprecated and could not be compiled... so the ubuntu version can be installed)
-    /usr/bin/Rscript -e 'install.packages("pak",repos="https://cloud.r-project.org", quiet = T); 
-                         options(pak.timeout = 600); pak::pkg_install(c("devtools", "foreach","iterators", "glue", "rlang", "magrittr", "stringi", "vctrs", "ggplot2", "Rcpp", "scales", "vroom", "tzdb", "dplyr", "magick", "patchwork"), ask = FALSE, dependencies = NA);
-                         pak::pkg_install(c("remotes", "lifecycle", "stringr", "tibble", "tidyr", "readr", "scattermore", "ggrepel", "hexbin", "RcppEigen"), ask = FALSE, dependencies = F);
-                         remotes::install_github("bnprks/BPCells/r", dependencies = F, quiet = T, upgrade = "never");
-                         pak::pkg_install(c(
-                                                        "bit64",
-                                                        "bitops", "cluster", "colorspace", "corrplot", "curl", "data.table", 
-                                                        "dichromat", "dirmult", "doParallel", "factoextra", 
-                                                        "funr", "ggdendro", "ggfortify", "ggpmisc", "ggupset",
-                                                        "ggpubr", "gtools", "harmony", "Hmisc", "htmlwidgets", 
-                                                        "jpeg", "matrixStats", "mime", "minpack.lm", 
-                                                        "nloptr", "openxlsx", "openssl", "optparse", "pheatmap", "pkgconfig", 
-                                                        "plotly", "png", "qpdf", "rbioapi", "RColorBrewer", 
-                                                        "RcppArmadillo", "RcppThread", "rentrez", "reshape", "rgl", 
-                                                        "robustbase", "rrvgo", "Seurat", "textshape", 
-                                                        "umap", "VennDiagram", "WGCNA", "writexl", "xtable",
-                                                        "affy",
-                                                        "annotate", "AnnotationDbi", "AnnotationHub", "biomaRt",
-                                                        "clusterProfiler", "ComplexHeatmap", "DESeq2", "DOSE", "edgeR",
-                                                        "enrichplot", "genefilter", "GenomicFeatures", "GEOquery", "GOfuncR",
-                                                        "GO.db", "GOxploreR", "GSVA", "impute", "limma", "M3C", "Mfuzz",
-                                                        "NormqPCR", "org.Hs.eg.db", "org.Mm.eg.db", "pathview", "preprocessCore",
-                                                        "ReactomePA", "Repitools", "rtracklayer", "scRecover", "sva", "STRINGdb",
-                                                        "ctlab/fgsea",
-                                                        "ievaKer/aPEAR",
-                                                        "immunogenomics/presto",
-                                                        "vqf/nVennR",
-                                                        "wjawaid/enrichR",
-                                                        "url::https://cran.r-project.org/src/contrib/Archive/autoGO/autoGO_0.9.1.tar.gz",
-                                                        "url::https://cran.r-project.org/src/contrib/Archive/gsmoothr/gsmoothr_0.1.7.tar.gz",
-                                                        "url::https://cran.r-project.org/src/contrib/Archive/imguR/imguR_1.0.3.tar.gz",
-                                                        "url::https://cran.r-project.org/src/contrib/Archive/qpcR/qpcR_1.4-1.tar.gz"), ask = FALSE, dependencies = NA); 
-                         pak::pkg_install("kkang7/CDSeq_R_Package", ask = FALSE, dependencies = FALSE); pak::cache_clean()'
-
-
-
-  # Python (note deeptools installed as a system package above, because of dependency hell...)
-    pip install -q --break-system-packages --root-user-action ignore pysradb fastq-dl biopython openpyxl how_are_we_stranded_here statistics sphinx RSeQC multiqc brotlipy pysam scipy networkx pandas matplotlib python-igraph pyparsing git+https://github.com/netZoo/netZooPy.git ignore six markdown packaging markupsafe
-
-    export PATH="$HOME/.pyenv/bin:$PATH" && pyenv install 3.11.1 && pyenv virtualenv 3.11.1 recentr && eval "$(pyenv init -)" && eval "$(pyenv virtualenv-init -)" && pyenv activate recentr && \
-    pip install -q numpy==1.24.3 pandas==1.5.3 recentrifuge==1.16.1
-
-
-
-  # Perl   
-    cpanm --force -q Strict::Perl LWP Cwd less Class::MOP
+    # SRAToolkit
+    curl -fsSL --retry 10 https://ftp-trace.ncbi.nlm.nih.gov/sra/sdk/current/sratoolkit.current-ubuntu64.tar.gz -o sratoolkit.tar.gz
+    tar xzf sratoolkit.tar.gz
+    find sratoolkit*/bin -type f -exec mv {} /bin_external/ \;
     
+    # Samtools
+    curl -fsSL --retry 10 https://github.com/samtools/samtools/releases/download/1.23/samtools-1.23.tar.bz2 -o samtools.tar.bz2
+    tar xf samtools.tar.bz2 && cd samtools-1.23
+    ./configure -q --without-curses --prefix=$PWD/bin && make -s && make -s install
+    mv bin/bin/* /bin_external/
+    cd $TMPDIR
+
+    # Edirect
+    yes n | sh -c "$(curl -fsSL --retry 10 https://ftp.ncbi.nlm.nih.gov/entrez/entrezdirect/install-edirect.sh)"
+    mv /root/edirect /bin_external/edirect
+    
+    # Fastp
+    curl -fsSL --retry 10 http://opengene.org/fastp/fastp -o fastp && chmod a+x ./fastp && mv ./fastp /bin_external/
+    
+    # Taxonkit
+    curl -fsSL --retry 10 https://github.com/shenwei356/taxonkit/releases/download/v0.20.0/taxonkit_linux_amd64.tar.gz -o taxonkit.tar.gz
+    tar xzf taxonkit.tar.gz && mv taxonkit /bin_external/
+    
+    # Sortmerna
+    curl -fsSL --retry 10 https://github.com/sortmerna/sortmerna/releases/download/v4.3.7/sortmerna-4.3.7-Linux.tar.gz -o sortmerna.tar.gz
+    tar xzf sortmerna.tar.gz && mv sortmerna*/bin/* /bin_external/
+    
+    # Salmon
+    curl -fsSL --retry 10 https://github.com/COMBINE-lab/salmon/releases/download/v1.10.0/salmon-1.10.0_linux_x86_64.tar.gz -o salmon.tar.gz
+    tar xzf salmon.tar.gz && mv salmon*/bin/* /bin_external/
+    
+    # Kallisto
+    curl -fsSL --retry 10 https://github.com/pachterlab/kallisto/releases/download/v0.51.1/kallisto_linux-v0.51.1.tar.gz -o kallisto.tar.gz
+    tar xzf kallisto.tar.gz && mv kallisto/kallisto /bin_external/
+    
+    # STAR
+    curl -fsSL --retry 10 https://github.com/alexdobin/STAR/releases/download/2.7.11b/STAR_2.7.11b.zip -o STAR.zip
+    unzip -qqo STAR.zip && mv STAR*/Linux_x86_64_static/* /bin_external/
+    
+    # Subread
+    curl -fsSL --retry 10 https://sourceforge.net/projects/subread/files/subread-2.1.1/subread-2.1.1-Linux-x86_64.tar.gz/download -o subread.tar.gz
+    tar -xzf subread.tar.gz && mv subread*/bin/* /bin_external/
+    
+    # Qualimap
+    curl -fsSL --retry 10 https://bitbucket.org/kokonech/qualimap/downloads/qualimap_v2.3.zip -o qualimap.zip
+    unzip -qqo qualimap.zip
+    sed -i 's/-XX:MaxPermSize/-XX:MaxMetaspaceSize/g' qualimap_v2.3/qualimap
+    mv qualimap_v2.3/qualimap /bin_external/
+    mv qualimap_v2.3/qualimap.jar /bin_external/
+    mv qualimap_v2.3/lib/* /bin_external/lib/
+
+    # Compiling seqk and hisat2
+    git clone -q https://github.com/lh3/seqtk.git && cd seqtk && make -s && mv seqtk /bin_external/ && cd ..
+    git clone -q https://github.com/DaehwanKimLab/hisat2.git && cd hisat2 && make -s && mv hisat2* /bin_external/ && cd ..
+    
+    # Kraken2
+    git clone -q https://github.com/DerrickWood/kraken2
+    mkdir -p kraken2/bin
+    ./kraken2/install_kraken2.sh $PWD/kraken2/bin
+    mv kraken2/bin/* /bin_external/
+    git clone -q https://github.com/jenniferlu717/KrakenTools
+    chmod +x KrakenTools/* && mv KrakenTools/* /bin_external/
+
+    # --------------------------------------------------------------------------
+    # 3. Python Environment (Python 3.12)
+    # --------------------------------------------------------------------------
+    
+    cat <<EOF > $APPTAINER_TMPDIR/requirements.txt
+numpy==2.3.5
+pandas==2.3.3
+scipy==1.17.0
+matplotlib==3.10.8
+networkx==3.6.1
+statsmodels==0.14.6
+sympy==1.14.0
+biopython==1.84
+pysam==0.23.3
+deepTools==3.5.6
+multiqc==1.33
+fastq-dl==3.0.1
+pysradb==1.4.2
+RSeQC==5.0.4
+netZooPy==0.10.8
+openpyxl==3.1.5
+python-igraph==1.0.0
+rich==13.9.4
+tqdm==4.67.3
+pyyaml==6.0.3
+yq==3.4.3
+jq==1.11.0
+plotly==6.5.2
+kaleido==0.2.1
+click==8.3.1
+recentrifuge==2.1.1
+markdown==3.10.2
+markupsafe==3.0.3
+EOF
+
+    # Ubuntu 24.04 enforces PEP 668. We use --break-system-packages
+    # because we are modifying the container's system python intentionally.
+   
+    apt-get remove -qy python3-numpy python3-scipy python3-matplotlib python3-pandas 2>/dev/null || true
+    pip3 install --no-cache-dir --break-system-packages torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+    pip3 install --no-cache-dir --break-system-packages --ignore-installed -r $APPTAINER_TMPDIR/requirements.txt
+
+    # --------------------------------------------------------------------------
+    # 4. R Packages (Ubuntu 24.04 / Noble)
+    # --------------------------------------------------------------------------
+    # Installing R 4.x
+    wget -qO- https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc | tee -a /etc/apt/trusted.gpg.d/cran_ubuntu_key.asc
+    add-apt-repository "deb https://cloud.r-project.org/bin/linux/ubuntu $(lsb_release -cs)-cran40/"
+    apt-get update -qq && apt-get install -qy --no-install-recommends r-base r-base-dev pandoc
+    
+    cat <<EOF > $APPTAINER_TMPDIR/install_r.R
+install.packages("pak", quiet = T)
+install.packages("stringi", type = "source", quiet = T)
+library(pak)
+options(pak.timeout = 1200)
+
+pkgs_1 <- c(
+  "abind@1.4-8", "annotate@1.88.0", "AnnotationDbi@1.72.0", "ape@5.8-1", "aplot@0.2.9", 
+  "askpass@1.2.1", "assorthead@1.4.0", "backports@1.5.0", "base64enc@0.1-6", "beachmat@2.26.0", 
+  "BH@1.90.0-1", "Biobase@2.70.0", "BiocFileCache@3.0.0", "BiocGenerics@0.56.0", "BiocParallel@1.44.0", 
+  "BiocSingular@1.26.1", "biomaRt@2.66.0", "Biostrings@2.78.0", "bit@4.6.0", "bit64@4.6.0-1", 
+  "bitops@1.0-9", "blob@1.3.0", "brew@1.0-10", "brio@1.1.5", "bslib@0.10.0", 
+  "cachem@1.1.0", "callr@3.7.6", "caTools@1.18.3", "checkmate@2.3.4", "chron@2.3-62", 
+  "circlize@0.4.17", "cli@3.6.5", "clipr@0.8.0", "clue@0.3-66", "clusterProfiler@4.18.4", 
+  "colorspace@2.1-2", "commonmark@2.0.0", "ComplexHeatmap@2.26.1", "cowplot@1.2.0", "cpp11@0.5.3", 
+  "crayon@1.5.3", "credentials@2.0.3", "crosstalk@1.2.2", "curl@7.0.0", "data.table@1.18.2.1", 
+  "DBI@1.2.3", "dbplyr@2.5.2", "DelayedArray@0.36.0", "deldir@2.0-4", "desc@1.4.3", 
+  "DESeq2@1.50.2", "devtools@2.4.6", "diffobj@0.3.6", "digest@0.6.39", "dir.expiry@1.18.0", 
+  "doParallel@1.0.17", "DOSE@4.4.0", "dotCall64@1.2", "downlit@0.4.5", "dplyr@1.2.0", 
+  "dqrng@0.4.1", "dynamicTreeCut@1.63-1", "DynDoc@1.88.0", "e1071@1.7-17", "edgeR@4.8.2", 
+  "ellipsis@0.3.2", "enrichplot@1.30.4", "evaluate@1.0.5", "fansi@1.0.7", "farver@2.1.2", 
+  "fastcluster@1.3.0", "fastDummies@1.7.5", "fastmap@1.2.0", "fastmatch@1.1-8", "fgsea@1.36.2", 
+  "filelock@1.0.3", "fitdistrplus@1.2-6", "FNN@1.1.4.1", "fontawesome@0.5.3", "fontBitstreamVera@0.1.1", 
+  "fontLiberation@0.1.0", "fontquiver@0.2.1", "foreach@1.5.2", "formatR@1.14", "Formula@1.2-5", 
+  "fs@1.6.6", "futile.logger@1.4.9", "futile.options@1.0.1", "future@1.69.0", "future.apply@1.20.1", 
+  "gdtools@0.5.0", "genefilter@1.92.0", "generics@0.1.4", "GenomicRanges@1.62.1", "gert@2.3.1", 
+  "GetoptLong@1.1.0", "ggforce@0.5.0", "ggfun@0.2.0", "ggiraph@0.9.4", "ggplot2@4.0.2", 
+  "ggplotify@0.1.3", "ggraph@2.2.2", "ggrepel@0.9.6", "ggridges@0.5.7", "ggtangle@0.1.1", 
+  "ggtree@4.0.4", "gh@1.5.0", "gitcreds@0.1.2", "GlobalOptions@0.1.3", "globals@0.19.0", 
+  "glue@1.8.0", "GO.db@3.22.0", "goftest@1.2-3", "GOSemSim@2.36.0", "gplots@3.3.0", 
+  "graph@1.88.1", "graphite@1.56.0", "graphlayouts@1.2.2", "gridExtra@2.3", "gridGraphics@0.5-1", 
+  "GSEABase@1.72.0", "gson@0.1.0", "gsubfn@0.7", "GSVA@2.4.4", "gtable@0.3.6", 
+  "gtools@3.9.5", "h5mread@1.2.1", "harmony@1.2.4", "hash@2.2.6.4", "HDF5Array@1.38.0", 
+  "here@1.0.2", "hexbin@1.28.5", "highr@0.11", "Hmisc@5.2-5", "hms@1.1.4", 
+  "htmlTable@2.4.3", "htmltools@0.5.9", "htmlwidgets@1.6.4", "httpuv@1.6.16", "httr@1.4.8", 
+  "httr2@1.2.2", "ica@1.0-3", "igraph@2.2.2", "impute@1.84.0", "ini@0.3.1", 
+  "IRanges@2.44.0", "irlba@2.3.7", "isoband@0.3.0", "iterators@1.0.14", "jquerylib@0.1.4", 
+  "jsonlite@2.0.0", "KEGGgraph@1.70.0", "KEGGREST@1.50.0", "knitr@1.51", "labeling@0.4.3", 
+  "lambda.r@1.2.4", "later@1.4.6", "lazyeval@0.2.2", "lifecycle@1.0.5", "limma@3.66.0", 
+  "listenv@0.10.0", "lmtest@0.9-40", "locfit@1.5-9.12", "magick@2.9.0", "magrittr@2.0.4", 
+  "MatrixGenerics@1.22.0", "matrixStats@1.5.0", "memoise@2.0.1", "memuse@4.2-3", "Mfuzz@2.70.0", 
+  "mime@0.13", "miniUI@0.1.2", "openssl@2.3.4", "org.Hs.eg.db@3.22.0", "org.Mm.eg.db@3.22.0", 
+  "otel@0.2.0", "parallelly@1.46.1", "patchwork@1.3.2", "pathview@1.50.0", "pbapply@1.7-4", 
+  "pillar@1.11.1", "pkgbuild@1.4.8", "pkgconfig@2.0.3", "pkgdown@2.2.0", "pkgload@1.5.0", 
+  "plotly@4.12.0", "plotrix@3.8-14", "plyr@1.8.9", "png@0.1-8", "polyclip@1.10-7", 
+  "praise@1.0.0", "preprocessCore@1.72.0", "prettyunits@1.2.0", "processx@3.8.6", "profvis@0.4.0", 
+  "progress@1.2.3", "progressr@0.18.0", "promises@1.5.0", "proto@1.0.0", "proxy@0.4-29", 
+  "ps@1.9.1", "purrr@1.2.1", "qvalue@2.42.0", "R.methodsS3@1.8.2", "R.oo@1.27.1", 
+  "R.utils@2.13.0", "R6@2.6.1", "ragg@1.5.0", "RANN@2.6.2", "rappdirs@0.3.4", 
+  "rcmdcheck@1.4.0", "RColorBrewer@1.1-3", "Rcpp@1.1.1", "RcppAnnoy@0.0.23", "RcppArmadillo@15.2.3-1", 
+  "RcppEigen@0.3.4.0.2", "RcppHNSW@0.6.0", "RcppProgress@0.4.2", "RcppTOML@0.2.3", "RCurl@1.98-1.17", 
+  "reactome.db@1.95.0", "ReactomePA@1.54.0", "readr@2.1.6", "remotes@2.5.0", "rentrez@1.2.4", "reshape2@1.4.5", 
+  "reticulate@1.45.0", "Rgraphviz@2.54.0", "rhdf5@2.54.1", "rhdf5filters@1.22.0", "Rhdf5lib@1.32.0", 
+  "RhpcBLASctl@0.23-42", "rjson@0.2.23", "rlang@1.1.7", "rmarkdown@2.30", "ROCR@1.0-12", 
+  "roxygen2@7.3.3", "rprojroot@2.1.1", "RSpectra@0.16-2", "RSQLite@2.4.6", "rstudioapi@0.18.0", 
+  "rsvd@1.0.5", "Rtsne@0.17", "rversions@3.0.0", "S4Arrays@1.10.1", "S4Vectors@0.48.0", 
+  "S7@0.2.1", "sass@0.4.10", "ScaledMatrix@1.18.0", "scales@1.4.0", "scattermore@1.2", 
+  "scatterpie@0.2.6", "sctransform@0.4.3", "Seqinfo@1.0.0", "sessioninfo@1.2.3", "Seurat@5.4.0", 
+  "SeuratObject@5.3.0", "shape@1.4.6.1", "shiny@1.12.1", "SingleCellExperiment@1.32.0", "sitmo@2.0.2", 
+  "snow@0.4-4", "sourcetools@0.1.7-1", "sp@2.2-1", "spam@2.11-3", "SparseArray@1.10.8", 
+  "sparseMatrixStats@1.22.0", "SpatialExperiment@1.20.0", "spatstat.data@3.1-9", "spatstat.explore@3.7-0", "spatstat.geom@3.7-0", 
+  "spatstat.random@3.4-4", "spatstat.sparse@3.1-0", "spatstat.univar@3.1-6", "spatstat.utils@3.2-1", "sqldf@0.4-12", 
+  "statmod@1.5.1", "STRINGdb@2.22.0", "stringr@1.6.0", "SummarizedExperiment@1.40.0", 
+  "sva@3.58.0", "sys@3.4.3", "systemfonts@1.3.1", "tensor@1.5.1", "testthat@3.3.2", 
+  "textshaping@1.0.4", "tibble@3.3.1", "tidydr@0.0.6", "tidygraph@1.3.1", "tidyr@1.3.2", 
+  "tidyselect@1.2.1", "tidytree@0.4.7", "tinytex@0.58", "tkWidgets@1.88.0", "treeio@1.34.0", 
+  "tweenr@2.0.3", "tzdb@0.5.0", "urlchecker@1.0.1", "usethis@3.2.1", "utf8@1.2.6", 
+  "uwot@0.2.4", "vctrs@0.7.1", "viridis@0.6.5", "viridisLite@0.4.3", "vroom@1.7.0", 
+  "waldo@0.6.2", "WGCNA@1.74", "whisker@0.4.1", "widgetTools@1.88.0", "withr@3.0.2", 
+  "xfun@0.56", "XML@3.99-0.22", "xml2@1.5.2", "xopen@1.0.1", "xtable@1.8-4", 
+  "XVector@0.50.0", "yaml@2.3.12", "yulab.utils@0.2.4", "zip@2.3.3", "zoo@1.8-15"
+)
+pkgs_2 <- c("Biobase@2.70.0", "BiocGenerics@0.56.0", "DEoptimR@1.1-4", "minpack.lm@1.2-4", "NormqPCR@1.56.0",
+  "qpcR@1.4-2", "ReadqPCR@1.56.0", "rgl@1.3.34", "robustbase@0.99-7","ggfortify@0.4.19","abind@1.4-8", "car@3.1-5", 
+  "carData@3.0-6", "colorspace@2.1-2", "cowplot@1.2.0", "dendextend@1.19.1", "doBy@4.7.1", "ellipse@0.5.0", "emmeans@2.0.1", 
+  "estimability@1.5.1", "factoextra@1.0.7", "FactoMineR@2.13", "flashClust@1.01-2", "forecast@9.0.1", "Formula@1.2-5", "ggpubr@0.6.2", 
+  "ggrepel@0.9.6", "ggsci@4.2.0", "ggsignif@0.6.4", "gridExtra@2.3", "leaps@3.2", "lme4@1.1-38", "lmtest@0.9-40", "MatrixModels@0.5-4", 
+  "minqa@1.2.8", "multcompView@0.1-11", "mvtnorm@1.3-3", "nloptr@2.2.1", "numDeriv@2016.8-1.1", "pbkrtest@0.5.5", "plyr@1.8.9", "polynom@1.4-1", 
+  "quantreg@6.1", "RcppArmadillo@15.2.3-1", "RcppEigen@0.3.4.0.2", "Rdpack@2.6.6", "reformulas@0.4.4", "reshape2@1.4.5", "rstatix@0.7.3", 
+  "scatterplot3d@0.3-44", "SparseM@1.84-2", "viridis@0.6.5", "zoo@1.8-15", "corpcor@1.6.10", "doParallel@1.0.17", "doSNOW@1.0.20", "foreach@1.5.2", 
+  "here@1.0.2", "iterators@1.0.14", "M3C@1.32.0", "matrixcalc@1.0-6", "RcppTOML@0.2.3", "reticulate@1.45.0", "rprojroot@2.1.1", "RSpectra@0.16-2", 
+  "Rtsne@0.17", "snow@0.4-4", "umap@0.2.10.0", "bitops@1.0-9", "caTools@1.18.3", "confintr@1.0.2", "data.table@1.18.2.1", "ggdendro@0.2.0", "ggpmisc@0.6.3", 
+  "ggpp@0.6.0", "kernlab@0.9-33", "lmodel2@1.7-4", "mixtools@2.0.0.1", "multcomp@1.4-29", "plotly@4.12.0", "sandwich@3.1-1", "segmented@2.2-1", "splus2R@1.3-5", 
+  "TH.data@1.1-5", "xts@0.14.1")
+
+pkg_install(pkgs_1, ask = FALSE)
+pkg_install(pkgs_2, ask = FALSE)
+pkg_install(c("url::https://cran.r-project.org/src/contrib/Archive/aPEAR/aPEAR_1.0.0.tar.gz","url::https://cran.r-project.org/src/contrib/Archive/XML/XML_3.99-0.20.tar.gz"), ask = FALSE)
+remotes::install_github("bnprks/BPCells/r", ref = "v0.3.1")
+unlink(list.files(path = .libPaths(), pattern = "^src$", 
+                  recursive = TRUE, full.names = TRUE, include.dirs = TRUE), 
+       recursive = TRUE)
+pak_cleanup(force = TRUE)
+EOF
+
+    Rscript $APPTAINER_TMPDIR/install_r.R
+
+    # --------------------------------------------------------------------------
+    # 5. Perl
+    # --------------------------------------------------------------------------
+    apt-get install -qy --no-install-recommends \
+      libconfig-inifiles-perl libconfig-ini-perl libtemplate-plugin-posix-perl \
+      libscalar-list-utils-perl libwww-perl libdatetime-perl libstatistics-r-perl \
+      cpanminus
+
+    cpanm --force -q Strict::Perl LWP Cwd less Class::MOP
 
 
-  # Cleaning:
-    # apt-get remove -qy --auto-remove software-properties-common build-essential gcc g++ make cmake libfreetype6-dev libpng-dev libtiff5-dev libjpeg-dev libxml2-dev libcairo2-dev libncurses5-dev liblzma-dev libharfbuzz-dev libfribidi-dev r-base-dev python3-dev cython3 pkg-config dirmngr apt-utils wget > /dev/null && \
-    apt-get -qy autoremove --purge > /dev/null && apt-get -q clean > /dev/null && \
-    python3 -m pip cache purge > /dev/null && \
-    rm -rf /var/lib/apt/lists/* /root/.cpanm /root/.cache /usr/share/doc/* /usr/share/man/* /usr/share/locale/* /usr/lib/*/include /usr/lib/*/*.a /usr/include/* /var/cache/apt/* /root/.wget-hsts /root/.cache/pip /var/cache/pip
+    # --------------------------------------------------------------------------
+    # 6. Pipeline Installation & Cleanup
+    # --------------------------------------------------------------------------
+    git clone -q https://github.com/BioinfoIPBLN/reanalyzerGSE /reanalyzerGSE
+    chmod +x /reanalyzerGSE/reanalyzerGSE.sh
+    chmod +x /reanalyzerGSE/scripts/*
+    chmod +x /reanalyzerGSE/external_software/miARma-seq/miARma
+    rm -rf /reanalyzerGSE/test_data
+    find /reanalyzerGSE -name ".git" -type d -exec rm -rf {} + 2>/dev/null || true
+
+    # Strip Binaries (reduce size)
+    find /usr/local/lib/R/site-library -name "*.so" -exec strip --strip-unneeded {} + 2>/dev/null || true
+    find /usr/local/lib/python3.*/dist-packages -name "*.so" -exec strip --strip-unneeded {} + 2>/dev/null || true
+    find /bin_external -type f -executable -exec strip --strip-unneeded {} + 2>/dev/null || true
+
+    # Remove R documentation and sources
+    rm -rf /usr/local/lib/R/site-library/*/help
+    rm -rf /usr/local/lib/R/site-library/*/doc
+    rm -rf /usr/local/lib/R/site-library/*/html
+
+    # Remove Python cache
+    find /usr/lib/python3* -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null || true
+    find /usr/local/lib/python3* -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null || true
+    find /usr/local/lib/python3* -name "*.pyc" -delete 2>/dev/null || true
+
+    # Keep only runtime libraries, remove build tools, reinstall some required by R packages
+    apt-get remove -qy --purge build-essential cmake \
+       libopenblas-dev liblapack-dev gfortran g++ gcc git
+    apt-get install -qy --no-install-recommends libgfortran5 libgomp1 libmagick++-dev libmagickwand-dev libmagickcore-dev imagemagick libuv1
+    apt-get autoremove -qy --purge
+    apt-get clean
+
+    # Cleanup
+    rm -rf /root/.cpan 2>/dev/null || true
+    rm -rf /root/.cache 2>/dev/null || true
+    rm -rf /root/.npm 2>/dev/null || true
 
 
+%environment
+    export PATH="/bin_external/edirect:/bin_external:/bin_external/lib:/reanalyzerGSE:/reanalyzerGSE/scripts:/reanalyzerGSE/external_software/miARma-seq/:$PATH"
+    export LC_ALL=en_US.UTF-8
+    export LANG=en_US.UTF-8
+    export LD_LIBRARY_PATH="/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"
 
-%environment    
-    export PATH="/root/edirect:/reanalyzerGSE:/reanalyzerGSE/scripts:/reanalyzerGSE/external_software/miARma-seq/:/bin_external/:/root/.local/bin:/bin:/:/root/.pyenv/shims/:$PATH"
-
-
-
+%runscript
+    exec /reanalyzerGSE/reanalyzerGSE.sh "$@"
