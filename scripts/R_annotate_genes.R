@@ -17,6 +17,9 @@ if(organism_cp=="Homo sapiens"){
   organism_cp_react <- "mouse"
   orgDB <- "org.Mm.eg.db"
   suppressMessages(library("org.Mm.eg.db",quiet = T,warn.conflicts = F))
+} else {
+  print("For now the only organisms supported for further adding annotation and info to gene IDs are human and mouse. There are plans to add more in the future, including both the already available orgDB and support via annotationForge to build custom databases...")
+  stop(paste0(organism," is currently not supported..."))
 }
 
 
@@ -94,16 +97,13 @@ if (exists("orgDB")){
 
   ### Take the files and annotate them
   for (file in grep("annotation",list.files(path=path,recursive=T, include.dirs=T, full.names=T,pattern=pattern_to_match),invert=T,val=T)){
-  	a <- as.data.frame(data.table::fread(file))
+	a <- as.data.frame(data.table::fread(file))
     if("Gene_ID" %in% colnames(a)){
       a$Gene_ID <- convert_ids(a$Gene_ID,mode)
       annot_summary_final$SYMBOL <- convert_ids(annot_summary_final$SYMBOL,mode)
       b <- merge(a,annot_summary_final,by.x="Gene_ID",by.y="SYMBOL",all.x=T)
-  	  write.table(b,file=gsub(".txt$","_annotation.txt",file),col.names = T,row.names = F,quote = F,sep="\t")	
+	  write.table(b,file=gsub(".txt$","_annotation.txt",file),col.names = T,row.names = F,quote = F,sep="\t")	
       print(paste0("Annotating ",basename(file)," ..."))
     }
   }
-} else {
-  print("For now the only organism supported for annotating gene IDs are human and mouse. There are plans to add more in the future, including both the already available orgDB and support via annotationForge to build custom databases...")
-  print(paste0(organism," is currently not supported..."))
 }
