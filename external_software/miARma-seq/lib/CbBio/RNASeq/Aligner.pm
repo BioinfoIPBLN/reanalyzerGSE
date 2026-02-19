@@ -2819,6 +2819,7 @@ sub hisat2{
 	      							    -1 \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \\
 	      							    -2 \$(cat $tmp_file | xargs dirname | uniq)/{}_2.fastq.gz \\
 	      							    --met-file {}.metrics --un-conc-gz {}_no_aligned.fastq.gz \\
+	      							    --new-summary --summary-file {}_hisat2.log \\
 	      							  $samtools_pipeline_pe && \\
 	      							  echo Done...{}_hisat2.bam && \\
 	      							  export _JAVA_OPTIONS=\"-Xms5g -Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD\" && \\
@@ -2838,7 +2839,7 @@ sub hisat2{
 								  
 								  CONTIG_COUNT=\$(samtools view -H \$(ls *.bam | shuf | head -1) | grep -c "^\@SQ")
                                                                   if [ \$CONTIG_COUNT -gt 1000 ]; then
-                                                                    echo "Genome has \$CONTIG_COUNT contigs (>1000), using top 100 largest contigs" | tee qc4.log
+                                                                    echo "Genome has \$CONTIG_COUNT contigs (>1000), using top 100 largest contigs for QC" | tee qc4.log
                                                                     samtools idxstats \$(ls *.bam | shuf | head -1) | sort -k2,2nr | head -100 | awk '{print \$1"\\t0\\t"\$2}' > top100_regions.bed
                                                                     multiBamSummary BED-file --BED top100_regions.bed -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz >> qc4.log 2>&1
                                                                   else
@@ -2907,6 +2908,7 @@ sub hisat2{
 	      							    -U \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \\
 	      							    -U \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \\
 	      							    --met-file {}.metrics --un-conc-gz {}_no_aligned.fastq.gz \\
+	      							    --new-summary --summary-file {}_hisat2.log \\
 	      							  $samtools_pipeline_se && \\
 	      							  echo Done...{}_hisat2.bam && \\
 	      							  export _JAVA_OPTIONS=\"-Xms5g -Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD\" && \\
@@ -2926,7 +2928,7 @@ sub hisat2{
 
 								  CONTIG_COUNT=\$(samtools view -H \$(ls *.bam | shuf | head -1) | grep -c "^\@SQ")
                                                                   if [ \$CONTIG_COUNT -gt 1000 ]; then
-                                                                    echo "Genome has \$CONTIG_COUNT contigs (>1000), using top 100 largest contigs" | tee qc4.log
+                                                                    echo "Genome has \$CONTIG_COUNT contigs (>1000), using top 100 largest contigs for QC" | tee qc4.log
                                                                     samtools idxstats \$(ls *.bam | shuf | head -1) | sort -k2,2nr | head -100 | awk '{print \$1"\\t0\\t"\$2}' > top100_regions.bed
                                                                     multiBamSummary BED-file --BED top100_regions.bed -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz >> qc4.log 2>&1
                                                                   else
@@ -3363,7 +3365,7 @@ sub star{
 					                          
 								  CONTIG_COUNT=\$(samtools view -H \$(ls *.bam | shuf | head -1) | grep -c "^\@SQ")
                                                                   if [ \$CONTIG_COUNT -gt 1000 ]; then
-                                                                    echo "Genome has \$CONTIG_COUNT contigs (>1000), using top 100 largest contigs" | tee qc4.log
+                                                                    echo "Genome has \$CONTIG_COUNT contigs (>1000), using top 100 largest contigs for QC" | tee qc4.log
                                                                     samtools idxstats \$(ls *.bam | shuf | head -1) | sort -k2,2nr | head -100 | awk '{print \$1"\\t0\\t"\$2}' > top100_regions.bed
                                                                     multiBamSummary BED-file --BED top100_regions.bed -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz >> qc4.log 2>&1
                                                                   else
@@ -3441,7 +3443,7 @@ sub star{
 		                          
 					  CONTIG_COUNT=\$(samtools view -H \$(ls *.bam | shuf | head -1) | grep -c "^\@SQ")
                                           if [ \$CONTIG_COUNT -gt 1000 ]; then
-                                             echo "Genome has \$CONTIG_COUNT contigs (>1000), using top 100 largest contigs" | tee qc4.log
+                                             echo "Genome has \$CONTIG_COUNT contigs (>1000), using top 100 largest contigs for QC" | tee qc4.log
                                              samtools idxstats \$(ls *.bam | shuf | head -1) | sort -k2,2nr | head -100 | awk '{print \$1"\\t0\\t"\$2}' > top100_regions.bed
                                              multiBamSummary BED-file --BED top100_regions.bed -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz >> qc4.log 2>&1
                                           else

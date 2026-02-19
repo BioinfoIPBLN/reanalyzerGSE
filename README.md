@@ -4,7 +4,7 @@ reanalyzerGSE is a pipeline to assist with and streamline transcriptomic analyse
 ## Installation
 We suggest alternatives for installation. Please choose one of:
 
-1) An Apptainer/Singularity container (~3 GB) is provided. You can either:
+1) An Apptainer/Singularity container (~5 GB) is provided. You can either:
 
 1.1) Use the .def file to create the .sif image by executing:
 ```
@@ -87,6 +87,7 @@ reanalyzerGSE.sh -h
 	        -Tc | -time_course # Whether to perform additional time-course analyses as a last step ('yes' or 'no', by default)
 	        -Na | -network_analyses # Whether to perform network analyses, only for human or mouse analyses ('yes' or 'no', by default)
 	        -apl | -auto_panther_log # Whether to perform additional autoGO and Panther analyses for DEGs separated by log2Fc positive or negative ('yes' or 'no', by default)
+	        -eDe | -exploreDE_se # Whether to generate a SummarizedExperiment object (.qs2) for the exploreDE Shiny app ('no' by default, or 'yes'). Currently only supported for Human (Homo_sapiens) analyses.
 	
 	        #### Processing parameters:
 	        -s | -strand # Strandness of the library ('yes, 'no', 'reverse'). If not provided and '-t' used, this would be predicted by salmon. Please use this parameter if prediction not correct, see explanations in for example in bit.ly/strandness0 and bit.ly/strandness

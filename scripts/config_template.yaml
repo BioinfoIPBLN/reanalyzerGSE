@@ -54,6 +54,7 @@ convert_tables_excel: "no"             # Convert tables to .xlsx ('yes' or 'no')
 time_course: "no"                      # Time-course analyses ('yes' or 'no')
 network_analyses: "no"                 # Network analyses, human/mouse only ('yes' or 'no')
 auto_panther_log: "no"                 # Additional autoGO/Panther by log2Fc ('yes' or 'no')
+exploreDE_se: "no"                     # Generate SummarizedExperiment for exploreDE app ('yes' or 'no', Human only)
 
 # === Processing parameters ===
 strand: ""                             # Strandness ('yes', 'no', 'reverse'; predicted by salmon if empty)

@@ -267,7 +267,7 @@ if [[ $debug_step == "all" || $debug_step == "step1a_bis" ]]; then
                     --un-conc-gz $clean_seqs_location/${f}_%.fastq.gz \
                     --summary-file $clean_seqs_location/${f}_removal_summary.txt \
                     > /dev/null
-                 
+ 
                  # Rename output to match expected format (_1.fastq.gz instead of _1.fastq.gz) - hisat2 output fits usually but let's ensure
                  mv $clean_seqs_location/${f}_1.fastq.gz $clean_seqs_location/${f}_1.fastq.gz 2>/dev/null || true 
                  mv $clean_seqs_location/${f}_2.fastq.gz $clean_seqs_location/${f}_2.fastq.gz 2>/dev/null || true
@@ -444,7 +444,7 @@ if [[ $debug_step == "all" || $debug_step == "step1d" ]]; then
 	fi
 	if [ ! -z "$covariables" ]; then
  		echo $covariables > $output_folder/$name/GEO_info/covariables.txt
-  	fi	
+  	fi
 fi
 
 ### STEP 1. Give info of NCBI's current genome:
@@ -697,8 +697,9 @@ if [[ $debug_step == "all" || $debug_step == "step3a" ]]; then
 				fi
 			elif [[ "$aligner" == "kallisto" ]]; then
 				sed -i "s,aligner=star,aligner=kallisto,g" miarma$index.ini
+				sed -i "s,fasta=$reference_genome,fasta=$transcripts,g" miarma$index.ini
 				if [ -z "$reference_genome_index" ]; then
-					sed -i "s,indexname=,indexname=${organism}_$(basename ${reference_genome%.*})_$(basename ${gff%.*})_kallisto_idx,g" miarma$index.ini
+					sed -i "s,indexname=,indexname=${organism}_$(basename ${transcripts%.*})_kallisto_idx,g" miarma$index.ini
 					sed -i "s,indexdir=,indexdir=$output_folder/$name/indexes/,g" miarma$index.ini
 				else
 					sed -i "s,kallistoindex=,kallistoindex=$reference_genome_index,g" miarma$index.ini
@@ -809,6 +810,26 @@ if [[ $debug_step == "all" || $debug_step == "step4" ]]; then
 		cd $output_folder/$name/final_results_reanalysis$index/DGE/
 		tar -cf - $(ls | egrep ".RData$") | pigz -p $cores > allRData.tar.gz; rm -rf $(ls | egrep ".RData$")
 	done
+	### Generate SummarizedExperiment for exploreDE app if requested
+	if [[ "$exploreDE_se" == "yes" ]]; then
+		echo -e "\nGenerating SummarizedExperiment for exploreDE...\n"
+		for index in "${!array[@]}"; do
+			final_dir=$output_folder/$name/final_results_reanalysis$index
+			if [ -f "$final_dir/Raw_counts_genes.txt" ] && [ -f "$final_dir/TPM_counts_genes.txt" ] && [ -f "$final_dir/DGE/list_comp.txt" ]; then
+				Rscript $CURRENT_DIR/scripts/prepare_SE.R \
+					"$final_dir/Raw_counts_genes.txt" \
+					"$final_dir/TPM_counts_genes.txt" \
+					"$output_folder/$name/GEO_info/samples_info.txt" \
+					"$final_dir/DGE/list_comp.txt" \
+					"$final_dir/DGE" \
+					"DGE_analysis_comp" \
+					"$name" 2>&1 | tee -a "$final_dir/prepare_SE.log"
+			else
+				echo "Skipping exploreDE SE generation for index $index: required files not found"
+			fi
+		done
+	fi
+
 	export debug_step="all"
 	echo -e "\n\nSTEP 4: DONE\nCurrent date/time: $(date)\n\n"
 	if [[ "$perform_differential_analyses" == "no" ]]; then
@@ -818,7 +839,7 @@ fi
 
 
 ### STEP 5. Time course analyses if required
-if [[ $debug_step == "all" || $debug_step == "step5" ]]; then	
+if [[ $debug_step == "all" || $debug_step == "step5" ]]; then
 	for index in "${!array[@]}"; do
 		if [[ "$time_course" == "yes" ]]; then
 			echo -e "\n\nSTEP 5: Starting...\nCurrent date/time: $(date)\n\n"
@@ -855,6 +876,8 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 		if [ -z "$annotation_file" ]; then
 			annotation_file=${array[index]}
 		fi
+
+		# Network analyses (Only implemented for Human/Mouse)
 		if [[ "$organism" == "Mus_musculus" || "$organism" == "Homo_sapiens" || "$organism" == "Mus musculus" || "$organism" == "Homo sapiens" ]]; then
 			if [[ $network_analyses == "yes" ]]; then
 				mkdir -p network_analyses && rm -rf network_analyses/* && cd network_analyses
@@ -862,12 +885,16 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
     				echo -e "\nPerforming network analyses...\n"
 				R_network_analyses.R $output_folder/$name/final_results_reanalysis$index/DGE/ $output_folder/$name/final_results_reanalysis$index/RM_counts_genes.txt "^DGE_analysis_comp[0-9]+.txt$" $taxonid &> network_analyses_funct_enrichment.log
 			fi
-			if [[ "$functional_enrichment_analyses" == "no" ]]; then
+		fi
+
+		# Functional Enrichment Analyses
+		if [[ "$functional_enrichment_analyses" == "no" ]]; then
+			echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
+    			echo -e "\nSkipping functional enrichment analyses\n"
+		else
+			if [[ "$organism" == "Mus_musculus" || "$organism" == "Homo_sapiens" || "$organism" == "Mus musculus" || "$organism" == "Homo sapiens" ]]; then
 				echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
-    				echo -e "\nSkipping functional enrichment analyses\n"
-			else
-				echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
-    				echo -e "\nPerforming functional enrichment analyses for DEGs. The results up to this point are ready to use (including DEGs and expression, that are only lacking annotation). This step of funtional enrichment analyses may take long if many significant DEGs, comparisons, or analyses...\n"
+    				echo -e "\nPerforming functional enrichment analyses for DEGs. The results up to this point are ready to use (including DEGs and expression table including gene_ids). This step of funtional enrichment analyses may take long if many significant DEGs, comparisons, or analyses...\n"
 				cd $output_folder/$name/final_results_reanalysis$index/DGE/
 				ls | egrep "^DGE_analysis_comp[0-9]+.txt$" | parallel --joblog R_clusterProfiler_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_clusterProfiler_analyses_parallel.R $PWD $organism "1" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution '^{}$' $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_{}_funct_enrichment.log"
 				echo -e "\nPerforming autoGO and Panther execution... this may take long if many genes or comparisons...\n"
@@ -877,85 +904,79 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 					ls | egrep "^DGE_limma_timecourse.*.txt$" | parallel --joblog R_clusterProfiler_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_clusterProfiler_analyses_parallel.R $PWD $organism "1" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution '^{}$' $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_{}_funct_enrichment.log"
 					ls | egrep "^DGE_limma_timecourse.*.txt$" | parallel --joblog R_autoGO_panther_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism "1" $databases_function {} $panther_method $auto_panther_log &> autoGO_panther_{}_funct_enrichment.log"
 				fi
-			fi
-		else
-			echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
-   			echo "Organism is $organism... Functional analyses apart from human/mouse is not fully supported yet"
-			# Determine which annotation file to use for functional enrichment
-			annot_enrichm=""
-			if [ ! -z "$non_reference_funct_enrichm" ]; then
-				echo "Using provided non-reference functional enrichment file: $non_reference_funct_enrichm"
-				annot_enrichm="$non_reference_funct_enrichm"
-			elif [ $(egrep -c "GO:|Ontology|tology_term|tology term" $annotation_file) -gt 0 ]; then
-				echo "Using main annotation file for functional enrichment: $annotation_file"
-				annot_enrichm="$annotation_file"
-			fi
-
-			if [ ! -z "$annot_enrichm" ]; then
-				cd $output_folder/$name/final_results_reanalysis$index/DGE/
-				echo "An automatic approach based on clusterProfiler's enrichr function and automatically extracted GO terms from the annotation can be applied for DEGs..."
-				
-				# Check if input is GAF (Gene Association File)
-				if [[ "$annot_enrichm" == *.gaf ]] || [[ "$annot_enrichm" == *.gaf.gz ]]; then
-					echo "Detected GAF format. Extracting Gene IDs and GO terms..."
-					# GAF 2.1 format: Column 2 is DB Object ID (Gene ID), Column 5 is GO ID.
-					# Handle .gz or plain text
-					if [[ "$annot_enrichm" == *.gz ]]; then
-						cat_cmd="zcat"
-					else
-						cat_cmd="cat"
-					fi
-					
-					# Extract cols 2 and 5, skip comments (!), minimal cleaning
-					$cat_cmd "$annot_enrichm" | grep -v "^!" | cut -f 2,5 | sort -u > $output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annot_enrichm).automatically_extracted_GO_terms.txt
-					
-				elif [[ "$annot_enrichm" == *.gmt ]] || [[ "$annot_enrichm" == *.gmt.gz ]]; then
-					echo "Detected GMT format. Transforming to GeneID-TermID format..."
-					# GMT format: TermID <tab> Description <tab> Gene1 <tab> Gene2 ...
-					# We need: GeneID <tab> TermID
-					if [[ "$annot_enrichm" == *.gz ]]; then
-						cat_cmd="zcat"
-					else
-						cat_cmd="cat"
-					fi
-					
-					# Process GMT: 
-					# 1. Read line
-					# 2. Extract Term (col 1)
-					# 3. Iterate from col 3 to end (Gene IDs)
-					# 4. Print "GeneID \t TermID"
-					$cat_cmd "$annot_enrichm" | awk -F'\t' '{term=$1; for(i=3;i<=NF;i++) print $i"\t"term}' | sort -u > $output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annot_enrichm).automatically_extracted_GO_terms.txt
-
-				else
-					# Assume GFF/GTF/GFF3
-					echo "Detected GFF/GTF format. Extracting Gene IDs and GO terms..."
-					paste <(egrep "GO:|,GO:|Ontology|tology_term|tology term" $annot_enrichm | sed 's,.*ID=,,g;s,.*Parent=,,g;s,;.*,,g') <(egrep "GO:|,GO:|Ontology|tology_term|tology term" $annot_enrichm | sed 's,.*tology_term=,,g') | sort -t $'\t' -k1,1 -k2,2 | awk -F'\t' '!a[$1,$2]++' | awk -F'\t' '{ a[$1] = (a[$1] ? a[$1]","$2 : $2); } END { for (i in a) print i"\t"a[i]; }' | awk -F '\t' '{n=split($2,a,","); for (i=1; i<=n; i++) print $1,a[i]}' | uniq > $output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annot_enrichm).automatically_extracted_GO_terms.txt
-				fi
-
-				annotation_go=$output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annot_enrichm).automatically_extracted_GO_terms.txt
-				sed -i '1s/^/source_id\tComputed_GO_Process_IDs\n/' $annotation_go
-				
-				if [ -s "$annotation_go" ]; then
-					R_clusterProfiler_enrichr.R $annotation_go $output_folder/$name/final_results_reanalysis$index/RPKM_counts_genes.txt $output_folder/$name/final_results_reanalysis$index/DGE "^DGE_analysis_comp[0-9]+.txt$" &> clusterProfiler_enrichr_funct_enrichment.log
-					echo "DONE. Please double check the attempt of executing enrichr with automatically detected GO terms from the annotation"
-				fi
 			else
-				echo "For $organism and the annotation $annotation_file (or provided enrichment file), it does not seem there's GO or functional information available..."
-			fi
-		fi
-		cd $output_folder/$name/final_results_reanalysis$index/DGE/
-		echo -e "\nFunctional enrichment analyses done!\nYou may want to check out the following logs, which seem to contain some errors:\n"
-		grep Err* $(ls | egrep _funct_enrichment.log) | cut -d":" -f1 | sed 's,.txt_funct_enrichment.log,,g' | sort | uniq
+				echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
+   				echo "Organism is $organism... Functional analyses apart from human/mouse is not fully supported yet"
+				# Determine which annotation file to use for functional enrichment
+				annot_enrichm=""
+				if [ ! -z "$non_reference_funct_enrichm" ]; then
+					echo "Using provided non-reference functional enrichment file: $non_reference_funct_enrichm"
+					annot_enrichm="$non_reference_funct_enrichm"
+				elif [ $(egrep -c "GO:|Ontology|tology_term|tology term" $annotation_file) -gt 0 ]; then
+					echo "Using main annotation file for functional enrichment: $annotation_file"
+					annot_enrichm="$annotation_file"
+				fi
 
-		# Add to the tables of functional enrichment the number of genes up/down:
-		cd $output_folder/$name/final_results_reanalysis$index/
-		echo "Processing results of functional enrichment analyses if any, for example executing Revigo..."
-		files_to_process=$(find . \( -name "*.txt" -o -name "*.tsv" -o -name "*.csv" \) | grep funct | grep -v _err.txt)
-		if [ -n "$files_to_process" ]; then
+				if [ ! -z "$annot_enrichm" ]; then
+					cd $output_folder/$name/final_results_reanalysis$index/DGE/
+					echo "An automatic approach based on clusterProfiler's enrichr function and automatically extracted GO terms from the annotation can be applied for DEGs..."
+
+					# Check if input is GAF (Gene Association File)
+					if [[ "$annot_enrichm" == *.gaf ]] || [[ "$annot_enrichm" == *.gaf.gz ]]; then
+						echo "Detected GAF format. Extracting Gene IDs and GO terms..."
+						# GAF 2.1 format: Column 2 is DB Object ID (Gene ID), Column 5 is GO ID.
+						# Handle .gz or plain text
+						# Extract cols 2 and 5, skip comments (!), minimal cleaning
+						zcat -f "$annot_enrichm" | grep -v "^!" | cut -f 2,5 | sort -u > $output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annot_enrichm).automatically_extracted_GO_terms.txt
+
+					elif [[ "$annot_enrichm" == *.gmt ]] || [[ "$annot_enrichm" == *.gmt.gz ]]; then
+						echo "Detected GMT format. Transforming to GeneID-TermID format..."
+						# GMT format: TermID <tab> Description <tab> Gene1 <tab> Gene2 ...
+						# We need: GeneID <tab> TermID
+						# Process GMT:
+						# 1. Read line
+						# 2. Extract Term (col 1)
+						# 3. Iterate from col 3 to end (Gene IDs)
+						# 4. Print "GeneID \t TermID"
+						zcat -f "$annot_enrichm" | awk -F'\t' '{term=$1; for(i=3;i<=NF;i++) print $i"\t"term}' | sort -u > $output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annot_enrichm).automatically_extracted_GO_terms.txt
+
+					else
+						# Assume GFF/GTF/GFF3
+						echo "Detected GFF/GTF format. Extracting Gene IDs and GO terms..."
+						paste <(egrep "GO:|,GO:|Ontology|tology_term|tology term" $annot_enrichm | sed 's,.*ID=,,g;s,.*Parent=,,g;s,;.*,,g') <(egrep "GO:|,GO:|Ontology|tology_term|tology term" $annot_enrichm | sed 's,.*tology_term=,,g') | sort -t $'\t' -k1,1 -k2,2 | awk -F'\t' '!a[$1,$2]++' | awk -F'\t' '{ a[$1] = (a[$1] ? a[$1]","$2 : $2); } END { for (i in a) print i"\t"a[i]; }' | awk -F '\t' '{n=split($2,a,","); for (i=1; i<=n; i++) print $1,a[i]}' | uniq > $output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annot_enrichm).automatically_extracted_GO_terms.txt
+					fi
+
+					annotation_go=$output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annot_enrichm).automatically_extracted_GO_terms.txt
+					sed -i '1s/^/source_id\tComputed_GO_Process_IDs\n/' $annotation_go
+
+					if [ -s "$annotation_go" ]; then
+						R_clusterProfiler_enrichr.R $annotation_go $output_folder/$name/final_results_reanalysis$index/RPKM_counts_genes.txt $output_folder/$name/final_results_reanalysis$index/DGE "^DGE_analysis_comp[0-9]+.txt$" &> clusterProfiler_enrichr_funct_enrichment.log
+						echo "DONE. Please double check the attempt of executing enrichr with automatically detected GO terms from the annotation"
+					fi
+				else
+					echo "For $organism and the annotation $annotation_file (or provided enrichment file), it does not seem there's GO or functional information available..."
+				fi
+			fi
+
 			cd $output_folder/$name/final_results_reanalysis$index/DGE/
-			echo $files_to_process | parallel --joblog R_enrich_format_analyses_parallel_log_parallel.txt -j $cores "file={}; R_enrich_format.R \"\$file\" \$(echo \"\$file\" | sed 's,DGE/.*,DGE/,g')\$(echo \"\$file\" | sed 's,.*DGE_analysis_comp,DGE_analysis_comp,g;s,_pval.*,,g;s,_fdr.*,,g;s,_funct.*,,g;s,_cluster.*,,g' | sed 's,.txt,,g').txt $organism $rev_thr" &> $PWD/enrichment_format.log
-		else
-			echo "No functional enrichment results found, exiting the pipeline..."; exit 1
+			error_files=$(grep -l "Err" *_funct_enrichment.log 2>/dev/null | sed 's/.txt_funct_enrichment.log//g' | sort | uniq)
+			if [ -n "$error_files" ]; then
+			    echo -e "\nFunctional enrichment analyses done!\nYou may want to check out the following logs, which seem to contain some errors:\n"
+			    echo "$error_files"
+			else
+			    echo -e "\nFunctional enrichment analyses done! No errors detected in logs."
+			fi
+
+			# Add to the tables of functional enrichment the number of genes up/down:
+			cd $output_folder/$name/final_results_reanalysis$index/
+			echo "Processing results if any"
+			files_to_process=$(find . \( -name "*.txt" -o -name "*.tsv" -o -name "*.csv" \) | grep funct | grep -v _err.txt)
+			if [ -n "$files_to_process" ]; then
+				cd $output_folder/$name/final_results_reanalysis$index/DGE/
+				echo $files_to_process | parallel --joblog R_enrich_format_analyses_parallel_log_parallel.txt -j $cores "file={}; R_enrich_format.R \"\$file\" \$(echo \"\$file\" | sed 's,DGE/.*,DGE/,g')\$(echo \"\$file\" | sed 's,.*DGE_analysis_comp,DGE_analysis_comp,g;s,_pval.*,,g;s,_fdr.*,,g;s,_funct.*,,g;s,_cluster.*,,g' | sed 's,.txt,,g').txt $organism $rev_thr" &> $PWD/enrichment_format.log
+			else
+				echo "No functional enrichment results found?"
+			fi
 		fi
 	done
 	export debug_step="all"
@@ -1025,7 +1046,7 @@ if [[ $debug_step == "all" || $debug_step == "step8" ]]; then
 				rm -rf $(ls | egrep ".bam$") $TMPDIR
 			fi
 		done
-	fi	
+	fi
 
 	cd $output_folder/$name/ && rm $(find . -name "*_fdr_05.txt" -o -name "*_logneg.txt" -o -name "*_logpos.txt")
 	if [ "$convert_tables_excel" == "yes" ]; then

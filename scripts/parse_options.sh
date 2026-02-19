@@ -62,6 +62,7 @@ for argument in $options; do
 	        -Tc | -time_course # Whether to perform additional time-course analyses as a last step ('yes' or 'no', by default)
 	        -Na | -network_analyses # Whether to perform network analyses, only for human or mouse analyses ('yes' or 'no', by default)
 	        -apl | -auto_panther_log # Whether to perform additional autoGO and Panther analyses for DEGs separated by log2Fc positive or negative ('yes' or 'no', by default)
+	        -eDe | -exploreDE_se # Whether to generate a SummarizedExperiment object (.qs2) for the exploreDE Shiny app ('yes' or 'no', by default). Only works for Human (Homo_sapiens) analyses.
 	
 	        #### Processing parameters:
 	        -s | -strand # Strandness of the library ('yes, 'no', 'reverse'). If not provided and '-t' used, this would be predicted by salmon. Please use this parameter if prediction not correct, see explanations in for example in bit.ly/strandness0 and bit.ly/strandness
@@ -187,6 +188,7 @@ for argument in $options; do
 		-Freq) bam_require_flags=${arguments[index]} ;;
 		-Fdup) bam_dedup=${arguments[index]} ;;
 		-nrf) non_reference_funct_enrichm=${arguments[index]} ;;
+		-eDe) exploreDE_se=${arguments[index]} ;;
 	esac
 done
 
@@ -423,6 +425,9 @@ if [ -z "$bam_require_flags" ]; then
 fi
 if [ -z "$bam_dedup" ]; then
 	bam_dedup="no"
+fi
+if [ -z "$exploreDE_se" ]; then
+	exploreDE_se="no"
 fi
 
 seqs_location=$output_folder/$name/raw_reads
