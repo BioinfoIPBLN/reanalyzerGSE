@@ -23,7 +23,7 @@ From: ubuntu:24.04
       libmagick++-dev libmagickwand-dev libmagickcore-dev imagemagick \
       libopenblas-dev liblapack-dev libcairo2-dev libncurses5-dev \
       libbz2-dev liblzma-dev libtbb12 libdeflate0 libdeflate-dev libisal2 libisal-dev \
-      libhdf5-dev libgl1-mesa-dev libglu1-mesa \
+      libhdf5-dev libgl1-mesa-dev libglu1-mesa libnode-dev \
       python3-dev python3-pip python3-venv python3-setuptools python-is-python3 picard-tools \
       cython3 \
       fastqc pigz parallel zip unzip bzip2 expat file jq \
@@ -238,7 +238,8 @@ pkgs_2 <- c("Biobase@2.70.0", "BiocGenerics@0.56.0", "DEoptimR@1.1-4", "minpack.
 pkgs_3 <- c("AnnotationHub@4.0.0","BiocBaseUtils@1.12.0","BiocManager@1.30.27","BiocVersion@3.22.0","callr@3.7.6",
   "cellranger@1.1.0","conflicted@1.2.0","dtplyr@1.3.3","forcats@1.0.1","gargle@1.6.1","googledrive@2.1.2", "googlesheets4@1.1.2",
   "haven@2.5.5","ids@1.0.1","processx@3.8.6","ps@1.9.1","ragg@1.5.0","readxl@1.4.5","rematch@2.0.0","rematch2@2.1.2", "reprex@2.1.1",
-  "rvest@1.0.5","selectr@0.5-1","textshaping@1.0.4","tidyverse@2.0.0","uuid@1.2-2","stephenturner/annotables@5bf7dc0")
+  "rvest@1.0.5","selectr@0.5-1","textshaping@1.0.4","tidyverse@2.0.0","uuid@1.2-2","stephenturner/annotables@5bf7dc0", "GenomeInfoDbData@1.2.15",
+  "igvShiny@1.6.0","randomcoloR@1.1.0.1", "V8@8.0.1", "shinyjs@2.1.1")
 
 pkg_install(pkgs_1, ask = FALSE)
 pkg_install(pkgs_2, ask = FALSE)

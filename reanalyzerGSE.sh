@@ -1052,6 +1052,29 @@ if [[ $debug_step == "all" || $debug_step == "step8" ]]; then
 	if [ "$convert_tables_excel" == "yes" ]; then
 		R_convert_tables.R $output_folder/$name/ $cores "log_parallel|jquery|bamqc|rnaseqqc|samtools|strand" > /dev/null 2>&1
 	fi
+	### Deploy igvShinyApp.R to final results folders with real paths substituted
+	if [ -f "$CURRENT_DIR/scripts/igvShinyApp.R" ]; then
+		IFS=', ' read -r -a array_annot <<< "$annotation"
+		for index in "${!array_annot[@]}"; do
+			final_dir_igv=$(find $output_folder/$name -maxdepth 1 -type d -name "final_results_reanalysis${index}_*" | head -1)
+			if [ -z "$final_dir_igv" ]; then
+				final_dir_igv="$output_folder/$name/final_results_reanalysis${index}_$(basename $output_folder)"
+			fi
+			if [ -d "$final_dir_igv" ]; then
+				bw_dir="$output_folder/$name/miARma_out${index}/${aligner}_results"
+				gtf_for_igv="${array_annot[index]}"
+				cp "$CURRENT_DIR/scripts/igvShinyApp.R" "$final_dir_igv/igvShinyApp.R"
+				sed -i "s|/path/to/reference_genome.fa|${reference_genome}|g" "$final_dir_igv/igvShinyApp.R"
+				sed -i "s|/path/to/annotation.gtf|${gtf_for_igv}|g"          "$final_dir_igv/igvShinyApp.R"
+				sed -i "s|/path/to/bigwig_folder/|${bw_dir}/|g"              "$final_dir_igv/igvShinyApp.R"
+				sed -i "s|GENOME_NAME_PLACEHOLDER|${organism}|g"             "$final_dir_igv/igvShinyApp.R"
+				echo -e "\nigvShinyApp.R deployed to $final_dir_igv with pipeline paths pre-filled.\n"
+				echo -e "Launch with: Rscript -e \"shiny::runApp('$final_dir_igv/igvShinyApp.R')\"\n"
+				echo -e "Note: update 'genome_name' inside the app if the organism name is not recognised by igvShiny (e.g. use 'mm39' instead of 'Mus_musculus').\n"
+			fi
+		done
+	fi
+
 	export debug_step="all"
 	echo -e "\n\nSTEP 8: DONE\nCurrent date/time: $(date)\n\n"
 fi
