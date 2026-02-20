@@ -200,7 +200,7 @@ sub featureCount{
 	 			    fi
 	 			    cd $projectdir && mkdir -p \$PWD/../multiqc_out && if [ \$(ls \$PWD/../multiqc_out | wc -l) -eq 0 ]; then
        				       echo 'Gathering all QC reports with MultiQC'
-	     			       multiqc -f \$PWD/../../ -n multiqc_report -o \$PWD/../multiqc_out -p -q > \$PWD/../multiqc_out/multiqc.log 2>&1
+	     		       multiqc -f \$PWD/../../ --ignore 'miARma_stat*' -n multiqc_report -o \$PWD/../multiqc_out -p -q > \$PWD/../multiqc_out/multiqc.log 2>&1
 	   			    fi};
 			
 			# Simplified execution without legacy renaming hacks

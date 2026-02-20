@@ -1068,9 +1068,6 @@ if [[ $debug_step == "all" || $debug_step == "step8" ]]; then
 				sed -i "s|/path/to/annotation.gtf|${gtf_for_igv}|g"          "$final_dir_igv/igvShinyApp.R"
 				sed -i "s|/path/to/bigwig_folder/|${bw_dir}/|g"              "$final_dir_igv/igvShinyApp.R"
 				sed -i "s|GENOME_NAME_PLACEHOLDER|${organism}|g"             "$final_dir_igv/igvShinyApp.R"
-				echo -e "\nigvShinyApp.R deployed to $final_dir_igv with pipeline paths pre-filled.\n"
-				echo -e "Launch with: Rscript -e \"shiny::runApp('$final_dir_igv/igvShinyApp.R')\"\n"
-				echo -e "Note: update 'genome_name' inside the app if the organism name is not recognised by igvShiny (e.g. use 'mm39' instead of 'Mus_musculus').\n"
 			fi
 		done
 	fi

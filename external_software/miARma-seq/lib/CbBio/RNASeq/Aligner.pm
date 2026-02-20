@@ -2848,8 +2848,8 @@ sub hisat2{
 
 		  						  plotCorrelation --corData deeptools_all_bams.npz --corMethod spearman --plotFile deeptools_all_bams.npz_correlation_spearman.pdf --whatToPlot heatmap --skipZeros --plotTitle \"Spearman Correlation\" --outFileCorMatrix deeptools_all_bams.npz_correlation_spearman_scores.tab --plotNumbers >> qc4.log 2>&1
 		  						  plotCorrelation --corData deeptools_all_bams.npz --corMethod pearson --plotFile deeptools_all_bams.npz_correlation_pearson.pdf --whatToPlot heatmap --skipZeros --plotTitle \"Pearson Correlation\" --outFileCorMatrix deeptools_all_bams.npz_correlation_pearson_scores.tab --plotNumbers >> qc4.log 2>&1
-		   						  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA.pdf --outFileNameData deeptools_all_bams.npz_PCA.tab && \\ >> qc4.log 2>&1
-		   						  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_2.pdf --outFileNameData deeptools_all_bams.npz_PCA_2.tab --rowCenter && \\ >> qc4.log 2>&1
+		   						  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA.pdf --outFileNameData deeptools_all_bams.npz_PCA.tab >> qc4.log 2>&1
+		   						  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_2.pdf --outFileNameData deeptools_all_bams.npz_PCA_2.tab --rowCenter >> qc4.log 2>&1
 		   						  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_3.pdf --outFileNameData deeptools_all_bams.npz_PCA_3.tab --transpose  >> qc4.log 2>&1
 	    						    fi};
 					}
@@ -2937,8 +2937,8 @@ sub hisat2{
 
 		  						  plotCorrelation --corData deeptools_all_bams.npz --corMethod spearman --plotFile deeptools_all_bams.npz_correlation_spearman.pdf --whatToPlot heatmap --skipZeros --plotTitle \"Spearman Correlation\" --outFileCorMatrix deeptools_all_bams.npz_correlation_spearman_scores.tab --plotNumbers >> qc4.log 2>&1
 		  						  plotCorrelation --corData deeptools_all_bams.npz --corMethod pearson --plotFile deeptools_all_bams.npz_correlation_pearson.pdf --whatToPlot heatmap --skipZeros --plotTitle \"Pearson Correlation\" --outFileCorMatrix deeptools_all_bams.npz_correlation_pearson_scores.tab --plotNumbers >> qc4.log 2>&1
-		   						  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA.pdf --outFileNameData deeptools_all_bams.npz_PCA.tab && \\ >> qc4.log 2>&1
-		   						  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_2.pdf --outFileNameData deeptools_all_bams.npz_PCA_2.tab --rowCenter && \\ >> qc4.log 2>&1
+		   						  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA.pdf --outFileNameData deeptools_all_bams.npz_PCA.tab >> qc4.log 2>&1
+		   						  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_2.pdf --outFileNameData deeptools_all_bams.npz_PCA_2.tab --rowCenter >> qc4.log 2>&1
 		   						  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_3.pdf --outFileNameData deeptools_all_bams.npz_PCA_3.tab --transpose  >> qc4.log 2>&1
 	    						    fi};
 		}

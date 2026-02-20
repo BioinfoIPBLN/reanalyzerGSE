@@ -20,6 +20,31 @@ default_bw_dir  <- "/path/to/bigwig_folder/"
 genome_name     <- "GENOME_NAME_PLACEHOLDER"   # e.g. "mm39", "hg38"
 # ---------------------------------------------------------------------
 
+# Derive a sensible initial locus from a random contig in the GTF (first 1000 bp)
+get_initial_locus <- function(gtf_path) {
+  tryCatch({
+    if (!file.exists(gtf_path)) return("all")
+    # Read non-comment lines and collect unique contig names
+    con <- file(gtf_path, "r")
+    on.exit(close(con))
+    contigs <- character(0)
+    while (length(line <- readLines(con, n = 1)) > 0) {
+      if (!startsWith(line, "#")) {
+        contig <- strsplit(line, "\t")[[1]][1]
+        if (!is.na(contig) && nchar(contig) > 0) contigs <- c(contigs, contig)
+      }
+      # Stop early once we have enough unique contigs (no need to read entire GTF)
+      if (length(unique(contigs)) >= 50) break
+    }
+    contigs <- unique(contigs)
+    if (length(contigs) == 0) return("all")
+    chosen <- sample(contigs, 1)
+    paste0(chosen, ":1-1000")
+  }, error = function(e) "all")
+}
+
+default_locus <- get_initial_locus(default_gtf)
+
 ui <- fluidPage(
   useShinyjs(),
   tags$style(HTML("
@@ -37,7 +62,7 @@ ui <- fluidPage(
                 value = default_gtf),
       textInput("bw_folder", "BigWig folder:",
                 value = default_bw_dir),
-      textInput("locus", "Locus:", value = "chr1:1-1000"),
+      textInput("locus", "Locus:", value = default_locus),
       actionButton("load", "Load Files", class = "btn-primary"),
       hr(),
       uiOutput("bw_files_found")
