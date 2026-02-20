@@ -10,6 +10,7 @@
 # === Input/Output ===
 input: ""                              # GEO ID (GSEXXXXXX), folder with raw reads, or ENA/SRA accession
 input_geo_reads: ""                    # Absolute path to combine GEO metadata download with existing reads
+input_filter_regex: ""                 # Regex to filter input files in local mode (e.g. "Sample_A|Sample_B")
 name: ""                               # Name of the project/folder to create
 output_folder: ""                      # Destination folder
 genes: "none"                          # Genes to highlight in plots (comma-separated, no spaces)

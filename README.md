@@ -44,6 +44,7 @@ reanalyzerGSE.sh -h
 	        #### Input/output: 
 	        -i | -input # GEO_ID (GSEXXXXXX, separated by comma if more than one), or folder containing raw reads (please provide full absolute path, e.g. /path/folder_name/, containing only fastq.gz files and not folders, links or any other item, and please rename samples with meaningful names if possible), or almost any accession from ENA/SRA to download .fastq from (any of the ids with the prefixes PRJEB,PRJNA,PRJDB,ERP,DRP,SRP,SAMD,SAME,SAMN,ERS,DRS,SRS,ERX,DRX,SRX,ERR,DRR,SRR, please separated by commas if more than one id as input)
 	        -iG | -input_GEO_reads # If you want to combine downloading metadata from GEO with reads from GEO or any database already downloaded, maybe from a previous attempt, please provide an absolute path
+	        -regex | -input_filter_regex # Regex to filter input files in local mode (e.g. "Sample_A|Sample_B")
 	        -n | -name # Name of the project/folder to create and store results
 	        -o | -output_folder # Destination folder
 	        -g | -genes # Genes to highlight their expression in plots (one or several, separated by comma and no space, none by default)
