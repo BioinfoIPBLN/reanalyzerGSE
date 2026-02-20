@@ -97,7 +97,7 @@ for argument in $options; do
 	        #### BAM filtering (post-alignment):
 	        -mQ | -bam_mapq_threshold # Min MAPQ for samtools view -q and featureCounts -Q (0 = use default)
 	        -Fex | -bam_exclude_flags # samtools -F flags to exclude, e.g. '4' (unmapped), '256' (secondary), '2308' (combined)
-	        -Freq | -bam_require_flags # samtools -f flags to require, e.g. '2' (proper pair)
+	        -Freq | -bam_require_flags # samtools -f flags to require. Suggestion: use '2' for Paired-End (proper pair), leave empty or '4' for Single-End.
 	        -Fdup | -bam_dedup # Duplicate removal: 'no' (default), 'samtools' (markdup -r), 'picard' (REMOVE_DUPLICATES), 'picard_optical' (REMOVE_SEQUENCING_DUPLICATES)
 	
 	        #### Performance:

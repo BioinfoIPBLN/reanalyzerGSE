@@ -87,7 +87,7 @@ revigo_threshold_similarity: 0.7       # Revigo similarity threshold (0.4-0.9)
 # === BAM filtering (post-alignment) ===
 bam_mapq_threshold: 0                 # Min MAPQ for samtools view -q and featureCounts -Q (0 = use default)
 bam_exclude_flags: ""                  # samtools -F flags to exclude, e.g. "4" (unmapped), "256" (secondary), "2308" (unmapped+secondary+supplementary)
-bam_require_flags: ""                  # samtools -f flags to require, e.g. "2" (proper pair)
+bam_require_flags: ""                  # samtools -f flags to require. SUGGESTION: use "2" for Paired-End to keep properly paired reads, or leave as "" (or "4") for Single-End.
 bam_dedup: "no"                        # Duplicate removal: 'no', 'samtools', 'picard', 'picard_optical' (see below)
                                        #   no             = no deduplication
                                        #   samtools       = samtools markdup -r (remove all duplicates)
