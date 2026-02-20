@@ -546,8 +546,7 @@ pattern_to_remove <- args[16] # if not provided, "no"
   }
   }
 
-  cat(paste0("\n\nPDF barplots and violin plots done if required. Keep in mind you can also use the Expression Visualization App at https://bioinfoipbln.shinyapps.io/expressionvisualizationapp/."))
-  cat("\n\nGenes highlighted are:");print(genes);print(paste0("Current date: ",date()))
+  cat("\n\nGene ids provided to perform plots:");print(genes);print(paste0("Current date: ",date()))
 
 
 ###### Attempt of Differential Gene Expression Analyses... modified from Bioinfo Unit to use here:
