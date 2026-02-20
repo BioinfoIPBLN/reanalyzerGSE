@@ -969,7 +969,7 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 
 			# Add to the tables of functional enrichment the number of genes up/down:
 			cd $output_folder/$name/final_results_reanalysis$index/
-			echo "Processing results if any"
+			echo "Processing results if any..."
 			files_to_process=$(find . \( -name "*.txt" -o -name "*.tsv" -o -name "*.csv" \) | grep funct | grep -v _err.txt)
 			if [ -n "$files_to_process" ]; then
 				cd $output_folder/$name/final_results_reanalysis$index/DGE/
