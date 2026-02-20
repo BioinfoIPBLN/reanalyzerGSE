@@ -1038,7 +1038,7 @@ if [[ $debug_step == "all" || $debug_step == "step8" ]]; then
 				cd $seqs_location
 				echo "After execution, raw reads have been removed for the sake of efficient storage. These were... " > readme
 				ls -lh >> readme
-				rm $(ls | grep -v readme)
+				ls | grep -v readme | xargs -r rm -rf
 
 				cd $output_folder/$name/miARma_out$index/$aligner\_results
 				echo "For the sake of efficiente storage: samtools view -@ cores -T ref_genome -C -o xxx.bam.cram xxx.bam && rm xx.bam" >> conversion_bam_to_cram.txt
@@ -1048,7 +1048,7 @@ if [[ $debug_step == "all" || $debug_step == "step8" ]]; then
 		done
 	fi
 
-	cd $output_folder/$name/ && rm $(find . -name "*_fdr_05.txt" -o -name "*_logneg.txt" -o -name "*_logpos.txt")
+	cd $output_folder/$name/ && find . -type f \( -name "*_fdr_05.txt" -o -name "*_logneg.txt" -o -name "*_logpos.txt" \) -exec rm -f {} +
 	if [ "$convert_tables_excel" == "yes" ]; then
 		R_convert_tables.R $output_folder/$name/ $cores "log_parallel|jquery|bamqc|rnaseqqc|samtools|strand" > /dev/null 2>&1
 	fi
