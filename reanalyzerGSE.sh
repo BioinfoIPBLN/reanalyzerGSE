@@ -201,7 +201,7 @@ if [[ $debug_step == "all" || $debug_step == "step1a" ]]; then
 				    percentage <- runif(1, 0, 10)  # Random % between 0 and 10
 				    change <- ifelse(runif(1) < 0.5, -1, 1)  # Randomly add or subtract
 				    change_amount <- number * (percentage / 100) * change
-				    return(number + change_amount)
+				    return(round(number + change_amount))
 				  }
 				  cat(modify_number('"$1"'), "\n")
 				'
@@ -339,7 +339,7 @@ if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
 				    percentage <- runif(1, 0, 10)  # Random % between 0 and 10
 				    change <- ifelse(runif(1) < 0.5, -1, 1)  # Randomly add or subtract
 				    change_amount <- number * (percentage / 100) * change
-				    return(number + change_amount)
+				    return(round(number + change_amount))
 				  }
 				  cat(modify_number('"$1"'), "\n")
 				'

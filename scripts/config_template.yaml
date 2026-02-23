@@ -31,7 +31,7 @@ design_custom_local: ""                # Experimental design for local dataset (
 design_custom: "no"                    # Manually specify experimental design for GEO ('yes' or 'no')
 organism: ""                           # Scientific name with underscore (e.g. Homo_sapiens)
 taxonid: ""                            # NCBI taxon ID
-number_reads_to_subsample: ""          # Path to reads_numbers.txt and target number (comma-separated)
+number_reads_to_subsample: ""          # Path to reads_numbers.txt and target library size (comma-separated). NOTE: the number is the desired library size (counted/mapped reads), NOT raw reads; proportions are computed automatically
 batch_vector: ""                       # Comma-separated batch vector for Combat-seq
 batch_biological_covariates: ""        # Comma-separated biological covariables for Combat-seq
 batch_format: "fact"                   # Format of batch variables ('num' or 'fact')
