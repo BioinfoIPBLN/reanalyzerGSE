@@ -44,7 +44,8 @@ reanalyzerGSE.sh -h
 	        #### Input/output: 
 	        -i | -input # GEO_ID (GSEXXXXXX, separated by comma if more than one), or folder containing raw reads (please provide full absolute path, e.g. /path/folder_name/, containing only fastq.gz files and not folders, links or any other item, and please rename samples with meaningful names if possible), or almost any accession from ENA/SRA to download .fastq from (any of the ids with the prefixes PRJEB,PRJNA,PRJDB,ERP,DRP,SRP,SAMD,SAME,SAMN,ERS,DRS,SRS,ERX,DRX,SRX,ERR,DRR,SRR, please separated by commas if more than one id as input)
 	        -iG | -input_GEO_reads # If you want to combine downloading metadata from GEO with reads from GEO or any database already downloaded, maybe from a previous attempt, please provide an absolute path
-	        -regex | -input_filter_regex # Regex to filter input files in local mode (e.g. "Sample_A|Sample_B")
+	        -regex | -input_filter_regex # Regex to keep only matching input files in local mode, removing the rest (e.g. "Sample_A|Sample_B")
+	        -regexExclude | -input_filter_regex_exclude # Regex to exclude matching input files in local mode, keeping the rest (e.g. "Sample_Bad|Sample_Outlier")
 	        -n | -name # Name of the project/folder to create and store results
 	        -o | -output_folder # Destination folder
 	        -g | -genes # Genes to highlight their expression in plots (one or several, separated by comma and no space, none by default)
@@ -55,7 +56,8 @@ reanalyzerGSE.sh -h
 	        -ri | -reference_genome_index # If the reference genome to be used already has an index that would like to reuse, please provide full pathway here (by default the provided genome is indexed)
 	        -a | -annotation # Reference annotation to be used (.gtf file, absolute pathway). If hisat2 is used, a gff file (make sure format is '.gff' and not '.gff3') is accepted (some QC steps like 'qualimap rnaseqqc' may be skipped though). You can provide a comma-separated list of the pathways to different annotation, and multiple/independent quantification/outputs from the same alignments will be generated.
 	        -t | -transcripts # Reference transcripts to be used (.fasta cDNA file, absolute pathway, only used if '-s' argument not provided so salmon prediction of strandness is required)
-	        -Dk | -kraken2_databases # Folder (absolute pathway) containing the database that should be used by Kraken2 (any input here, e.g. 'standard_eupathdb_48_kraken2_db', would activate the kraken2-based decontamination step)
+	        -Dk | -kraken2_databases # Comma-separated list of Kraken2 database folders (e.g. '/path/to/core_nt,/path/to/gtdb'). Any input here activates the kraken2-based decontamination step. All DB+confidence combinations will be run
+	        -Kc | -kraken2_confidence # Comma-separated confidence scores for Kraken2 classification (default '0', e.g. '0,0.20,0.50'). Each score is run for each database
 	        -Ds | -sortmerna_databases # The database (absolute pathway) that should be used by SortMeRNA (any input here, e.g. '/path/to/rRNA_databases/smr_v4.3_sensitive_db.fasta', would activate the sortmerna-based rRNA removal step)
 	        -Df | -databases_function # Manually provide a comma separated list of databases to be used in automatic functional enrichment analyses of DEGs (check out the R package autoGO::choose_database(), but the most popular GO terms are used by default)
 	
@@ -80,7 +82,10 @@ reanalyzerGSE.sh -h
 	        -cPf | -clusterProfiler_full # Whether to perform additional functional enrichment analyses with multiple databases using clusterProfiler, by default only ORA for GO BP, GO MF and GO CC, and KEGG and REACTOME enrichment, will be performed, as additional analyses may be slow if many significant DEGs or multiple number of comparisons ('yes' or 'no', by default)
 	        -b | -batch # Batch effect present? (no by default, yes if correction through Combat-seq and model is to be performed, and info is going to be required in other arguments or prompts)
 	        -B | -bed_mode # Whether to convert list of files to bed format so they can be visualized in genome browsers ('yes' or 'no', by default)
-	        -Dc | -deconvolution # Whether to perform deconvolution of the bulk RNA-seq data by CDSeq ('yes', which may require few hours to complete, or 'no', by default)
+	        -Dc | -deconvolution # Deconvolution method for bulk RNA-seq data: 'no' (default), 'CDSeq' (unsupervised, may take hours), or 'BisqueRNA' (reference-based, requires -scM, -scP, and -bulkM)
+	        -scM | -sc_count_matrix # Path to sc/snRNA count matrix for BisqueRNA deconvolution (tab-delimited, first column 'Gene', remaining columns are cells, values are counts)
+	        -scP | -sc_phenotype # Path to sc/snRNA phenotype file for BisqueRNA (tab-delimited, columns: 'SubjectName' and 'cellType', rows = cell IDs matching count matrix columns)
+	        -bulkM | -bulk_expression_matrix # Path to bulk expression matrix for BisqueRNA (tab-delimited, first column 'Gene', remaining columns are samples)
 	        -vv | -perform_volcano_venn # Whether to perform all Volcano plots and Venn diagrams, which may take a long time if many comparisons ('no' or 'yes', by default)
 	        -aP | -aPEAR_execution # Whether to simplify pathway enrichment analysis results by detecting clusters of similar pathways and visualizing enrichment networks by aPEAR package, which may be slow ('yes' or 'no', by default)
 	        -Ti | -tidy_tmp_files # Space-efficient run, with a last step removing raw reads if downloaded, converting bam to cram, removing tmp files... etc ('yes' or 'no', by default)
@@ -106,7 +111,7 @@ reanalyzerGSE.sh -h
 	        #### Filtering out samples/comparisons:
 	        -G | -GSM_filter # GSM ids (one or several, separated by comma and no space) within the GSE entry to restrict the analysis to. An alternative to requesting a stop with -S to reorganize the downloaded files manually
 	        -S | -stop # Manual stop so the automatically downloaded files can be manually modified ('yes' or 'no', by default)
-	        -pR | -pattern_to_remove # A pattern to remove some matching samples from QC figures and DGE analyses (by default 'none')
+	        -pR | -pattern_to_remove # A pattern to exclude matching samples from downstream R processing only, i.e. QC figures and DGE analyses (by default 'none'). Unlike -regex/-regexExclude which filter raw reads before alignment, this option keeps all samples through alignment and counting but excludes matching ones at the R analysis stage. Useful for removing outlier samples without re-running the full pipeline (e.g. resume from -Dm step4)
 	        -Dec | -differential_expr_comparisons # Whether to restrict the differential expression analyses to only some of the possible comparisons or reorder the 'treatment' and 'control' elements of the comparison ('no', by default, or a comma-separated list specifying separated by '\\' the elements in the comparison, which you could get from a preliminar previous run, e.g. 'A//B,C//D,D//A'...)
 	
 	        #### Functional enrichment/networking analyses
@@ -131,7 +136,7 @@ reanalyzerGSE.sh -h
 	        -P | -number_parallel # Number of files to be processed in parallel (10 by default)
 	        -cG | -compression_level # Specify the compression level to gzip the downloaded fastq files from GEO (numeric '0' to '9', default '9')
 	        -Ac | -aligner_index_cache # Whether to try and keep the genome index on the cache/loaded RAM so concurrent jobs do not have to reload it and can use it more easily ('no', which will empty cache at the end, or 'yes', by default)
-	        -K | -Kraken2_fast # Kraken2 fast mode, consisting on copying the Kraken2 database to /dev/shm (RAM) so execution is faster ('yes' or 'no' by default)
+	        -K | -Kraken2_fast # DEPRECATED: daemon mode now replaces /dev/shm approach. This option is kept for backward compatibility but has no effect
 ```
 
 Parameters are not positional. If you did not provide a required parameter, the pipeline may exit or use default values if possible (check the help page above, the log after execution, or the 'Arguments and variables' first section in the main script 'reanalyzerGSE.sh'). For example, if the argument '-s' is not provided, strandness will be predicted using Salmon and transcript sequences would be required, so the pipeline would exit if not provided with the argument '-t'. Similarly, reference genome and annotation are likely going to be required for the alignment and quantifying steps (arguments '-r' and '-a').

@@ -16,6 +16,12 @@ restrict_comparisons <- args[13] # if not provided, "no"
 full_analyses <- args[14] # if not provided, "yes"
 venn_volcano <- args[15] # if not provided, "none"
 pattern_to_remove <- args[16] # if not provided, "no"
+annotation_file <- args[17] # GTF/GFF path
+fc_seq_key <- args[18] # featureCounts seqid, e.g. "gene_name"
+fc_feat_type <- args[19] # featureCounts feature type, e.g. "exon"
+sc_count_matrix <- args[20] # sc/snRNA count matrix path, or "none"
+sc_phenotype <- args[21] # sc phenotype file path, or "none"
+bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
 
 ###### Load read counts, format, filter, start differential expression analyses, get normalized counts, save...:
   cat("\nProcessing counts and getting figures...\n")
@@ -99,7 +105,7 @@ pattern_to_remove <- args[16] # if not provided, "no"
               file=paste0(output_dir,"/Raw_counts_genes.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
  
   # CDSeq preliminary deconvolution:
-  if (cdseq_exec!="no"){
+  if (cdseq_exec=="CDSeq"){
     suppressMessages(library(CDSeq,quiet = T,warn.conflicts = F))
     read_length <- data.table::fread(list.files(dirname(input_dir),pattern="*.ini",full.names=T)[1],fill=T)
     read_length <- as.numeric(gsub("read_length=","",grep("read_length",read_length$V1,val=T))) + 1 # in the miARma.ini the read_length is -1, so here +1 to restore
@@ -114,6 +120,96 @@ pattern_to_remove <- args[16] # if not provided, "no"
     print(paste0("Number of cell types estimated by CDSeq: ",result_cdseq$estT))
     print("Estimated proportions for the number of cell types estimated by CDSeq: ")
     result_cdseq$estProp; cat("\n\n")
+  }
+
+  # BisqueRNA reference-based deconvolution:
+  if (cdseq_exec=="BisqueRNA"){
+    cat("\n\nRunning BisqueRNA reference-based deconvolution...\n")
+    tryCatch({
+      suppressMessages(library(Biobase, quiet = T, warn.conflicts = F))
+      suppressMessages(library(BisqueRNA, quiet = T, warn.conflicts = F))
+
+      # Read user-provided bulk expression matrix
+      cat(paste0("Reading bulk expression matrix: ", bulk_expression_matrix, "\n"))
+      bulk_raw <- read.table(bulk_expression_matrix, head = T, sep = "\t", check.names = F)
+      dup_genes_bulk <- unique(bulk_raw[,1][duplicated(bulk_raw[,1])])
+      bulk_raw <- bulk_raw[!(bulk_raw[,1] %in% dup_genes_bulk), ]
+      bulk_mat <- as.matrix(bulk_raw[, -1])
+      rownames(bulk_mat) <- bulk_raw[, 1]
+      bulk.eset <- Biobase::ExpressionSet(assayData = bulk_mat)
+      cat(paste0("Bulk matrix: ", nrow(bulk_mat), " genes x ", ncol(bulk_mat), " samples\n"))
+
+      # Read user-provided sc/snRNA count matrix
+      cat(paste0("Reading sc/snRNA count matrix: ", sc_count_matrix, "\n"))
+      sc_raw <- read.table(sc_count_matrix, head = T, sep = "\t", check.names = F)
+      dup_genes_sc <- unique(sc_raw[,1][duplicated(sc_raw[,1])])
+      sc_raw <- sc_raw[!(sc_raw[,1] %in% dup_genes_sc), ]
+      sc.counts.matrix <- as.matrix(sc_raw[, -1])
+      rownames(sc.counts.matrix) <- sc_raw[, 1]
+      cat(paste0("sc matrix: ", nrow(sc.counts.matrix), " genes x ", ncol(sc.counts.matrix), " cells\n"))
+
+      # Read user-provided sc phenotype
+      cat(paste0("Reading sc phenotype: ", sc_phenotype, "\n"))
+      sc_pheno_raw <- read.table(sc_phenotype, head = T, sep = "\t", check.names = F, stringsAsFactors = F)
+      if (!all(c("SubjectName", "cellType") %in% colnames(sc_pheno_raw))) {
+        stop("sc phenotype file must have 'SubjectName' and 'cellType' columns")
+      }
+      # Use first column as row names if it's not SubjectName/cellType
+      if (!colnames(sc_pheno_raw)[1] %in% c("SubjectName", "cellType")) {
+        rownames(sc_pheno_raw) <- sc_pheno_raw[, 1]
+        sc_pheno_raw <- sc_pheno_raw[, c("SubjectName", "cellType")]
+      } else {
+        # Row names must be cell IDs matching sc count matrix columns
+        rownames(sc_pheno_raw) <- colnames(sc.counts.matrix)
+      }
+
+      sc.meta <- data.frame(labelDescription = c("SubjectName", "cellType"),
+                            row.names = c("SubjectName", "cellType"))
+      sc.pdata <- new("AnnotatedDataFrame", data = sc_pheno_raw, varMetadata = sc.meta)
+      sc.eset <- Biobase::ExpressionSet(assayData = sc.counts.matrix, phenoData = sc.pdata)
+
+      # Run BisqueRNA
+      cat("Running BisqueRNA::ReferenceBasedDecomposition...\n")
+      res_bisque <- BisqueRNA::ReferenceBasedDecomposition(bulk.eset, sc.eset, markers = NULL, use.overlap = FALSE)
+
+      # Save results
+      dir.create(paste0(output_dir, "/deconvolution"), showWarnings = FALSE)
+      write.table(res_bisque$bulk.props,
+                  file = paste0(output_dir, "/deconvolution/BisqueRNA_results.txt"),
+                  sep = "\t", quote = FALSE)
+      save(res_bisque, file = paste0(output_dir, "/deconvolution/BisqueRNA_results.RData"))
+      cat("BisqueRNA results saved.\n")
+
+      # Stacked barplot
+      suppressMessages(library(ggplot2, quiet = T, warn.conflicts = F))
+      suppressMessages(library(RColorBrewer, quiet = T, warn.conflicts = F))
+      suppressMessages(library(tidyr, quiet = T, warn.conflicts = F))
+      suppressMessages(library(dplyr, quiet = T, warn.conflicts = F))
+
+      props <- as.data.frame(res_bisque$bulk.props)
+      props$CellType <- rownames(props)
+      data_long <- tidyr::pivot_longer(props, cols = -CellType, names_to = "Sample", values_to = "Fraction")
+      color_palette <- colorRampPalette(brewer.pal(12, "Paired"))(length(unique(data_long$CellType)))
+      data_long <- data_long %>%
+        mutate(label_text = if_else(Fraction > 0.02, paste0(round(Fraction * 100), "%"), ""))
+
+      p <- ggplot(data_long, aes(x = Sample, y = Fraction, fill = CellType)) +
+        geom_bar(stat = "identity", position = "stack") +
+        scale_fill_manual(values = color_palette) +
+        labs(title = "BisqueRNA Deconvolution: Cell Type Composition",
+             x = "Sample", y = "Fraction", fill = "Cell Type") +
+        geom_text(aes(label = label_text),
+                  position = position_stack(vjust = 0.5), color = "black", size = 2) +
+        theme_classic() +
+        theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 8),
+              plot.title = element_text(hjust = 0.5, face = "bold"))
+
+      ggsave(paste0(output_dir, "/deconvolution/BisqueRNA_barplot.pdf"), p,
+             device = cairo_pdf, width = 297, height = 210, units = "mm")
+      cat("BisqueRNA barplot saved.\n")
+    }, error = function(e) {
+      cat(paste0("\nERROR in BisqueRNA deconvolution: ", e$message, "\n"))
+    })
   }
 
   # Deal with phenotypic data/samples info:
@@ -327,6 +423,30 @@ pattern_to_remove <- args[16] # if not provided, "no"
               file=paste0(output_dir,"/TPM_counts_genes.txt"),quote = F,row.names = T, col.names = T,sep = "\t")
   write.table(log2(tpm_counts+0.1),
               file=paste0(output_dir,"/TPM_counts_genes_log2_0.1.txt"),quote = F,row.names = T, col.names = T,sep = "\t")
+  # High/medium/low categ for TPM:
+  tpm_counts_categ <- tpm_counts
+  for (col in colnames(tpm_counts_categ)){
+    a <- Hmisc::cut2(tpm_counts_categ[,col],g=3); b <- as.character(a)
+    b[b==levels(a)[1]] <- "Low"; b[b==levels(a)[2]] <- "Medium"; b[b==levels(a)[3]] <- "High"
+    tpm_counts_categ[,paste0(col,"_categ")] <- b
+    a <- Hmisc::cut2(tpm_counts_categ[,col],g=5); b <- as.character(a)
+    b[b==levels(a)[1]] <- "Very_Low"; b[b==levels(a)[2]] <- "Low"; b[b==levels(a)[3]] <- "Medium"; b[b==levels(a)[4]] <- "High"; b[b==levels(a)[5]] <- "Very_High"
+    tpm_counts_categ[,paste0(col,"_categ_2")] <- b
+  }
+  write.table(tpm_counts_categ,
+              file=paste0(output_dir,"/TPM_counts_genes_categ.txt"),quote = F,row.names = T, col.names = T,sep = "\t")
+  tpm_counts_log <- log2(tpm_counts+0.1)
+  tpm_counts_log_categ <- tpm_counts_log
+  for (col in colnames(tpm_counts_log_categ)){
+    a <- Hmisc::cut2(tpm_counts_log_categ[,col],g=3); b <- as.character(a)
+    b[b==levels(a)[1]] <- "Low"; b[b==levels(a)[2]] <- "Medium"; b[b==levels(a)[3]] <- "High"
+    tpm_counts_log_categ[,paste0(col,"_categ")] <- b
+    a <- Hmisc::cut2(tpm_counts_log_categ[,col],g=5); b <- as.character(a)
+    b[b==levels(a)[1]] <- "Very_Low"; b[b==levels(a)[2]] <- "Low"; b[b==levels(a)[3]] <- "Medium"; b[b==levels(a)[4]] <- "High"; b[b==levels(a)[5]] <- "Very_High"
+    tpm_counts_log_categ[,paste0(col,"_categ_2")] <- b
+  }
+  write.table(tpm_counts_log_categ,
+              file=paste0(output_dir,"/TPM_counts_genes_log2_0.1_categ.txt"),quote = F,row.names = T, col.names = T,sep = "\t")
   # High/medium/low categ:
   gene_counts_rpkm_to_write_categ <- gene_counts_rpkm_to_write
   for (col in colnames(gene_counts_rpkm_to_write_categ[,-1])){
@@ -944,6 +1064,128 @@ if (venn_volcano!="no"){
     try(system("tar cf venn_diagrams.tar Venn_diagram* 2>/dev/null; rm Venn_diagram* 2>/dev/null"))
   }
 }
+###### Merge DGE + expression categories + GTF annotation:
+cat("\n\nGenerating merged expression/DGE + GTF annotation tables...\n")
+tryCatch({
+  # 1. Parse GTF/GFF to extract V9 attributes
+  gtf_raw <- data.table::fread(annotation_file, header = FALSE, sep = "\t",
+                                quote = "", comment.char = "#", fill = TRUE)
+  # Filter by feature type (column V3)
+  gtf_filtered <- gtf_raw[gtf_raw$V3 == fc_feat_type, ]
+  cat(paste0("GTF lines matching feature type '", fc_feat_type, "': ", nrow(gtf_filtered), "\n"))
+
+  # Parse V9 key-value pairs; handle both GTF (key "value";) and GFF3 (key=value;) formats
+  parse_v9 <- function(v9_strings) {
+    is_gff3 <- !any(grepl('"', head(v9_strings, 100)))
+    all_attrs <- list()
+    for (s in v9_strings) {
+      if (is_gff3) {
+        pairs <- unlist(strsplit(trimws(s), ";"))
+        pairs <- pairs[nchar(trimws(pairs)) > 0]
+        kv <- strsplit(trimws(pairs), "=")
+      } else {
+        pairs <- unlist(strsplit(trimws(s), ";"))
+        pairs <- pairs[nchar(trimws(pairs)) > 0]
+        kv <- lapply(pairs, function(p) {
+          p <- trimws(p)
+          sp <- regmatches(p, regexpr("\\s+", p), invert = TRUE)[[1]]
+          if (length(sp) == 2) c(sp[1], gsub('"', '', sp[2])) else c(p, "")
+        })
+      }
+      attrs <- setNames(sapply(kv, `[`, 2), sapply(kv, `[`, 1))
+      all_attrs <- c(all_attrs, list(attrs))
+    }
+    # Get all unique keys
+    all_keys <- unique(unlist(lapply(all_attrs, names)))
+    # Build data frame
+    df <- as.data.frame(do.call(rbind, lapply(all_attrs, function(a) {
+      sapply(all_keys, function(k) ifelse(k %in% names(a), a[k], NA))
+    })), stringsAsFactors = FALSE)
+    colnames(df) <- paste0("gtf_", all_keys)
+    return(df)
+  }
+
+  gtf_attrs <- parse_v9(gtf_filtered$V9)
+  # Add genomic coordinates
+  gtf_attrs$gtf_chr <- gtf_filtered$V1
+  gtf_attrs$gtf_start <- gtf_filtered$V4
+  gtf_attrs$gtf_end <- gtf_filtered$V5
+  gtf_attrs$gtf_strand <- gtf_filtered$V7
+
+  # Identify the merge key column in the gtf_attrs (matching fc_seq_key)
+  gtf_key_col <- paste0("gtf_", fc_seq_key)
+  if (!gtf_key_col %in% colnames(gtf_attrs)) {
+    cat(paste0("WARNING: Key '", fc_seq_key, "' not found in GTF V9 attributes. Available: ",
+              paste(colnames(gtf_attrs), collapse = ", "), "\n"))
+    cat("Skipping GTF merge.\n")
+    gtf_attrs <- NULL
+  } else {
+    # Deduplicate: keep unique per gene (collapse if multiple rows per gene)
+    gtf_attrs[[gtf_key_col]] <- stringr::str_to_title(gtf_attrs[[gtf_key_col]])  # Match Gene_ID casing
+    gtf_attrs <- gtf_attrs[!duplicated(gtf_attrs[[gtf_key_col]]), ]
+    rownames(gtf_attrs) <- gtf_attrs[[gtf_key_col]]
+    cat(paste0("Unique GTF entries for merge key '", fc_seq_key, "': ", nrow(gtf_attrs), "\n"))
+  }
+
+  # 2. Prepare expression categ tables (already in memory)
+  # RPKM log2 categ - has Gene_ID as first column
+  rpkm_categ <- gene_counts_rpkm_log_categ
+  # TPM log2 categ - has Gene_ID as rownames
+  tpm_categ <- tpm_counts_log_categ
+  tpm_categ$Gene_ID <- rownames(tpm_categ)
+
+  # 3. Helper function for merging
+  merge_tables <- function(base_df, gene_id_col = "Gene_ID") {
+    result <- base_df
+    # Merge with GTF attributes
+    if (!is.null(gtf_attrs)) {
+      result <- merge(result, gtf_attrs, by.x = gene_id_col, by.y = gtf_key_col, all.x = TRUE)
+    }
+    return(result)
+  }
+
+  # 4. If DGE tables exist, merge each with expression + GTF
+  dge_files <- list.files(path = paste0(output_dir, "/DGE"),
+                          full.names = TRUE, pattern = "^DGE_analysis_comp\\d+\\.txt$")
+
+  if (length(dge_files) > 0 && full_analyses != "no") {
+    for (dge_file in dge_files) {
+      dge <- read.delim(dge_file, stringsAsFactors = FALSE)
+      comp_name <- sub("\\.txt$", "", basename(dge_file))
+
+      # Merge DGE + RPKM categ + GTF
+      merged_rpkm <- merge(dge, rpkm_categ, by = "Gene_ID", all.x = TRUE)
+      merged_rpkm <- merge_tables(merged_rpkm)
+      write.table(merged_rpkm,
+                  file = paste0(output_dir, "/DGE/", comp_name, "_merged_RPKM.txt"),
+                  quote = FALSE, row.names = FALSE, col.names = TRUE, sep = "\t")
+
+      # Merge DGE + TPM categ + GTF
+      merged_tpm <- merge(dge, tpm_categ, by = "Gene_ID", all.x = TRUE)
+      merged_tpm <- merge_tables(merged_tpm)
+      write.table(merged_tpm,
+                  file = paste0(output_dir, "/DGE/", comp_name, "_merged_TPM.txt"),
+                  quote = FALSE, row.names = FALSE, col.names = TRUE, sep = "\t")
+    }
+    cat(paste0("Merged DGE+expression+GTF tables written for ", length(dge_files), " comparisons.\n"))
+  } else {
+    # No DGE: just write expression + GTF to main output dir
+    merged_rpkm_all <- merge_tables(rpkm_categ)
+    write.table(merged_rpkm_all,
+                file = paste0(output_dir, "/expression_merged_RPKM.txt"),
+                quote = FALSE, row.names = FALSE, col.names = TRUE, sep = "\t")
+
+    merged_tpm_all <- merge_tables(tpm_categ)
+    write.table(merged_tpm_all,
+                file = paste0(output_dir, "/expression_merged_TPM.txt"),
+                quote = FALSE, row.names = FALSE, col.names = TRUE, sep = "\t")
+    cat("Merged expression+GTF tables written (no DGE requested).\n")
+  }
+  cat(paste0("Merge completed. Current date: ", date(), "\n"))
+}, error = function(e) {
+  cat(paste0("\nWARNING: Merging expression/DGE + GTF failed: ", e$message, "\nContinuing...\n"))
+})
+
 conflicts <- intersect(ls(envir = environment()), ls(envir = .GlobalEnv))
 if (length(conflicts) > 0) {warning("The following objects will be overwritten in the global environment: ", paste(conflicts, collapse = ", "))}
 list2env(as.list(environment()), envir = .GlobalEnv); save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))

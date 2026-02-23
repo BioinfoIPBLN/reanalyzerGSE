@@ -10,7 +10,8 @@
 # === Input/Output ===
 input: ""                              # GEO ID (GSEXXXXXX), folder with raw reads, or ENA/SRA accession
 input_geo_reads: ""                    # Absolute path to combine GEO metadata download with existing reads
-input_filter_regex: ""                 # Regex to filter input files in local mode (e.g. "Sample_A|Sample_B")
+input_filter_regex: ""                 # Regex to keep only matching input files in local mode (e.g. "Sample_A|Sample_B")
+input_filter_regex_exclude: ""         # Regex to exclude matching input files in local mode (e.g. "Sample_Bad|Sample_Outlier")
 name: ""                               # Name of the project/folder to create
 output_folder: ""                      # Destination folder
 genes: "none"                          # Genes to highlight in plots (comma-separated, no spaces)
@@ -21,7 +22,8 @@ reference_genome: ""                   # Reference genome (.fasta or .gz, absolu
 reference_genome_index: ""             # Pre-built genome index (absolute path)
 annotation: ""                         # Reference annotation (.gtf, absolute path; comma-separated for multiple)
 transcripts: ""                        # Reference transcripts (.fasta cDNA, used if -s not provided)
-kraken2_databases: ""                  # Kraken2 database folder (activates decontamination step)
+kraken2_databases: ""                  # Comma-separated Kraken2 DB folders (e.g. '/path/to/core_nt,/path/to/gtdb')
+kraken2_confidence: "0"                # Comma-separated confidence scores (e.g. '0,0.20,0.50')
 sortmerna_databases: ""                # SortMeRNA database path (activates rRNA removal step)
 databases_function: "GO_Biological_Process_2023,GO_Molecular_Function_2023,GO_Cellular_Component_2023"
 non_reference_funct_enrichm: ""            # Annotation file (GAF, GMT, GFF, GTF) for functional enrichment in non-model organisms
@@ -47,7 +49,10 @@ functional_enrichment_analyses: "yes"  # Functional enrichment ('yes' or 'no')
 clusterProfiler_full: "no"            # Additional clusterProfiler analyses ('yes' or 'no')
 batch: "no"                            # Batch effect correction ('yes' or 'no')
 bed_mode: "no"                         # Convert to BED format for genome browsers ('yes' or 'no')
-deconvolution: "no"                    # Deconvolution by CDSeq ('yes' or 'no')
+deconvolution: "no"                    # Deconvolution method: 'no', 'CDSeq', or 'BisqueRNA'
+sc_count_matrix: ""                    # Path to sc/snRNA count matrix for BisqueRNA (Gene x cells, tab-delimited)
+sc_phenotype: ""                       # Path to sc phenotype file for BisqueRNA (SubjectName + cellType columns)
+bulk_expression_matrix: ""             # Path to bulk expression matrix for BisqueRNA (Gene x samples, tab-delimited)
 perform_volcano_venn: "yes"            # Volcano plots and Venn diagrams ('yes' or 'no')
 aPEAR_execution: "no"                 # aPEAR pathway clustering ('yes' or 'no')
 tidy_tmp_files: "no"                   # Space-efficient run, remove tmp files ('yes' or 'no')
@@ -73,7 +78,7 @@ time_course_fuzz: 0                    # Fuziness for soft clustering (0 = auto-
 # === Filtering out samples/comparisons ===
 GSM_filter: ""                         # Restrict to specific GSM ids (comma-separated)
 stop: "no"                             # Manual stop for file modification ('yes' or 'no')
-pattern_to_remove: "none"              # Pattern to exclude samples from analyses
+pattern_to_remove: "none"              # Exclude matching samples from downstream R processing only (QC figures, DGE). Alignment/counting still runs for these samples
 differential_expr_comparisons: "no"    # Restrict comparisons ('no' or 'A\\B,C\\D,...')
 
 # === Functional enrichment/networking analyses ===
@@ -102,4 +107,4 @@ memory_max: 257698037760               # Max RAM in bytes (~240GB)
 number_parallel: 10                    # Files processed in parallel
 compression_level: 9                   # Gzip compression level (0-9)
 aligner_index_cache: "yes"             # Keep genome index in cache ('yes' or 'no')
-kraken2_fast: "no"                     # Copy Kraken2 DB to RAM ('yes' or 'no')
+# kraken2_fast is deprecated (daemon mode replaces /dev/shm approach)

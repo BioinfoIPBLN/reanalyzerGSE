@@ -314,6 +314,16 @@ if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
 				fi
 				cd - > /dev/null
 			fi
+			if [ ! -z "$input_filter_regex_exclude" ]; then
+				echo -e "\nExcluding input files matching regex: $input_filter_regex_exclude\n"
+				cd $seqs_location
+				ls | egrep "$input_filter_regex_exclude" | xargs rm -f
+				if [ $(ls | wc -l) -eq 0 ]; then
+					echo "Error: All files were excluded by the regex '$input_filter_regex_exclude'. Exiting..."
+					exit 1
+				fi
+				cd - > /dev/null
+			fi
 			echo -e "\nProcessing the provided fastq files, renaming to _1.fastq and _2.fastq if necessary...\n"
 		fi
 	 	cd $seqs_location
@@ -504,43 +514,105 @@ fi
 ### STEP 2. Decontamination if required:
 if [[ $debug_step == "all" || $debug_step == "step2" ]]; then
 	if [ ! -z "$kraken2_databases" ]; then
-  		echo -e "\n\nSTEP 2: Decontamination starting with Kraken2...\nCurrent date/time: $(date)\n\n"
-    		rm -rf $output_folder/$name/raw_reads_k2 # I'm now removing the seqs_location at the beginning of this section, in the context of the new system of resuming by -Dm stepx, so this should always be done
+  		echo -e "\n\nSTEP 2: Decontamination starting with Kraken2 (k2 daemon mode)...\nCurrent date/time: $(date)\n\n"
+    		rm -rf $output_folder/$name/raw_reads_k2
 		mkdir -p $output_folder/$name/raw_reads_k2
 		cd $output_folder/$name/raw_reads_k2
 
-		if [[ $kraken2_fast == "yes" ]]; then
-			echo -e "\nPreparing database $kraken2_databases for fast access in RAM...\n"
-			cp -ru $kraken2_databases /dev/shm/
-			db_k2="--db /dev/shm/$(basename $kraken2_databases) --memory-mapping"
-		elif [[ $kraken2_fast == "no" ]]; then
-			db_k2="--db $kraken2_databases"
-		fi
-		echo -e "\nExecuting kraken2...\n"
-		if [[ $(find $output_folder/$name -name library_layout_info.txt | xargs cat) == "SINGLE" ]]; then
-			for f in $(ls $seqs_location | egrep ".fastq$|.fq$|.fastq.gz$|.fq.gz$"); do \time -f "mem=%K RSS=%M elapsed=%E cpu.sys=%S .user=%U" kraken2 $db_k2 --threads $cores --classified-out $f.classification.txt --unclassified-out $f.classification_unknwn.txt --report $f.report.txt --output $f.kraken2_output.txt --use-names $seqs_location/$f 1>> kraken2_log_out.txt 2>> kraken2_log_warnings_errors.txt; done
-		elif [[ $(find $output_folder/$name -name library_layout_info.txt | xargs cat) == "PAIRED" ]]; then
-			for f in $(ls $seqs_location | egrep ".fastq$|.fq$|.fastq.gz$|.fq.gz$" | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq); do \time -f "mem=%K RSS=%M elapsed=%E cpu.sys=%S .user=%U" kraken2 $db_k2 --threads $cores --classified-out $f.classification.txt --unclassified-out $f.classification_unknwn.txt --report $f.report.txt --output $f.kraken2_output.txt --use-names --paired $seqs_location/${f}_1.fastq.gz $seqs_location/${f}_2.fastq.gz 1>> kraken2_log_out.txt 2>> kraken2_log_warnings_errors.txt; done
-		fi
-		echo -e "Please check the files report.txt, kraken2_log_out.txt and kraken2_log_out_warnings_errors.txt"
-		echo -e "Processing reports and extracting uncontaminated reads..."
-		for f in $(ls | egrep "report.txt$"); do echo -e "\nLog of kraken2:"; echo -e "%_reads_covered\t#_reads_covered\t#_reads_directly_assigned\tRank_code\tTaxon_id\tScientific_name" >> $f.final.txt && cat $f >> $f.final.txt && echo -e "\n\nNumber of classified reads at the genus level: $(cat $f | awk '$4 == "G" {print $2"\t"$5}' | awk '{s+=$1}END{print s}')" >> $f.final.txt && echo -e "\nTaxonomy IDs at the genus level assigned to the reads:" >> $f.final.txt && echo -e "#read\tTaxID\n$(awk '$4 == "G" {print $2"\t"$5}' $f)\n" >> $f.final.txt; done
-		for f in $(ls | egrep "kraken2_output.txt$"); do rcf -n $kraken2_databases/taxdump -k $f -o $f.recentrifuge_contamination_report.html -e CSV &>> rcf_log_out.txt; done # Add --sequential if problems with multithreading
+		IFS=',' read -r -a k2_db_array <<< "$kraken2_databases"
+		IFS=',' read -r -a k2_conf_array <<< "$kraken2_confidence"
+		layout=$(find $output_folder/$name -name library_layout_info.txt | xargs cat)
 
-		if [ -z "$taxonid" ]; then
-			taxonid=$(echo $organism | sed 's/_\+/ /g' | taxonkit name2taxid --data-dir $kraken2_databases/taxdump | head -1 | cut -f2)
-		fi
-		taxon_name=$(taxonkit list --ids $taxonid -n -r --data-dir $kraken2_databases/taxdump | grep $taxonid)
-		echo -e "\nOrganism provided: $organism"; echo -e "\nOrganism provided (taxonid): $taxonid"; echo $taxon_name
-		echo -e "\nIf not correct, please rerun and double check that you have provided it explicitely in the prompt... kraken2 output will be filtered to retain that taxa and below"
-		echo -e "\nCheck out the logs in the files rcf_log_out.txt and extract_kraken2_log_out.txt"
+		for k2_db in "${k2_db_array[@]}"; do
+			db_basename=$(basename $k2_db)
+			echo -e "\n\nProcessing database: $db_basename ($k2_db)\n"
 
-		mkdir -p $seqs_location\_k2
-		if [[ $(find $output_folder/$name -name library_layout_info.txt | xargs cat) == "SINGLE" ]]; then
-			for f in $(ls | egrep ".kraken2_output.txt$"); do extract_kraken_reads.py -k $f -U $(echo $f | sed 's,.kraken2_output.txt,,g') -o $seqs_location\_k2/$f\_1.fastq.gz -t $taxonid -r $(echo $f | sed 's,.kraken2_output.txt,,g').report.txt --include-children &>> extract_kraken2_log_out.txt; done
-		elif [[ $(find $output_folder/$name -name library_layout_info.txt | xargs cat) == "PAIRED" ]]; then
-			for f in $(ls | egrep ".kraken2_output.txt$"); do extract_kraken_reads.py -k $f -s1 $(echo $f | sed 's,.kraken2_output.txt,,g')\_1.fastq.gz -s2 $(echo $f | sed 's,.kraken2_output.txt,,g')\_2.fastq.gz -o $seqs_location\_k2/$f\_1.fastq.gz -o2 $seqs_location\_k2/$f\_2.fastq.gz -t $taxonid -r $(echo $f | sed 's,.kraken2_output.txt,,g').report.txt --include-children &>> extract_kraken2_log_out.txt; done
+			for conf in "${k2_conf_array[@]}"; do
+				# Build confidence label: e.g. 0 -> "00", 0.20 -> "020", 0.50 -> "050"
+				conf_label=$(echo "$conf" | sed 's/^0$/00/;s/^0\.\([0-9]*\)/0\1/')
+
+				echo -e "\n  Running k2 classify with confidence=$conf (label=$conf_label) on database $db_basename...\n"
+
+				if [[ "$layout" == "SINGLE" ]]; then
+					for f in $(ls $seqs_location | egrep ".fastq$|.fq$|.fastq.gz$|.fq.gz$"); do
+						sample_base=$(basename $f | sed 's,\.\(fastq\|fq\)\(\.gz\)\?$,,')
+						k2 classify --use-daemon --db $k2_db --threads $cores \
+							$([ "$conf" != "0" ] && echo "--confidence $conf") \
+							--report-minimizer-data --use-names \
+							--output $PWD/${sample_base}.${conf_label}k2_${db_basename} \
+							--report $PWD/${sample_base}.${conf_label}k2_${db_basename}_report.txt \
+							--log $PWD/${sample_base}.${conf_label}k2_${db_basename}_log.txt \
+							$seqs_location/$f \
+							1>> kraken2_log_out.txt 2>> kraken2_log_warnings_errors.txt
+					done
+				elif [[ "$layout" == "PAIRED" ]]; then
+					for f in $(ls $seqs_location | egrep ".fastq$|.fq$|.fastq.gz$|.fq.gz$" | sed 's,_R\?[12]\.\(fastq\|fq\)\(\.gz\)\?$,,g' | sort | uniq); do
+						k2 classify --use-daemon --db $k2_db --threads $cores \
+							$([ "$conf" != "0" ] && echo "--confidence $conf") \
+							--report-minimizer-data --use-names --paired \
+							--output $PWD/${f}.${conf_label}k2_${db_basename} \
+							--report $PWD/${f}.${conf_label}k2_${db_basename}_report.txt \
+							--log $PWD/${f}.${conf_label}k2_${db_basename}_log.txt \
+							${seqs_location}/${f}_*.fastq.gz \
+							1>> kraken2_log_out.txt 2>> kraken2_log_warnings_errors.txt
+					done
+				fi
+			done
+
+			# Compress output files for this DB and stop daemon
+			pigz --best -p $cores *k2_${db_basename} 2>/dev/null
+			k2 clean --stop-daemon 2>/dev/null
+
+			# Process reports for this DB
+			for f in $(ls | egrep "k2_${db_basename}_report.txt$" 2>/dev/null); do
+				echo -e "\nLog of kraken2 ($f):"
+				echo -e "%_reads_covered\t#_reads_covered\t#_reads_directly_assigned\t#_minimizers_total\t#_minimizers_distinct\tRank_code\tTaxon_id\tScientific_name" >> $f.final.txt
+				cat $f >> $f.final.txt
+				echo -e "\n\nNumber of classified reads at the genus level: $(cat $f | awk '$6 == "G" {print $2"\t"$7}' | awk '{s+=$1}END{print s}')" >> $f.final.txt
+				echo -e "\nTaxonomy IDs at the genus level assigned to the reads:" >> $f.final.txt
+				echo -e "#read\tTaxID\n$(awk '$6 == "G" {print $2"\t"$7}' $f)\n" >> $f.final.txt
+			done
+		done
+
+		echo -e "Please check the files *_report.txt, kraken2_log_out.txt and kraken2_log_warnings_errors.txt"
+		echo -e "Processing recentrifuge reports and extracting reads..."
+
+		# Recentrifuge for all output files
+		first_db=$(basename ${k2_db_array[0]})
+		taxdump_dir=""
+		if [[ -d "${k2_db_array[0]}/taxdump" ]]; then
+			taxdump_dir="${k2_db_array[0]}/taxdump"
 		fi
+		if [ ! -z "$taxdump_dir" ]; then
+			for f in $(ls | egrep "k2_.*\.gz$" 2>/dev/null); do rcf -n $taxdump_dir -k $f -o $f.recentrifuge_contamination_report.html -e CSV &>> rcf_log_out.txt; done
+		fi
+
+		# Extract reads for the organism (use first DB for taxdump if available)
+		if [ ! -z "$taxdump_dir" ]; then
+			if [ -z "$taxonid" ]; then
+				taxonid=$(echo $organism | sed 's/_\+/ /g' | taxonkit name2taxid --data-dir $taxdump_dir | head -1 | cut -f2)
+			fi
+			taxon_name=$(taxonkit list --ids $taxonid -n -r --data-dir $taxdump_dir | grep $taxonid)
+			echo -e "\nOrganism provided: $organism"; echo -e "\nOrganism provided (taxonid): $taxonid"; echo $taxon_name
+			echo -e "\nIf not correct, please rerun and double check that you have provided it explicitly in the prompt... kraken2 output will be filtered to retain that taxa and below"
+			echo -e "\nCheck out the logs in the files rcf_log_out.txt and extract_kraken2_log_out.txt"
+
+			mkdir -p $seqs_location\_k2
+			# Use first confidence score + first DB for read extraction
+			conf_label_first=$(echo "${k2_conf_array[0]}" | sed 's/^0$/00/;s/^0\.\([0-9]*\)/0\1/')
+			if [[ "$layout" == "SINGLE" ]]; then
+				for f in $(ls | egrep "\.${conf_label_first}k2_${first_db}\.gz$"); do
+					base=$(echo $f | sed "s,\.${conf_label_first}k2_${first_db}\.gz,,g")
+					extract_kraken_reads.py -k $f -U $base -o $seqs_location\_k2/${f}_1.fastq.gz -t $taxonid -r ${base}.${conf_label_first}k2_${first_db}_report.txt --include-children &>> extract_kraken2_log_out.txt
+				done
+			elif [[ "$layout" == "PAIRED" ]]; then
+				for f in $(ls | egrep "\.${conf_label_first}k2_${first_db}\.gz$"); do
+					base=$(echo $f | sed "s,\.${conf_label_first}k2_${first_db}\.gz,,g")
+					extract_kraken_reads.py -k $f -s1 ${base}_1.fastq.gz -s2 ${base}_2.fastq.gz -o $seqs_location\_k2/${f}_1.fastq.gz -o2 $seqs_location\_k2/${f}_2.fastq.gz -t $taxonid -r ${base}.${conf_label_first}k2_${first_db}_report.txt --include-children &>> extract_kraken2_log_out.txt
+				done
+			fi
+		fi
+
 		for f in $(ls | grep "k2" | egrep ".fastq.gz$"); do fastqc -q -t $cores $f; done
   		echo -e "\n\nSTEP 2: DONE\nCurrent date/time: $(date)\n\n"
 	fi
@@ -800,8 +872,10 @@ if [[ $debug_step == "all" || $debug_step == "step4" ]]; then
 	IFS=', ' read -r -a array2 <<< "$filter"
 	for index in "${!array[@]}"; do
 		annotation_file=${array[index]}
-  		echo -e "R_process_reanalyzer_GSE.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index $genes ${array2[index]} $organism $target $differential_expr_soft $batch_format $covariables $covariables_format $deconvolution $differential_expr_comparisons $perform_differential_analyses $perform_volcano_venn $pattern_to_remove\n\n" >> $output_folder/$name/R_process_reanalyzer.log
-    		R_process_reanalyzer_GSE.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index $genes ${array2[index]} $organism $target $differential_expr_soft $batch_format $covariables $covariables_format $deconvolution $differential_expr_comparisons $perform_differential_analyses $perform_volcano_venn $pattern_to_remove | tee -a $output_folder/$name/R_process_reanalyzer.log
+		fc_seq_key=${optionsFeatureCounts_seq:-gene_name}
+		fc_feat_type=${optionsFeatureCounts_feat:-exon}
+  		echo -e "R_process_reanalyzer_GSE.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index $genes ${array2[index]} $organism $target $differential_expr_soft $batch_format $covariables $covariables_format $deconvolution $differential_expr_comparisons $perform_differential_analyses $perform_volcano_venn $pattern_to_remove $annotation_file $fc_seq_key $fc_feat_type $sc_count_matrix $sc_phenotype $bulk_expression_matrix\n\n" >> $output_folder/$name/R_process_reanalyzer.log
+    		R_process_reanalyzer_GSE.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index $genes ${array2[index]} $organism $target $differential_expr_soft $batch_format $covariables $covariables_format $deconvolution $differential_expr_comparisons $perform_differential_analyses $perform_volcano_venn $pattern_to_remove $annotation_file $fc_seq_key $fc_feat_type $sc_count_matrix $sc_phenotype $bulk_expression_matrix | tee -a $output_folder/$name/R_process_reanalyzer.log
     		R_qc_figs.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index "edgeR_object_prefilter" "edgeR_object" "edgeR_object_norm" $pattern_to_remove
 		if [[ -e "$output_folder/$name/final_results_reanalysis$index/counts_adjusted.txt" ]]; then
 			echo -e "\n\nRemember that batch effect correction/covariables have been only provided to Combat-Seq/limma for visualization purposes, to include covariables in the DGE model after checking the visualization the argument -C will be used\n\n\nQC_PDF adjusted counts\n\nRemember that you have requested batch effect correction/count adjustment, so you have to mind the figures in this QC_PDF from ComBat-seq/limma counts...\n"

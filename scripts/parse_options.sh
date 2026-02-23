@@ -28,7 +28,8 @@ for argument in $options; do
 	        -ri | -reference_genome_index # If the reference genome to be used already has an index that would like to reuse, please provide full pathway here (by default the provided genome is indexed)
 	        -a | -annotation # Reference annotation to be used (.gtf file, absolute pathway). If hisat2 is used, a gff file (make sure format is '.gff' and not '.gff3') is accepted (some QC steps like 'qualimap rnaseqqc' may be skipped though). You can provide a comma-separated list of the pathways to different annotation, and multiple/independent quantification/outputs from the same alignments will be generated.
 	        -t | -transcripts # Reference transcripts to be used (.fasta cDNA file, absolute pathway, only used if '-s' argument not provided so salmon prediction of strandness is required)
-	        -Dk | -kraken2_databases # Folder (absolute pathway) containing the database that should be used by Kraken2 (any input here, e.g. 'standard_eupathdb_48_kraken2_db', would activate the kraken2-based decontamination step)
+	        -Dk | -kraken2_databases # Comma-separated list of Kraken2 database folders (e.g. '/path/to/core_nt,/path/to/gtdb'). Any input here activates the kraken2-based decontamination step. All DB+confidence combinations will be run
+	        -Kc | -kraken2_confidence # Comma-separated confidence scores for Kraken2 classification (default '0', e.g. '0,0.20,0.50'). Each score is run for each database
 	        -Ds | -sortmerna_databases # The database (absolute pathway) that should be used by SortMeRNA (any input here, e.g. '/path/to/rRNA_databases/smr_v4.3_sensitive_db.fasta', would activate the sortmerna-based rRNA removal step)
 	        -Df | -databases_function # Manually provide a comma separated list of databases to be used in automatic functional enrichment analyses of DEGs (check out the R package autoGO::choose_database(), but the most popular GO terms are used by default)
 	        -nrf | -non_reference_funct_enrichm # Pathway to a file containing functional annotation (GAF, GFF, or GTF) to be used for functional enrichment when the organism is not Human or Mouse. If provided, this overrides the default behavior of using the main annotation file.
@@ -54,7 +55,10 @@ for argument in $options; do
 	        -cPf | -clusterProfiler_full # Whether to perform additional functional enrichment analyses with multiple databases using clusterProfiler, by default only ORA for GO BP, GO MF and GO CC, and KEGG and REACTOME enrichment, will be performed, as additional analyses may be slow if many significant DEGs or multiple number of comparisons ('yes' or 'no', by default)
 	        -b | -batch # Batch effect present? (no by default, yes if correction through Combat-seq and model is to be performed, and info is going to be required in other arguments or prompts)
 	        -B | -bed_mode # Whether to convert list of files to bed format so they can be visualized in genome browsers ('yes' or 'no', by default)
-	        -Dc | -deconvolution # Whether to perform deconvolution of the bulk RNA-seq data by CDSeq ('yes', which may require few hours to complete, or 'no', by default)
+	        -Dc | -deconvolution # Deconvolution method for bulk RNA-seq data: 'no' (default), 'CDSeq' (unsupervised, may take hours), or 'BisqueRNA' (reference-based, requires -scM, -scP, and -bulkM)
+	        -scM | -sc_count_matrix # Path to sc/snRNA count matrix for BisqueRNA deconvolution (tab-delimited, first column 'Gene', remaining columns are cells, values are counts)
+	        -scP | -sc_phenotype # Path to sc/snRNA phenotype file for BisqueRNA (tab-delimited, columns: 'SubjectName' and 'cellType', rows = cell IDs matching count matrix columns)
+	        -bulkM | -bulk_expression_matrix # Path to bulk expression matrix for BisqueRNA (tab-delimited, first column 'Gene', remaining columns are samples)
 	        -vv | -perform_volcano_venn # Whether to perform all Volcano plots and Venn diagrams, which may take a long time if many comparisons ('no' or 'yes', by default)
 	        -aP | -aPEAR_execution # Whether to simplify pathway enrichment analysis results by detecting clusters of similar pathways and visualizing enrichment networks by aPEAR package, which may be slow ('yes' or 'no', by default)
 	        -Ti | -tidy_tmp_files # Space-efficient run, with a last step removing raw reads if downloaded, converting bam to cram, removing tmp files... etc ('yes' or 'no', by default)
@@ -71,6 +75,7 @@ for argument in $options; do
 	        -Os | -options_featureCounts_seq # The seqid type to use to count in featureCounts (default 'gene_name')
 	        -A | -aligner # Aligner software to use ('hisat2' or 'star', by default)
 	        input_filter_regex=""
+	        input_filter_regex_exclude=""
         alignment_removal=""
         cores=8
 	        -Des | -differential_expr_software # Software to be used in the differential expression analyses ('edgeR' by default, or 'DESeq2')
@@ -83,7 +88,7 @@ for argument in $options; do
 	        #### Filtering out samples/comparisons:
 	        -G | -GSM_filter # GSM ids (one or several, separated by comma and no space) within the GSE entry to restrict the analysis to. An alternative to requesting a stop with -S to reorganize the downloaded files manually
 	        -S | -stop # Manual stop so the automatically downloaded files can be manually modified ('yes' or 'no', by default)
-	        -pR | -pattern_to_remove # A pattern to remove some matching samples from QC figures and DGE analyses (by default 'none')
+	        -pR | -pattern_to_remove # A pattern to exclude matching samples from downstream R processing only, i.e. QC figures and DGE analyses (by default 'none'). Unlike -regex/-regexExclude which filter raw reads before alignment, this option keeps all samples through alignment and counting but excludes matching ones at the R analysis stage. Useful for removing outlier samples without re-running the full pipeline (e.g. resume from -Dm step4)
 	        -Dec | -differential_expr_comparisons # Whether to restrict the differential expression analyses to only some of the possible comparisons or reorder the 'treatment' and 'control' elements of the comparison ('no', by default, or a comma-separated list specifying separated by '\\' the elements in the comparison, which you could get from a preliminar previous run, e.g. 'A//B,C//D,D//A'...)
 	
 	        #### Functional enrichment/networking analyses
@@ -101,7 +106,8 @@ for argument in $options; do
 	        -Fdup | -bam_dedup # Duplicate removal: 'no' (default), 'samtools' (markdup -r), 'picard' (REMOVE_DUPLICATES), 'picard_optical' (REMOVE_SEQUENCING_DUPLICATES)
 	
 	        #### Performance:
-	        -regex | -input_filter_regex # Regex to filter input files in local mode (e.g. "Sample_A|Sample_B")
+	        -regex | -input_filter_regex # Regex to keep only matching input files in local mode, removing the rest (e.g. "Sample_A|Sample_B")
+	        -regexExclude | -input_filter_regex_exclude # Regex to exclude matching input files in local mode, keeping the rest (e.g. "Sample_Bad|Sample_Outlier")
 	        -Ar | -alignment_removal # Fasta file to map against and remove aligned reads (e.g. host genome)
 	        -p | -cores # Number of cores
 	        -cR | -cores_reads_to_subsample # Cores to use in subsampling by seqtk (10 by default)
@@ -110,13 +116,14 @@ for argument in $options; do
 	        -P | -number_parallel # Number of files to be processed in parallel (10 by default)
 	        -cG | -compression_level # Specify the compression level to gzip the downloaded fastq files from GEO (numeric '0' to '9', default '9')
 	        -Ac | -aligner_index_cache # Whether to try and keep the genome index on the cache/loaded RAM so concurrent jobs do not have to reload it and can use it more easily ('no', which will empty cache at the end, or 'yes', by default)
-	        -K | -Kraken2_fast # Kraken2 fast mode, consisting on copying the Kraken2 database to /dev/shm (RAM) so execution is faster ('yes' or 'no' by default)" && exit 1;;
+	        -K | -Kraken2_fast # DEPRECATED: daemon mode now replaces /dev/shm approach. This option is kept for backward compatibility but has no effect" && exit 1;;
 		-options) options_file=${arguments[index]} ;;
 		-i) input=${arguments[index]} ;;
 		-n) name=${arguments[index]} ;;
 		-o) output_folder=${arguments[index]} ;;
 		-p) cores=${arguments[index]} ;;
         -regex | -input_filter_regex) input_filter_regex=${arguments[index]} ;;
+        -regexExclude | -input_filter_regex_exclude) input_filter_regex_exclude=${arguments[index]} ;;
         -Ar | -alignment_removal) alignment_removal=${arguments[index]} ;;
 		-pi) cores_index=${arguments[index]} ;;
 		-M) memory_max=${arguments[index]} ;;
@@ -146,13 +153,17 @@ for argument in $options; do
 		-T) target=${arguments[index]} ;;
 		-A) aligner=${arguments[index]} ;;
 		-A) aligner_index_cache=${arguments[index]} ;;
-		-K) kraken2_fast=${arguments[index]} ;;
+		-K) kraken2_fast=${arguments[index]}; echo "WARNING: -K/Kraken2_fast is deprecated; k2 daemon mode is used instead. This option has no effect." ;;
 		-Dk) kraken2_databases=${arguments[index]} ;;
+		-Kc | -kraken2_confidence) kraken2_confidence=${arguments[index]} ;;
 		-Ds) sortmerna_databases=${arguments[index]} ;;
 		-Des) differential_expr_soft=${arguments[index]} ;;
 		-Dm) debug_module=${arguments[index]} ;;
 		-Dec) differential_expr_comparisons=${arguments[index]} ;;
 		-Dc) deconvolution=${arguments[index]} ;;
+		-scM | -sc_count_matrix) sc_count_matrix=${arguments[index]} ;;
+		-scP | -sc_phenotype) sc_phenotype=${arguments[index]} ;;
+		-bulkM | -bulk_expression_matrix) bulk_expression_matrix=${arguments[index]} ;;
 		-cPf) clusterProfiler_full=${arguments[index]} ;;
 		-fe) functional_enrichment_analyses=${arguments[index]} ;;
 		-fd) full_differential_analyses=${arguments[index]} ;;
@@ -287,6 +298,19 @@ echo -e "\ncovariables_format=$covariables_format\n"
 if [ -z "$deconvolution" ]; then
 	deconvolution="no"
 fi
+# Backward compat: treat 'yes' as 'CDSeq'
+if [ "$deconvolution" == "yes" ]; then
+	deconvolution="CDSeq"
+fi
+if [ -z "$sc_count_matrix" ]; then
+	sc_count_matrix="none"
+fi
+if [ -z "$sc_phenotype" ]; then
+	sc_phenotype="none"
+fi
+if [ -z "$bulk_expression_matrix" ]; then
+	bulk_expression_matrix="none"
+fi
 if [ -z "$design_custom" ]; then
 	design_custom="no"
 fi
@@ -390,8 +414,8 @@ if [ -z "$debug_module" ]; then
 	debug_module="all"
 fi
 ### Info on the kraken2 decontamination step and databases:
-if [ -z "$kraken2_fast" ]; then
-	kraken2_fast="no"
+if [ -z "$kraken2_confidence" ]; then
+	kraken2_confidence="0"
 fi
 if [ -z "$compression_level" ]; then
 	compression_level=9
@@ -448,50 +472,34 @@ if [ ! -z "$kraken2_databases" ]; then
 	echo -e "\nPLEASE note some local databases for the decontamination step (kraken2-based) are needed"
 	echo -e "These databases may be large, so please be aware that the RAM usage may reach hundreds of GBs. Rerun without the -Dk parameter to skip decontamination if not acceptable"
 	echo -e "reanalyzerGSE is now going to check or give you instructions so the databases are downloaded and placed in the corresponding folders"
-	if [[ -f $kraken2_databases/taxdump/names.dmp ]] && [[ -f $kraken2_databases/taxdump/nodes.dmp ]] && [ "$(find -L $kraken2_databases -name hash.k2d | wc -l)" -gt 0 ]; then
-		echo -e "\nGood, apparently all of the required databases for decontamination based on taxonomic classification have been found in "$kraken2_databases"\n"
-	else
-		echo -e "\The databases for kraken2 have to be downloaded. The software will exit until the following steps are performed. Please note 'wget' may not complete the download and then uncompressing would give errors. You would need to remove any incomplete file and restart download"
-		echo -e "The databases names.dmp, nodes.dmp, merged.dmp and delnodes.dmp have to be downloaded by the user executing: mkdir -p $kraken2_databases/taxdump && cd $kraken2_databases/taxdump && wget https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/taxdmp.zip && unzip taxdmp.zip && rm taxdmp.zip"
-		echo -e "The kraken2 database has to be built by the user and placed within the $kraken2_databases folder. Please execute the following and read these comments if you want to build a kraken2 database containing the standard kraken2 recommended sequences and the EuPathDB v48 preprocessed sequences (http://ccb.jhu.edu/data/eupathDB/):"
-		echo -e "cd $kraken2_databases && cores=64"
-		echo -e "kraken2-build --download-taxonomy --threads \$cores --db standard_eupathdb_48_kraken2_db & #### The download commands can be sent to the background so they are simultaneously processed"
-		echo -e "kraken2-build --download-library archaea --threads \$cores --db standard_eupathdb_48_kraken2_db &"
-		echo -e "kraken2-build --download-library viral --threads \$cores --db standard_eupathdb_48_kraken2_db &"
-		echo -e "kraken2-build --download-library plasmid --threads \$cores --db standard_eupathdb_48_kraken2_db &"
-		echo -e "kraken2-build --download-library bacteria --threads \$cores --db standard_eupathdb_48_kraken2_db & #### This is around a download of 150GB"
-		echo -e "kraken2-build --download-library fungi --threads \$cores --db standard_eupathdb_48_kraken2_db &"
-		echo -e "kraken2-build --download-library UniVec_Core --threads \$cores --db standard_eupathdb_48_kraken2_db &"
-		echo -e "# kraken2-build --download-library protozoa --threads \$cores --db standard_eupathdb_48_kraken2_db & #### Not required here because protozoa from EuPathDB are going to be already added"
-		echo -e "# kraken2-build --download-library nt --threads \$cores --db standard_eupathdb_48_kraken2_db & #### With the nt database results would more precise, but it's huge. It works if you are patient, but it would involve a download of ~450GB, and then building would require to allocate at least 1TB. Then the final database would be of ~450GB of size, and require that much RAM to build and run"
-		echo -e "# kraken2-build --add-to-library chr1.fa --threads \$cores --db standard_eupathdb_48_kraken2_db #### If you want to add custom sequences or a particular genome you suspect contamination for... check kraken2 manual to handle taxonomy"
-		echo -e "# To add EuPathDB:"
-		echo -e "mkdir -p standard_eupathdb_48_kraken2_db/library/added && cd standard_eupathdb_48_kraken2_db/library/added"
-		echo -e "wget ftp://ftp.ccb.jhu.edu/pub/data/EuPathDB48/AmoebaDB48.tgz &"
-		echo -e "wget ftp://ftp.ccb.jhu.edu/pub/data/EuPathDB48/CryptoDB48.tgz &"
-		echo -e "wget ftp://ftp.ccb.jhu.edu/pub/data/EuPathDB48/FungiDB48.tgz &"
-		echo -e "wget ftp://ftp.ccb.jhu.edu/pub/data/EuPathDB48/GiardiaDB48.tgz &"
-		echo -e "wget ftp://ftp.ccb.jhu.edu/pub/data/EuPathDB48/MicrosporidiaDB48.tgz &"
-		echo -e "wget ftp://ftp.ccb.jhu.edu/pub/data/EuPathDB48/PiroplasmaDB48.tgz &"
-		echo -e "wget ftp://ftp.ccb.jhu.edu/pub/data/EuPathDB48/PlasmoDB48.tgz &"
-		echo -e "wget ftp://ftp.ccb.jhu.edu/pub/data/EuPathDB48/ToxoDB48.tgz &"
-		echo -e "wget ftp://ftp.ccb.jhu.edu/pub/data/EuPathDB48/TrichDB48.tgz &"
-		echo -e "wget ftp://ftp.ccb.jhu.edu/pub/data/EuPathDB48/TriTrypDB48.tgz &"
-		echo -e "wget ftp://ftp.ccb.jhu.edu/pub/data/EuPathDB48/seqid2taxid.map &"
-		echo -e "for f in *.tgz; do tar -xvzf \$f; done && rm *.tgz \$(ls | grep log)"
-		echo "awk '{ print "'"TAXID""\t"$1"\t"$2 }'"' seqid2taxid.map > prelim_map_1.txt && rm seqid2taxid.map"
-		echo -e "# To build the kraken2 database:"
-		echo -e "kraken2-build --build --threads \$cores --db standard_eupathdb_48_kraken2_db #### This would take around 5 hours and require around 75GB of RAM. If you included nt database, around 24 hours and 500GB of RAM. For the larger database including nt, you may need to include the flag --fast-build to avoid stalling or too much time building"
-		echo -e "kraken2-inspect --db standard_eupathdb_48_kraken2_db --threads \$cores > standard_eupathdb_48_kraken2_db_k2_inspect.txt"
-		echo -e "kraken2-build --clean --threads \$cores --db standard_eupathdb_48_kraken2_db #### This would remove the downloaded sequences and keep only the kraken2 database. This must be done to save space, but first double check the included sequences and the output of kraken2 inspect. If you execute this command and then you want to make any change to the database, you would have to download everything again"
-
-		echo -e "\n\nAlternatively, you can download ready-to-use databases from https://benlangmead.github.io/aws-indexes/k2"
-		echo -e "Please note that if you followed installation instructions, the kraken2-build script has been modified so database building is faster (improved masking, https://github.com/DerrickWood/kraken2/pull/39) and a bug in sequences download from ncbi has been corrected (https://github.com/DerrickWood/kraken2/issues/571)"
-		echo -e "Please note that if you have allocated enough RAM and the system is compatible, copying the kraken2 database to the faster RAM, something like /dev/shm/, and then pointing to the library there in kraken2 execution with the flag --memory-mapping would greatly improve speed, particularly if multiple runs (https://github.com/DerrickWood/kraken2/issues/451). reanalyzerGSE includes this mode with the flag -K"
-		echo -e "The execution of kraken2 classification with the suggested database (archaea + viral + plasmid + bacteria + fungi + UniVec_Core + EuPathDB) will require ~70GB of RAM."
-		echo -e "Please note that the kraken2 version within reanalyzerGSE is frozen. Though it should work, kraken2 is under active development to improve database download and build, sequence databases may undergo crucial changes, and external factors such as updates in NCBI structure may cause errors in the code above. For example, 'core_nt' since to be now more recommended than 'nt'. Please double check you are using the most up-to-date/appropriate databases"
-		exit 1
-	fi
+	IFS=',' read -r -a k2_db_array <<< "$kraken2_databases"
+	for k2_db in "${k2_db_array[@]}"; do
+		if [ "$(find -L $k2_db -name hash.k2d 2>/dev/null | wc -l)" -gt 0 ]; then
+			echo -e "\nGood, Kraken2 database found in $k2_db\n"
+		else
+			echo -e "\nERROR: Kraken2 database not found in $k2_db (missing hash.k2d)"
+			echo -e "\nTo download ready-to-use databases: https://benlangmead.github.io/aws-indexes/k2"
+			echo -e "\nTo build your own database with k2, example commands:"
+			echo -e "  mkdir -p $k2_db && cd $k2_db && cores=64"
+			echo -e "  k2 download-taxonomy --threads \$cores --db $k2_db &"
+			echo -e "  k2 download-library archaea --threads \$cores --db $k2_db &"
+			echo -e "  k2 download-library viral --threads \$cores --db $k2_db &"
+			echo -e "  k2 download-library plasmid --threads \$cores --db $k2_db &"
+			echo -e "  k2 download-library bacteria --threads \$cores --db $k2_db & # ~150GB download"
+			echo -e "  k2 download-library fungi --threads \$cores --db $k2_db &"
+			echo -e "  k2 download-library UniVec_Core --threads \$cores --db $k2_db &"
+			echo -e "  # k2 download-library nt --threads \$cores --db $k2_db & # Huge (~450GB), requires ~1TB to build"
+			echo -e "  # k2 add-to-library custom.fa --threads \$cores --db $k2_db # For custom sequences"
+			echo -e "  k2 build --threads \$cores --db $k2_db # ~5h, ~75GB RAM for standard; ~24h, ~500GB for nt"
+			echo -e "  k2 inspect --db $k2_db --threads \$cores > ${k2_db}_k2_inspect.txt"
+			echo -e "  k2 clean --db $k2_db # Remove downloaded seqs, keep only DB files (saves space)"
+			echo -e "\nAlternatively, download the recommended core_nt or gtdb databases from the link above."
+			echo -e "Exiting..."
+			exit 1
+		fi
+	done
+	echo -e "Confidence scores to be used: $kraken2_confidence"
+	echo -e "Note: reanalyzerGSE now uses k2 daemon mode for fast classification. The old -K/Kraken2_fast option is deprecated."
 fi
 if [ ! -z "$sortmerna_databases" ]; then
 	echo -e "\nPLEASE note some local databases for the step of rRNA removal (sortmerna-based) are needed"
