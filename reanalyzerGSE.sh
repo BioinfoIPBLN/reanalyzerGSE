@@ -206,19 +206,33 @@ if [[ $debug_step == "all" || $debug_step == "step1a" ]]; then
 				  cat(modify_number('"$1"'), "\n")
 				'
 			}
-   			desired_numbers=$(while IFS=$'\t' read -r col1 col2 col3; do
-					    desired_number_rand=$(apply_random_shift $desired_number)
-					    if (( col3 < desired_number_rand )); then
-					        result=$col2
-					    else
-					        result=$((col2 * desired_number_rand / col3))
-					    fi
-					    echo $result
-					 done < <(sed '1d' ${arr[0]}))
-			IFS=', ' read -r -a arr3 <<< "$(echo $desired_numbers | tr ' ' ',')"
+   			# Name-based lookup: match each sample prefix against reads_numbers.txt
+			declare -a arr3=()
+			for sample_prefix in "${arr2[@]}"; do
+				sample_name="${sample_prefix%_}"
+				matched_line=$(awk -F'\t' -v name="$sample_name" 'NR>1 && $1 == name' "${arr[0]}")
+				if [ -z "$matched_line" ]; then
+					echo "WARNING: Sample '$sample_name' not found in ${arr[0]}. Keeping all reads."
+					arr3+=("0")
+				else
+					col2=$(echo "$matched_line" | cut -f2)
+					col3=$(echo "$matched_line" | cut -f3)
+					desired_number_rand=$(apply_random_shift $desired_number)
+					if (( col3 < desired_number_rand )); then
+						arr3+=("$col2")
+					else
+						arr3+=("$((col2 * desired_number_rand / col3))")
+					fi
+				fi
+			done
    			subsample_reads() {
 				files=$(ls | grep $1)
 				number=$2
+				if [ "$number" -eq 0 ]; then
+					echo "Skipping subsampling for $1 (not found in reads_numbers.txt, keeping all reads)"
+					for file in $files; do cp "$file" "${file}_subsamp"; done
+					return
+				fi
 				for file in $files; do seqtk sample -s 123 "$file" "$number" > "${file}_subsamp"; done
 			}
 			export -f subsample_reads
@@ -354,20 +368,32 @@ if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
 				  cat(modify_number('"$1"'), "\n")
 				'
 			}
-   			desired_numbers=$(while IFS=$'\t' read -r col1 col2 col3; do
-					    desired_number_rand=$(apply_random_shift $desired_number)
-					    if (( col3 < desired_number_rand )); then
-					        result=$col2
-					    else
-					        result=$((col2 * desired_number_rand / col3))
-					    fi
-					    #echo "desired_rand is $desired_number_rand"
-					    echo $result
-					 done < <(sed '1d' ${arr[0]}))
-			IFS=', ' read -r -a arr3 <<< "$(echo $desired_numbers | tr ' ' ',')"
+   			# Name-based lookup: match each sample prefix against reads_numbers.txt
+			declare -a arr3=()
+			for sample_prefix in "${arr2[@]}"; do
+				sample_name="${sample_prefix%_}"
+				matched_line=$(awk -F'\t' -v name="$sample_name" 'NR>1 && $1 == name' "${arr[0]}")
+				if [ -z "$matched_line" ]; then
+					echo "WARNING: Sample '$sample_name' not found in ${arr[0]}. Keeping all reads."
+					arr3+=("0")
+				else
+					col2=$(echo "$matched_line" | cut -f2)
+					col3=$(echo "$matched_line" | cut -f3)
+					desired_number_rand=$(apply_random_shift $desired_number)
+					if (( col3 < desired_number_rand )); then
+						arr3+=("$col2")
+					else
+						arr3+=("$((col2 * desired_number_rand / col3))")
+					fi
+				fi
+			done
    			subsample_reads() {
 				files=$(ls | grep $1)
 				number=$2
+				if [ "$number" -eq 0 ]; then
+					echo "Skipping subsampling for $1 (not found in reads_numbers.txt, keeping all reads)"
+					return
+				fi
 				for file in $files; do seqtk sample -s 123 "$file" "$number" > "${file}_subsamp"; done
 			}
 			export -f subsample_reads
