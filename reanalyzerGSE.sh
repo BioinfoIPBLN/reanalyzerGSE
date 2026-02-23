@@ -866,7 +866,7 @@ if [[ $debug_step == "all" || $debug_step == "step3b" ]]; then
 		if [ "$qc_raw_reads" == "no" ]; then
 			mkdir -p $output_folder/$name/miARma_out$index/Pre_fastqc_results/_skip_
 		fi
-		$miarma_path/miARma miarma$index.ini 
+		$miarma_path/miARma miarma$index.ini
 	done
 
 	### Reformat the logs by parallel...
@@ -1150,9 +1150,9 @@ if [[ $debug_step == "all" || $debug_step == "step8" ]]; then
 
 	cd $output_folder/$name/ && find . -type f \( -name "*_fdr_05.txt" -o -name "*_logneg.txt" -o -name "*_logpos.txt" \) -exec rm -f {} +
 	if [ "$convert_tables_excel" == "yes" ]; then
-		R_convert_tables.R $output_folder/$name/ $cores "log_parallel|jquery|bamqc|rnaseqqc|samtools|strand" > /dev/null 2>&1
+		R_convert_tables.R $output_folder/$name/ $cores "log_parallel|jquery|bamqc|rnaseqqc|samtools|strand" > R_convert_tables.log 2>&1
 	fi
-	### Deploy igvShinyApp.R to final results folders with real paths substituted
+	### Deploy igvShinyApp.R to final results folders
 	if [ -f "$CURRENT_DIR/scripts/igvShinyApp.R" ]; then
 		IFS=', ' read -r -a array_annot <<< "$annotation"
 		for index in "${!array_annot[@]}"; do
