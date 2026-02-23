@@ -164,6 +164,47 @@ sub featureCount{
 	if ($file and $projectdir and $database and $logfile){
 		if($file !~ /no_aligned/ and $file !~ /unmapped/){
 		if($file =~ /.*\.bam$/ or $file =~ /.*\.sam$/){
+
+			# ── JLR: Annotation file validation (run once, before featureCounts) ──
+			if (! -e $database) {
+				die "SEQCOUNT ERROR :: Annotation file '$database' does not exist. "
+				  . "Please check your 'annotation' setting.\n";
+			}
+			if (-z $database || ! -s $database) {
+				die "SEQCOUNT ERROR :: Annotation file '$database' is empty (0 bytes). "
+				  . "Please provide a valid GTF/GFF annotation file.\n";
+			}
+			if (defined($args{"featuretype"})) {
+				my $featuretype = $args{"featuretype"};
+				my $found = 0;
+				open(my $annfh, "<", $database) or die "SEQCOUNT ERROR :: Cannot open annotation file '$database': $!\n";
+				while (<$annfh>) {
+					next if /^#/;
+					my @cols = split(/\t/);
+					if (scalar(@cols) >= 3 && $cols[2] eq $featuretype) {
+						$found = 1;
+						last;
+					}
+				}
+				close($annfh);
+				unless ($found) {
+					my %types;
+					open(my $annfh2, "<", $database) or die "SEQCOUNT ERROR :: Cannot open annotation file '$database': $!\n";
+					while (<$annfh2>) {
+						next if /^#/;
+						my @cols = split(/\t/);
+						$types{$cols[2]}++ if scalar(@cols) >= 3;
+					}
+					close($annfh2);
+					my $available = join(", ", sort keys %types) || "(none)";
+					die "SEQCOUNT ERROR :: Feature type '$featuretype' (set via -t / optionsFeatureCounts_feat) "
+					  . "not found in annotation file '$database'. "
+					  . "Available feature types: $available. "
+					  . "Please check your 'optionsFeatureCounts_feat' setting.\n";
+				}
+			}
+			# ── End annotation validation ──
+
 			print STDOUT "SEQCOUNT :: " . date() . " Reading counts from $file\n" if($verbose);
 			my $name;
 			if ($file =~ /.*\.sam$/){
