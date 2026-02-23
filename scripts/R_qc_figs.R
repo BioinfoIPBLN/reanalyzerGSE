@@ -132,7 +132,8 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   
   ### 3. Library size and read counts figures:
   par(mfrow=c(1,1))
-  bar_mids <- barplot(x$samples$lib.size,names.arg = gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name),las=2, main="Library Size",col=col.group, ylim=range(pretty(c(0, x$samples$lib.size))))
+  bar_mids <- barplot(x$samples$lib.size,names.arg = gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name),
+                       las=2, main="Library Size",col=col.group, ylim=range(pretty(c(0, x$samples$lib.size))))
   # Loop over the bar midpoints and add the text on top of each bar
   for(i in 1:length(bar_mids)) {
     # The y position is slightly above the top of the bar
@@ -142,7 +143,8 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   }
   
   par(mfrow=c(1,1))
-  bar_mids <- barplot(x$samples$lib.size,names.arg = gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Filename),las=1, main="Library Size",col=col.group, ylim=range(pretty(c(0, x$samples$lib.size))))
+  bar_mids <- barplot(x$samples$lib.size,names.arg = stringr::str_c(str_split(gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Filename), "_")[[1]][1:2], collapse = "_"),
+                       las=1, main="Library Size",col=col.group, ylim=range(pretty(c(0, x$samples$lib.size))))
   # Loop over the bar midpoints and add the text on top of each bar
   for(i in 1:length(bar_mids)) {
     # The y position is slightly above the top of the bar
