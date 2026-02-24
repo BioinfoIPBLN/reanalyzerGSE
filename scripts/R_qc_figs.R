@@ -277,11 +277,13 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   
   
   ### 4. Corrplot no log
-  tmp <- lcpm_no_log; colnames(tmp) <- gsub("_hisat.*|_STAR.*","",colnames(tmp))
-  corrplot(cor(tmp,method="spearman"), order='AOE',type = 'full',title="Spearman_correlation",tl.col = col.group,tl.srt = 45)
-  corrplot(cor(tmp,method="spearman"), method='number',type = 'full', title="Spearman_correlation",tl.col = col.group,tl.srt = 45)
-  corrplot(cor(tmp,method="pearson"), order='AOE',type = 'full',title="Pearson_correlation",tl.col = col.group,tl.srt = 45)
-  corrplot(cor(tmp,method="pearson"), method='number',type = 'full', title="Pearson_correlation",tl.col = col.group,tl.srt = 45)
+  tmp <- lcpm_no_log; colnames(tmp) <- gsub(\"_hisat.*|_STAR.*\",\"\",colnames(tmp))
+  # Adjust margins to prevent title cropping
+  par(mar=c(2, 2, 4, 3))
+  corrplot(cor(tmp,method=\"spearman\"), order='AOE',type = 'full',title=\"Spearman_correlation\",tl.col = col.group,tl.srt = 45, mar=c(0,0,2,0))
+  corrplot(cor(tmp,method=\"spearman\"), method='number',type = 'full', title=\"Spearman_correlation\",tl.col = col.group,tl.srt = 45, mar=c(0,0,2,0))
+  corrplot(cor(tmp,method=\"pearson\"), order='AOE',type = 'full',title=\"Pearson_correlation\",tl.col = col.group,tl.srt = 45, mar=c(0,0,2,0))
+  corrplot(cor(tmp,method=\"pearson\"), method='number',type = 'full', title=\"Pearson_correlation\",tl.col = col.group,tl.srt = 45, mar=c(0,0,2,0))
   
   ### 5.1. MDS_norm
   z <- plotMDS(lcpm2_no_log, labels=targets$Name, col=col.group, gene.selection = "pairwise", plot=F)
