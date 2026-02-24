@@ -109,6 +109,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
     den <- density(lcpm_prefilter[,i])
     lines(den$x, den$y, col=col[i], lwd=2)
   }
+  legend("topleft", legend="cutoff: 10/M + 2/L", lty=3, bty="n", cex=0.5)
   legend("topright",legend=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), text.col=col, bty = "n", cex = 0.5)
   
   ### 1.2. Density rawcounts log2, cpm...:
@@ -119,6 +120,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
     den <- density(lcpm[,i])
     lines(den$x, den$y, col=col[i], lwd=2)
   }
+  legend("topleft", legend="cutoff: 10/M + 2/L", lty=3, bty="n", cex=0.5)
   legend("topright", legend=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), text.col=col, bty="n", cex = 0.5)
   
   ### 2.1. Boxplots non-normalised:
