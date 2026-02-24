@@ -166,6 +166,51 @@ class IncludeMatchingFiles(SphinxDirective):
             raw_node = nodes.raw(\"\", download_html, format=\"html\")
             deg_nodes.append(raw_node)
 
+            # --- Extract top 10 from merged annotated file if exists ---
+            import glob
+            import os
+            base_name = os.path.splitext(file_name)[0]
+            # Assumes format: DGE_analysis_compX_merged_RPKM.txt or similar
+            merged_pattern = os.path.join(os.path.dirname(file_path), f\"{base_name}_merged_*.txt\")
+            merged_files = glob.glob(merged_pattern)
+            
+            if merged_files:
+                # Prefer RPKM if multiple, else just take the first
+                merged_file_path = next((f for f in merged_files if \"RPKM\" in f), merged_files[0])
+                merged_file_name = os.path.basename(merged_file_path)
+                try:
+                    merged_data = pd.read_csv(merged_file_path, sep=\"\\\t\", header=0)
+                    
+                    # Usually logFC is col 2, FDR is col 5, but let's dynamically find them if possible
+                    logfc_col_idx = 2
+                    padj_col_idx = 5
+                    for i, col in enumerate(merged_data.columns):
+                        if \"logFC\" in col or \"log2FoldChange\" in col:
+                            logfc_col_idx = i
+                        elif \"FDR\" in col or \"padj\" in col or \"P.Value\" in col or \"pvalue\" in col:
+                            padj_col_idx = i
+
+                    merged_data.iloc[:, logfc_col_idx] = pd.to_numeric(merged_data.iloc[:, logfc_col_idx], errors=\"coerce\")
+                    merged_data.iloc[:, padj_col_idx] = pd.to_numeric(merged_data.iloc[:, padj_col_idx], errors=\"coerce\")
+                    merged_data = merged_data.dropna(subset=[merged_data.columns[logfc_col_idx], merged_data.columns[padj_col_idx]])
+                    
+                    merged_degs_filtered = merged_data[merged_data.iloc[:, padj_col_idx] < 0.05]
+                    merged_sorted_degs = merged_degs_filtered.sort_values(by=merged_data.columns[logfc_col_idx])
+                    merged_head_tail = pd.concat([merged_sorted_degs.head(10), merged_sorted_degs.tail(10)])
+
+                    deg_nodes.append(nodes.paragraph(text=f\"Top 10 DEGs in each sense (with annotation):\"))
+                    merged_literal_node = nodes.literal_block()
+                    merged_literal_node['language'] = \"text\"
+                    merged_literal_node += nodes.Text(merged_head_tail.to_string(index=False, header=True))
+                    deg_nodes.append(merged_literal_node)
+
+                    # Add download link for merged
+                    merged_download_html = f'<p><a href=\"{merged_file_name}\" download=\"{merged_file_name}\" class=\"btn btn-primary\">Download {merged_file_name}</a></p>'
+                    deg_nodes.append(nodes.raw(\"\", merged_download_html, format=\"html\"))
+
+                except Exception as e:
+                    deg_nodes.append(nodes.paragraph(text=f\"Error processing merged DEGs from {merged_file_name}: {e}\"))
+
         except Exception as e:
             error_node = nodes.paragraph(text=f\"Error processing DEGs in {file_name}: {e}\")
             deg_nodes.append(error_node)
