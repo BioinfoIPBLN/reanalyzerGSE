@@ -847,9 +847,9 @@ if [[ $debug_step == "all" || $debug_step == "step3b" ]]; then
 		organism=$(cat $output_folder/$name/GEO_info/organism.txt | sed 's, ,_,g;s,_+,_,g')
 	fi
 
-	echo -e "\n\nmiARma configuration:\n"
+	echo -e "\n\nmiARma configuration:"
         cat miarma$index.ini
-	echo -e "\n\n\n Please double check all the parameters above for miARma, in particular the stranded or the reference genome files and annotation used. Proceeding with miARma execution in..."
+	echo -e "\nPlease double check all the parameters above for miARma, in particular the stranded or the reference genome files and annotation used. Proceeding with miARma execution in..."
 	secs=$((1 * 15))
 	dir=$output_folder/$name/miARma_out0
 	while [ $secs -gt 0 ]; do

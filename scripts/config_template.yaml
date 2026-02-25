@@ -26,10 +26,10 @@ kraken2_databases: ""                  # Comma-separated Kraken2 DB folders (e.g
 kraken2_confidence: "0"                # Comma-separated confidence scores (e.g. '0,0.20,0.50')
 sortmerna_databases: ""                # SortMeRNA database path (activates rRNA removal step)
 databases_function: "GO_Biological_Process_2023,GO_Molecular_Function_2023,GO_Cellular_Component_2023"
-non_reference_funct_enrichm: ""            # Annotation file (GAF, GMT, GFF, GTF) for functional enrichment in non-model organisms
+non_reference_funct_enrichm: ""        # Annotation file (GAF, GMT, GFF, GTF) for functional enrichment in non-model organisms
 
 # === Metadata and sample info ===
-design_custom_local: ""                # Experimental design for local dataset (comma-separated list, '/' for multiple)
+design_custom_local: ""                # Experimental design for local dataset (comma-separated list, '/' for multiple. If no design, please provide a dummy one, e.g. with every sample in the same group or a separate one.)
 design_custom: "no"                    # Manually specify experimental design for GEO ('yes' or 'no')
 organism: ""                           # Scientific name with underscore (e.g. Homo_sapiens)
 taxonid: ""                            # NCBI taxon ID
@@ -46,7 +46,7 @@ debug_step: "all"                      # Step to resume from ('step1'..'step9', 
 qc_raw_reads: "yes"                    # QC on raw reads ('yes' or 'no')
 full_differential_analyses: "yes"      # Full differential analyses ('yes' or 'no')
 functional_enrichment_analyses: "yes"  # Functional enrichment ('yes' or 'no')
-clusterProfiler_full: "no"            # Additional clusterProfiler analyses ('yes' or 'no')
+clusterProfiler_full: "no"             # Additional clusterProfiler analyses ('yes' or 'no')
 batch: "no"                            # Batch effect correction ('yes' or 'no')
 bed_mode: "no"                         # Convert to BED format for genome browsers ('yes' or 'no')
 deconvolution: "no"                    # Deconvolution method: 'no', 'CDSeq', or 'BisqueRNA'
@@ -54,7 +54,7 @@ sc_count_matrix: ""                    # Path to sc/snRNA count matrix for Bisqu
 sc_phenotype: ""                       # Path to sc phenotype file for BisqueRNA (SubjectName + cellType columns)
 bulk_expression_matrix: ""             # Path to bulk expression matrix for BisqueRNA (Gene x samples, tab-delimited)
 perform_volcano_venn: "yes"            # Volcano plots and Venn diagrams ('yes' or 'no')
-aPEAR_execution: "no"                 # aPEAR pathway clustering ('yes' or 'no')
+aPEAR_execution: "no"                  # aPEAR pathway clustering ('yes' or 'no')
 tidy_tmp_files: "no"                   # Space-efficient run, remove tmp files ('yes' or 'no')
 convert_tables_excel: "no"             # Convert tables to .xlsx ('yes' or 'no')
 time_course: "no"                      # Time-course analyses ('yes' or 'no')
@@ -67,7 +67,7 @@ strand: ""                             # Strandness ('yes', 'no', 'reverse'; pre
 filter: "standard"                     # Gene count threshold ('bin', 'filterbyexpr', or 'standard')
 optionsFeatureCounts_feat: "exon"      # featureCounts feature type
 optionsFeatureCounts_seq: "gene_name"  # featureCounts seqid type
-aligner: "star"                        # Aligner ('hisat2' or 'star')
+aligner: "star"                        # Aligner ('hisat2' or 'star') or 'kallisto'
 differential_expr_soft: "edgeR"        # DGE software ('edgeR' or 'DESeq2')
 fastp_mode: "no"                       # Quality filtering by fastp ('yes' or 'no')
 fastp_adapter: "no"                    # Adapter trimming by fastp ('yes', 'no', or path to fasta)
@@ -90,7 +90,7 @@ panther_method: "FDR"                  # Panther p-value adjustment ('NONE', 'BO
 revigo_threshold_similarity: 0.7       # Revigo similarity threshold (0.4-0.9)
 
 # === BAM filtering (post-alignment) ===
-bam_mapq_threshold: 0                 # Min MAPQ for samtools view -q and featureCounts -Q (0 = use default)
+bam_mapq_threshold: 0                  # Min MAPQ for samtools view -q and featureCounts -Q (0 = use default)
 bam_exclude_flags: ""                  # samtools -F flags to exclude, e.g. "4" (unmapped), "256" (secondary), "2308" (unmapped+secondary+supplementary)
 bam_require_flags: ""                  # samtools -f flags to require. SUGGESTION: use "2" for Paired-End to keep properly paired reads, or leave as "" (or "4") for Single-End.
 bam_dedup: "no"                        # Duplicate removal: 'no', 'samtools', 'picard', 'picard_optical' (see below)
@@ -107,4 +107,3 @@ memory_max: 257698037760               # Max RAM in bytes (~240GB)
 number_parallel: 10                    # Files processed in parallel
 compression_level: 9                   # Gzip compression level (0-9)
 aligner_index_cache: "yes"             # Keep genome index in cache ('yes' or 'no')
-# kraken2_fast is deprecated (daemon mode replaces /dev/shm approach)

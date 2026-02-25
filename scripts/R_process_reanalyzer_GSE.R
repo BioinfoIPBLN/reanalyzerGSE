@@ -60,6 +60,8 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
       # Ensure Length is not 0 (Kallisto length should be fine, but just in case)
       gene_counts$Length[gene_counts$Length == 0] <- 1
       
+      gene_counts <- as.data.frame(gene_counts)
+      
       cat("\nKallisto reads loaded (Transcript level)...\n")
       
   } else if (length(rc_dirs) > 0) {
@@ -333,7 +335,8 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
   edgeR_object <- DGEList(counts=gene_counts[,grep("Gene_ID|Length",colnames(gene_counts),invert=T)],
                    group=pheno$condition,
                    genes=gene_counts[,c(grep("Gene_ID",colnames(gene_counts)),grep("Length",colnames(gene_counts)))])
-  cat("\n\nPlease note that counts have been normalized and figures have been performed using the groups and samples:\n"); print(pheno$condition); print(grep("Gene_ID|Length",colnames(gene_counts),invert=T,val=T))
+  cat("\n\nPlease note that counts have been normalized and figures have been performed using the groups and samples:\n"); print(pheno$condition)
+  cat("\n\nPlease note the following samples/colnames:\n"); print(grep("Gene_ID|Length",colnames(gene_counts),invert=T,val=T))
 
 ###### Filter counts:
   filter <- function(filter="standard",data,min_group=3){
@@ -420,9 +423,9 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
               file=paste0(output_dir,"/RPKM_counts_genes.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
   tpm_counts <- rpkm_to_tpm(gene_counts_rpkm_to_write[,grep("Gene_ID",colnames(gene_counts_rpkm_to_write),invert=T)]); rownames(tpm_counts) <- gene_counts_rpkm_to_write$Gene_ID
   write.table(tpm_counts,
-              file=paste0(output_dir,"/TPM_counts_genes.txt"),quote = F,row.names = T, col.names = T,sep = "\t")
+              file=paste0(output_dir,"/TPM_counts_genes.txt"),quote = F,row.names = T, col.names = NA,sep = "\t")
   write.table(log2(tpm_counts+0.1),
-              file=paste0(output_dir,"/TPM_counts_genes_log2_0.1.txt"),quote = F,row.names = T, col.names = T,sep = "\t")
+              file=paste0(output_dir,"/TPM_counts_genes_log2_0.1.txt"),quote = F,row.names = T, col.names = NA,sep = "\t")
   # High/medium/low categ for TPM:
   tpm_counts_categ <- tpm_counts
   for (col in colnames(tpm_counts_categ)){
@@ -434,7 +437,7 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
     tpm_counts_categ[,paste0(col,"_categ_2")] <- b
   }
   write.table(tpm_counts_categ,
-              file=paste0(output_dir,"/TPM_counts_genes_categ.txt"),quote = F,row.names = T, col.names = T,sep = "\t")
+              file=paste0(output_dir,"/TPM_counts_genes_categ.txt"),quote = F,row.names = T, col.names = NA,sep = "\t")
   tpm_counts_log <- log2(tpm_counts+0.1)
   tpm_counts_log_categ <- tpm_counts_log
   for (col in colnames(tpm_counts_log_categ)){
@@ -446,7 +449,7 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
     tpm_counts_log_categ[,paste0(col,"_categ_2")] <- b
   }
   write.table(tpm_counts_log_categ,
-              file=paste0(output_dir,"/TPM_counts_genes_log2_0.1_categ.txt"),quote = F,row.names = T, col.names = T,sep = "\t")
+              file=paste0(output_dir,"/TPM_counts_genes_log2_0.1_categ.txt"),quote = F,row.names = T, col.names = NA,sep = "\t")
   # High/medium/low categ:
   gene_counts_rpkm_to_write_categ <- gene_counts_rpkm_to_write
   for (col in colnames(gene_counts_rpkm_to_write_categ[,-1])){
@@ -511,11 +514,11 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
           file=paste0(output_dir,"/RPKM_counts_adjusted_genes_log2_0.1.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
     tpm_counts <- rpkm_to_tpm(gene_counts_rpkm_adjusted_to_write[,grep("Gene_ID",colnames(gene_counts_rpkm_adjusted_to_write),invert=T)]); rownames(tpm_counts) <- gene_counts_rpkm_adjusted_to_write$Gene_ID
     write.table(tpm_counts,
-                file=paste0(output_dir,"/TPM_counts_adjusted_genes.txt"),quote = F,row.names = T, col.names = T,sep = "\t")
+                file=paste0(output_dir,"/TPM_counts_adjusted_genes.txt"),quote = F,row.names = T, col.names = NA,sep = "\t")
     write.table(log2(tpm_counts+0.1),
-                file=paste0(output_dir,"/TPM_counts_adjusted_genes_log2_0.1.txt"),quote = F,row.names = T, col.names = T,sep = "\t")
+                file=paste0(output_dir,"/TPM_counts_adjusted_genes_log2_0.1.txt"),quote = F,row.names = T, col.names = NA,sep = "\t")
   }
-  cat(paste0("\nCounts written. Current date: ",date()))
+  cat(paste0("\nCounts written. Current date: ",date(),"\n"))
 
 ###### Figure of the expr of certain genes of interest:
   ## Introduce in the violin plot statistics, loop through the different designs to get different coloring and grouping... etc
@@ -863,26 +866,51 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
 
       # Perform DGE:
       if (full_analyses!="no"){
-        if(covariab == "none"){
-          edgeR_results <- DGE(comp=list_combinations[[i]],object=edgeR_object_norm_temp_to_process)
-          colnames(edgeR_results$table)[3] <- paste0(colnames(edgeR_results$table)[3],paste(sub("__","",list_combinations[[i]]),collapse = "__VS__"))
+        cond1 <- list_combinations[[i]][1]
+        cond2 <- list_combinations[[i]][2]
+        group_counts <- table(as.character(edgeR_object_norm_temp_to_process$samples$group))
+        if (group_counts[cond1] == 1 || group_counts[cond2] == 1) {
+          cat(paste0("\nSkipping standard statistical testing for ", cond1, " vs ", cond2, " because at least one condition has only 1 replicate. Computing manual logFC instead.\n"))
+          norm_counts_cpm <- cpm(edgeR_object_norm_temp_to_process, log=TRUE)
+          samples_cond1 <- rownames(edgeR_object_norm_temp_to_process$samples)[edgeR_object_norm_temp_to_process$samples$group == cond1]
+          samples_cond2 <- rownames(edgeR_object_norm_temp_to_process$samples)[edgeR_object_norm_temp_to_process$samples$group == cond2]
+          
+          mean1 <- rowMeans(norm_counts_cpm[, samples_cond1, drop=FALSE])
+          mean2 <- rowMeans(norm_counts_cpm[, samples_cond2, drop=FALSE])
+          
+          manual_table <- data.frame(
+            Gene_ID = edgeR_object_norm_temp_to_process$genes$Gene_ID,
+            Length = edgeR_object_norm_temp_to_process$genes$Length,
+            logFC = mean1 - mean2,
+            logCPM = (mean1 + mean2) / 2,
+            PValue = NA,
+            FDR = NA
+          )
+          rownames(manual_table) <- manual_table$Gene_ID
+          edgeR_results <- list(table = manual_table)
+          colnames(edgeR_results$table)[3] <- paste0("logFC",paste(sub("__","",list_combinations[[i]]),collapse = "__VS__"))
         } else {
-          fit <- glmQLFit(edgeR_object_norm_temp_to_process, design, robust=TRUE)
-          contrast <- rep(0,dim(design)[2])
-          idxs_design <- rev(c(grep(sub("__","",list_combinations[[i]][1]),colnames(design)),grep(sub("__","",list_combinations[[i]][2]),colnames(design))))
-          if(length(idxs_design)!=2){cat(paste0("\n\nSomething is WRONG as one of your contrasts has been required to compare ",length(idxs_design)," conditions. Probably conflicting naming of biological conditions...\n\n"));stop("Exiting, please review the naming of the conditions...")}
-          contrast[idxs_design] <- c(-1,1)
-          qlf <- glmQLFTest(fit,contrast=contrast)
-          edgeR_results <- topTags(qlf,n=nrow(qlf),adjust.method="BH",sort.by="PValue")
-          print(summary(decideTests(qlf)))
-          print(nrow(edgeR_results$table[edgeR_results$table$FDR<=0.05 & abs(edgeR_results$table$logFC)>= 0,]))
-          print(list_combinations[[i]]); print("Top 10 results (each sense):")
-          print(as.data.frame(edgeR_results)[order(as.data.frame(edgeR_results)$logFC)[c(as.numeric(dim(edgeR_results)[1]):as.numeric(dim(edgeR_results)[1]-10),1:10)],3:6])
-          colnames(edgeR_results$table)[3] <- paste0(colnames(edgeR_results$table)[3],paste(sub("__","",list_combinations[[i]]),collapse = "__VS__"))
-          if (venn_volcano!="no"){
-            myLabel1=paste(list_combinations[[i]], collapse = '_vs_')
-            myLabel1=gsub("^_","",gsub("_+","_",gsub("[^[:alnum:]_]+", "_", myLabel1)))
-            Volcano(edgeR_results,paste(output_dir,"/DGE/Volcano_plot_",myLabel1,".pdf", sep=""),myLabel1)
+          if(covariab == "none"){
+            edgeR_results <- DGE(comp=list_combinations[[i]],object=edgeR_object_norm_temp_to_process)
+            colnames(edgeR_results$table)[3] <- paste0(colnames(edgeR_results$table)[3],paste(sub("__","",list_combinations[[i]]),collapse = "__VS__"))
+          } else {
+            fit <- glmQLFit(edgeR_object_norm_temp_to_process, design, robust=TRUE)
+            contrast <- rep(0,dim(design)[2])
+            idxs_design <- rev(c(grep(sub("__","",list_combinations[[i]][1]),colnames(design)),grep(sub("__","",list_combinations[[i]][2]),colnames(design))))
+            if(length(idxs_design)!=2){cat(paste0("\n\nSomething is WRONG as one of your contrasts has been required to compare ",length(idxs_design)," conditions. Probably conflicting naming of biological conditions...\n\n"));stop("Exiting, please review the naming of the conditions...")}
+            contrast[idxs_design] <- c(-1,1)
+            qlf <- glmQLFTest(fit,contrast=contrast)
+            edgeR_results <- topTags(qlf,n=nrow(qlf),adjust.method="BH",sort.by="PValue")
+            print(summary(decideTests(qlf)))
+            print(nrow(edgeR_results$table[edgeR_results$table$FDR<=0.05 & abs(edgeR_results$table$logFC)>= 0,]))
+            print(list_combinations[[i]]); print("Top 10 results (each sense):")
+            print(as.data.frame(edgeR_results)[order(as.data.frame(edgeR_results)$logFC)[c(as.numeric(dim(edgeR_results)[1]):as.numeric(dim(edgeR_results)[1]-10),1:10)],3:6])
+            colnames(edgeR_results$table)[3] <- paste0(colnames(edgeR_results$table)[3],paste(sub("__","",list_combinations[[i]]),collapse = "__VS__"))
+            if (venn_volcano!="no"){
+              myLabel1=paste(list_combinations[[i]], collapse = '_vs_')
+              myLabel1=gsub("^_","",gsub("_+","_",gsub("[^[:alnum:]_]+", "_", myLabel1)))
+              Volcano(edgeR_results,paste(output_dir,"/DGE/Volcano_plot_",myLabel1,".pdf", sep=""),myLabel1)
+            }
           }
         }
         conflicts <- intersect(ls(envir = environment()), ls(envir = .GlobalEnv))
@@ -995,7 +1023,7 @@ if (venn_volcano!="no"){
       contrast <- sapply(color,colorspace::contrast_ratio); contrast <- contrast[contrast>4] # Ensure a high contrast here and below (>4 on W3C standard)
       contrast2 <- unique(t(combn(unique(names(contrast)),2))[apply(t(combn(unique(names(contrast)),2)),1,function(x){colorspace::contrast_ratio(x[1],col2=x[2])}) > 4])
       levels(col.group) <- sample(contrast2, nlevels(col.group)); col.group <- as.character(col.group)
-      list_of_ids <- lapply(list_of_tables,function(y){y$Gene_ID[y$FDR<0.05]})
+      list_of_ids <- lapply(list_of_tables,function(y){y$Gene_ID[which(y$FDR<0.05)]})
       names(list_of_ids) <- group
   
       if(length(list_of_ids) < 8){

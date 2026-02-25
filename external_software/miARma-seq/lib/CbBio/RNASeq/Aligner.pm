@@ -4121,7 +4121,11 @@ sub kallisto{
                                       name_lists=\$(cat $tmp_file | sed 's,_1.fastq.gz*,,g' | sed 's,_2.fastq.gz*,,g' | sed 's,_R1.fastq.gz*,,g' | sed 's,_R2.fastq.gz*,,g' | sort | uniq | awk -F '/' '{ print \$NF }') && unset DISPLAY
                                       
                                       parallel --verbose --joblog ${projectdir}/kallisto_log_parallel.txt -j $parallelnumber 'kallisto quant -i $kallistoidx_final -o $projectdir${output_dir}{} -t $threads --bootstrap-samples 10 --seed 42 $kallistoparameters \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \$(cat $tmp_file | xargs dirname | uniq)/{}_2.fastq.gz && echo Done...{}' ::: \$(echo \$name_lists)
-                                    fi};
+                                    fi
+	 			    cd $projectdir && mkdir -p \$PWD/../multiqc_out && if [ \$(ls \$PWD/../multiqc_out | wc -l) -eq 0 ]; then
+       				       echo 'Gathering all QC reports with MultiQC'
+	     		       multiqc -f \$PWD/../../ --ignore 'miARma_stat*' -n multiqc_report -o \$PWD/../multiqc_out -p -q > \$PWD/../multiqc_out/multiqc.log 2>&1
+	   			    fi};
 					}
 				}
 				else{
@@ -4147,7 +4151,11 @@ sub kallisto{
                                   name_lists=\$(cat $tmp_file | awk -F '/' '{ print \$NF }') && unset DISPLAY
                                   
                                   parallel --verbose --joblog ${projectdir}/kallisto_log_parallel.txt -j $parallelnumber 'kallisto quant -i $kallistoidx_final -o $projectdir${output_dir}{} --single -t $threads --bootstrap-samples 10 --seed 42 $kallistoparameters \$(cat $tmp_file | xargs dirname | uniq)/{} && echo Done...{}' ::: \$(echo \$name_lists)
-                                fi};
+                                fi
+	 			    cd $projectdir && mkdir -p \$PWD/../multiqc_out && if [ \$(ls \$PWD/../multiqc_out | wc -l) -eq 0 ]; then
+       				       echo 'Gathering all QC reports with MultiQC'
+	     		       multiqc -f \$PWD/../../ --ignore 'miARma_stat*' -n multiqc_report -o \$PWD/../multiqc_out -p -q > \$PWD/../multiqc_out/multiqc.log 2>&1
+	   			    fi};
 		}
 		
 		# Execution block 
