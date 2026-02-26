@@ -244,8 +244,8 @@ pkgs_3 <- c("AnnotationHub@4.0.0","BiocBaseUtils@1.12.0","BiocManager@1.30.27","
 
 pkg_install(pkgs_1, ask = FALSE)
 pkg_install(pkgs_2, ask = FALSE)
-pkg_install(c("url::https://cran.r-project.org/src/contrib/Archive/aPEAR/aPEAR_1.0.0.tar.gz","url::https://cran.r-project.org/src/contrib/Archive/XML/XML_3.99-0.20.tar.gz",
-              "url::https://cran.r-project.org/src/contrib/Archive/BisqueRNA/BisqueRNA_1.0.5.tar.gz"), ask = FALSE)
+pkg_install(c("url::https://cran.r-project.org/src/contrib/Archive/aPEAR/aPEAR_1.0.0.tar.gz", "url::https://cran.r-project.org/src/contrib/Archive/XML/XML_3.99-0.20.tar.gz",
+              "url::https://cran.r-project.org/src/contrib/Archive/BisqueRNA/BisqueRNA_1.0.5.tar.gz", "url::https://cran.r-project.org/src/contrib/Archive/nVennR/nVennR_0.2.3.tar.gz"), ask = FALSE)
 pkg_install(pkgs_3, ask = FALSE)
 remotes::install_github("bnprks/BPCells/r", ref = "v0.3.1")
 
