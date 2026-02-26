@@ -69,7 +69,7 @@ reanalyzerGSE.sh -h
 	        -R | -number_reads_to_subsample # Subsample raw reads to reach an approximate target library size (none by default). Provide a comma-separated pair: path to the 'reads_numbers.txt' file from a previous execution, and target library size (i.e. the number of counted/mapped reads you want to reach, NOT the number of raw reads). The pipeline will use the raw-read and library-size columns in reads_numbers.txt to compute the proportional number of raw reads to keep for each sample so that the resulting library size is approximately +-10% of the target. If the sample already has fewer reads than the target, all its reads are kept.
 	        -bv | -batch_vector # Comma-separated list of numbers for use as batch vector with Combat-seq
 	        -bc | -batch_biological_covariable # Comma-separated list of numbers for use as batch vector of covariables of biological interest with Combat-seq
-		-bf | -batch_format # Format of the provided batch variables ('num' for numeric/vector variables or 'fact' for factors, by default)
+		    -bf | -batch_format # Format of the provided batch variables ('num' for numeric/vector variables or 'fact' for factors, by default)
 	        -C | -covariables # Please input a comma-separated list for the covariable that should be included in the limma model for removeBatchEffect or in the edgeR model for DGE (for now only one covariable allowed, for example an expected batch effect)
 	        -Cf | -covariables_format # Format of the provided covariate ('num' by default for numeric covariables, or 'fact' for factors)
 	        -T | -target # Protopical target file for attempts to differential gene expression analyses (containing filenames and covariates, automatically built if not provided)
