@@ -13,7 +13,7 @@ apptainer build reanalyzerGSE.sif reanalyzerGSE/external_software/installation/r
 ```
 1.2) Download the ready-to-use .sif image:
 ```
-wget -q https://bit.ly/reana_apptainer -O reanalyzerGSE.sif
+wget -q https://bit.ly/reanalyzer_appt_image -O reanalyzerGSE.sif
 ```
 
 
@@ -23,7 +23,7 @@ git clone https://github.com/BioinfoIPBLN/reanalyzerGSE
 bash reanalyzerGSE/external_software/installation/install.sh 2>&1 | tee -a reanalyzerGSE/external_software/installation/install.sh.log # Check log to make sure that installation of all dependencies has been succesful
 ```
 
-This should work if you already have miniconda3 installed, and also install miniconda3 within the reanalyzerGSE folder if not available or if you have kept it out of the PATH. Plese keep in mind that in the 'install.sh' script most of the versions of the tools installed by conda are frozen (by means of multiple '.yml' files corresponding to different environments), so please open an issue or try to install with conda if there are dependency-related problems or any software is not installed.
+This should work if you already have miniconda3 installed, or install miniconda3 within the reanalyzerGSE folder if not available or if you have kept it out of the PATH. Plese keep in mind that in the 'install.sh' script most of the versions of the tools installed by conda are frozen (by means of multiple '.yml' files corresponding to different environments), so please open an issue or try to install with conda if there are dependency-related problems or any software is not installed.
 
 
 3) The less recommended option is to manually install the required software.
@@ -35,7 +35,7 @@ Please go to test_data/README and follow instructions.
 
 
 ## reanalyzerGSE arguments
-Please refer to the help page for futher details. Please be aware that a txt containing arguments can be provided to '-options'
+Please refer to the help page for futher details. Please be aware that the yml file with all arguments can be provided to '-options'. See the [template](https://github.com/BioinfoIPBLN/reanalyzerGSE/blob/main/scripts/config_template.yaml):
 ```
 reanalyzerGSE.sh -h
 		-h | -help # Type this to get help
