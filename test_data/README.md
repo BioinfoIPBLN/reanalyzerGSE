@@ -9,12 +9,13 @@ Depending on the installation method, you can either:
 1) Use the Apptainer image:
 
 ```
-# wget -q https://bit.ly/reana_apptainer -O reanalyzerGSE.sif # Download the Apptainer image or use the one you created (see Installation instructions in main README)
+# wget -q https://bit.ly/reanalyzer_appt_image -O reanalyzerGSE.sif # Download the Apptainer image or use the one you created (see Installation instructions in main README)
 wget -q https://bit.ly/reana_test -O test_data.tar && tar xf test_data.tar && rm test_data.tar # Download test datasets
 
 wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M36/GRCm39.primary_assembly.genome.fa.gz # Download reference genome
 wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M36/gencode.vM36.primary_assembly.basic.annotation.gtf.gz # Download reference genome annotation
 gzip -d *.gz # To uncompress the references
+wget -q https://github.com/BioinfoIPBLN/reanalyzerGSE/raw/refs/heads/main/test_data/options_test.yaml # To get updated yaml file
 
 apptainer exec reanalyzerGSE.sif reanalyzerGSE.sh -options options_test.yaml 2>&1 | tee -a out_test.log
 ```
@@ -28,6 +29,7 @@ cd test_data
 wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M36/GRCm39.primary_assembly.genome.fa.gz # Download reference genome
 wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M36/gencode.vM36.primary_assembly.basic.annotation.gtf.gz # Download reference genome annotation
 gzip -d *.gz # To uncompress the references
+wget -q https://github.com/BioinfoIPBLN/reanalyzerGSE/raw/refs/heads/main/test_data/options_test.yaml # To get updated yaml file
 
 reanalyzerGSE.sh -options options_test.yaml 2>&1 | tee -a out_test.log
 ```
@@ -45,7 +47,7 @@ Depending on the installation method, you can either:
 wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M36/GRCm39.primary_assembly.genome.fa.gz # Download reference genome
 wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M36/gencode.vM36.primary_assembly.basic.annotation.gtf.gz # Download reference genome annotation
 gzip -d *.gz # To uncompress the references
-wget https://github.com/BioinfoIPBLN/reanalyzerGSE/raw/refs/heads/main/test_data/manual_options_out_test_GEO.txt
+wget -q https://github.com/BioinfoIPBLN/reanalyzerGSE/raw/refs/heads/main/test_data/options_test_GEO.yaml # To get updated yaml file
 
 apptainer exec reanalyzerGSE.sif reanalyzerGSE.sh -options options_test_GEO.yaml 2>&1 | tee -a out_test_GEO.log
 ```
@@ -59,6 +61,7 @@ cd test_data
 wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M36/GRCm39.primary_assembly.genome.fa.gz # Download reference genome
 wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M36/gencode.vM36.primary_assembly.basic.annotation.gtf.gz # Download reference genome annotation
 gzip -d *.gz # To uncompress the references
+wget -q https://github.com/BioinfoIPBLN/reanalyzerGSE/raw/refs/heads/main/test_data/options_test_GEO.yaml # To get updated yaml file
 
 reanalyzerGSE.sh -options options_test_GEO.yaml 2>&1 | tee -a out_test_GEO.log
 ```
