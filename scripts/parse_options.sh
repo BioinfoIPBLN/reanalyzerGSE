@@ -1,6 +1,7 @@
 #!/bin/bash
 CURRENT_DIR_SCRIPTS=$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 export PATH=$CURRENT_DIR_SCRIPTS:$PATH; echo -e "\n\nAdding to PATH the scripts folder...$CURRENT_DIR_SCRIPTS"
+REANALYZER_VERSION=$(cat "$(dirname "$CURRENT_DIR_SCRIPTS")/VERSION" 2>/dev/null || echo "unknown")
 
 ##### From the command line, get arguments by looping through an index...
 index=0
@@ -11,7 +12,7 @@ for argument in $options; do
 
 ### Gather the parameters, default values, exit if essential not provided...
 	case $argument in
-		-h*) echo "reanalyzerGSE v3.2.0 - usage: reanalyzerGSE.sh [options]
+		-h*) echo "reanalyzerGSE v${REANALYZER_VERSION} - usage: reanalyzerGSE.sh [options]
 	        -h | -help # Type this to get help
 	        -options | Provide a YAML configuration file containing the parameters to be used. You can adapt the file 'config_template.yaml' provided in the scripts folder. CLI arguments override values from the YAML file.)
 	        
@@ -42,7 +43,7 @@ for argument in $options; do
 	        -R | -number_reads_to_subsample # Subsample raw reads to reach an approximate target library size (none by default). Provide a comma-separated pair: path to the 'reads_numbers.txt' file from a previous execution, and target library size (i.e. the number of counted/mapped reads you want to reach, NOT the number of raw reads). The pipeline will use the raw-read and library-size columns in reads_numbers.txt to compute the proportional number of raw reads to keep for each sample so that the resulting library size is approximately +-10% of the target. If the sample already has fewer reads than the target, all its reads are kept.
 	        -bv | -batch_vector # Comma-separated list of numbers for use as batch vector with Combat-seq
 	        -bc | -batch_biological_covariable # Comma-separated list of numbers for use as batch vector of covariables of biological interest with Combat-seq
-			-bf | -batch_format # Format of the provided batch variables ('num' for numeric/vector variables or 'fact' for factors, by default)
+			    -bf | -batch_format # Format of the provided batch variables ('num' for numeric/vector variables or 'fact' for factors, by default)
 	        -C | -covariables # Please input a comma-separated list for the covariable that should be included in the limma model for removeBatchEffect or in the edgeR model for DGE (for now only one covariable allowed, for example an expected batch effect)
 	        -Cf | -covariables_format # Format of the provided covariate ('num' by default for numeric covariables, or 'fact' for factors)
 	        -T | -target # Protopical target file for attempts to differential gene expression analyses (containing filenames and covariates, automatically built if not provided)
@@ -89,7 +90,7 @@ for argument in $options; do
 	        -G | -GSM_filter # GSM ids (one or several, separated by comma and no space) within the GSE entry to restrict the analysis to. An alternative to requesting a stop with -S to reorganize the downloaded files manually
 	        -S | -stop # Manual stop so the automatically downloaded files can be manually modified ('yes' or 'no', by default)
 	        -pR | -pattern_to_remove # A pattern to exclude matching samples from downstream R processing only, i.e. QC figures and DGE analyses (by default 'none'). Unlike -regex/-regexExclude which filter raw reads before alignment, this option keeps all samples through alignment and counting but excludes matching ones at the R analysis stage. Useful for removing outlier samples without re-running the full pipeline (e.g. resume from -Dm step4)
-	        -Dec | -differential_expr_comparisons # Whether to restrict the differential expression analyses to only some of the possible comparisons or reorder the 'treatment' and 'control' elements of the comparison ('no', by default, or a comma-separated list specifying separated by '\\' the elements in the comparison, which you could get from a preliminar previous run, e.g. 'A//B,C//D,D//A'...)
+	        -Dec | -differential_expr_comparisons # Restrict differential expression analyses to specific comparisons and control log2FC direction ('no' by default). Provide a comma-separated list using 'vs' (or '//' for backward compat) as separator, e.g. 'A7vsP0,P20vsP0'. The ORDER matters: the FIRST element is the numerator, so positive log2FC = higher expression in the first element
 	
 	        #### Functional enrichment/networking analyses
 	        -cPm | -clusterProfiler_method # Method for adjusting p.value in clusterProfiler iterations (one of 'holm','hochberg','hommel','bonferroni','BH','BY,'none', or 'fdr', by default)
@@ -104,6 +105,7 @@ for argument in $options; do
 	        -Fex | -bam_exclude_flags # samtools -F flags to exclude, e.g. '4' (unmapped), '256' (secondary), '2308' (combined)
 	        -Freq | -bam_require_flags # samtools -f flags to require. Suggestion: use '2' for Paired-End (proper pair), leave empty or '4' for Single-End.
 	        -Fdup | -bam_dedup # Duplicate removal: 'no' (default), 'samtools' (markdup -r), 'picard' (REMOVE_DUPLICATES), 'picard_optical' (REMOVE_SEQUENCING_DUPLICATES)
+	        -Fcust | -bam_custom_filter # Custom shell command to pipe SAM text through post-alignment (e.g. "grep -E '^@|\\<NM:i:0\\>'" for perfect matches). Must preserve header lines (^@).
 	
 	        #### Performance:
 	        -regex | -input_filter_regex # Regex to keep only matching input files in local mode, removing the rest (e.g. "Sample_A|Sample_B")
@@ -198,6 +200,7 @@ for argument in $options; do
 		-Fex) bam_exclude_flags=${arguments[index]} ;;
 		-Freq) bam_require_flags=${arguments[index]} ;;
 		-Fdup) bam_dedup=${arguments[index]} ;;
+		-Fcust) bam_custom_filter=${arguments[index]} ;;
 		-nrf) non_reference_funct_enrichm=${arguments[index]} ;;
 		-eDe) exploreDE_se=${arguments[index]} ;;
 	esac
@@ -449,6 +452,9 @@ if [ -z "$bam_require_flags" ]; then
 fi
 if [ -z "$bam_dedup" ]; then
 	bam_dedup="no"
+fi
+if [ -z "$bam_custom_filter" ]; then
+	bam_custom_filter=""
 fi
 if [ -z "$exploreDE_se" ]; then
 	exploreDE_se="no"

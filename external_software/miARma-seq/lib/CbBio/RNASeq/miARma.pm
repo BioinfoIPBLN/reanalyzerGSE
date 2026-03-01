@@ -722,6 +722,7 @@ sub run_miARma{
 						bam_exclude_flags=>$cfg->val("Aligner","bam_exclude_flags") || undef,
 						bam_mapq_threshold=>$cfg->val("Aligner","bam_mapq_threshold") || undef,
 						bam_dedup=>$cfg->val("Aligner","bam_dedup") || "no",
+						bam_custom_filter=>$cfg->val("Aligner","bam_custom_filter") || undef,
 						strand=>$cfg->val("General","strand")|| "yes",
 					);
 					push(@alignes,$file);

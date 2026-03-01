@@ -90,8 +90,8 @@ class IncludeMatchingFiles(SphinxDirective):
 
         file_nodes = []
         for file in matched_files:
-            # Ignore files containing \"annotation\" or \"Gene_IDs\" or \"fdr\"
-            if \"annotation\" in file or \"Gene_IDs\" in file or \"fdr\" in file:
+            # Ignore files containing \"annotation\" or \"Gene_IDs\" or \"fdr\" or \"merged\"
+            if \"annotation\" in file or \"Gene_IDs\" in file or \"fdr\" in file or \"merged\" in file:
                 continue
 
             file_path = os.path.join(directory, file)
@@ -162,24 +162,24 @@ class IncludeMatchingFiles(SphinxDirective):
             deg_nodes.append(literal_node)
 
             # Add a download link (HTML)
-            download_html = f'<p><a href=\"{file_name}\" download=\"{file_name}\" class=\"btn btn-primary\">Download {file_name}</a></p>'
+            xlsx_name = os.path.splitext(file_name)[0] + \".xlsx\"
+            xlsx_path = os.path.join(os.path.dirname(file_path), xlsx_name)
+            xlsx_link = f' (<a href=\"{xlsx_name}\" download=\"{xlsx_name}\">xlsx version</a>)' if os.path.exists(xlsx_path) else \"\"
+            download_html = f'<p><a href=\"{file_name}\" download=\"{file_name}\" class=\"btn btn-primary\">Download {file_name}</a>{xlsx_link}</p>'
             raw_node = nodes.raw(\"\", download_html, format=\"html\")
             deg_nodes.append(raw_node)
 
             # --- Extract top 10 from merged annotated file if exists ---
-            import glob
-            import os
             base_name = os.path.splitext(file_name)[0]
             # Assumes format: DGE_analysis_compX_merged_RPKM.txt or similar
             merged_pattern = os.path.join(os.path.dirname(file_path), f\"{base_name}_merged_*.txt\")
             merged_files = glob.glob(merged_pattern)
             
             if merged_files:
-                # Prefer RPKM if multiple, else just take the first
-                merged_file_path = next((f for f in merged_files if \"RPKM\" in f), merged_files[0])
-                merged_file_name = os.path.basename(merged_file_path)
+                # Prefer RPKM for the table preview, if multiple, else just take the first
+                preview_file_path = next((f for f in merged_files if \"RPKM\" in f), merged_files[0])
                 try:
-                    merged_data = pd.read_csv(merged_file_path, sep=\"\\\t\", header=0)
+                    merged_data = pd.read_csv(preview_file_path, sep=\"\\\t\", header=0)
                     
                     # Usually logFC is col 2, FDR is col 5, but let's dynamically find them if possible
                     logfc_col_idx = 2
@@ -204,12 +204,17 @@ class IncludeMatchingFiles(SphinxDirective):
                     merged_literal_node += nodes.Text(merged_head_tail.to_string(index=False, header=True))
                     deg_nodes.append(merged_literal_node)
 
-                    # Add download link for merged
-                    merged_download_html = f'<p><a href=\"{merged_file_name}\" download=\"{merged_file_name}\" class=\"btn btn-primary\">Download {merged_file_name}</a></p>'
-                    deg_nodes.append(nodes.raw(\"\", merged_download_html, format=\"html\"))
+                    # Add download link for all merged files
+                    for m_file_path in sorted(merged_files):
+                        m_file_name = os.path.basename(m_file_path)
+                        m_xlsx_name = os.path.splitext(m_file_name)[0] + \".xlsx\"
+                        m_xlsx_path = os.path.join(os.path.dirname(m_file_path), m_xlsx_name)
+                        m_xlsx_link = f' (<a href=\"{m_xlsx_name}\" download=\"{m_xlsx_name}\">xlsx version</a>)' if os.path.exists(m_xlsx_path) else \"\"
+                        m_download_html = f'<p><a href=\"{m_file_name}\" download=\"{m_file_name}\" class=\"btn btn-primary\">Download {m_file_name}</a>{m_xlsx_link}</p>'
+                        deg_nodes.append(nodes.raw(\"\", m_download_html, format=\"html\"))
 
                 except Exception as e:
-                    deg_nodes.append(nodes.paragraph(text=f\"Error processing merged DEGs from {merged_file_name}: {e}\"))
+                    deg_nodes.append(nodes.paragraph(text=f\"Error processing merged DEGs from {preview_file_path}: {e}\"))
 
         except Exception as e:
             error_node = nodes.paragraph(text=f\"Error processing DEGs in {file_name}: {e}\")
@@ -292,8 +297,8 @@ Please use the following links:
 
 .. raw:: html
    
-   <a href=\"sphinx_report/html/RPKM_counts_genes_log2_0.1_categ.txt\" target=\"_blank\">Click to get RPKM counts (log2 + 0.1)</a><br>
-   <a href=\"sphinx_report/html/TPM_counts_genes_log2_0.1.txt\" target=\"_blank\">Click to get TPM counts (log2 + 0.1)</a>
+   <a href=\"sphinx_report/html/RPKM_counts_genes_log2_0.1_categ.txt\" target=\"_blank\">Click to get RPKM counts (log2 + 0.1)</a>$(if [ -f "$path/$final_dir_name/RPKM_counts_genes_log2_0.1_categ.xlsx" ]; then echo ' (<a href="sphinx_report/html/RPKM_counts_genes_log2_0.1_categ.xlsx" target="_blank">xlsx version</a>)'; fi)<br>
+   <a href=\"sphinx_report/html/TPM_counts_genes_log2_0.1_categ.txt\" target=\"_blank\">Click to get TPM counts (log2 + 0.1)</a>$(if [ -f "$path/$final_dir_name/TPM_counts_genes_log2_0.1_categ.xlsx" ]; then echo ' (<a href="sphinx_report/html/TPM_counts_genes_log2_0.1_categ.xlsx" target="_blank">xlsx version</a>)'; fi)
 
 If requested, please go to \"$project_name/$final_dir_name/violin\" to check out the figures showing the transcriptional profiles of genes of interest. You may also find the tables \"_annotation.txt\" including the gene annotation available. The ExpressionVisualization or exploreDE apps may be also used (see below).
 
@@ -328,7 +333,7 @@ Volcano plots
 
 Functional enrichment analyses
 ------------------------------------------------------------------------------------
-Please use the following :download:\`link <../$final_dir_name/DGE/funct_enrichment_analyses.tar.gz>\` (fails if not computed)
+$(if [ -f "$path/$final_dir_name/DGE/funct_enrichment_analyses.tar.gz" ]; then echo "Please use the following :download:\`link <../$final_dir_name/DGE/funct_enrichment_analyses.tar.gz>\`"; else echo "Functional enrichment not requested or not available"; fi)
 
 .. index:: Funct_enrich
 
@@ -351,7 +356,7 @@ Please use the following links:
    <a href=\"sphinx_report/html/multiqc_report.html\" target=\"_blank\">Click to open report by MultiQC</a><br>
    <a href=\"sphinx_report/html/multisampleBamQcReport.html\" target=\"_blank\">Click to open Multi-sample BAM QC by Qualimap</a><br>
 ${rnaseqqc_links}   <a href=\"sphinx_report/html/${project_name}_norm_QC.pdf\" target=\"_blank\">Click to open PDF with multiple QC figures</a><br>
-   <a href=\"sphinx_report/html/${project_name}_adjusted_QC.pdf\" target=\"_blank\">Click to open PDF with multiple QC figures if batch correction/adjusted counts</a> (fails if not computed)
+$(if [ -f "$path/$final_dir_name/QC_and_others/${project_name}_adjusted_QC.pdf" ]; then echo "   <a href=\"sphinx_report/html/${project_name}_adjusted_QC.pdf\" target=\"_blank\">Click to open PDF with multiple QC figures if batch correction/adjusted counts</a><br>"; fi)
 
 .. index:: QC analyses
 

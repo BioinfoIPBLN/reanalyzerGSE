@@ -817,10 +817,27 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
       list_combinations <- lapply(list_combinations,function(x){if (sum(!startsWith(x,"__"))==2){paste0("__",x)} else {x}})
       cat("\nThese are the combinations that will be analyzed in differential gene expression analyses, if you want to restrict or change these, please use the argument -Dec or -pR\n")
       if (restrict_comparisons!="no"){
-        cat("You have manually provided a list. Reading the comma-separated list with the ordered comparisons that you want to perform...\n")
-        cat("These are:\n")
-        list_combinations <- strsplit(unlist(strsplit(restrict_comparisons,",")),"//")        
-        print(list_combinations)
+        cat("You have manually provided a list of explicit comparisons. Reading the comma-separated list with the ordered comparisons that you want to perform...\n")
+        cat("Separator detected: 'vs' or '//' between the two conditions in each comparison.\n")
+        cat("The ORDER matters: the FIRST element is the numerator, so positive log2FC = higher expression in the first element.\n")
+        # Support both 'vs' and '//' as separators (backward compatible)
+        individual_comparisons <- unlist(strsplit(restrict_comparisons, ","))
+        list_combinations <- lapply(individual_comparisons, function(x) {
+          if (grepl("//", x, fixed = TRUE)) {
+            unlist(strsplit(x, "//", fixed = TRUE))
+          } else if (grepl("vs", x, fixed = TRUE)) {
+            unlist(strsplit(x, "vs", fixed = TRUE))
+          } else {
+            warning(paste0("Could not parse comparison: '", x, "'. Expected format: 'AvsBvsC' or 'A//B'. Skipping..."))
+            return(NULL)
+          }
+        })
+        list_combinations <- list_combinations[!sapply(list_combinations, is.null)]
+        cat("These are the explicit comparisons requested:\n")
+        for (j in seq_along(list_combinations)) {
+          cat(paste0("  Comparison ", j, ": ", list_combinations[[j]][1], " vs ", list_combinations[[j]][2],
+                     "  (positive log2FC = higher in ", list_combinations[[j]][1], ")\n"))
+        }
       }
       if (pattern_to_remove!="none"){
         list_combinations <- list_combinations[grep(pattern_to_remove,list_combinations,invert=T)]
@@ -1050,6 +1067,7 @@ if (venn_volcano!="no"){
       write.table(paste0("Comparison number ",i,": ",paste0(names(list_of_ids[list_of_combinations[[i]]]),collapse=" // ")),file=paste0(unique(dirname(files)),"/list_combn.txt"),col.names = F,row.names = F,quote = F,sep="\n",append=T)
       list_of_ids[list_of_combinations[[i]]]
       tmp_file <- tempfile();sink(tmp_file)
+      suppressMessages(futile.logger::flog.threshold(futile.logger::ERROR, name = "VennDiagramLogger"))
         VennDiagram::venn.diagram(
               x = list_of_ids[list_of_combinations[[i]]],
               category.names = names(list_of_ids)[list_of_combinations[[i]]],
@@ -1178,19 +1196,58 @@ tryCatch({
 
   if (length(dge_files) > 0 && full_analyses != "no") {
     for (dge_file in dge_files) {
-      dge <- read.delim(dge_file, stringsAsFactors = FALSE)
+      dge <- read.delim(dge_file, stringsAsFactors = FALSE, check.names = FALSE)
       comp_name <- sub("\\.txt$", "", basename(dge_file))
 
+      # Extract the two conditions from the logFC column name (logFCcond1__VS__cond2)
+      # and subset expression tables to only include samples from those conditions
+      logfc_col <- grep("^logFC", colnames(dge), value = TRUE)
+      if (length(logfc_col) > 0) {
+        comp_str <- sub("^logFC", "", logfc_col[1])
+        comp_conditions <- unlist(strsplit(comp_str, "__VS__"))
+        # Get sample names belonging to these two conditions (handling '___' prefix for numeric conditions)
+        comp_samples <- pheno$sample[pheno$condition %in% comp_conditions | sub("^__", "", pheno$condition) %in% comp_conditions]
+        comp_samples <- sub("_[^_]+$", "",comp_samples)
+        
+        rpkm_cols <- colnames(rpkm_categ)
+        tpm_cols <- colnames(tpm_categ)
+        
+        if (length(comp_samples) == 0) {
+            # Fallback if conditions could not be matched
+            cat(paste0("  Warning: Conditions extracted from logFC (", paste(comp_conditions, collapse=", "), ") did not match any pheno conditions. Keeping all expression columns.\n"))
+            rpkm_keep <- rep(TRUE, length(rpkm_cols))
+            tpm_keep <- rep(TRUE, length(tpm_cols))
+        } else {
+            # Subset RPKM categ: keep Gene_ID + columns starting with comp_samples
+            rpkm_sample_pattern <- paste0("^(", paste(gsub("([.|()\\^{}+$*?]|\\\\[|\\\\])", "\\\\\\1", comp_samples), collapse="|"), ")", "(_.*|)$")
+            rpkm_keep <- rpkm_cols == "Gene_ID" | grepl(rpkm_sample_pattern, rpkm_cols)
+            
+            # Subset TPM categ: same logic
+            tpm_sample_pattern <- rpkm_sample_pattern
+            tpm_keep <- tpm_cols == "Gene_ID" | grepl(tpm_sample_pattern, tpm_cols)
+        }
+        
+        rpkm_categ_sub <- rpkm_categ[, rpkm_keep, drop = FALSE]
+        tpm_categ_sub <- tpm_categ[, tpm_keep, drop = FALSE]
+        cat(paste0("  Comparison: ", comp_str, " -> keeping expression columns for ",
+                   length(comp_samples), " samples (conditions: ", paste(comp_conditions, collapse=", "), ")\n"))
+      } else {
+        rpkm_categ_sub <- rpkm_categ
+        tpm_categ_sub <- tpm_categ
+      }
+
       # Merge DGE + RPKM categ + GTF
-      merged_rpkm <- merge(dge, rpkm_categ, by = "Gene_ID", all.x = TRUE)
+      merged_rpkm <- merge(dge, rpkm_categ_sub, by = "Gene_ID", all.x = TRUE)
       merged_rpkm <- merge_tables(merged_rpkm)
+      colnames(merged_rpkm) <- sub("gtf_","",colnames(merged_rpkm))
       write.table(merged_rpkm,
                   file = paste0(output_dir, "/DGE/", comp_name, "_merged_RPKM.txt"),
                   quote = FALSE, row.names = FALSE, col.names = TRUE, sep = "\t")
 
       # Merge DGE + TPM categ + GTF
-      merged_tpm <- merge(dge, tpm_categ, by = "Gene_ID", all.x = TRUE)
+      merged_tpm <- merge(dge, tpm_categ_sub, by = "Gene_ID", all.x = TRUE)
       merged_tpm <- merge_tables(merged_tpm)
+      colnames(merged_tpm) <- sub("gtf_","",colnames(merged_tpm))
       write.table(merged_tpm,
                   file = paste0(output_dir, "/DGE/", comp_name, "_merged_TPM.txt"),
                   quote = FALSE, row.names = FALSE, col.names = TRUE, sep = "\t")
@@ -1260,12 +1317,38 @@ if (diff_soft=="DESeq2"){
   
   # Differential DESeq analysis:
   deseq2_object <- DESeq(deseq2_object)
-  for (i in 1:dim(combn(unique(d),2))[2]){
-    res_deseq2_object <- results(deseq2_object,contrast=c("condition",combn(unique(d),2)[,i][1],combn(unique(d),2)[,i][2]))
-    table <- as.data.frame(res_deseq2_object)
-    table$Gene_ID <- rownames(table)
-    write.table(table,
-            file=paste0(output_dir,"/DGE/DGE_analysis_DESEQ2_comp",combn(unique(d),2)[,i][1],"vs",combn(unique(d),2)[,i][2],".txt"),quote = F,row.names = F, col.names = T,sep = "\t")
+  if (restrict_comparisons != "no") {
+    # Use the user-specified explicit comparisons (same parsing as edgeR path)
+    individual_comparisons_deseq2 <- unlist(strsplit(restrict_comparisons, ","))
+    list_combinations_deseq2 <- lapply(individual_comparisons_deseq2, function(x) {
+      if (grepl("//", x, fixed = TRUE)) {
+        unlist(strsplit(x, "//", fixed = TRUE))
+      } else if (grepl("vs", x, fixed = TRUE)) {
+        unlist(strsplit(x, "vs", fixed = TRUE))
+      } else {
+        warning(paste0("Could not parse comparison: '", x, "'. Skipping...")); return(NULL)
+      }
+    })
+    list_combinations_deseq2 <- list_combinations_deseq2[!sapply(list_combinations_deseq2, is.null)]
+    cat(paste0("DESeq2: Using ", length(list_combinations_deseq2), " explicit comparisons provided by user.\n"))
+    for (i in seq_along(list_combinations_deseq2)) {
+      cond_num <- list_combinations_deseq2[[i]][1]
+      cond_den <- list_combinations_deseq2[[i]][2]
+      res_deseq2_object <- results(deseq2_object, contrast = c("condition", cond_num, cond_den))
+      table <- as.data.frame(res_deseq2_object)
+      table$Gene_ID <- rownames(table)
+      write.table(table,
+              file = paste0(output_dir, "/DGE/DGE_analysis_DESEQ2_comp", cond_num, "vs", cond_den, ".txt"),
+              quote = F, row.names = F, col.names = T, sep = "\t")
+    }
+  } else {
+    for (i in 1:dim(combn(unique(d),2))[2]){
+      res_deseq2_object <- results(deseq2_object,contrast=c("condition",combn(unique(d),2)[,i][1],combn(unique(d),2)[,i][2]))
+      table <- as.data.frame(res_deseq2_object)
+      table$Gene_ID <- rownames(table)
+      write.table(table,
+              file=paste0(output_dir,"/DGE/DGE_analysis_DESEQ2_comp",combn(unique(d),2)[,i][1],"vs",combn(unique(d),2)[,i][2],".txt"),quote = F,row.names = F, col.names = T,sep = "\t")
+    }
   }
 }
 # print("ALL DONE")

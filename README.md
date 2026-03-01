@@ -112,7 +112,7 @@ reanalyzerGSE.sh -h
 	        -G | -GSM_filter # GSM ids (one or several, separated by comma and no space) within the GSE entry to restrict the analysis to. An alternative to requesting a stop with -S to reorganize the downloaded files manually
 	        -S | -stop # Manual stop so the automatically downloaded files can be manually modified ('yes' or 'no', by default)
 	        -pR | -pattern_to_remove # A pattern to exclude matching samples from downstream R processing only, i.e. QC figures and DGE analyses (by default 'none'). Unlike -regex/-regexExclude which filter raw reads before alignment, this option keeps all samples through alignment and counting but excludes matching ones at the R analysis stage. Useful for removing outlier samples without re-running the full pipeline (e.g. resume from -Dm step4)
-	        -Dec | -differential_expr_comparisons # Whether to restrict the differential expression analyses to only some of the possible comparisons or reorder the 'treatment' and 'control' elements of the comparison ('no', by default, or a comma-separated list specifying separated by '\\' the elements in the comparison, which you could get from a preliminar previous run, e.g. 'A//B,C//D,D//A'...)
+	        -Dec | -differential_expr_comparisons # Restrict differential expression analyses to specific comparisons and control log2FC direction ('no' by default). Provide a comma-separated list using 'vs' (or '//' for backward compat) as separator, e.g. 'A7vsP0,P20vsP0'. The ORDER matters: the FIRST element is the numerator, so positive log2FC = higher expression in the first element
 	
 	        #### Functional enrichment/networking analyses
 	        -cPm | -clusterProfiler_method # Method for adjusting p.value in clusterProfiler iterations (one of 'holm','hochberg','hommel','bonferroni','BH','BY,'none', or 'fdr', by default)
@@ -127,6 +127,7 @@ reanalyzerGSE.sh -h
 	        -Fex | -bam_exclude_flags # samtools -F flags to exclude, e.g. '4' (unmapped), '256' (secondary), '2308' (combined)
 	        -Freq | -bam_require_flags # samtools -f flags to require. Suggestion: use '2' for Paired-End (proper pair), leave empty or '4' for Single-End.
 	        -Fdup | -bam_dedup # Duplicate removal: 'no' (default), 'samtools' (markdup -r), 'picard' (REMOVE_DUPLICATES), 'picard_optical' (REMOVE_SEQUENCING_DUPLICATES)
+	        -Fcust | -bam_custom_filter # Custom shell command to pipe SAM text through post-alignment (e.g. "grep -E '^@|\\<NM:i:0\\>'" for perfect matches). Must preserve header lines (^@).
 	
 	        #### Performance:
 	        -p | -cores # Number of cores

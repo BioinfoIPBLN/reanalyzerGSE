@@ -47,6 +47,7 @@ Venn_funct <- function(files){
 		write.table(paste0("Comparison number ",i,": ",paste0(names(list_of_ids[list_of_combinations[[i]]]),collapse=" // ")),file=paste0(unique(dirname(files)),"/list_combn.txt"),col.names = F,row.names = F,quote = F,sep="\n",append=T)
 		list_of_ids[list_of_combinations[[i]]]
 		tmp_file <- tempfile();sink(tmp_file)
+		suppressMessages(futile.logger::flog.threshold(futile.logger::ERROR, name = "VennDiagramLogger"))
 			VennDiagram::venn.diagram(
 		        x = list_of_ids[list_of_combinations[[i]]],
 		        category.names = names(list_of_ids)[list_of_combinations[[i]]],

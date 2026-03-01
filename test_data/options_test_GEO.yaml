@@ -82,6 +82,7 @@ bam_mapq_threshold: 0
 bam_exclude_flags: ""
 bam_require_flags: ""
 bam_dedup: "no"
+bam_custom_filter: ""
 
 # === Performance ===
 cores: 12

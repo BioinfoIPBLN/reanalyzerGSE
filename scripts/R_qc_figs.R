@@ -78,8 +78,8 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   contrast2 <- unique(t(combn(unique(names(contrast)),2))[apply(t(combn(unique(names(contrast)),2)),1,function(x){colorspace::contrast_ratio(x[1],col2=x[2])}) > 4])
   levels(col.group) <- sample(contrast2, nlevels(col.group)); col.group <- as.character(col.group)
 
-  cat("\n\nSummary cpm log=TRUE per sample...")
-  print(summary(lcpm))
+  cat("\n\nSummary cpm log=TRUE per sample...\n")
+  cat(summary(lcpm))
 
 
 ### QC figures:
@@ -134,25 +134,48 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   
   ### 3. Library size and read counts figures:
   par(mfrow=c(1,1))
+  par(mar = c(7, 5, 4, 2))
   bar_mids <- barplot(x$samples$lib.size,names.arg = gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name),
                        las=2, main="Library Size",col=col.group, ylim=range(pretty(c(0, x$samples$lib.size))))
-  # Loop over the bar midpoints and add the text on top of each bar
-  for(i in 1:length(bar_mids)) {
-    # The y position is slightly above the top of the bar
-    y_pos <- x$samples$lib.size[i] + 0.02 * max(x$samples$lib.size)    
-    # Add the text, centered on the bar midpoint
-    text(bar_mids[i], y_pos, labels = x$samples$lib.size[i], cex = 0.8, pos = 3)
+  # Values on top of each bar
+  for (i in 1:length(bar_mids)) {
+    y_pos <- x$samples$lib.size[i] + 0.01 * max(x$samples$lib.size)
+    text(bar_mids[i], y_pos, labels = format(x$samples$lib.size[i], big.mark = ","), cex = 0.8, pos = 3)
   }
   
-  par(mfrow=c(1,1))
-  bar_mids <- barplot(x$samples$lib.size,names.arg = stringr::str_c(stringr::str_split(gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Filename), "_")[[1]][1:2], collapse = "_"),
-                       las=1, main="Library Size",col=col.group, ylim=range(pretty(c(0, x$samples$lib.size))))
-  # Loop over the bar midpoints and add the text on top of each bar
-  for(i in 1:length(bar_mids)) {
-    # The y position is slightly above the top of the bar
-    y_pos <- x$samples$lib.size[i] + 0.02 * max(x$samples$lib.size)    
-    # Add the text, centered on the bar midpoint
-    text(bar_mids[i], y_pos, labels = x$samples$lib.size[i], cex = 0.8, pos = 3)
+  # Labeled
+  par(mfrow = c(1, 1))
+  par(mar = c(7, 5, 4, 2))  # reduced top margin
+  
+  sample_labels <- sapply(
+    gsub("_t|m_Rep|_seq|_KO|_WT", "", targets$Filename),
+    function(f) stringr::str_c(stringr::str_split(f, "_")[[1]][1:2], collapse = "_")
+  )
+  
+  bar_mids <- barplot(
+    x$samples$lib.size,
+    names.arg = NA,
+    las = 1,
+    main = "Library Size",
+    col = col.group,
+    ylim = c(0, max(x$samples$lib.size) * 1.2)  # 1.2 gives enough headroom for labels
+  )
+  
+  # Rotated x-axis labels
+  text(
+    x = bar_mids,
+    y = par("usr")[3] - 0.02 * diff(par("usr")[3:4]),
+    labels = sample_labels,
+    srt = 45,
+    adj = 1,
+    xpd = TRUE,
+    cex = 0.9
+  )
+  
+  # Values on top of each bar
+  for (i in 1:length(bar_mids)) {
+    y_pos <- x$samples$lib.size[i] + 0.01 * max(x$samples$lib.size)
+    text(bar_mids[i], y_pos, labels = format(x$samples$lib.size[i], big.mark = ","), cex = 0.8, pos = 3)
   }
   
   
@@ -286,6 +309,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   corrplot(cor(tmp,method="pearson"), method='number',type = 'full', title="Pearson_correlation",tl.col = col.group,tl.srt = 45, mar=c(0,0,2,0))
   
   ### 5.1. MDS_norm
+  par(mar = c(5, 4, 4, 2))
   z <- plotMDS(lcpm2_no_log, labels=targets$Name, col=col.group, gene.selection = "pairwise", plot=F)
   edge <- sd(z$x)
   plotMDS(lcpm2_no_log, labels=targets$Name, col=col.group, gene.selection = "pairwise",xlim=c(min(z$x)-edge,max(z$x) + edge))

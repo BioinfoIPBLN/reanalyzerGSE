@@ -811,6 +811,27 @@ if [[ $debug_step == "all" || $debug_step == "step3a" ]]; then
 			if [ ! -z "$optionsFeatureCounts_feat" ]; then
 				sed -i "s,featuretype=exon,featuretype=${array3[index]},g" miarma$index.ini
 			fi
+
+			# ── Validate featureCounts parameters against annotation file ──
+			fc_feat_val="${array3[index]:-exon}"
+			fc_seq_val="${array2[index]:-gene_name}"
+			if [ -f "$gff" ]; then
+				# Check feature type (-t) exists in column 3
+				available_feats=$(awk -F'\t' '!/^#/ && NF>=9 {print $3}' "$gff" | sort -u | tr '\n' ', ' | sed 's/,$//')
+				if ! awk -F'\t' -v ft="$fc_feat_val" '!/^#/ && NF>=9 && $3==ft {found=1; exit} END {exit !found}' "$gff"; then
+					echo -e "\n\033[1;31mERROR:\033[0m Feature type '$fc_feat_val' (optionsFeatureCounts_feat / -t) was NOT found in column 3 of annotation file:\n  $gff\n\nAvailable feature types: $available_feats\n\nPlease set 'optionsFeatureCounts_feat' in your YAML config to one of the above (e.g. 'exon' for GTF, 'gene' for some GFF3 files).\n" >&2
+					exit 1
+				fi
+				# Check attribute name (-g) exists in column 9
+				if ! awk -F'\t' -v attr="$fc_seq_val" '!/^#/ && NF>=9 { if (index($9, attr) > 0) {found=1; exit} } END {exit !found}' "$gff"; then
+					# Extract example attributes from the first data line
+					example_attrs=$(awk -F'\t' '!/^#/ && NF>=9 {print $9; exit}' "$gff")
+					echo -e "\n\033[1;31mERROR:\033[0m Attribute name '$fc_seq_val' (optionsFeatureCounts_seq / -g) was NOT found in column 9 of annotation file:\n  $gff\n\nExample attributes from your file:\n  $example_attrs\n\nFor GTF files, typical values are 'gene_id' or 'gene_name'.\nFor GFF3 files, typical values are 'ID', 'Name', or 'gene_id'.\nPlease set 'optionsFeatureCounts_seq' in your YAML config accordingly.\n" >&2
+					exit 1
+				fi
+				echo "Annotation validation OK: feature type '$fc_feat_val' and attribute '$fc_seq_val' found in $gff"
+			fi
+			# ── End featureCounts parameter validation ──
 			if [ "$bam_mapq_threshold" -gt 0 ] 2>/dev/null; then
 				sed -i "s,quality=10,quality=$bam_mapq_threshold,g" miarma$index.ini
 				sed -i "s,bam_mapq_threshold=,bam_mapq_threshold=$bam_mapq_threshold,g" miarma$index.ini
@@ -823,6 +844,10 @@ if [[ $debug_step == "all" || $debug_step == "step3a" ]]; then
 			fi
 			if [ ! -z "$bam_dedup" ]; then
 				sed -i "s,bam_dedup=no,bam_dedup=$bam_dedup,g" miarma$index.ini
+			fi
+			if [ ! -z "$bam_custom_filter" ]; then
+				bam_custom_filter_escaped=$(printf '%s' "$bam_custom_filter" | sed 's/[\\&]/\\&/g')
+				sed -i "s,bam_custom_filter=,bam_custom_filter=$bam_custom_filter_escaped,g" miarma$index.ini
 			fi
 			# Final renaming of fastq raw files if SRR present in the filename:
 			if [ $(ls $seqs_location | grep -c SRR) -gt 0 ]; then

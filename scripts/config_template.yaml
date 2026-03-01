@@ -79,7 +79,7 @@ time_course_fuzz: 0                    # Fuziness for soft clustering (0 = auto-
 GSM_filter: ""                         # Restrict to specific GSM ids (comma-separated)
 stop: "no"                             # Manual stop for file modification ('yes' or 'no')
 pattern_to_remove: "none"              # Exclude matching samples from downstream R processing only (QC figures, DGE). Alignment/counting still runs for these samples
-differential_expr_comparisons: "no"    # Restrict comparisons ('no' or 'A\\B,C\\D,...')
+differential_expr_comparisons: "no"    # Restrict to specific comparisons ('no' or e.g. 'A7vsP0,P20vsP0'). First element = numerator for log2FC. Also supports '//' separator for backward compat.
 
 # === Functional enrichment/networking analyses ===
 clusterProfiler_method: "fdr"          # P-value adjustment method
@@ -98,6 +98,7 @@ bam_dedup: "no"                        # Duplicate removal: 'no', 'samtools', 'p
                                        #   samtools       = samtools markdup -r (remove all duplicates)
                                        #   picard         = picard MarkDuplicates REMOVE_DUPLICATES=true
                                        #   picard_optical = picard MarkDuplicates REMOVE_SEQUENCING_DUPLICATES=true (optical/sequencing only)
+bam_custom_filter: ""                  # Custom shell command to pipe SAM text through post-alignment (e.g. "grep -E '^@|\\<NM:i:0\\>'" for perfect matches). Must preserve header lines (^@).
 
 # === Performance ===
 cores: 30                              # Number of cores for multithreading
