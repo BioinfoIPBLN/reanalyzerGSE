@@ -104,7 +104,7 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
   }
   dir.create(output_dir,showWarnings=F)
   write.table(gene_counts[,c(grep("Gene_ID",colnames(gene_counts)),grep("Length",colnames(gene_counts)),grep("Gene_ID|Length",colnames(gene_counts),invert=T))],
-              file=paste0(output_dir,"/Raw_counts_genes.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
+              file=file.path(output_dir,"Raw_counts_genes.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
  
   # CDSeq preliminary deconvolution:
   if (cdseq_exec=="CDSeq"){
@@ -527,8 +527,6 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
   dir.create(paste0(output_dir,"/violin"),showWarnings = FALSE)
   write.table(c(paste0("PLEASE NOTE:","This folder contains barplots and violin plots for the expression of the of interest: ",genes,". In the filenames the statistical tests attempted are shown. If any of the violin plots do not display the expected statistics based on the title, it's because the test wasn't possible due to the data distribution or similar reasons, and therefore it's not the most suitable")),
         file=paste0(output_dir,"/violin/readme.txt"),quote = F,row.names = F, col.names = F,sep = "\n")
-  write.table(c("PLEASE VISIT https://bioinfoipbln.shinyapps.io/expressionvisualizationapp/ to use the Expression Visualization App and obtain the same figures for any other gene of interest uploading the expression tables"),
-        file=paste0(output_dir,"/violin/readme_external_ExpressionVisualizationApp.txt"),quote = F,row.names = F, col.names = F,sep = "\n")
   if (!exists("adjusted_counts")){
     gene_counts_rpkm_to_plot <- gene_counts_rpkm
   } else {
@@ -820,23 +818,25 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
         cat("You have manually provided a list of explicit comparisons. Reading the comma-separated list with the ordered comparisons that you want to perform...\n")
         cat("Separator detected: 'vs' or '//' between the two conditions in each comparison.\n")
         cat("The ORDER matters: the FIRST element is the numerator, so positive log2FC = higher expression in the first element.\n")
-        # Support both 'vs' and '//' as separators (backward compatible)
+        # Support both 'vs' and '//' as separators
         individual_comparisons <- unlist(strsplit(restrict_comparisons, ","))
         list_combinations <- lapply(individual_comparisons, function(x) {
           if (grepl("//", x, fixed = TRUE)) {
-            unlist(strsplit(x, "//", fixed = TRUE))
+            paste0("__",unlist(strsplit(x, "//", fixed = TRUE)))
           } else if (grepl("vs", x, fixed = TRUE)) {
-            unlist(strsplit(x, "vs", fixed = TRUE))
+            paste0("__",unlist(strsplit(x, "vs", fixed = TRUE)))
           } else {
-            warning(paste0("Could not parse comparison: '", x, "'. Expected format: 'AvsBvsC' or 'A//B'. Skipping..."))
+            warning(paste0("Could not parse comparison: '", x, "'. Expected format: 'AvsB' or 'A//B'. Skipping..."))
             return(NULL)
           }
         })
         list_combinations <- list_combinations[!sapply(list_combinations, is.null)]
         cat("These are the explicit comparisons requested:\n")
         for (j in seq_along(list_combinations)) {
-          cat(paste0("  Comparison ", j, ": ", list_combinations[[j]][1], " vs ", list_combinations[[j]][2],
-                     "  (positive log2FC = higher in ", list_combinations[[j]][1], ")\n"))
+          cat(gsub("__","",paste0("  Comparison ", j, ": ", list_combinations[[j]][1],
+                     " vs ", list_combinations[[j]][2],
+                     "  (positive log2FC = higher in ", list_combinations[[j]][1],
+                     ")\n")))
         }
       }
       if (pattern_to_remove!="none"){
