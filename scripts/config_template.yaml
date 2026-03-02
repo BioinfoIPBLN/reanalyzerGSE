@@ -79,7 +79,7 @@ time_course_fuzz: 0                    # Fuziness for soft clustering (0 = auto-
 GSM_filter: ""                         # Restrict to specific GSM ids (comma-separated)
 stop: "no"                             # Manual stop for file modification ('yes' or 'no')
 pattern_to_remove: "none"              # Exclude matching samples from downstream R processing only (QC figures, DGE). Alignment/counting still runs for these samples
-differential_expr_comparisons: "no"    # Restrict to specific comparisons ('no' or e.g. 'A7vsP0,P20vsP0'). First element = numerator for log2FC. Also supports '//' separator for backward compat.
+differential_expr_comparisons: "no"    # Restrict to specific comparisons ('no' or e.g. 'AvsB,CvsD'). First element = numerator for log2FC
 
 # === Functional enrichment/networking analyses ===
 clusterProfiler_method: "fdr"          # P-value adjustment method
