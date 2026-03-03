@@ -3,7 +3,6 @@ start=`date +%s`
 echo -e "\nCurrent time: $(date)\n"
 base64 -d <<<"CiAgX19fICBfX19fICBfX19fICAgICAgX19fXyAgX19fXyAgIF9fICAgX18gXyAgIF9fICAgX18gICAgXyAgXyAgX19fXyAgX19fXyAgX19fXyAKIC8gX18pLyBfX18pKCAgX18pICAgICggIF8gXCggIF9fKSAvIF9cICggICggXCAvIF9cICggICkgICggXC8gKShfXyAgKSggIF9fKSggIF8gXAooIChfIFxcX19fIFwgKSBfKSAgICAgICkgICAvICkgXykgLyAgICBcLyAgICAvLyAgICBcLyAoXy9cICkgIC8gIC8gXy8gICkgXykgICkgICAvCiBcX19fLyhfX19fLyhfX19fKSAgICAoX19cXykoX19fXylcXy9cXy9cXylfXylcXy9cXy9cX19fXy8oX18vICAoX19fXykoX19fXykoX19cXykKCmJ5IEJpb2luZm9ybWF0aWNzIFVuaXQJCQkJSVBCTE4tQ1NJQy4gMjAyMwoKYmlvaW5mb3JtYXRpY2FAaXBiLmNzaWMuZXMJCSAgICAgICAgaHR0cHM6Ly9naXRodWIuY29tL0Jpb2luZm9JUEJMTi9yZWFuYWx5emVyR1NFCgo="
 echo "doi.org/10.1101/2023.07.12.548663v2"
-echo -e "reanalyzerGSE v3.3.0\n\n"
 
 ###### 0. Define arguments and variables:
 ### Export a string with command options and an array with arguments and deal with them in parse_options.sh
@@ -15,6 +14,7 @@ source $CURRENT_DIR/scripts/parse_options.sh
 if [ $? -ne 0 ]; then
 	echo "Exiting..."; exit 1
 fi
+mkdir -p $TMPDIR
 
 ###### STEP 1. Download info from GEO and organize metadata and so:
 if [[ $debug_step == "all" || $debug_step == "step1" ]]; then
@@ -128,7 +128,6 @@ fi
 ###### STEP 1. Download and process fastq files from the GEO ID provided:
 if [[ $debug_step == "all" || $debug_step == "step1a" ]]; then
 	rm -rf $seqs_location
-	mkdir -p $TMPDIR
 	if [[ $input == G* ]]; then
  		echo -e "\n\nSTEP 1: Downloading from the $input id provided...\nCurrent date/time: $(date)\n\n"
 		if [ "$stop" == "yes" ]; then
@@ -306,7 +305,6 @@ if [[ $debug_step == "all" || $debug_step == "step1a_bis" ]]; then
 fi
 
 if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
-	mkdir -p $TMPDIR
 	if [[ $input == /* ]]; then
 		echo -e "\n\nSTEP 1b: Preparing the raw reads and metadata provided locally...\nCurrent date/time: $(date)\n\n"
   		seqs_location=$output_folder/$name/raw_reads
@@ -675,7 +673,6 @@ if [[ $debug_step == "all" || $debug_step == "step3a" ]]; then
  	echo -e "Preparing miARma-seq execution"
 	cd $output_folder/$name/
 	rm -rf mi*
-	mkdir -p $TMPDIR
 	# If the running is resumed in this step, the above has to be done
 	if [ -z "$organism" ]; then
 		organism=$(cat $output_folder/$name/GEO_info/organism.txt | sed 's, ,_,g;s,_+,_,g')
@@ -866,7 +863,6 @@ fi
 if [[ $debug_step == "all" || $debug_step == "step3b" ]]; then
 	echo -e "\n\nSTEP 3b: Starting...\nCurrent date/time: $(date)\n\n"
 	rm -rf $output_folder/$name/miARma_out*
-	mkdir -p $TMPDIR
 	# If the running is resumed in this step, the above has to be done
 	if [ -z "$organism" ]; then
 		organism=$(cat $output_folder/$name/GEO_info/organism.txt | sed 's, ,_,g;s,_+,_,g')
