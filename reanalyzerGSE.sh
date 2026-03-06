@@ -128,6 +128,7 @@ fi
 ###### STEP 1. Download and process fastq files from the GEO ID provided:
 if [[ $debug_step == "all" || $debug_step == "step1a" ]]; then
 	rm -rf $seqs_location
+	mkdir -p $TMPDIR
 	if [[ $input == G* ]]; then
  		echo -e "\n\nSTEP 1: Downloading from the $input id provided...\nCurrent date/time: $(date)\n\n"
 		if [ "$stop" == "yes" ]; then
@@ -305,6 +306,7 @@ if [[ $debug_step == "all" || $debug_step == "step1a_bis" ]]; then
 fi
 
 if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
+	mkdir -p $TMPDIR
 	if [[ $input == /* ]]; then
 		echo -e "\n\nSTEP 1b: Preparing the raw reads and metadata provided locally...\nCurrent date/time: $(date)\n\n"
   		seqs_location=$output_folder/$name/raw_reads
@@ -673,6 +675,7 @@ if [[ $debug_step == "all" || $debug_step == "step3a" ]]; then
  	echo -e "Preparing miARma-seq execution"
 	cd $output_folder/$name/
 	rm -rf mi*
+	mkdir -p $TMPDIR
 	# If the running is resumed in this step, the above has to be done
 	if [ -z "$organism" ]; then
 		organism=$(cat $output_folder/$name/GEO_info/organism.txt | sed 's, ,_,g;s,_+,_,g')
@@ -863,6 +866,7 @@ fi
 if [[ $debug_step == "all" || $debug_step == "step3b" ]]; then
 	echo -e "\n\nSTEP 3b: Starting...\nCurrent date/time: $(date)\n\n"
 	rm -rf $output_folder/$name/miARma_out*
+	mkdir -p $TMPDIR
 	# If the running is resumed in this step, the above has to be done
 	if [ -z "$organism" ]; then
 		organism=$(cat $output_folder/$name/GEO_info/organism.txt | sed 's, ,_,g;s,_+,_,g')
