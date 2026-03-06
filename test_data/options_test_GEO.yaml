@@ -83,6 +83,7 @@ bam_exclude_flags: ""
 bam_require_flags: ""
 bam_dedup: "no"
 bam_custom_filter: ""
+counts_custom_gene_filter: ""
 
 # === Performance ===
 cores: 12

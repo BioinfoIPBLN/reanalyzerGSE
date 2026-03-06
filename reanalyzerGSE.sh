@@ -925,7 +925,18 @@ if [[ $debug_step == "all" || $debug_step == "step4" ]]; then
 		annotation_file=${array[index]}
 		fc_seq_key=${optionsFeatureCounts_seq:-gene_name}
 		fc_feat_type=${optionsFeatureCounts_feat:-exon}
-  		echo -e "R_process_reanalyzer_GSE.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index $genes ${array2[index]} $organism $target $differential_expr_soft $batch_format $covariables $covariables_format $deconvolution $differential_expr_comparisons $perform_differential_analyses $perform_volcano_venn $pattern_to_remove $annotation_file $fc_seq_key $fc_feat_type $sc_count_matrix $sc_phenotype $bulk_expression_matrix\n\n" >> $output_folder/$name/R_process_reanalyzer.log
+		# Apply counts_custom_gene_filter if provided (filter gene rows from count tables before R processing)
+		if [ ! -z "$counts_custom_gene_filter" ]; then
+			echo -e "\nApplying counts_custom_gene_filter: $counts_custom_gene_filter\n"
+			for count_file in $(find $output_folder/$name/miARma_out$index -name "*_readcount.tab" -o -name "abundance.tsv" 2>/dev/null); do
+				cp "$count_file" "${count_file}.bak_before_gene_filter"
+				head -1 "$count_file" > "${count_file}.tmp"
+				tail -n +2 "$count_file" | eval "$counts_custom_gene_filter" >> "${count_file}.tmp"
+				mv "${count_file}.tmp" "$count_file"
+				echo "  Filtered: $count_file ($(wc -l < "${count_file}.bak_before_gene_filter") -> $(wc -l < "$count_file") lines)"
+			done
+		fi
+  		echo -e "R_process_reanalyzer_GSE.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index $genes ${array2[index]} $organism $target $differential_expr_soft $batch_format $covariables $covariables_format $deconvolution $differential_expr_comparisons $perform_differential_analyses $perform_volcano_venn $pattern_to_remove $annotation_file $fc_seq_key $fc_feat_type $sc_count_matrix $sc_phenotype $bulk_expression_matrix\n\n" > $output_folder/$name/R_process_reanalyzer.log
     		R_process_reanalyzer_GSE.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index $genes ${array2[index]} $organism $target $differential_expr_soft $batch_format $covariables $covariables_format $deconvolution $differential_expr_comparisons $perform_differential_analyses $perform_volcano_venn $pattern_to_remove $annotation_file $fc_seq_key $fc_feat_type $sc_count_matrix $sc_phenotype $bulk_expression_matrix | tee -a $output_folder/$name/R_process_reanalyzer.log
     		R_qc_figs.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index "edgeR_object_prefilter" "edgeR_object" "edgeR_object_norm" $pattern_to_remove
 		if [[ -e "$output_folder/$name/final_results_reanalysis$index/counts_adjusted.txt" ]]; then

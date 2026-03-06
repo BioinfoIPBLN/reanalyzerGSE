@@ -106,6 +106,9 @@ for argument in $options; do
 	        -Freq | -bam_require_flags # samtools -f flags to require. Suggestion: use '2' for Paired-End (proper pair), leave empty or '4' for Single-End.
 	        -Fdup | -bam_dedup # Duplicate removal: 'no' (default), 'samtools' (markdup -r), 'picard' (REMOVE_DUPLICATES), 'picard_optical' (REMOVE_SEQUENCING_DUPLICATES)
 	        -Fcust | -bam_custom_filter # Custom shell command to pipe SAM text through post-alignment (e.g. "grep -E '^@|\\<NM:i:0\\>'" for perfect matches). Must preserve header lines (^@).
+
+	        #### Count-level gene filtering (post-quantification):
+	        -Fgene | -counts_custom_gene_filter # Shell command to filter gene rows from count tables before R processing (e.g. "grep -v als" to remove genes starting with 'als'). Applied to featureCounts .tab and Kallisto abundance.tsv files. Header is always preserved.
 	
 	        #### Performance:
 	        -regex | -input_filter_regex # Regex to keep only matching input files in local mode, removing the rest (e.g. "Sample_A|Sample_B")
@@ -201,6 +204,7 @@ for argument in $options; do
 		-Freq) bam_require_flags=${arguments[index]} ;;
 		-Fdup) bam_dedup=${arguments[index]} ;;
 		-Fcust) bam_custom_filter=${arguments[index]} ;;
+		-Fgene) counts_custom_gene_filter=${arguments[index]} ;;
 		-nrf) non_reference_funct_enrichm=${arguments[index]} ;;
 		-eDe) exploreDE_se=${arguments[index]} ;;
 	esac
@@ -455,6 +459,9 @@ if [ -z "$bam_dedup" ]; then
 fi
 if [ -z "$bam_custom_filter" ]; then
 	bam_custom_filter=""
+fi
+if [ -z "$counts_custom_gene_filter" ]; then
+	counts_custom_gene_filter=""
 fi
 if [ -z "$exploreDE_se" ]; then
 	exploreDE_se="no"
