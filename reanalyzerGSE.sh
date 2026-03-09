@@ -974,6 +974,83 @@ if [[ $debug_step == "all" || $debug_step == "step4" ]]; then
 fi
 
 
+### STEP 4b. Splicing analysis if requested (saseR or IsoformSwitchAnalyzeR)
+if [[ $debug_step == "all" || $debug_step == "step4b" ]]; then
+	if [ -z "$organism" ]; then
+		organism=$(cat $output_folder/$name/GEO_info/organism.txt | sed 's, ,_,g;s,_+,_,g')
+	fi
+	if [ -z "${!array[@]}" ]; then
+		IFS=', ' read -r -a array <<< "$annotation"
+	fi
+	if [[ "$splicing_option" == "saser" ]]; then
+		echo -e "\n\nSTEP 4b: saseR splicing analysis...\nCurrent date/time: $(date)\n\n"
+		for index in "${!array[@]}"; do
+			bam_dir=$output_folder/$name/miARma_out$index/${aligner}_results
+			saser_out=$output_folder/$name/final_results_reanalysis$index/saseR_splicing
+			mkdir -p $saser_out
+			library_layout=$(find $output_folder/$name -name library_layout_info.txt | xargs cat)
+			samples_info=$output_folder/$name/GEO_info/samples_info.txt
+			design_file=$(ls $output_folder/$name/GEO_info/design_possible_full_1.txt 2>/dev/null || echo "none")
+			R_saseR_splicing.R \
+				"$bam_dir" \
+				"${array[index]}" \
+				"$saser_out" \
+				"$library_layout" \
+				"$strand" \
+				"$samples_info" \
+				"$design_file" \
+				"$cores" \
+				"$pattern_to_remove" \
+				"$differential_expr_comparisons" \
+				2>&1 | tee -a $saser_out/saseR_splicing.log
+		done
+		echo -e "\n\nSTEP 4b (saseR): DONE\nCurrent date/time: $(date)\n\n"
+	elif [[ "$splicing_option" == "isoformswitchr" ]]; then
+		if [[ "$aligner" != "kallisto" ]]; then
+			echo -e "\n\033[1;31mERROR:\033[0m IsoformSwitchAnalyzeR (splicing_option=isoformswitchr) requires transcript-level quantification and can only be used with aligner='kallisto'.\n  Current aligner: '$aligner'\n  Please re-run with -A kallisto (or aligner: \"kallisto\" in your YAML config).\n" >&2
+			exit 1
+		fi
+		echo -e "\n\nSTEP 4b: IsoformSwitchAnalyzeR analysis...\nCurrent date/time: $(date)\n\n"
+		if [ -z "$transcripts" ]; then
+			echo -e "WARNING: No transcript FASTA (-t) provided. Some IsoformSwitchAnalyzeR features may be limited.\n"
+			transcripts_arg="none"
+		else
+			transcripts_arg=$transcripts
+		fi
+		for index in "${!array[@]}"; do
+			# Determine quantification directory: Kallisto or Salmon results
+			if [[ "$aligner" == "kallisto" ]]; then
+				quant_dir=$output_folder/$name/miARma_out$index/kallisto_results
+			else
+				# Check if Salmon quantification exists (from strandness prediction or separate run)
+				quant_dir=$output_folder/$name/miARma_out$index/salmon_results
+				if [ ! -d "$quant_dir" ] || [ $(find $quant_dir -name "quant.sf" 2>/dev/null | wc -l) -eq 0 ]; then
+					quant_dir=$output_folder/$name/strand_prediction/salmon_out
+				fi
+			fi
+			isoswitch_out=$output_folder/$name/final_results_reanalysis$index/IsoformSwitchAnalyzeR
+			mkdir -p $isoswitch_out
+			samples_info=$output_folder/$name/GEO_info/samples_info.txt
+			design_file=$(ls $output_folder/$name/GEO_info/design_possible_full_1.txt 2>/dev/null || echo "none")
+			R_isoformswitch.R \
+				"$quant_dir" \
+				"${array[index]}" \
+				"$transcripts_arg" \
+				"$isoswitch_out" \
+				"$samples_info" \
+				"$design_file" \
+				"$cores" \
+				"$pattern_to_remove" \
+				"$differential_expr_comparisons" \
+				"$aligner" \
+				2>&1 | tee -a $isoswitch_out/isoformswitch.log
+		done
+		echo -e "\n\nSTEP 4b (IsoformSwitchAnalyzeR): DONE\nCurrent date/time: $(date)\n\n"
+	fi
+	export debug_step="all"
+fi
+
+
 ### STEP 5. Time course analyses if required
 if [[ $debug_step == "all" || $debug_step == "step5" ]]; then
 	for index in "${!array[@]}"; do

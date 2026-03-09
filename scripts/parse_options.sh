@@ -49,7 +49,7 @@ for argument in $options; do
 	        -T | -target # Protopical target file for attempts to differential gene expression analyses (containing filenames and covariates, automatically built if not provided)
 	
 	        #### Activate alternative modes:
-	        -Dm | -debug_module # For debugging, step to remove the content of the corresponding folders and to resume a failed or incomplete run without repeating (one of 'step1', 'step1a', 'step1b', 'step1c', 'step1d', 'step2', 'step3a', 'step3b', 'step4', 'step5', 'step6', 'step7', 'step8', step9', or 'all' to execute everything, by default)
+	        -Dm | -debug_module # For debugging, step to remove the content of the corresponding folders and to resume a failed or incomplete run without repeating (one of 'step1', 'step1a', 'step1b', 'step1c', 'step1d', 'step2', 'step3a', 'step3b', 'step4', 'step4b', 'step5', 'step6', 'step7', 'step8', step9', or 'all' to execute everything, by default)
 	        -q | -qc_raw_reads # Whether to perform quality control on the raw reads ('yes' by default, or 'no')
 	        -fd | -full_differential_analyses # Whether to perform full differential enrichment analyses (for example including computation of DEGs or Venn diagrams, 'no' or 'yes', by default)
 	        -fe | -functional_enrichment_analyses # Whether to perform functional enrichment analyses ('no' or 'yes', by default)
@@ -68,6 +68,7 @@ for argument in $options; do
 	        -Na | -network_analyses # Whether to perform network analyses, only for human or mouse analyses ('yes' or 'no', by default)
 	        -apl | -auto_panther_log # Whether to perform additional autoGO and Panther analyses for DEGs separated by log2Fc positive or negative ('yes' or 'no', by default)
 	        -eDe | -exploreDE_se # Whether to generate a SummarizedExperiment object (.qs2) for the exploreDE Shiny app ('yes' or 'no', by default). Only works for Human (Homo_sapiens) analyses.
+	        -sO | -splicing_option # Splicing analysis method: 'no' (default), 'saser' (differential splicing via saseR with adapted offsets in edgeR), or 'isoformswitchr' (isoform switch analysis via IsoformSwitchAnalyzeR, requires transcript-level quantification from Kallisto or Salmon)
 	
 	        #### Processing parameters:
 	        -s | -strand # Strandness of the library ('yes, 'no', 'reverse'). If not provided and '-t' used, this would be predicted by salmon. Please use this parameter if prediction not correct, see explanations in for example in bit.ly/strandness0 and bit.ly/strandness
@@ -207,6 +208,7 @@ for argument in $options; do
 		-Fgene) counts_custom_gene_filter=${arguments[index]} ;;
 		-nrf) non_reference_funct_enrichm=${arguments[index]} ;;
 		-eDe) exploreDE_se=${arguments[index]} ;;
+		-sO | -splicing_option) splicing_option=${arguments[index]} ;;
 	esac
 done
 
@@ -466,6 +468,10 @@ fi
 if [ -z "$exploreDE_se" ]; then
 	exploreDE_se="no"
 fi
+if [ -z "$splicing_option" ]; then
+	splicing_option="no"
+fi
+echo -e "\nsplicing_option=$splicing_option\n"
 
 seqs_location=$output_folder/$name/raw_reads
 

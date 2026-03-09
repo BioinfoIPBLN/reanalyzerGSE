@@ -4,7 +4,7 @@ reanalyzerGSE is a pipeline to assist with and streamline transcriptomic analyse
 ## Installation
 We suggest alternatives for installation. Please choose one of:
 
-1) An Apptainer/Singularity container (~5 GB) is provided. You can either:
+1) An Apptainer/Singularity container (~6 GB) is provided. You can either:
 
 1.1) Use the .def file to create the .sif image by executing:
 ```
@@ -75,7 +75,7 @@ reanalyzerGSE.sh -h
 	        -T | -target # Protopical target file for attempts to differential gene expression analyses (containing filenames and covariates, automatically built if not provided)
 	
 	        #### Activate alternative modes:
-	        -Dm | -debug_module # For debugging, step to remove the content of the corresponding folders and to resume a failed or incomplete run without repeating (one of 'step1', 'step1a', 'step1b', 'step1c', 'step2', 'step3a', 'step3b', 'step4', 'step5', 'step6', 'step7', 'step8', step9', or 'all' to execute everything, by default)
+	        -Dm | -debug_module # For debugging, step to remove the content of the corresponding folders and to resume a failed or incomplete run without repeating (one of 'step1', 'step1a', 'step1b', 'step1c', 'step2', 'step3a', 'step3b', 'step4', 'step4b', 'step5', 'step6', 'step7', 'step8', step9', or 'all' to execute everything, by default)
 	        -q | -qc_raw_reads # Whether to perform quality control on the raw reads ('yes' by default, or 'no')
 	        -fd | -full_differential_analyses # Whether to perform full differential enrichment analyses (for example including computation of DEGs or Venn diagrams, 'no' or 'yes', by default)
 	        -fe | -functional_enrichment_analyses # Whether to perform functional enrichment analyses ('no' or 'yes', by default)
@@ -94,6 +94,7 @@ reanalyzerGSE.sh -h
 	        -Na | -network_analyses # Whether to perform network analyses, only for human or mouse analyses ('yes' or 'no', by default)
 	        -apl | -auto_panther_log # Whether to perform additional autoGO and Panther analyses for DEGs separated by log2Fc positive or negative ('yes' or 'no', by default)
 	        -eDe | -exploreDE_se # Whether to generate a SummarizedExperiment object (.qs2) for the exploreDE Shiny app ('no' by default, or 'yes'). Currently only supported for Human (Homo_sapiens) analyses.
+	        -sO | -splicing_option # Splicing analysis method: 'no' (default), 'saser' (differential splicing via saseR), or 'isoformswitchr' (isoform switch analysis via IsoformSwitchAnalyzeR, requires Kallisto or Salmon quant)
 	
 	        #### Processing parameters:
 	        -s | -strand # Strandness of the library ('yes, 'no', 'reverse'). If not provided and '-t' used, this would be predicted by salmon. Please use this parameter if prediction not correct, see explanations in for example in bit.ly/strandness0 and bit.ly/strandness

@@ -49,6 +49,7 @@ convert_tables_excel: "yes"
 time_course: "no"
 network_analyses: "no"
 auto_panther_log: "no"
+splicing_option: "no"
 
 # === Processing parameters ===
 strand: "reverse"

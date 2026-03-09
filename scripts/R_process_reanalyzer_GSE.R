@@ -1167,7 +1167,7 @@ tryCatch({
     gtf_attrs <- NULL
   } else {
     # Deduplicate: keep unique per gene (collapse if multiple rows per gene)
-    gtf_attrs[[gtf_key_col]] <- stringr::str_to_title(gtf_attrs[[gtf_key_col]])  # Match Gene_ID casing
+    gtf_attrs[[gtf_key_col]] <- tolower(gtf_attrs[[gtf_key_col]])  # Normalize to lowercase for case-insensitive merge
     gtf_attrs <- gtf_attrs[!duplicated(gtf_attrs[[gtf_key_col]]), ]
     rownames(gtf_attrs) <- gtf_attrs[[gtf_key_col]]
     cat(paste0("Unique GTF entries for merge key '", fc_seq_key, "': ", nrow(gtf_attrs), "\n"))
@@ -1183,9 +1183,15 @@ tryCatch({
   # 3. Helper function for merging
   merge_tables <- function(base_df, gene_id_col = "Gene_ID") {
     result <- base_df
-    # Merge with GTF attributes
+    # Merge with GTF attributes (case-insensitive: lowercase merge key, preserve original Gene_ID)
     if (!is.null(gtf_attrs)) {
-      result <- merge(result, gtf_attrs, by.x = gene_id_col, by.y = gtf_key_col, all.x = TRUE)
+      result$.merge_key <- tolower(result[[gene_id_col]])
+      gtf_tmp <- gtf_attrs
+      gtf_tmp$.merge_key <- gtf_tmp[[gtf_key_col]]  # Already lowercased above
+      result <- merge(result, gtf_tmp, by = ".merge_key", all.x = TRUE)
+      result$.merge_key <- NULL
+      # Remove the duplicate gtf key column if present
+      if (gtf_key_col %in% colnames(result)) result[[gtf_key_col]] <- NULL
     }
     return(result)
   }
