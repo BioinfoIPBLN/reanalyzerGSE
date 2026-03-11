@@ -375,9 +375,175 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
     labs(title=paste("Hierarchical Clustering of normalized counts from samples of ", label, sep=""), y="Height",x="Samples") + ggpubr::rotate_x_text() + ylim(c(min(pr.hc.c$height),tail(sort(pr.hc.c$height),2)[1]))
 
 
+  ### 9. Top 3 over-represented genes per sample (inspired by ezRun CountQC)
+  tryCatch({
+    counts_mat <- as.matrix(x$counts)
+    countFrac <- sweep(counts_mat, 2, colSums(counts_mat), FUN = "/")
+    gene_names_vec <- rownames(countFrac)
+    sample_names_vec <- colnames(countFrac)
+    # Clean sample names for display
+    sample_names_clean <- gsub("_hisat2.*|_STAR.*", "", sample_names_vec)
 
-  
+    # Build long-format data frame (base R, no tibble)
+    df_long <- data.frame(
+      Gene = rep(gene_names_vec, times = ncol(countFrac)),
+      Sample = rep(sample_names_clean, each = nrow(countFrac)),
+      Fraction = as.vector(countFrac),
+      stringsAsFactors = FALSE
+    )
+    # Ensure Sample factor keeps original order
+    df_long$Sample <- factor(df_long$Sample, levels = sample_names_clean)
+
+    # Get top 3 per sample
+    top3_list <- lapply(split(df_long, df_long$Sample), function(d) {
+      d <- d[order(-d$Fraction), ]
+      d <- head(d, 3)
+      d$rank <- factor(seq_len(nrow(d)), levels = 1:3)
+      d
+    })
+    top3 <- do.call(rbind, top3_list)
+    rownames(top3) <- NULL
+
+    p_top3 <- ggplot(df_long, aes(x = Sample, y = Fraction)) +
+      geom_boxplot(outlier.shape = NA, fill = "grey90") +
+      geom_point(data = top3, aes(colour = rank), size = 2,
+                 position = position_dodge(width = 0.4)) +
+      ggrepel::geom_text_repel(
+        data = top3, aes(label = Gene, colour = rank),
+        size = 2.5, nudge_y = 0.02, direction = "y",
+        segment.size = 0.2, segment.alpha = 0.4, max.overlaps = Inf
+      ) +
+      scale_colour_manual(values = c("red", "orange", "gold"),
+                          name = "Top-gene rank") +
+      theme_bw() +
+      theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+            plot.margin = margin(5.5, 20, 5.5, 5.5, "pt")) +
+      labs(y = "Fraction of total expression",
+           title = "Top 3 over-represented genes per sample")
+    print(p_top3)
+    cat("\nTop 3 genes per sample plot done.\n")
+  }, error = function(e) {
+    cat(paste("\nSkipping top 3 genes plot:", e$message, "\n"))
+  })
+
+
+  ### 10. Correlation and clustering using only the top 100 most variable genes
+  tryCatch({
+    log2signal <- lcpm2  # log2 normalized CPM
+    gene_sds <- apply(log2signal, 1, sd, na.rm = TRUE)
+    n_top <- min(100, length(gene_sds))
+    top_genes <- names(sort(gene_sds, decreasing = TRUE))[1:n_top]
+    top_signal <- log2signal[top_genes, , drop = FALSE]
+
+    # Clean column names
+    top_clean <- top_signal
+    colnames(top_clean) <- gsub("_hisat.*|_STAR.*", "", colnames(top_clean))
+
+    ## Spearman corrplot - top genes
+    par(mar = c(2, 2, 4, 3))
+    corrplot(cor(top_clean, method = "spearman", use = "complete.obs"),
+             order = "AOE", type = "full",
+             title = paste0("Spearman correlation (top ", n_top, " genes)"),
+             tl.col = col.group, tl.srt = 45, mar = c(0, 0, 2, 0))
+
+    ## Spearman with numbers
+    corrplot(cor(top_clean, method = "spearman", use = "complete.obs"),
+             method = "number", type = "full",
+             title = paste0("Spearman correlation (top ", n_top, " genes)"),
+             tl.col = col.group, tl.srt = 45, mar = c(0, 0, 2, 0))
+
+    ## Pearson corrplot - top genes
+    corrplot(cor(top_clean, method = "pearson", use = "complete.obs"),
+             order = "AOE", type = "full",
+             title = paste0("Pearson correlation (top ", n_top, " genes)"),
+             tl.col = col.group, tl.srt = 45, mar = c(0, 0, 2, 0))
+
+    corrplot(cor(top_clean, method = "pearson", use = "complete.obs"),
+             method = "number", type = "full",
+             title = paste0("Pearson correlation (top ", n_top, " genes)"),
+             tl.col = col.group, tl.srt = 45, mar = c(0, 0, 2, 0))
+
+    ## Dendrogram using 1 - correlation distance (top genes)
+    if (ncol(top_signal) > 2) {
+      d_top <- as.dist(1 - cor(top_signal, use = "complete.obs"))
+      hc_top <- hclust(d_top, method = "ward.D2")
+      hc_top$labels <- gsub("_hisat.*|_STAR.*", "", hc_top$labels)
+
+      # Base R dendrogram
+      par(mfrow = c(1, 1), mar = c(8, 4, 4, 2),
+          col.main = "royalblue4", col.lab = "royalblue4",
+          col.axis = "royalblue4", bg = "white", fg = "royalblue4",
+          font = 2, cex.axis = 0.6, cex.main = 0.8)
+      plot(hc_top, xlab = "Sample Distance",
+           main = paste0("Hierarchical Clustering (top ", n_top, " genes, ward.D2)"),
+           cex = 0.5)
+
+      # ggdendro colored version
+      groups_top <- as.factor(x$samples$group)
+      group_index_top <- as.numeric(groups_top[hc_top$order])
+      p_dend <- ggdendrogram(hc_top, rotate = FALSE, theme_dendro = FALSE) +
+        theme_minimal() +
+        theme(axis.text.x = element_text(face = "bold",
+                                         color = unique(col.group)[group_index_top])) +
+        labs(title = paste0("Clustering top ", n_top, " genes (ward.D2)"),
+             y = "Height", x = "Samples") +
+        ggpubr::rotate_x_text() +
+        ylim(c(min(hc_top$height),
+               tail(sort(hc_top$height), 2)[1]))
+      print(p_dend)
+    }
+    cat(paste0("\nCorrelation/clustering plots for top ", n_top, " genes done.\n"))
+  }, error = function(e) {
+    cat(paste("\nSkipping top-gene correlation/clustering:", e$message, "\n"))
+  })
+
+
+  ### 11. Scatter plots by condition (pairwise condition averages)
+  tryCatch({
+    conds <- as.character(x$samples$group)
+    unique_conds <- unique(conds)
+
+    if (length(unique_conds) >= 2) {
+      # Compute mean log2 normalized CPM per condition
+      signalCond_mat <- sapply(unique_conds, function(g) {
+        rowMeans(lcpm2[, conds == g, drop = FALSE])
+      })
+      colnames(signalCond_mat) <- unique_conds
+
+      # Pairwise scatter plots
+      cond_pairs <- combn(unique_conds, 2)
+      for (i in seq_len(ncol(cond_pairs))) {
+        c1 <- cond_pairs[1, i]
+        c2 <- cond_pairs[2, i]
+        plot_df <- data.frame(xval = signalCond_mat[, c1],
+                              yval = signalCond_mat[, c2])
+        r_val <- cor(plot_df$xval, plot_df$yval,
+                     use = "complete.obs", method = "pearson")
+
+        p_sc <- ggplot(plot_df, aes(x = xval, y = yval)) +
+          geom_point(alpha = 0.3, size = 0.5, color = "steelblue") +
+          geom_abline(slope = 1, intercept = 0,
+                      linetype = "dashed", color = "red") +
+          annotate("text", x = min(plot_df$xval, na.rm = TRUE) + 1,
+                   y = max(plot_df$yval, na.rm = TRUE) - 0.5,
+                   label = paste0("r = ", round(r_val, 3)),
+                   size = 4, color = "black", hjust = 0) +
+          labs(x = paste0(c1, " (mean log2 CPM)"),
+               y = paste0(c2, " (mean log2 CPM)"),
+               title = paste0("Scatter: ", c2, " vs ", c1)) +
+          theme_minimal() +
+          coord_fixed()
+        print(p_sc)
+      }
+      cat(paste0("\nScatter plots for ", ncol(cond_pairs), " condition pair(s) done.\n"))
+    } else {
+      cat("\nOnly one condition found, skipping scatter plots by condition.\n")
+    }
+  }, error = function(e) {
+    cat(paste("\nSkipping scatter plots by condition:", e$message, "\n"))
+  })
+
+
 dev.off()
-
 
 
