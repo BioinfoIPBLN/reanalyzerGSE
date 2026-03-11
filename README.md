@@ -130,7 +130,8 @@ reanalyzerGSE.sh -h
 	        -Fdup | -bam_dedup # Duplicate removal: 'no' (default), 'samtools' (markdup -r), 'picard' (REMOVE_DUPLICATES), 'picard_optical' (REMOVE_SEQUENCING_DUPLICATES)
 	        -Fcust | -bam_custom_filter # Custom shell command to pipe SAM text through post-alignment (e.g. "grep -E '^@|\\<NM:i:0\\>'" for perfect matches). Must preserve header lines (^@).
 
-	        #### Count-level gene filtering (post-quantification):
+	        #### Count-level options (quantification):
+	        -Ofc | -featureCounts_extra_args # Extra arguments to pass to featureCounts (default '-M -O -C -B'). These are appended to the automatically built featureCounts command line after strand, feature type, seqid, threads, and MAPQ options.
 	        -Fgene | -counts_custom_gene_filter # Shell command to filter gene rows from count tables before R processing (e.g. "grep -v als" to remove genes starting with 'als'). Applied to featureCounts .tab and Kallisto abundance.tsv files. Header is always preserved.
 	
 	        #### Performance:
