@@ -102,7 +102,7 @@ bam_dedup: "no"                        # Duplicate removal: 'no', 'samtools', 'p
 bam_custom_filter: ""                  # Custom shell command to pipe SAM text through post-alignment (e.g. "grep -E '^@|\\<NM:i:0\\>'" for perfect matches). Must preserve header lines (^@).
 
 # === Count-level options (quantification) ===
-featureCounts_extra_args: "-M -O -C -B"  # Extra arguments to pass to featureCounts (default '-M -O -C -B'). Appended after strand, feature type, seqid, threads, and MAPQ options.
+featureCounts_extra_args: "-M -O -C -B" # Extra arguments to pass to featureCounts (default '-M -O -C -B').
 counts_custom_gene_filter: ""          # Shell command to filter gene rows from count tables before R processing (e.g. "grep -v als" to remove genes starting with 'als'). Header is always preserved.
 
 # === Performance ===
