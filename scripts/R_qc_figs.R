@@ -375,7 +375,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
     labs(title=paste("Hierarchical Clustering of normalized counts from samples of ", label, sep=""), y="Height",x="Samples") + ggpubr::rotate_x_text() + ylim(c(min(pr.hc.c$height),tail(sort(pr.hc.c$height),2)[1]))
 
 
-  ### 9. Top 3 over-represented genes per sample (inspired by ezRun CountQC)
+  ### 9. Top N over-represented genes per sample (inspired by ezRun CountQC)
   tryCatch({
     counts_mat <- as.matrix(x$counts)
     countFrac <- sweep(counts_mat, 2, colSums(counts_mat), FUN = "/")
@@ -394,36 +394,61 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
     # Ensure Sample factor keeps original order
     df_long$Sample <- factor(df_long$Sample, levels = sample_names_clean)
 
-    # Get top 3 per sample
-    top3_list <- lapply(split(df_long, df_long$Sample), function(d) {
-      d <- d[order(-d$Fraction), ]
-      d <- head(d, 3)
-      d$rank <- factor(seq_len(nrow(d)), levels = 1:3)
-      d
-    })
-    top3 <- do.call(rbind, top3_list)
-    rownames(top3) <- NULL
+    # Helper to build the top-N figure
+    plot_topN <- function(df_long, N) {
+      topN_list <- lapply(split(df_long, df_long$Sample), function(d) {
+        d <- d[order(-d$Fraction), ]
+        d <- head(d, N)
+        d$rank <- factor(seq_len(nrow(d)), levels = 1:N)
+        d
+      })
+      topN <- do.call(rbind, topN_list)
+      rownames(topN) <- NULL
+      # Create a label for the legend combining rank + gene
+      topN$label <- paste0("#", topN$rank, " ", topN$Gene)
 
-    p_top3 <- ggplot(df_long, aes(x = Sample, y = Fraction)) +
-      geom_boxplot(outlier.shape = NA, fill = "grey90") +
-      geom_point(data = top3, aes(colour = rank), size = 2,
-                 position = position_dodge(width = 0.4)) +
-      ggrepel::geom_text_repel(
-        data = top3, aes(label = Gene, colour = rank),
-        size = 2.5, nudge_y = 0.02, direction = "y",
-        segment.size = 0.2, segment.alpha = 0.4, max.overlaps = Inf
-      ) +
-      scale_colour_manual(values = c("red", "orange", "gold"),
-                          name = "Top-gene rank") +
-      theme_bw() +
-      theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
-            plot.margin = margin(5.5, 20, 5.5, 5.5, "pt")) +
-      labs(y = "Fraction of total expression",
-           title = "Top 3 over-represented genes per sample")
-    print(p_top3)
-    cat("\nTop 3 genes per sample plot done.\n")
+      # Color palette: generate N distinct colours
+      rank_colors <- scales::hue_pal()(N)
+      names(rank_colors) <- as.character(1:N)
+
+      p <- ggplot(df_long, aes(x = Sample, y = Fraction)) +
+        geom_boxplot(outlier.shape = NA, fill = "grey90") +
+        geom_point(data = topN, aes(colour = rank), size = 2,
+                   position = position_dodge(width = 0.5)) +
+        scale_colour_manual(values = rank_colors,
+                            labels = setNames(
+                              paste0("#", 1:N),
+                              as.character(1:N)),
+                            name = "Rank") +
+        theme_bw() +
+        theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1, size = 7),
+              legend.position = "right",
+              plot.margin = margin(5.5, 20, 5.5, 5.5, "pt")) +
+        labs(y = "Fraction of total expression",
+             title = paste0("Top ", N, " over-represented genes per sample"))
+
+      # Add a table annotation below the plot listing the gene names per sample
+      gene_table <- topN[, c("Sample", "rank", "Gene")]
+      gene_table <- gene_table[order(gene_table$Sample, gene_table$rank), ]
+      # Build a concise caption
+      caption_lines <- tapply(
+        paste0("#", gene_table$rank, ":", gene_table$Gene),
+        gene_table$Sample,
+        function(x) paste(x, collapse = "  "))
+      caption_text <- paste(paste0(names(caption_lines), ": ", caption_lines), collapse = "\n")
+      p <- p + labs(caption = caption_text) +
+        theme(plot.caption = element_text(size = 5, hjust = 0, family = "mono"))
+      return(p)
+    }
+
+    print(plot_topN(df_long, 5))
+    cat("\nTop 5 genes per sample plot done.\n")
+
+    print(plot_topN(df_long, 10))
+    cat("\nTop 10 genes per sample plot done.\n")
+
   }, error = function(e) {
-    cat(paste("\nSkipping top 3 genes plot:", e$message, "\n"))
+    cat(paste("\nSkipping top N genes plot:", e$message, "\n"))
   })
 
 

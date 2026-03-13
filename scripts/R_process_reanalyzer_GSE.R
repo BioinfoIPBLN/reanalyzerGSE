@@ -426,6 +426,18 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
               file=paste0(output_dir,"/TPM_counts_genes.txt"),quote = F,row.names = T, col.names = NA,sep = "\t")
   write.table(log2(tpm_counts+0.1),
               file=paste0(output_dir,"/TPM_counts_genes_log2_0.1.txt"),quote = F,row.names = T, col.names = NA,sep = "\t")
+  
+  # CPM calculation and writing (mirroring the RPKM pattern to avoid case-mismatch issues)
+  cpm_counts <- as.data.frame(cpm(edgeR_object_norm, normalized.lib.sizes=TRUE))
+  colnames(cpm_counts) <- rownames(edgeR_object_norm$samples)
+  rownames(cpm_counts) <- stringr::str_to_title(rownames(cpm_counts))
+  # Reorder rows and columns to match RPKM/TPM ordering
+  cpm_counts <- cpm_counts[gene_counts_rpkm_to_write$Gene_ID,]
+  cpm_counts <- cpm_counts[,sort(colnames(cpm_counts))]
+  write.table(cpm_counts,
+              file=paste0(output_dir,"/CPM_counts_genes.txt"),quote = F,row.names = T, col.names = NA,sep = "\t")
+  write.table(log2(cpm_counts+0.1),
+              file=paste0(output_dir,"/CPM_counts_genes_log2_0.1.txt"),quote = F,row.names = T, col.names = NA,sep = "\t")
   # High/medium/low categ for TPM:
   tpm_counts_categ <- tpm_counts
   for (col in colnames(tpm_counts_categ)){
@@ -450,6 +462,31 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
   }
   write.table(tpm_counts_log_categ,
               file=paste0(output_dir,"/TPM_counts_genes_log2_0.1_categ.txt"),quote = F,row.names = T, col.names = NA,sep = "\t")
+  
+  # High/medium/low categ for CPM:
+  cpm_counts_categ <- cpm_counts
+  for (col in colnames(cpm_counts)){
+    a <- Hmisc::cut2(cpm_counts_categ[,col],g=3); b <- as.character(a)
+    b[b==levels(a)[1]] <- "Low"; b[b==levels(a)[2]] <- "Medium"; b[b==levels(a)[3]] <- "High"
+    cpm_counts_categ[,paste0(col,"_categ")] <- b
+    a <- Hmisc::cut2(cpm_counts_categ[,col],g=5); b <- as.character(a)
+    b[b==levels(a)[1]] <- "Very_Low"; b[b==levels(a)[2]] <- "Low"; b[b==levels(a)[3]] <- "Medium"; b[b==levels(a)[4]] <- "High"; b[b==levels(a)[5]] <- "Very_High"
+    cpm_counts_categ[,paste0(col,"_categ_2")] <- b
+  }
+  write.table(cpm_counts_categ,
+              file=paste0(output_dir,"/CPM_counts_genes_categ.txt"),quote = F,row.names = T, col.names = NA,sep = "\t")
+  cpm_counts_log <- log2(cpm_counts+0.1)
+  cpm_counts_log_categ <- cpm_counts_log
+  for (col in colnames(cpm_counts_log)){
+    a <- Hmisc::cut2(cpm_counts_log_categ[,col],g=3); b <- as.character(a)
+    b[b==levels(a)[1]] <- "Low"; b[b==levels(a)[2]] <- "Medium"; b[b==levels(a)[3]] <- "High"
+    cpm_counts_log_categ[,paste0(col,"_categ")] <- b
+    a <- Hmisc::cut2(cpm_counts_log_categ[,col],g=5); b <- as.character(a)
+    b[b==levels(a)[1]] <- "Very_Low"; b[b==levels(a)[2]] <- "Low"; b[b==levels(a)[3]] <- "Medium"; b[b==levels(a)[4]] <- "High"; b[b==levels(a)[5]] <- "Very_High"
+    cpm_counts_log_categ[,paste0(col,"_categ_2")] <- b
+  }
+  write.table(cpm_counts_log_categ,
+              file=paste0(output_dir,"/CPM_counts_genes_log2_0.1_categ.txt"),quote = F,row.names = T, col.names = NA,sep = "\t")
   # High/medium/low categ:
   gene_counts_rpkm_to_write_categ <- gene_counts_rpkm_to_write
   for (col in colnames(gene_counts_rpkm_to_write_categ[,-1])){
@@ -517,6 +554,17 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
                 file=paste0(output_dir,"/TPM_counts_adjusted_genes.txt"),quote = F,row.names = T, col.names = NA,sep = "\t")
     write.table(log2(tpm_counts+0.1),
                 file=paste0(output_dir,"/TPM_counts_adjusted_genes_log2_0.1.txt"),quote = F,row.names = T, col.names = NA,sep = "\t")
+    
+    # CPM calculation and writing for adjusted counts
+    cpm_counts_adjusted <- as.data.frame(cpm(edgeR_object_norm_adjusted, normalized.lib.sizes=TRUE))
+    colnames(cpm_counts_adjusted) <- rownames(edgeR_object_norm_adjusted$samples)
+    rownames(cpm_counts_adjusted) <- stringr::str_to_title(rownames(cpm_counts_adjusted))
+    cpm_counts_adjusted <- cpm_counts_adjusted[gene_counts_rpkm_adjusted_to_write$Gene_ID,]
+    cpm_counts_adjusted <- cpm_counts_adjusted[,sort(colnames(cpm_counts_adjusted))]
+    write.table(cpm_counts_adjusted,
+                file=paste0(output_dir,"/CPM_counts_adjusted_genes.txt"),quote = F,row.names = T, col.names = NA,sep = "\t")
+    write.table(log2(cpm_counts_adjusted+0.1),
+                file=paste0(output_dir,"/CPM_counts_adjusted_genes_log2_0.1.txt"),quote = F,row.names = T, col.names = NA,sep = "\t")
   }
   cat(paste0("\nCounts written. Current date: ",date(),"\n"))
 
@@ -1179,6 +1227,9 @@ tryCatch({
   # TPM log2 categ - has Gene_ID as rownames
   tpm_categ <- tpm_counts_log_categ
   tpm_categ$Gene_ID <- rownames(tpm_categ)
+  # CPM log2 categ - has Gene_ID as rownames
+  cpm_categ <- cpm_counts_log_categ
+  cpm_categ$Gene_ID <- rownames(cpm_categ)
 
   # 3. Helper function for merging
   merge_tables <- function(base_df, gene_id_col = "Gene_ID") {
@@ -1217,29 +1268,36 @@ tryCatch({
         
         rpkm_cols <- colnames(rpkm_categ)
         tpm_cols <- colnames(tpm_categ)
+        cpm_cols <- colnames(cpm_categ)
         
         if (length(comp_samples) == 0) {
             # Fallback if conditions could not be matched
             cat(paste0("  Warning: Conditions extracted from logFC (", paste(comp_conditions, collapse=", "), ") did not match any pheno conditions. Keeping all expression columns.\n"))
             rpkm_keep <- rep(TRUE, length(rpkm_cols))
             tpm_keep <- rep(TRUE, length(tpm_cols))
+            cpm_keep <- rep(TRUE, length(cpm_cols))
         } else {
             # Subset RPKM categ: keep Gene_ID + columns starting with comp_samples
             rpkm_sample_pattern <- paste0("^(", paste(gsub("([.|()\\^{}+$*?]|\\\\[|\\\\])", "\\\\\\1", comp_samples), collapse="|"), ")", "(_.*|)$")
             rpkm_keep <- rpkm_cols == "Gene_ID" | grepl(rpkm_sample_pattern, rpkm_cols)
             
-            # Subset TPM categ: same logic
+            # Subset TPM/CPM categ: same logic
             tpm_sample_pattern <- rpkm_sample_pattern
             tpm_keep <- tpm_cols == "Gene_ID" | grepl(tpm_sample_pattern, tpm_cols)
+            
+            cpm_sample_pattern <- rpkm_sample_pattern
+            cpm_keep <- cpm_cols == "Gene_ID" | grepl(cpm_sample_pattern, cpm_cols)
         }
         
         rpkm_categ_sub <- rpkm_categ[, rpkm_keep, drop = FALSE]
         tpm_categ_sub <- tpm_categ[, tpm_keep, drop = FALSE]
+        cpm_categ_sub <- cpm_categ[, cpm_keep, drop = FALSE]
         cat(paste0("  Comparison: ", comp_str, " -> keeping expression columns for ",
                    length(comp_samples), " samples (conditions: ", paste(comp_conditions, collapse=", "), ")\n"))
       } else {
         rpkm_categ_sub <- rpkm_categ
         tpm_categ_sub <- tpm_categ
+        cpm_categ_sub <- cpm_categ
       }
 
       # Merge DGE + RPKM categ + GTF
@@ -1257,6 +1315,14 @@ tryCatch({
       write.table(merged_tpm,
                   file = paste0(output_dir, "/DGE/", comp_name, "_merged_TPM.txt"),
                   quote = FALSE, row.names = FALSE, col.names = TRUE, sep = "\t")
+
+      # Merge DGE + CPM categ + GTF
+      merged_cpm <- merge(dge, cpm_categ_sub, by = "Gene_ID", all.x = TRUE)
+      merged_cpm <- merge_tables(merged_cpm)
+      colnames(merged_cpm) <- sub("gtf_","",colnames(merged_cpm))
+      write.table(merged_cpm,
+                  file = paste0(output_dir, "/DGE/", comp_name, "_merged_CPM.txt"),
+                  quote = FALSE, row.names = FALSE, col.names = TRUE, sep = "\t")
     }
     cat(paste0("Merged DGE+expression+GTF tables written for ", length(dge_files), " comparisons.\n"))
   } else {
@@ -1269,6 +1335,11 @@ tryCatch({
     merged_tpm_all <- merge_tables(tpm_categ)
     write.table(merged_tpm_all,
                 file = paste0(output_dir, "/expression_merged_TPM.txt"),
+                quote = FALSE, row.names = FALSE, col.names = TRUE, sep = "\t")
+
+    merged_cpm_all <- merge_tables(cpm_categ)
+    write.table(merged_cpm_all,
+                file = paste0(output_dir, "/expression_merged_CPM.txt"),
                 quote = FALSE, row.names = FALSE, col.names = TRUE, sep = "\t")
     cat("Merged expression+GTF tables written (no DGE requested).\n")
   }

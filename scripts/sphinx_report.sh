@@ -198,7 +198,17 @@ class IncludeMatchingFiles(SphinxDirective):
                     merged_sorted_degs = merged_degs_filtered.sort_values(by=merged_data.columns[logfc_col_idx])
                     merged_head_tail = pd.concat([merged_sorted_degs.head(10), merged_sorted_degs.tail(10)])
 
-                    deg_nodes.append(nodes.paragraph(text=f\"Top 10 DEGs in each sense (with annotation):\"))
+                    # Determine which expression type is being previewed
+                    preview_basename = os.path.basename(preview_file_path)
+                    if \"RPKM\" in preview_basename:
+                        expr_type = \"RPKM\"
+                    elif \"TPM\" in preview_basename:
+                        expr_type = \"TPM\"
+                    elif \"CPM\" in preview_basename:
+                        expr_type = \"CPM\"
+                    else:
+                        expr_type = \"expression\"
+                    deg_nodes.append(nodes.paragraph(text=f\"Top 10 DEGs in each sense (with annotation, {expr_type} expression values):\"))
                     merged_literal_node = nodes.literal_block()
                     merged_literal_node['language'] = \"text\"
                     merged_literal_node += nodes.Text(merged_head_tail.to_string(index=False, header=True))
@@ -297,8 +307,9 @@ Please use the following links:
 
 .. raw:: html
    
+   <a href=\"sphinx_report/html/TPM_counts_genes_log2_0.1_categ.txt\" target=\"_blank\">Click to get TPM counts (log2 + 0.1)</a>$(if [ -f "$path/$final_dir_name/TPM_counts_genes_log2_0.1_categ.xlsx" ]; then echo ' (<a href="sphinx_report/html/TPM_counts_genes_log2_0.1_categ.xlsx" target="_blank">xlsx version</a>)'; fi)<br>
    <a href=\"sphinx_report/html/RPKM_counts_genes_log2_0.1_categ.txt\" target=\"_blank\">Click to get RPKM counts (log2 + 0.1)</a>$(if [ -f "$path/$final_dir_name/RPKM_counts_genes_log2_0.1_categ.xlsx" ]; then echo ' (<a href="sphinx_report/html/RPKM_counts_genes_log2_0.1_categ.xlsx" target="_blank">xlsx version</a>)'; fi)<br>
-   <a href=\"sphinx_report/html/TPM_counts_genes_log2_0.1_categ.txt\" target=\"_blank\">Click to get TPM counts (log2 + 0.1)</a>$(if [ -f "$path/$final_dir_name/TPM_counts_genes_log2_0.1_categ.xlsx" ]; then echo ' (<a href="sphinx_report/html/TPM_counts_genes_log2_0.1_categ.xlsx" target="_blank">xlsx version</a>)'; fi)
+   <a href=\"sphinx_report/html/CPM_counts_genes_log2_0.1_categ.txt\" target=\"_blank\">Click to get CPM counts (log2 + 0.1)</a>$(if [ -f "$path/$final_dir_name/CPM_counts_genes_log2_0.1_categ.xlsx" ]; then echo ' (<a href="sphinx_report/html/CPM_counts_genes_log2_0.1_categ.xlsx" target="_blank">xlsx version</a>)'; fi)
 
 If requested, please go to \"$project_name/$final_dir_name/violin\" to check out the figures showing the transcriptional profiles of genes of interest. You may also find the tables \"_annotation.txt\" including the gene annotation available. The ExpressionVisualization or exploreDE apps may be also used (see below).
 
@@ -417,6 +428,7 @@ sed -i 's,href="multi,href="sphinx_report/html/multi,g' $path/final_report.html
 sed -i 's,href="Volcano,href="sphinx_report/html/Volcano,g' $path/final_report.html
 sed -i 's,href="TPM,href="sphinx_report/html/TPM,g' $path/final_report.html
 sed -i 's,href="RPKM,href="sphinx_report/html/RPKM,g' $path/final_report.html
+sed -i 's,href="CPM,href="sphinx_report/html/CPM,g' $path/final_report.html
 sed -i 's,href="DGE_analysis_comp,href="sphinx_report/html/DGE_analysis_comp,g' $path/final_report.html
 sed -i 's,src="_static/,src="sphinx_report/html/_static/,g' $path/final_report.html
 
