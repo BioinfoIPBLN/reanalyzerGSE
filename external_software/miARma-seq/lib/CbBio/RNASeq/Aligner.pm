@@ -329,6 +329,7 @@ sub ReadAligment{
 	my $bam_mapq_threshold=$args{"bam_mapq_threshold"};
 	my $bam_dedup=$args{"bam_dedup"};
 	my $bam_custom_filter=$args{"bam_custom_filter"};
+	my $bam_normalization=$args{"bam_normalization"};
 	#Declaring the variables to collect the path of the new files
 	my $output_file1;
 	my $output_file2;
@@ -821,7 +822,8 @@ sub ReadAligment{
 					bam_exclude_flags=>$bam_exclude_flags,
 					bam_mapq_threshold=>$bam_mapq_threshold,
 					bam_dedup=>$bam_dedup,
-					bam_custom_filter=>$bam_custom_filter
+					bam_custom_filter=>$bam_custom_filter,
+					bam_normalization=>$bam_normalization
 		  		);
 		  		return($output_file2);
 			}
@@ -872,7 +874,8 @@ sub ReadAligment{
 					bam_exclude_flags=>$bam_exclude_flags,
 					bam_mapq_threshold=>$bam_mapq_threshold,
 					bam_dedup=>$bam_dedup,
-					bam_custom_filter=>$bam_custom_filter
+					bam_custom_filter=>$bam_custom_filter,
+					bam_normalization=>$bam_normalization
 		  		);
 		  		return($output_file2);
 			}
@@ -2720,6 +2723,11 @@ sub hisat2{
 	my $bam_mapq_threshold=$args{"bam_mapq_threshold"};
 	my $bam_dedup=$args{"bam_dedup"};
 	my $bam_custom_filter=$args{"bam_custom_filter"};
+	my $bam_normalization=$args{"bam_normalization"};
+	my $norm_cmd = "";
+	if (defined $bam_normalization && lc($bam_normalization) ne "none") {
+		$norm_cmd = "--normalizeUsing " . uc($bam_normalization);
+	}
 	
 	#Variable declaration and describing results directory 
 	my $commanddef;
@@ -2834,7 +2842,7 @@ sub hisat2{
 	      							  export _JAVA_OPTIONS=\"-Xms5g -Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD\" && \\
 	      							  qualimap bamqc -bam {}_hisat2.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_hisat2.bam --java-mem-size=${memorylimit_div_mb}m >> qc1.log 2>&1 || true && \\
 	      							  case \"$gtf\" in *.gtf) qualimap rnaseq -bam {}_hisat2.bam -gtf $gtf -pe -outdir \$PWD/rnaseqqc_results/{}_hisat2.bam --java-mem-size=${memorylimit_div_mb}m >> qc2.log 2>&1 || true ;; esac && \\
-	      							  bamCoverage -b {}_hisat2.bam -o {}_hisat2.bam.bw -of bigwig -bs 10 -p $threads --normalizeUsing RPKM &>> bamCoverage.log && \\
+	      							  bamCoverage -b {}_hisat2.bam -o {}_hisat2.bam.bw -of bigwig -bs 10 -p $threads $norm_cmd &>> bamCoverage.log && \\
 	      							  samtools flagstat -@ $threads {}_hisat2.bam > {}_hisat2.bam.flagstat && \\
 	      							  samtools stats -@ $threads {}_hisat2.bam > {}_hisat2.bam.stats' \\
 	      							  ::: \$(cat $tmp_file | sed -E 's,_(R)?[12]\.fastq\.gz.*,,g' | sort | uniq | awk -F '/' '{print \$NF}')
@@ -2928,7 +2936,7 @@ sub hisat2{
 	      							  export _JAVA_OPTIONS=\"-Xms5g -Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD\" && \\
 	      							  qualimap bamqc -bam {}_hisat2.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_hisat2.bam --java-mem-size=${memorylimit_div_mb}m >> qc1.log 2>&1 || true && \\
 	      							  case \"$gtf\" in *.gtf) qualimap rnaseq -bam {}_hisat2.bam -gtf $gtf -outdir \$PWD/rnaseqqc_results/{}_hisat2.bam --java-mem-size=${memorylimit_div_mb}m >> qc2.log 2>&1 || true ;; esac && \\
-	      							  bamCoverage -b {}_hisat2.bam -o {}_hisat2.bam.bw -of bigwig -bs 10 -p $threads --normalizeUsing RPKM &>> bamCoverage.log && \\
+	      							  bamCoverage -b {}_hisat2.bam -o {}_hisat2.bam.bw -of bigwig -bs 10 -p $threads $norm_cmd &>> bamCoverage.log && \\
 	      							  samtools flagstat -@ $threads {}_hisat2.bam > {}_hisat2.bam.flagstat && \\
 	      							  samtools stats -@ $threads {}_hisat2.bam > {}_hisat2.bam.stats' \\
 	      							  ::: \$(cat $tmp_file | sed -E 's,_(R)?1\.fastq\.gz.*,,g' | sort | uniq | awk -F '/' '{print \$NF}')
@@ -3247,6 +3255,11 @@ sub star{
 	my $bam_mapq_threshold=$args{"bam_mapq_threshold"};
 	my $bam_dedup=$args{"bam_dedup"};
 	my $bam_custom_filter=$args{"bam_custom_filter"};
+	my $bam_normalization=$args{"bam_normalization"};
+	my $norm_cmd = "";
+	if (defined $bam_normalization && lc($bam_normalization) ne "none") {
+		$norm_cmd = "--normalizeUsing " . uc($bam_normalization);
+	}
 	my $commanddef;
 	my $output_dir="/star_results/";
 	my $starpardef;
@@ -3384,7 +3397,7 @@ sub star{
 					                          parallel --verbose --joblog ${projectdir}/star_log_parallel.txt -j $parallelnumber 'STAR --runMode alignReads --genomeDir $staridx_final --genomeLoad LoadAndKeep --readFilesIn \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \$(cat $tmp_file | xargs dirname | uniq)/{}_2.fastq.gz --outFileNamePrefix $projectdir${output_dir}{}_STAR_ $starpardef --outStd SAM $samtools_pipeline_pe && echo Done...{}_STAR.bam' ::: \$(echo \$name_lists)
 					                          parallel --verbose --joblog ${projectdir}/starprocess_log_parallel.txt -j $parallelnumber 'export _JAVA_OPTIONS="-Xms5g -Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD" && qualimap bamqc -bam $projectdir${output_dir}/{}_STAR.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_STAR.bam --java-mem-size="${memorylimit_div_mb}m" >> qc1.log 2>&1 || true
 					                          qualimap rnaseq -bam $projectdir${output_dir}/{}_STAR.bam -gtf $gtf -pe -outdir \$PWD/rnaseqqc_results/{}_STAR.bam --java-mem-size="${memorylimit_div_mb}m" >> qc2.log 2>&1 || true
-					                          bamCoverage -b {}_STAR.bam -o {}_STAR.bam.bw -of bigwig -bs 10 -p $threads --normalizeUsing RPKM' ::: \$(echo \$name_lists)
+					                          bamCoverage -b {}_STAR.bam -o {}_STAR.bam.bw -of bigwig -bs 10 -p $threads $norm_cmd' ::: \$(echo \$name_lists)
 					                          for f in \$( ls | egrep '.bam\$' ); do echo \$f"\t"\$PWD/bamqc_results/\$f >> \$PWD/bamqc_results/list_multi.txt; done && mkdir -p \$PWD/samtools_results/ && parallel --verbose -j $parallelnumber 'samtools flagstat -@ $threads {} > \$PWD/samtools_results/{}_flagstat.txt && samtools stats -@ $threads {} > \$PWD/samtools_results/{}_stats.txt' ::: \$( ls | egrep '.bam\$' )
 					                          export _JAVA_OPTIONS="-Xms5g -Xmx${memorylimit_in_mb}m -Djava.io.tmpdir=\$PWD" && qualimap multi-bamqc -d \$PWD/bamqc_results/list_multi.txt -outdir \$PWD/multibamqc_results/ >> qc3.log 2>&1 || true && \\
 					                          
@@ -3467,7 +3480,7 @@ sub star{
 					  parallel --verbose --joblog ${projectdir}/star_log_parallel.txt -j $parallelnumber 'STAR --runMode alignReads --genomeDir $staridx_final --genomeLoad LoadAndKeep --readFilesIn \$(cat $tmp_file | xargs dirname | uniq)/{} --outFileNamePrefix $projectdir${output_dir}{}_STAR_ $starpardef --outStd SAM $samtools_pipeline_se && echo Done...{}_STAR.bam' ::: \$(echo \$name_lists)
 					  parallel --verbose --joblog ${projectdir}/starprocess_log_parallel.txt -j $parallelnumber 'export _JAVA_OPTIONS="-Xms5g -Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD" && qualimap bamqc -bam $projectdir${output_dir}/{}_STAR.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_STAR.bam --java-mem-size="${memorylimit_div_mb}m" >> qc1.log 2>&1 || true
 		                          qualimap rnaseq -bam $projectdir${output_dir}/{}_STAR.bam -gtf $gtf -outdir \$PWD/rnaseqqc_results/{}_STAR.bam --java-mem-size="${memorylimit_div_mb}m" >> qc2.log 2>&1 || true
-		                          bamCoverage -b {}_STAR.bam -o {}_STAR.bam.bw -of bigwig -bs 10 -p $threads --normalizeUsing RPKM' ::: \$(echo \$name_lists)
+		                          bamCoverage -b {}_STAR.bam -o {}_STAR.bam.bw -of bigwig -bs 10 -p $threads $norm_cmd' ::: \$(echo \$name_lists)
 		                          for f in \$( ls | egrep '.bam\$' ); do echo \$f"\t"\$PWD/bamqc_results/\$f >> \$PWD/bamqc_results/list_multi.txt; done && mkdir -p \$PWD/samtools_results/ && parallel --verbose -j $parallelnumber 'samtools flagstat -@ $threads {} > \$PWD/samtools_results/{}_flagstat.txt && samtools stats -@ $threads {} > \$PWD/samtools_results/{}_stats.txt' ::: \$( ls | egrep '.bam\$' )
 		                          export _JAVA_OPTIONS="-Xms5g -Xmx${memorylimit_in_mb}m -Djava.io.tmpdir=\$PWD" && qualimap multi-bamqc -d \$PWD/bamqc_results/list_multi.txt -outdir \$PWD/multibamqc_results/ >> qc3.log 2>&1 || true && \\
 		                          

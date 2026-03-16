@@ -849,6 +849,9 @@ if [[ $debug_step == "all" || $debug_step == "step3a" ]]; then
 				bam_custom_filter_escaped=$(printf '%s' "$bam_custom_filter" | sed 's/[\\&]/\\&/g')
 				sed -i "s,bam_custom_filter=,bam_custom_filter=$bam_custom_filter_escaped,g" miarma$index.ini
 			fi
+			if [ ! -z "$bam_normalization" ]; then
+				sed -i "s,bam_normalization=,bam_normalization=$bam_normalization,g" miarma$index.ini
+			fi
 			if [ ! -z "$featureCounts_extra_args" ]; then
 				fc_extra_escaped=$(printf '%s' "$featureCounts_extra_args" | sed 's/[\\&]/\\&/g')
 				sed -i "s,parameters=-M -O -C -B,parameters=$fc_extra_escaped,g" miarma$index.ini

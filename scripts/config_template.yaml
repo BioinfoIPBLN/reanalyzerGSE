@@ -100,6 +100,7 @@ bam_dedup: "no"                        # Duplicate removal: 'no', 'samtools', 'p
                                        #   picard         = picard MarkDuplicates REMOVE_DUPLICATES=true
                                        #   picard_optical = picard MarkDuplicates REMOVE_SEQUENCING_DUPLICATES=true (optical/sequencing only)
 bam_custom_filter: ""                  # Custom shell command to pipe SAM text through post-alignment (e.g. "grep -E '^@|\\<NM:i:0\\>'" for perfect matches). Must preserve header lines (^@).
+bam_normalization: "BPM"               # Normalization option for bamCoverage. Choices: RPKM, CPM, BPM, RPGC, None. (default "BPM")
 
 # === Count-level options (quantification) ===
 featureCounts_extra_args: "-M -O -C -B" # Extra arguments to pass to featureCounts (default '-M -O -C -B').

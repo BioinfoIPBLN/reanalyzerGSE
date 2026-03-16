@@ -107,6 +107,7 @@ for argument in $options; do
 	        -Freq | -bam_require_flags # samtools -f flags to require. Suggestion: use '2' for Paired-End (proper pair), leave empty or '4' for Single-End.
 	        -Fdup | -bam_dedup # Duplicate removal: 'no' (default), 'samtools' (markdup -r), 'picard' (REMOVE_DUPLICATES), 'picard_optical' (REMOVE_SEQUENCING_DUPLICATES)
 	        -Fcust | -bam_custom_filter # Custom shell command to pipe SAM text through post-alignment (e.g. "grep -E '^@|\\<NM:i:0\\>'" for perfect matches). Must preserve header lines (^@).
+	        -bN | -bam_normalization # Normalization method using deeptool's bamCoverage. Choices: RPKM, CPM, BPM, RPGC, None. ('BPM' by default)
 
 	        #### Count-level options (quantification):
 	        -Ofc | -featureCounts_extra_args # Extra arguments to pass to featureCounts (default '-M -O -C -B'). These are appended to the automatically built featureCounts command line after strand, feature type, seqid, threads, and MAPQ options.
@@ -206,6 +207,7 @@ for argument in $options; do
 		-Freq) bam_require_flags=${arguments[index]} ;;
 		-Fdup) bam_dedup=${arguments[index]} ;;
 		-Fcust) bam_custom_filter=${arguments[index]} ;;
+		-bN) bam_normalization=${arguments[index]} ;;
 		-Ofc) featureCounts_extra_args=${arguments[index]} ;;
 		-Fgene) counts_custom_gene_filter=${arguments[index]} ;;
 		-nrf) non_reference_funct_enrichm=${arguments[index]} ;;
@@ -463,6 +465,9 @@ if [ -z "$bam_dedup" ]; then
 fi
 if [ -z "$bam_custom_filter" ]; then
 	bam_custom_filter=""
+fi
+if [ -z "$bam_normalization" ]; then
+	bam_normalization="BPM"
 fi
 if [ -z "$featureCounts_extra_args" ]; then
 	featureCounts_extra_args="-M -O -C -B"
