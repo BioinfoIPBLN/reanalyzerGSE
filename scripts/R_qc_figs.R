@@ -569,42 +569,172 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
     cat(paste("\nSkipping scatter plots by condition:", e$message, "\n"))
   })
 
-dev.off()
-
-  ### 12. geneBody_coverage logic (RSeQC)
+  ### 12. geneBody_coverage logic
   if (args[6] == "edgeR_object_norm" && bam_files_present) {
     tryCatch({
       cat("\nPreparing annotation for geneBody_coverage.py (RSeQC)...\n")
-      bed_file <- annotation_file
-      if (length(grep("\\.bed(12)?$", annotation_file, ignore.case=TRUE)) == 0) {
-        bed_file <- file.path(output_dir, "QC_and_others", paste0(basename(annotation_file), ".bed12"))
-        if (!file.exists(bed_file)) {
-          cat("Converting GTF/GFF3 to BED12 using rtracklayer and GenomicFeatures...\n")
-          suppressMessages(library(rtracklayer, quiet = T, warn.conflicts = F))
-          suppressMessages(library(GenomicFeatures, quiet = T, warn.conflicts = F))
-          txdb <- makeTxDbFromGFF(annotation_file)
+      cat("Importing GTF/GFF3 using rtracklayer...\n")
+      suppressMessages(library(rtracklayer, quiet = T, warn.conflicts = F))
+      suppressMessages(library(GenomicFeatures, quiet = T, warn.conflicts = F))
+      suppressMessages(library(txdbmaker, quiet = T, warn.conflicts = F))
+          
+          # Auto-detect format by peeking at first data line's attributes column
+          lines <- readLines(annotation_file, n=50)
+          lines <- lines[!grepl("^#", lines) & nzchar(lines)]
+          fmt <- "gtf"
+          if (length(lines) > 0) {
+              attrs <- strsplit(lines[1], "\t", fixed=TRUE)[[1]]
+              if (length(attrs) >= 9 && grepl("=", attrs[9])) {
+                  fmt <- "gff3"
+              }
+          }
+          
+          suppressWarnings(gr <- rtracklayer::import(annotation_file, format=fmt))
+          
+          cat("Sanitizing metadata for txdbmaker (flattening lists)...\n")
+          needed_cols <- intersect(colnames(mcols(gr)), c("type", "ID", "Parent", "Name", "transcript_id", "gene_id", "exon_id", "exon_name"))
+          mc <- mcols(gr)[, needed_cols, drop=FALSE]
+          
+          for (col in colnames(mc)) {
+            if (is(mc[[col]], "List") || is.list(mc[[col]])) {
+              # Extract first element of any list/AtomicList to prevent length > 1 coercion errors
+              mc[[col]] <- as.character(sapply(mc[[col]], function(x) if(length(x) > 0) as.character(x[[1]]) else NA))
+            }
+          }
+          
+          # Synthesize missing ID and Parent attrs for txdbmaker
+          if (!"ID" %in% colnames(mc)) mc$ID <- NA
+          if (!"Parent" %in% colnames(mc)) mc$Parent <- NA
+          
+          if ("transcript_id" %in% colnames(mc)) {
+             idx_tx <- mc$type %in% c("mRNA", "transcript") & is.na(mc$ID)
+             mc$ID[idx_tx] <- as.character(mc$transcript_id[idx_tx])
+             
+             idx_ex <- mc$type %in% c("exon", "CDS") & is.na(mc$Parent)
+             mc$Parent[idx_ex] <- as.character(mc$transcript_id[idx_ex])
+          }
+          
+          if ("gene_id" %in% colnames(mc)) {
+             idx_gene <- mc$type == "gene" & (is.na(mc$ID) | mc$ID == "")
+             mc$ID[idx_gene] <- as.character(mc$gene_id[idx_gene])
+             
+             idx_tx_parent <- mc$type %in% c("mRNA", "transcript") & is.na(mc$Parent)
+             mc$Parent[idx_tx_parent] <- as.character(mc$gene_id[idx_tx_parent])
+          }
+          
+          # Ensure all genes have an ID
+          idx_gene_no_id <- mc$type == "gene" & (is.na(mc$ID) | mc$ID == "")
+          if(any(idx_gene_no_id)) {
+             if("Name" %in% colnames(mc)) {
+                mc$ID[idx_gene_no_id] <- as.character(mc$Name[idx_gene_no_id])
+             }
+             still_no_id <- mc$type == "gene" & (is.na(mc$ID) | mc$ID == "")
+             if(any(still_no_id)) {
+                 mc$ID[still_no_id] <- paste0("gene_unnamed_", seq_len(sum(still_no_id)))
+             }
+          }
+          
+          mcols(gr) <- mc
+          
+          cat("Making TxDb...\n")
+          suppressWarnings(txdb <- txdbmaker::makeTxDbFromGRanges(gr))
+          cat("Extracting exons for Transcript calculation...\n")
           exons_by_tx <- exonsBy(txdb, by = "tx", use.names = TRUE)
-          export.bed(exons_by_tx, bed_file)
-          cat("Conversion to BED12 done.\n")
-        } else {
-          cat("BED12 file already exists, skipping conversion.\n")
-        }
-      }
-      
-      cat("\nRunning geneBody_coverage.py...\n")
-      bam_files <- list.files(path=input_dir, pattern="\\.bam$", recursive=TRUE, full.names=TRUE)
-      bam_string <- paste(bam_files, collapse=",")
-      out_prefix <- file.path(output_dir, "QC_and_others", paste0(label, "_geneBody_coverage"))
-      
-      cmd <- paste("geneBody_coverage.py", "-r", shQuote(bed_file), "-i", shQuote(bam_string), "-o", shQuote(out_prefix), "-f pdf")
-      cat("Command:", cmd, "\n")
-      system(cmd)
-      cat("geneBody_coverage.py execution complete.\n")
+          
+          # Use all transcripts > 100bp
+          tx_lengths <- sum(width(exons_by_tx))
+          valid_tx <- names(tx_lengths[tx_lengths >= 100])
+          sampled_exons <- exons_by_tx[valid_tx]
+          
+          bam_files <- list.files(path=input_dir, pattern="\\.bam$", recursive=TRUE, full.names=TRUE)
+          cat(sprintf("\nCalculating Gene Body Coverage for %s BAMs (processing %s transcripts)...\n", length(bam_files), length(valid_tx)))
+          suppressMessages(library(Rsamtools, quiet = T, warn.conflicts = F))
+          suppressMessages(library(GenomicAlignments, quiet = T, warn.conflicts = F))
+          suppressMessages(library(BiocParallel, quiet = T, warn.conflicts = F))
+          suppressMessages(library(GenomeInfoDb, quiet = T, warn.conflicts = F))
+          
+          # Setup parallel environment
+          num_workers <- min(12, length(bam_files))
+          bpparam <- MulticoreParam(workers = num_workers)
+          
+          bin_mat_list <- bplapply(bam_files, function(bfile) {
+            bname <- gsub("\\.bam$", "", basename(bfile))
+            
+            # Ensure BAM index exists
+            if (!file.exists(paste0(bfile, ".bai")) && !file.exists(sub("\\.bam$", ".bai", bfile))) {
+               return(NULL)
+            }
+            
+            bf <- BamFile(bfile)
+            bam_seqs <- seqlevels(bf)
+            
+            # Prune query ranges that sit on contigs missing from this BAM's header
+            valid_seqs <- intersect(seqlevels(sampled_exons), bam_seqs)
+            if (length(valid_seqs) == 0) return(NULL)
+            
+            valid_exons <- suppressWarnings(keepSeqlevels(sampled_exons, valid_seqs, pruning.mode="coarse"))
+            if (length(valid_exons) == 0) return(NULL)
+            
+            # which must be a GRanges, not an aptly-named GRangesList, otherwise ScanBamParam thinks list names are chromosomes!
+            param <- ScanBamParam(which = reduce(unlist(valid_exons)))
+            
+            gal <- readGAlignments(bf, param = param)
+            if (length(gal) == 0) return(NULL)
+            
+            cvg <- coverage(gal)
+            
+            tx_cvg <- lapply(seq_along(sampled_exons), function(i) {
+               exs <- sampled_exons[[i]]
+               seqn <- as.character(seqnames(exs)[1])
+               if (!seqn %in% names(cvg)) return(NULL)
+               
+               chrom_cvg <- cvg[[seqn]]
+               ex_cvgs <- Views(chrom_cvg, ranges(exs))
+               spliced_cvg <- as.numeric(unlist(ex_cvgs))
+               
+               if (as.character(strand(exs)[1]) == "-") {
+                 spliced_cvg <- rev(spliced_cvg)
+               }
+               if (length(spliced_cvg) < 100) return(NULL)
+               
+               return(approx(seq_along(spliced_cvg), spliced_cvg, n=100)$y)
+            })
+            
+            tx_cvg <- tx_cvg[!sapply(tx_cvg, is.null)]
+            if (length(tx_cvg) == 0) return(NULL)
+            
+            mean_cvg <- colMeans(do.call(rbind, tx_cvg))
+            if(sum(mean_cvg) == 0) return(NULL)
+            
+            mean_cvg <- mean_cvg / sum(mean_cvg)  # Area normalized
+            
+            return(data.frame(
+               Percentage = 1:100,
+               Coverage = mean_cvg,
+               Sample = bname
+            ))
+          }, BPPARAM = bpparam)
+          
+          # Clean up NULLs from failed/empty BAMs
+          bin_mat_list <- bin_mat_list[!sapply(bin_mat_list, is.null)]
+          
+          if (length(bin_mat_list) > 0) {
+             plot_df <- do.call(rbind, bin_mat_list)
+             p <- ggplot(plot_df, aes(x=Percentage, y=Coverage, color=Sample)) +
+                geom_line(size=1) +
+                theme_bw() +
+                scale_x_continuous(breaks = seq(0, 100, by=25), labels = function(x) paste0(x, "%")) + 
+                labs(title=paste0(length(bam_files), " BAMs, ", length(valid_tx), " transcripts - Gene Body Coverage"), x="Gene body proportion (5' -> 3')", y="Normalized Coverage") +
+                theme(legend.position="right")
+             print(p)
+             cat("Gene body coverage pure R calculation complete (appended to main QC report).\n")
+          }
     }, error = function(e) {
-      cat(paste("\nSkipping geneBody_coverage.py step:", e$message, "\n"))
+      cat(paste("\nSkipping geneBody_coverage logic:", e$message, "\n"))
+      # Write R-level error to log as well
+      log_file <- file.path(output_dir, "QC_and_others", paste0(label, "_geneBody_coverage_error.log"))
+      writeLines(e$message, log_file)
     })
   }
 
-
-
-
+while (!is.null(dev.list())) dev.off()
