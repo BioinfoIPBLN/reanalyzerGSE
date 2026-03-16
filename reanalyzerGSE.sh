@@ -822,8 +822,8 @@ if [[ $debug_step == "all" || $debug_step == "step3a" ]]; then
 					echo -e "\n\033[1;31mERROR:\033[0m Feature type '$fc_feat_val' (optionsFeatureCounts_feat / -t) was NOT found in column 3 of annotation file:\n  $gff\n\nAvailable feature types: $available_feats\n\nPlease set 'optionsFeatureCounts_feat' in your YAML config to one of the above (e.g. 'exon' for GTF, 'gene' for some GFF3 files).\n" >&2
 					exit 1
 				fi
-				# Check attribute name (-g) exists in column 9
-				if ! awk -F'\t' -v attr="$fc_seq_val" '!/^#/ && NF>=9 { if (index($9, attr) > 0) {found=1; exit} } END {exit !found}' "$gff"; then
+				# Check attribute name (-g) exists as a proper key in column 9 (not substring)
+				if ! awk -F'\t' -v attr="$fc_seq_val" '!/^#/ && NF>=9 { n=split($9,pairs,";"); for(i=1;i<=n;i++){ gsub(/^[ \t]+/,"",pairs[i]); split(pairs[i],kv," "); if(kv[1]==attr){found=1; exit} } } END {exit !found}' "$gff"; then
 					# Extract example attributes from the first data line
 					example_attrs=$(awk -F'\t' '!/^#/ && NF>=9 {print $9; exit}' "$gff")
 					echo -e "\n\033[1;31mERROR:\033[0m Attribute name '$fc_seq_val' (optionsFeatureCounts_seq / -g) was NOT found in column 9 of annotation file:\n  $gff\n\nExample attributes from your file:\n  $example_attrs\n\nFor GTF files, typical values are 'gene_id' or 'gene_name'.\nFor GFF3 files, typical values are 'ID', 'Name', or 'gene_id'.\nPlease set 'optionsFeatureCounts_seq' in your YAML config accordingly.\n" >&2
