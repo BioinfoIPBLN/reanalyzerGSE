@@ -9,6 +9,7 @@ edgeR_object_prefilter <- eval(as.symbol(args[4]))
 edgeR_object <- eval(as.symbol(args[5]))
 edgeR_object_norm <- eval(as.symbol(args[6]))
 pattern_to_remove <- args[7]
+annotation_file <- args[8]
 label <- basename(path)
 label2 <- sub(".*_","",args[6])
 
@@ -568,7 +569,42 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
     cat(paste("\nSkipping scatter plots by condition:", e$message, "\n"))
   })
 
-
 dev.off()
+
+  ### 12. geneBody_coverage logic (RSeQC)
+  if (args[6] == "edgeR_object_norm" && bam_files_present) {
+    tryCatch({
+      cat("\nPreparing annotation for geneBody_coverage.py (RSeQC)...\n")
+      bed_file <- annotation_file
+      if (length(grep("\\.bed(12)?$", annotation_file, ignore.case=TRUE)) == 0) {
+        bed_file <- file.path(output_dir, "QC_and_others", paste0(basename(annotation_file), ".bed12"))
+        if (!file.exists(bed_file)) {
+          cat("Converting GTF/GFF3 to BED12 using rtracklayer and GenomicFeatures...\n")
+          suppressMessages(library(rtracklayer, quiet = T, warn.conflicts = F))
+          suppressMessages(library(GenomicFeatures, quiet = T, warn.conflicts = F))
+          txdb <- makeTxDbFromGFF(annotation_file)
+          exons_by_tx <- exonsBy(txdb, by = "tx", use.names = TRUE)
+          export.bed(exons_by_tx, bed_file)
+          cat("Conversion to BED12 done.\n")
+        } else {
+          cat("BED12 file already exists, skipping conversion.\n")
+        }
+      }
+      
+      cat("\nRunning geneBody_coverage.py...\n")
+      bam_files <- list.files(path=input_dir, pattern="\\.bam$", recursive=TRUE, full.names=TRUE)
+      bam_string <- paste(bam_files, collapse=",")
+      out_prefix <- file.path(output_dir, "QC_and_others", paste0(label, "_geneBody_coverage"))
+      
+      cmd <- paste("geneBody_coverage.py", "-r", shQuote(bed_file), "-i", shQuote(bam_string), "-o", shQuote(out_prefix), "-f pdf")
+      cat("Command:", cmd, "\n")
+      system(cmd)
+      cat("geneBody_coverage.py execution complete.\n")
+    }, error = function(e) {
+      cat(paste("\nSkipping geneBody_coverage.py step:", e$message, "\n"))
+    })
+  }
+
+
 
 
