@@ -84,9 +84,11 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
 
 
 ### QC figures:
+  cat("\n=== [QC] Opening PDF ===")
   pdf(paste0(output_dir,"/QC_and_others/",label,"_",label2,"_QC.pdf"),paper="A4")
   
   ### 0. Reminder of the samples:
+  cat("\n--- [1/12] Sample table ---\n")
   ggplot() + theme_void(base_size=1) + coord_flip() +
     annotate(geom = "table",
                    x = 0,
@@ -95,6 +97,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
                    label = list(as.data.frame(targets)))
   
   ### 1.1. Density rawcounts log2, cpm...:
+  cat("--- [2/12] Density plots (raw + filtered) ---\n")
   col <- RColorBrewer::brewer.pal(nsamples, "Paired")
   
   if(sum(duplicated(col))>0){
@@ -125,6 +128,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   legend("topright", legend=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), text.col=col, bty="n", cex = 0.5)
   
   ### 2.1. Boxplots non-normalised:
+  cat("--- [3/12] Boxplots (unnorm + norm) ---\n")
   par(mfrow=c(1,2))
   boxplot(lcpm, las=2, col=col.group, main="", names=targets$Name, cex.axis=0.4)
   title(main="Unnormalized data (lcpm)",ylab="Log-cpm")
@@ -134,6 +138,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   title(main="Normalized data (lcpm2)",ylab="Log-cpm")
   
   ### 3. Library size and read counts figures:
+  cat("--- [4/12] Library size barplots ---\n")
   par(mfrow=c(1,1))
   par(mar = c(7, 5, 4, 2))
   bar_mids <- barplot(x$samples$lib.size,names.arg = gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name),
@@ -187,6 +192,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
 
   if(length(grep("_skip_",list.files(path=input_dir,full.names=T,recursive=T)))==0 & length(grep("_stats.txt",list.files(path=input_dir,full.names=T,recursive=T)))>0){
     ### Figures with the number of reads
+    cat("--- [4b/12] BAM/FASTQ read count barplots ---\n")
     reads <- c()
     files <- grep("_flagstat.txt",list.files(path=input_dir,full.names=T,recursive=T),val=T)
     for (f in files){reads <- c(reads,sub(" .*","",read.delim(f)[9,]))}
@@ -247,6 +253,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   }
 
   ## Barplot 3 no. of alignments
+  cat("--- [4c/12] Alignment category barplots ---\n")
   multiqc_dir <- file.path(input_dir,"../multiqc_out/multiqc_report_data/")
   aln_files <- grep("pe_plot.txt|star_alignment",list.files(multiqc_dir,full=T),val=T)
   if(length(aln_files) > 0) {
@@ -301,6 +308,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   
   
   ### 4. Corrplot no log
+  cat("--- [5/12] Correlation plots (all genes) ---\n")
   tmp <- lcpm_no_log; colnames(tmp) <- gsub("_hisat.*|_STAR.*","",colnames(tmp))
   # Adjust margins to prevent title cropping
   par(mar=c(2, 2, 4, 3))
@@ -310,6 +318,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   corrplot(cor(tmp,method="pearson"), method='number',type = 'full', title="Pearson_correlation",tl.col = col.group,tl.srt = 45, mar=c(0,0,2,0))
   
   ### 5.1. MDS_norm
+  cat("--- [6/12] MDS-PCoA plots ---\n")
   par(mar = c(5, 4, 4, 2))
   z <- plotMDS(lcpm2_no_log, labels=targets$Name, col=col.group, gene.selection = "pairwise", plot=F)
   edge <- sd(z$x)
@@ -333,6 +342,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   title(main="MDS-PCoA Sample Names log2 Norm")
   
   ### 6. PCA por tipos
+  cat("--- [7/12] PCA plots ---\n")
   data_pca <- as.matrix(x)
   data_pca <- as.data.frame(t(data_pca))
   rownames(data_pca) <- targets$Name
@@ -346,12 +356,14 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   autoplot(data_pca.PC,label=T,data=data_pca,colour=col.group,xlim = c(-0.8,0.8),label.size=3,label.repel=T) + theme_minimal() + ggtitle("PCA")
   
   ### 7. Heatmap 250 mots differential entities
+  cat("--- [8/12] Heatmap (top 250 most variable) ---\n")
   rsd <- rowSds(as.matrix(x))
   sel <- order(rsd, decreasing=TRUE)[1:250]
   
   heatmap(na.omit(as.matrix(x[sel,])),margins=c(10,8),main="Heatmap 250 most diff entities raw counts",cexRow=0.01,cexCol=0.5,labCol=sub("_hisat2.*|_STAR.*","",rownames(x$samples)))
   
   ### 8.1. Dendogram cluster raw norm
+  cat("--- [9/12] Dendrograms (all genes) ---\n")
   par(mfrow=c(1,1), mar=c(8, 4, 4, 2),col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
   pr.hc.c <- hclust(na.omit(dist(t(cpm(x2$counts,log=F)),method = "euclidean")))
   pr.hc.c$labels <- sub("_hisat2.*|_STAR.*","",pr.hc.c$labels)
@@ -377,6 +389,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
 
 
   ### 9. Top N over-represented genes per sample (inspired by ezRun CountQC)
+  cat("--- [10/12] Top N over-represented genes ---\n")
   tryCatch({
     counts_mat <- as.matrix(x$counts)
     countFrac <- sweep(counts_mat, 2, colSums(counts_mat), FUN = "/")
@@ -454,6 +467,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
 
 
   ### 10. Correlation and clustering using only the top 100 most variable genes
+  cat("--- [11a/12] Correlation/clustering (top 100 genes) ---\n")
   tryCatch({
     log2signal <- lcpm2  # log2 normalized CPM
     gene_sds <- apply(log2signal, 1, sd, na.rm = TRUE)
@@ -525,6 +539,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
 
 
   ### 11. Scatter plots by condition (pairwise condition averages)
+  cat("--- [11b/12] Scatter plots by condition ---\n")
   tryCatch({
     conds <- as.character(x$samples$group)
     unique_conds <- unique(conds)
@@ -571,8 +586,9 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
 
   ### 12. geneBody_coverage logic
   if (args[6] == "edgeR_object_norm" && bam_files_present) {
+    cat("--- [12/12] Gene body coverage ---\n")
     tryCatch({
-      cat("\nPreparing annotation for geneBody_coverage.py (RSeQC)...\n")
+      cat("Preparing annotation for geneBody_coverage...\n")
       cat("Importing GTF/GFF3 using rtracklayer...\n")
       suppressMessages(library(rtracklayer, quiet = T, warn.conflicts = F))
       suppressMessages(library(GenomicFeatures, quiet = T, warn.conflicts = F))
@@ -603,36 +619,69 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
           }
           
           # Synthesize missing ID and Parent attrs for txdbmaker
-          if (!"ID" %in% colnames(mc)) mc$ID <- NA
-          if (!"Parent" %in% colnames(mc)) mc$Parent <- NA
+          # Be robust to both GFF3 (has ID/Parent) and GTF (has gene_id/transcript_id)
+          if (!"ID" %in% colnames(mc)) mc$ID <- NA_character_
+          if (!"Parent" %in% colnames(mc)) mc$Parent <- NA_character_
           
-          if ("transcript_id" %in% colnames(mc)) {
-             idx_tx <- mc$type %in% c("mRNA", "transcript") & is.na(mc$ID)
-             mc$ID[idx_tx] <- as.character(mc$transcript_id[idx_tx])
-             
-             idx_ex <- mc$type %in% c("exon", "CDS") & is.na(mc$Parent)
-             mc$Parent[idx_ex] <- as.character(mc$transcript_id[idx_ex])
+          has_gene_id <- "gene_id" %in% colnames(mc)
+          has_tx_id   <- "transcript_id" %in% colnames(mc)
+          
+          # Define feature-type groups flexibly
+          gene_like <- c("gene", "pseudogene")
+          tx_like   <- c("mRNA", "transcript", "pseudogenic_transcript",
+                         "snRNA", "snoRNA", "tRNA", "rRNA", "ncRNA",
+                         "lnc_RNA", "primary_transcript", "guide_RNA")
+          sub_like  <- c("exon", "CDS", "five_prime_UTR", "three_prime_UTR",
+                         "start_codon", "stop_codon")
+
+          # 1) Gene-level: ID <- gene_id (or Name)
+          idx_gene <- mc$type %in% gene_like & (is.na(mc$ID) | mc$ID == "")
+          if (any(idx_gene)) {
+             if (has_gene_id)  mc$ID[idx_gene] <- as.character(mc$gene_id[idx_gene])
+             still <- mc$type %in% gene_like & (is.na(mc$ID) | mc$ID == "")
+             if (any(still) && "Name" %in% colnames(mc))
+                mc$ID[still] <- as.character(mc$Name[still])
+             still <- mc$type %in% gene_like & (is.na(mc$ID) | mc$ID == "")
+             if (any(still))
+                mc$ID[still] <- paste0("gene_unnamed_", seq_len(sum(still)))
           }
-          
-          if ("gene_id" %in% colnames(mc)) {
-             idx_gene <- mc$type == "gene" & (is.na(mc$ID) | mc$ID == "")
-             mc$ID[idx_gene] <- as.character(mc$gene_id[idx_gene])
-             
-             idx_tx_parent <- mc$type %in% c("mRNA", "transcript") & is.na(mc$Parent)
-             mc$Parent[idx_tx_parent] <- as.character(mc$gene_id[idx_tx_parent])
-          }
-          
-          # Ensure all genes have an ID
-          idx_gene_no_id <- mc$type == "gene" & (is.na(mc$ID) | mc$ID == "")
-          if(any(idx_gene_no_id)) {
-             if("Name" %in% colnames(mc)) {
-                mc$ID[idx_gene_no_id] <- as.character(mc$Name[idx_gene_no_id])
+
+          # 2) Transcript-level: ID <- transcript_id, Parent <- gene_id
+          idx_tx <- mc$type %in% tx_like & (is.na(mc$ID) | mc$ID == "")
+          if (any(idx_tx)) {
+             if (has_tx_id)   mc$ID[idx_tx] <- as.character(mc$transcript_id[idx_tx])
+             if (has_gene_id) {
+                no_parent <- mc$type %in% tx_like & (is.na(mc$Parent) | mc$Parent == "")
+                mc$Parent[no_parent] <- as.character(mc$gene_id[no_parent])
              }
-             still_no_id <- mc$type == "gene" & (is.na(mc$ID) | mc$ID == "")
-             if(any(still_no_id)) {
-                 mc$ID[still_no_id] <- paste0("gene_unnamed_", seq_len(sum(still_no_id)))
+          }
+
+          # 3) Sub-features (exon, CDS, …): Parent <- transcript_id
+          idx_sub <- mc$type %in% sub_like & (is.na(mc$Parent) | mc$Parent == "")
+          if (any(idx_sub) && has_tx_id) {
+             mc$Parent[idx_sub] <- as.character(mc$transcript_id[idx_sub])
+          }
+
+          # 4) Any remaining features without ID: try transcript_id, then gene_id, then generate
+          idx_noid <- is.na(mc$ID) | mc$ID == ""
+          if (any(idx_noid)) {
+             if (has_tx_id) {
+                fill <- idx_noid & !is.na(mc$transcript_id) & mc$transcript_id != ""
+                mc$ID[fill] <- as.character(mc$transcript_id[fill])
+                idx_noid <- is.na(mc$ID) | mc$ID == ""
+             }
+             if (has_gene_id && any(idx_noid)) {
+                fill <- idx_noid & !is.na(mc$gene_id) & mc$gene_id != ""
+                mc$ID[fill] <- as.character(mc$gene_id[fill])
+                idx_noid <- is.na(mc$ID) | mc$ID == ""
+             }
+             if (any(idx_noid)) {
+                mc$ID[idx_noid] <- paste0("feature_unnamed_", seq_len(sum(idx_noid)))
              }
           }
+          
+          cat(sprintf("  ID/Parent synthesis complete: %d features, %d with ID, %d with Parent\n",
+                      nrow(mc), sum(!is.na(mc$ID) & mc$ID != ""), sum(!is.na(mc$Parent) & mc$Parent != "")))
           
           mcols(gr) <- mc
           
@@ -731,10 +780,8 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
           }
     }, error = function(e) {
       cat(paste("\nSkipping geneBody_coverage logic:", e$message, "\n"))
-      # Write R-level error to log as well
-      log_file <- file.path(output_dir, "QC_and_others", paste0(label, "_geneBody_coverage_error.log"))
-      writeLines(e$message, log_file)
     })
   }
 
+cat("\n=== [QC] All sections complete, closing PDF ===\n")
 while (!is.null(dev.list())) dev.off()
