@@ -335,6 +335,28 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
   edgeR_object <- DGEList(counts=gene_counts[,grep("Gene_ID|Length",colnames(gene_counts),invert=T)],
                    group=pheno$condition,
                    genes=gene_counts[,c(grep("Gene_ID",colnames(gene_counts)),grep("Length",colnames(gene_counts)))])
+
+  # Guard: detect and exclude samples with zero library size (e.g. from bam_custom_filter removing all reads)
+  zero_lib <- edgeR_object$samples$lib.size == 0
+  if (any(zero_lib)) {
+    zero_names <- rownames(edgeR_object$samples)[zero_lib]
+    cat("\n\n*** WARNING: The following sample(s) have ZERO library size (no mapped/counted reads) and will be excluded from the analysis:\n")
+    cat(paste0("  - ", zero_names, collapse = "\n"), "\n")
+    cat("This is often caused by:\n  1. bam_custom_filter removing all alignments for that sample\n  2. All reads mapping to contigs not in the annotation\n  3. Severe quality filtering\nPlease review the featureCounts log for details.\n\n")
+    
+    if (all(zero_lib)) {
+      stop("ALL samples have zero library size. Cannot proceed with any analysis. Please check your BAM files and annotation.")
+    }
+    
+    # Remove zero-library samples from all objects
+    keep_samples <- !zero_lib
+    edgeR_object <- edgeR_object[, keep_samples]
+    gene_counts <- gene_counts[, c(which(keep_samples), grep("Gene_ID|Length", colnames(gene_counts)))]
+    pheno <- pheno[keep_samples, , drop = FALSE]
+    
+    cat(sprintf("Continuing with %d sample(s): %s\n", sum(keep_samples), paste(rownames(edgeR_object$samples), collapse = ", ")))
+  }
+
   cat("\n\nPlease note that counts have been normalized and figures have been performed using the groups and samples:\n"); print(pheno$condition)
   cat("\n\nPlease note the following samples/colnames:\n"); print(grep("Gene_ID|Length",colnames(gene_counts),invert=T,val=T))
 
