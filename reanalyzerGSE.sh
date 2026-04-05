@@ -193,7 +193,7 @@ if [[ $debug_step == "all" || $debug_step == "step1a" ]]; then
 			echo -e "\nSubsampling...\n"
 			# From the input parameter by the user, obtain a random number allowing a +- 10% window:
 			IFS=', ' read -r -a arr <<< "$number_reads"
-			IFS=', ' read -r -a arr2 <<< "$(ls | egrep .fastq.gz$ | sed 's,1.fastq.gz,,g;s,2.fastq.gz,,g' | sort | uniq | tr '\n' ',')"
+			IFS=', ' read -r -a arr2 <<< "$(ls | egrep .fastq.gz$ | sed 's,[12].fastq.gz,,g' | sort | uniq | tr '\n' ',')"
 			desired_number=${arr[1]}
 			apply_random_shift() {
 				Rscript -e '
@@ -355,7 +355,7 @@ if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
 			echo -e "\nSubsampling...\n"
 			# From the input parameter by the user, obtain a random number allowing a +- 10% window:
 			IFS=', ' read -r -a arr <<< "$number_reads"
-			IFS=', ' read -r -a arr2 <<< "$(ls | egrep .fastq.gz$ | sed 's,1.fastq.gz,,g;s,2.fastq.gz,,g' | sort | uniq | tr '\n' ',')"			
+			IFS=', ' read -r -a arr2 <<< "$(ls | egrep .fastq.gz$ | sed 's,[12].fastq.gz,,g' | sort | uniq | tr '\n' ',')"			
 			desired_number=${arr[1]}
 			apply_random_shift() {
 				Rscript -e '
@@ -408,10 +408,13 @@ if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
 			read -r design_input
 		else
 			design_input=$design_custom_local
-			echo -e "The used conditions are (must match the list above):\n$(echo $design_input | sed 's_,_\n_g;s,/,\n\n,g')"
+			echo -e "The used conditions are (the assignment must match sample names):\n"
+			paste \
+			  <(ls -l "$seqs_location" | awk '{ print $9 }' | tail -n +2 | sed 's,_[12].fastq.gz,,g' | uniq) \
+			  <(echo "$design_input" | sed 's_,_\n_g;s,/,\n\n,g')
 		fi
 		mkdir -p $output_folder/$name/GEO_info/
-		paste <(ls $seqs_location | egrep '.fq|.fastq' | sed "s/_1.fastq.gz//" | sed "s/_2.fastq.gz//" | uniq) <(paste -d'_' <(ls $seqs_location | egrep '.fq|.fastq' | egrep '.fq|.fastq' | sed "s/_1.fastq.gz//" | sed "s/_2.fastq.gz//" | uniq) <(echo $design_input | sed 's*/*\t*g'| cut -f1 | sed 's*,*\n*g')) <(echo $design_input | sed 's*/*\t*g'| cut -f1 | sed 's*,*\n*g') > $output_folder/$name/GEO_info/samples_info.txt
+		paste <(ls $seqs_location | egrep '.fq|.fastq' | sed 's,_[12].fastq.gz,,g' | uniq) <(paste -d'_' <(ls $seqs_location | egrep '.fq|.fastq' | sed 's,_[12].fastq.gz,,g' | uniq) <(echo $design_input | sed 's*/*\t*g'| cut -f1 | sed 's*,*\n*g')) <(echo $design_input | sed 's*/*\t*g'| cut -f1 | sed 's*,*\n*g') > $output_folder/$name/GEO_info/samples_info.txt
 		IFS='/' read -ra ADDR <<< "$design_input"
 		for i in "${!ADDR[@]}"; do
 			# For each comma-separated list, split by ',' and echo to file
@@ -487,53 +490,128 @@ fi
 Rscript -e "organism <- '${organism}'; tryCatch({ ids <- rentrez::entrez_search(db='assembly', term=paste0(organism, '[orgn]'))\$ids; if(length(ids)==0) stop('No ids'); assemblies <- rentrez::entrez_summary(db='assembly', id=ids[1]); cat(paste(paste0('\n\nNCBI current assembly info: ', date()), assemblies\$assemblyname, assemblies\$assemblyaccession, assemblies\$submissiondate, '\n', sep='\n')) }, error=function(e) cat(paste0('\n\nNo genome information found in NCBI for: ', organism, '\n\n')))"
 organism=$(cat $output_folder/$name/GEO_info/organism.txt | sed 's/ \+/_/g;s/__*/_/g') # Get again the organism in case it has been manually modified... and without spaces...
 
-### STEP 1. Deal with fastp if required:
-if [ "$fastp_mode" == "yes" ]; then
-	echo -e "\n\nSTEP 1: Preprocessing with fastp...\nCurrent date/time: $(date)\n\n"
- 	mkdir -p $output_folder/$name/fastp_out
-	cd $output_folder/$name/fastp_out
-	if [[ "$(find $output_folder/$name -name library_layout_info.txt | xargs cat)" == "SINGLE" ]]; then
-		for f in $(ls -d $seqs_location/*); do echo "Processing $f"; fastp --in1 $f --out1 $f\_fastp.fastq.gz --dont_overwrite --dont_eval_duplication --disable_adapter_trimming --thread $cores -h $(basename $f)\_report.html -j $(basename $f)\_report.json &>> $(basename $f)\_fastp_out.log; done
-	elif [[ "$(find $output_folder/$name -name library_layout_info.txt | xargs cat)" == "PAIRED" ]]; then
-		for f in $(ls -d $seqs_location/* | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq); do echo "Processing $f"; fastp --in1 $f\_1.fastq.gz --in2 $f\_2.fastq.gz --out1 $f\_1.fastq.gz_fastp.fastq.gz --out2 $f\_2.fastq.gz_fastp.fastq.gz --dont_overwrite --dont_eval_duplication --disable_adapter_trimming --thread $cores -h $(basename $f)\_report.html -j $(basename $f)\_report.json &>> $(basename $f)\_fastp_out.log; done
+### STEP 1. Auto-decompress gzipped reference inputs into the indexes subfolder:
+mkdir -p $output_folder/$name/indexes
+declare -a files_to_decompress=()
+declare -a decompressed_outputs=()
+
+if [[ "$reference_genome" == *.gz ]]; then
+	decompressed_genome="$output_folder/$name/indexes/$(basename ${reference_genome%.gz})"
+	if [ ! -f "$decompressed_genome" ]; then
+		files_to_decompress+=("$reference_genome")
+		decompressed_outputs+=("$decompressed_genome")
+	else
+		echo -e "\nDecompressed reference genome already exists: $decompressed_genome\n"
 	fi
+	reference_genome="$decompressed_genome"
+fi
+
+IFS=', ' read -r -a _annot_array <<< "$annotation"
+for _ai in "${!_annot_array[@]}"; do
+	if [[ "${_annot_array[$_ai]}" == *.gz ]]; then
+		_decompressed_annot="$output_folder/$name/indexes/$(basename ${_annot_array[$_ai]%.gz})"
+		if [ ! -f "$_decompressed_annot" ]; then
+			files_to_decompress+=("${_annot_array[$_ai]}")
+			decompressed_outputs+=("$_decompressed_annot")
+		else
+			echo -e "\nDecompressed annotation already exists: $_decompressed_annot\n"
+		fi
+		_annot_array[$_ai]="$_decompressed_annot"
+	fi
+done
+annotation=$(IFS=','; echo "${_annot_array[*]}")
+
+if [[ "$transcripts" == *.gz ]]; then
+	decompressed_transcripts="$output_folder/$name/indexes/$(basename ${transcripts%.gz})"
+	if [ ! -f "$decompressed_transcripts" ]; then
+		files_to_decompress+=("$transcripts")
+		decompressed_outputs+=("$decompressed_transcripts")
+	else
+		echo -e "\nDecompressed transcripts already exists: $decompressed_transcripts\n"
+	fi
+	transcripts="$decompressed_transcripts"
+fi
+
+if [ ${#files_to_decompress[@]} -gt 0 ]; then
+	echo -e "\nDecompressing gzipped reference inputs in parallel...\n"
+	parallel --tmpdir $TMPDIR -j $number_parallel 'echo "Decompressing {1} -> {2}"; gunzip -c "{1}" > "{2}"' ::: "${files_to_decompress[@]}" :::+ "${decompressed_outputs[@]}"
+fi
+
+### STEP 1. Deal with fastp if required:
+mkdir -p $TMPDIR
+cores_fastp=$((cores / number_parallel))
+if [ $cores_fastp -lt 1 ]; then cores_fastp=1; fi
+
+# Build fastp-specific options based on config
+fastp_extra_opts=""
+fastp_labels=()
+
+if [ "$fastp_mode" == "yes" ]; then
+	fastp_labels+=("quality filtering")
+elif [ "$fastp_mode" == "no" ] && [ "$fastp_adapter" != "no" ]; then
+	fastp_extra_opts="--disable_quality_filtering"
 fi
 
 if [ "$fastp_adapter" == "yes" ]; then
-	echo -e "\n\nSTEP 1: Preprocessing with fastp to remove adapters...\nCurrent date/time: $(date)\n\n"
- 	mkdir -p $output_folder/$name/fastp_out
-	cd $output_folder/$name/fastp_out
-	if [[ "$(find $output_folder/$name -name library_layout_info.txt | xargs cat)" == "SINGLE" ]]; then
-		for f in $(ls -d $seqs_location/*); do echo "Processing $f"; fastp --in1 $f --out1 $f\_fastp.fastq.gz --dont_overwrite --dont_eval_duplication --thread $cores -h $(basename $f)\_report.html -j $(basename $f)\_report.json &>> $(basename $f)\_fastp_out.log; done
-	elif [[ "$(find $output_folder/$name -name library_layout_info.txt | xargs cat)" == "PAIRED" ]]; then
-		for f in $(ls -d $seqs_location/* | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq); do echo "Processing $f"; fastp --in1 $f\_1.fastq.gz --in2 $f\_2.fastq.gz --out1 $f\_1.fastq.gz_fastp.fastq.gz --out2 $f\_2.fastq.gz_fastp.fastq.gz --dont_overwrite --dont_eval_duplication --detect_adapter_for_pe --thread $cores -h $(basename $f)\_report.html -j $(basename $f)\_report.json &>> $(basename $f)\_fastp_out.log; done
-	fi
+	fastp_extra_opts="$fastp_extra_opts --detect_adapter_for_pe"
+	fastp_labels+=("adapter trimming")
 elif [[ $fastp_adapter == /* ]]; then
-	echo -e "\n\nSTEP 1: Preprocessing with fastp to remove adapters...\nCurrent date/time: $(date)\n\n"
- 	mkdir -p $output_folder/$name/fastp_out
+	fastp_extra_opts="$fastp_extra_opts --adapter_fasta $fastp_adapter"
+	fastp_labels+=("custom adapter trimming")
+elif [ "$fastp_adapter" == "no" ] && [ "$fastp_mode" == "yes" ]; then
+	fastp_extra_opts="$fastp_extra_opts --disable_adapter_trimming"
+fi
+
+fastp_label=""
+if [ ${#fastp_labels[@]} -gt 0 ]; then
+	joined_labels=$(IFS=','; echo "${fastp_labels[*]}" | sed 's/,/ and /g')
+	fastp_label="Preprocessing with fastp ($joined_labels)"
+fi
+
+# Append any user-provided extra fastp arguments
+if [ ! -z "$fastp_extra_args" ]; then
+	fastp_extra_opts="$fastp_extra_opts $fastp_extra_args"
+fi
+
+if [ ! -z "$fastp_label" ]; then
+	echo -e "\n\nSTEP 1: $fastp_label...(output files will be renamed and moved to raw_reads internal folder)\nCurrent date/time: $(date)\n\n"
+	mkdir -p $output_folder/$name/fastp_out
 	cd $output_folder/$name/fastp_out
-	if [[ "$(find $output_folder/$name -name library_layout_info.txt | xargs cat)" == "SINGLE" ]]; then
-		for f in $(ls -d $seqs_location/*); do echo "Processing $f"; fastp --in1 $f --out1 $f\_fastp.fastq.gz --dont_overwrite --dont_eval_duplication --adapter_fasta $fastp_adapter --thread $cores -h $(basename $f)\_report.html -j $(basename $f)\_report.json &>> $(basename $f)\_fastp_out.log; done
-	elif [[ "$(find $output_folder/$name -name library_layout_info.txt | xargs cat)" == "PAIRED" ]]; then
-		for f in $(ls -d $seqs_location/* | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq); do echo "Processing $f"; fastp --in1 $f\_1.fastq.gz --in2 $f\_2.fastq.gz --out1 $f\_1.fastq.gz_fastp.fastq.gz --out2 $f\_2.fastq.gz_fastp.fastq.gz --dont_overwrite --dont_eval_duplication --adapter_fasta $fastp_adapter --thread $cores -h $(basename $f)\_report.html -j $(basename $f)\_report.json &>> $(basename $f)\_fastp_out.log; done
+	layout_fastp=$(find $output_folder/$name -name library_layout_info.txt | xargs cat)
+
+	if [[ "$layout_fastp" == "SINGLE" ]]; then
+		ls -d $seqs_location/*.fastq.gz | \
+			parallel --tmpdir $TMPDIR --verbose --joblog $output_folder/$name/fastp_out/fastp_log_parallel.txt -j $number_parallel \
+			'fastp --in1 {} --out1 {}_fastp.fastq.gz --dont_overwrite --dont_eval_duplication '$fastp_extra_opts' --thread '$cores_fastp' -z '$compression_level' -h '$output_folder/$name'/fastp_out/{/}_report.html -j '$output_folder/$name'/fastp_out/{/}_report.json &>> '$output_folder/$name'/fastp_out/{/}_fastp_out.log'
+	elif [[ "$layout_fastp" == "PAIRED" ]]; then
+		ls -d $seqs_location/*.fastq.gz | sed 's,_[12].fastq.gz,,g' | sort | uniq | \
+			parallel --tmpdir $TMPDIR --verbose --joblog $output_folder/$name/fastp_out/fastp_log_parallel.txt -j $number_parallel \
+			'fastp --in1 {}_1.fastq.gz --in2 {}_2.fastq.gz --out1 {}_1.fastq.gz_fastp.fastq.gz --out2 {}_2.fastq.gz_fastp.fastq.gz --dont_overwrite --dont_eval_duplication '$fastp_extra_opts' --thread '$cores_fastp' -z '$compression_level' -h '$output_folder/$name'/fastp_out/{/}_report.html -j '$output_folder/$name'/fastp_out/{/}_report.json &>> '$output_folder/$name'/fastp_out/{/}_fastp_out.log'
 	fi
 fi
 
+# Trimming step can run in addition to the adapter/mode step above
 if [ "$fastp_trimming" != "none" ]; then
 	echo -e "\n\nSTEP 1: Preprocessing with fastp and trimming...\nCurrent date/time: $(date)\n\n"
- 	mkdir -p $output_folder/$name/fastp_out
+	mkdir -p $output_folder/$name/fastp_out
 	cd $output_folder/$name/fastp_out
 	IFS=', ' read -r -a arrfastp <<< "$fastp_trimming"
-	if [[ "$(find $output_folder/$name -name library_layout_info.txt | xargs cat)" == "SINGLE" ]]; then
-		for f in $(ls -d $seqs_location/*); do echo "Processing $f"; fastp --in1 $f --out1 $f\_fastp.fastq.gz --dont_overwrite --dont_eval_duplication  --trim_front1 "${arrfastp[0]}" --trim_tail1 "${arrfastp[1]}" --thread $cores -z $compression_level -h $(basename $f)\_report.html -j $(basename $f)\_report.json &>> $(basename $f)\_fastp_out.log; done
-	elif [[ "$(find $output_folder/$name -name library_layout_info.txt | xargs cat)" == "PAIRED" ]]; then
-		for f in $(ls -d $seqs_location/* | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq); do echo "Processing $f"; fastp --in1 $f\_1.fastq.gz --in2 $f\_2.fastq.gz --out1 $f\_1.fastq.gz_fastp.fastq.gz --out2 $f\_2.fastq.gz_fastp.fastq.gz --dont_overwrite --dont_eval_duplication  --trim_front1 "${arrfastp[0]}" --trim_tail1 "${arrfastp[1]}" --thread $cores -z $compression_level -h $(basename $f)\_report.html -j $(basename $f)\_report.json &>> $(basename $f)\_fastp_out.log; done
+	layout_fastp=$(find $output_folder/$name -name library_layout_info.txt | xargs cat)
+
+	if [[ "$layout_fastp" == "SINGLE" ]]; then
+		ls -d $seqs_location/*.fastq.gz | \
+			parallel --tmpdir $TMPDIR --verbose --joblog $output_folder/$name/fastp_out/fastp_trim_log_parallel.txt -j $number_parallel \
+			'fastp --in1 {} --out1 {}_fastp.fastq.gz --dont_overwrite --dont_eval_duplication --trim_front1 '"${arrfastp[0]}"' --trim_tail1 '"${arrfastp[1]}"' --thread '$cores_fastp' -z '$compression_level' -h '$output_folder/$name'/fastp_out/{/}_trim_report.html -j '$output_folder/$name'/fastp_out/{/}_trim_report.json &>> '$output_folder/$name'/fastp_out/{/}_fastp_trim_out.log'
+	elif [[ "$layout_fastp" == "PAIRED" ]]; then
+		ls -d $seqs_location/*.fastq.gz | sed 's,_[12].fastq.gz,,g' | sort | uniq | \
+			parallel --tmpdir $TMPDIR --verbose --joblog $output_folder/$name/fastp_out/fastp_trim_log_parallel.txt -j $number_parallel \
+			'fastp --in1 {}_1.fastq.gz --in2 {}_2.fastq.gz --out1 {}_1.fastq.gz_fastp.fastq.gz --out2 {}_2.fastq.gz_fastp.fastq.gz --dont_overwrite --dont_eval_duplication --trim_front1 '"${arrfastp[0]}"' --trim_tail1 '"${arrfastp[1]}"' --thread '$cores_fastp' -z '$compression_level' -h '$output_folder/$name'/fastp_out/{/}_trim_report.html -j '$output_folder/$name'/fastp_out/{/}_trim_report.json &>> '$output_folder/$name'/fastp_out/{/}_fastp_trim_out.log'
 	fi
 fi
 
 if [ $(ls -d $seqs_location/* | grep -c _fastp.fastq.gz) -gt 0 ]; then
 	for f in $(ls -d $seqs_location/* | grep _fastp.fastq.gz); do mv $f $(echo $f | sed 's,.fastq.gz_fastp.fastq.gz,.fastq.gz,g'); done
- 	echo "Files in $seqs_location have been successfully processed by fastp!"
+	echo "Files in $seqs_location have been successfully processed by fastp!"
 fi
 
 
@@ -644,27 +722,72 @@ if [[ $debug_step == "all" || $debug_step == "step2" ]]; then
 	fi
 	if [ ! -z "$sortmerna_databases" ]; then
 		echo -e "\n\nSTEP 2: Decontamination starting with sortmerna...\nCurrent date/time: $(date)\n\n"
-  		mkdir -p $seqs_location\_sortmerna $output_folder/$name/indexes/$(basename $sortmerna_databases)_sortmerna_index; cd $seqs_location\_sortmerna
-    		if [ ! -d "$output_folder/$name/indexes/$(basename $sortmerna_databases)_sortmerna_index" ]; then
+		mkdir -p $seqs_location\_sortmerna $output_folder/$name/indexes/$(basename $sortmerna_databases)_sortmerna_index
+		cd $seqs_location\_sortmerna
+
+		### Build index before parallel execution (uses all cores, done once)
+		if [ ! -d "$output_folder/$name/indexes/$(basename $sortmerna_databases)_sortmerna_index/idx" ]; then
 			echo "Indexing the provided $sortmerna_databases ..."
-   			sortmerna --index 1 --ref $sortmerna_databases --workdir $output_folder/$name/indexes/$(basename $sortmerna_databases)_sortmerna_index --threads $cores &>> $output_folder/$name/indexes/sortmerna_index.log
+			sortmerna --index 1 --ref $sortmerna_databases \
+				--workdir $output_folder/$name/indexes/$(basename $sortmerna_databases)_sortmerna_index \
+				--threads $cores &>> $output_folder/$name/indexes/sortmerna_index.log
 		fi
-		rm -rf $seqs_location\_sortmerna/* # I'm now removing also at the beginning of this section, in the context of the new system of resuming by -Dm stepx, so this should always be done
-		# with the argument --paired_out, only the pairs where both reads are coincident (aligning to rRNA or not, are included in the results)
-		# I don't include it, so the numbers are exactly the ones in the log, and the properly paired reads can be dealt with later on the mapping
-		echo -e "\nExecuting sortmerna and fastqc of the new reads...\n"
-		if [[ $(find $output_folder/$name -name library_layout_info.txt | xargs cat) == "PAIRED" ]]; then
-			for f in $(ls $seqs_location | egrep ".fastq$|.fq$|.fastq.gz$|.fq.gz$" | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq); do echo "Processing $f"; sortmerna --idx-dir $output_folder/$name/indexes/$(basename $sortmerna_databases)_sortmerna_index/idx --ref $sortmerna_databases --reads $seqs_location/${f}_1.fastq.gz --reads $seqs_location/${f}_2.fastq.gz --workdir ${f}_sortmerna_out --fastx --threads $cores --out2 --aligned ${f}_rRNA --other ${f}_no_rRNA -v &>> $seqs_location\_sortmerna/${f}_out.log; done
-			rm -rf $(ls | egrep "_sortmerna_out$")
-		elif [[ $(find $output_folder/$name -name library_layout_info.txt | xargs cat) == "SINGLE" ]]; then
-			for f in $(ls $seqs_location | egrep ".fastq$|.fq$|.fastq.gz$|.fq.gz$"); do echo "Processing $f"; sortmerna --idx-dir $output_folder/$name/indexes/$(basename $sortmerna_databases)_sortmerna_index/idx --ref $sortmerna_databases --reads $seqs_location/$f --workdir ${f}_sortmerna_out --fastx --threads $cores --aligned ${f}_rRNA --other ${f}_no_rRNA -v &>> $seqs_location\_sortmerna/${f}_out.log; done
-			rm -rf $(ls | egrep "_sortmerna_out$")
+
+		rm -rf $seqs_location\_sortmerna/*
+
+		### Compute per-job thread count (mirror fastp logic)
+		cores_sortmerna=$((cores / number_parallel))
+		if [ $cores_sortmerna -lt 1 ]; then cores_sortmerna=1; fi
+
+		layout_sortmerna=$(find $output_folder/$name -name library_layout_info.txt | xargs cat)
+		sortmerna_idx=$output_folder/$name/indexes/$(basename $sortmerna_databases)_sortmerna_index/idx
+		sortmerna_out=$seqs_location\_sortmerna
+
+		echo -e "\nExecuting sortmerna in parallel and fastqc of the new reads...\n"
+
+		if [[ "$layout_sortmerna" == "PAIRED" ]]; then
+			ls $seqs_location | egrep ".fastq$|.fq$|.fastq.gz$|.fq.gz$" \
+				| sed 's,_[12].fastq.gz,,g' | sort | uniq \
+				| parallel --tmpdir $TMPDIR --verbose \
+						   --joblog $sortmerna_out/sortmerna_log_parallel.txt \
+						   -j $number_parallel --max-args 1 \
+				"sortmerna \
+					--idx-dir $sortmerna_idx \
+					--ref $sortmerna_databases \
+					--reads $seqs_location/{}_1.fastq.gz \
+					--reads $seqs_location/{}_2.fastq.gz \
+					--workdir $sortmerna_out/{}_sortmerna_workdir \
+					--fastx --threads $cores_sortmerna --out2 --index 0 \
+					--aligned $sortmerna_out/{}_rRNA \
+					--other $sortmerna_out/{}_no_rRNA \
+					-v &>> $sortmerna_out/{}_out.log"
+
+		elif [[ "$layout_sortmerna" == "SINGLE" ]]; then
+			ls $seqs_location | egrep ".fastq$|.fq$|.fastq.gz$|.fq.gz$" \
+				| parallel --tmpdir $TMPDIR --verbose \
+						   --joblog $sortmerna_out/sortmerna_log_parallel.txt \
+						   -j $number_parallel --max-args 1 \
+				"sortmerna \
+					--idx-dir $sortmerna_idx \
+					--ref $sortmerna_databases \
+					--reads $seqs_location/{} \
+					--workdir $sortmerna_out/{}_sortmerna_workdir \
+					--fastx --threads $cores_sortmerna --index 0 \
+					--aligned $sortmerna_out/{}_rRNA \
+					--other $sortmerna_out/{}_no_rRNA \
+					-v &>> $sortmerna_out/{}_out.log"
 		fi
-		fastqc -q -t $cores *.fq.gz
-  		mkdir out_noRNA; cd out_noRNA; ln -sf ../*no_rRNA*.fq.gz .; for f in $(ls); do mv $f $(basename $f | sed 's,.fq.gz,.fastq.gz,g;s,_fwd,_1,g;s,_rev,_2,g;s,_no_rRNA,,g'); done
-    		export seqs_location=$seqs_location\_sortmerna/out_noRNA
-  		echo -e "\n\nSTEP 2: DONE\nCurrent date/time: $(date)\n\n"
- 	fi
+
+		### Clean up per-sample workdirs
+		rm -rf $sortmerna_out/*_sortmerna_workdir
+
+		fastqc -q -t $cores $sortmerna_out/*.fq.gz
+		mkdir $sortmerna_out/out_noRNA; cd $sortmerna_out/out_noRNA
+		ln -sf ../*no_rRNA*.fq.gz .
+		for f in $(ls); do mv $f $(basename $f | sed 's,.fq.gz,.fastq.gz,g;s,_fwd,_1,g;s,_rev,_2,g;s,_no_rRNA,,g'); done
+		export seqs_location=$sortmerna_out/out_noRNA
+		echo -e "\n\nSTEP 2: DONE\nCurrent date/time: $(date)\n\n"
+	fi
 	export debug_step="all"
 fi
 
@@ -698,7 +821,7 @@ if [[ $debug_step == "all" || $debug_step == "step3a" ]]; then
 				echo -e "\nPredicting strandness with salmon on random sample: $rand_sample\n"
 				salmon quant -i $salmon_idx -l A -r $seqs_location/$rand_sample -p $cores -o $output_folder/$name/strand_prediction/salmon_out/ --skipQuant &> $output_folder/$name/strand_prediction/salmon_out/salmon_out.log
 			elif [[ $(find $output_folder/$name -name library_layout_info.txt | xargs cat) == "PAIRED" ]]; then
-				rand_sample_root=$(ls $seqs_location | sed 's,_1.fastq.gz,,g;s,_2.fastq.gz,,g' | sort | uniq | shuf | head -1)
+				rand_sample_root=$(ls $seqs_location | sed 's,_[12].fastq.gz,,g' | sort | uniq | shuf | head -1)
 				rand_sample="${rand_sample_root}_1.fastq.gz / ${rand_sample_root}_2.fastq.gz"
 				echo -e "\nPredicting strandness with salmon on random sample: $rand_sample\n"
 				salmon quant -i $salmon_idx -l A -1 $seqs_location/${rand_sample_root}_1.fastq.gz -2 $seqs_location/${rand_sample_root}_2.fastq.gz -p $cores -o $output_folder/$name/strand_prediction/salmon_out/ --skipQuant &> $output_folder/$name/strand_prediction/salmon_out/salmon_out.log
@@ -736,7 +859,7 @@ if [[ $debug_step == "all" || $debug_step == "step3a" ]]; then
 
 	### Prepare other info required by the updated version of miARma...
 		echo -e "\nPreparing miARma-seq execution...\n"
-		number_files=$(ls $seqs_location | sed 's,_1.fastq.gz*,,g' | sed 's,_2.fastq.gz*,,g' | sort | uniq | wc -l)
+		number_files=$(ls $seqs_location | sed 's,_[12].fastq.gz.*,,g' | sort | uniq | wc -l)
 		if [ $number_files -le $number_parallel ]; then
 			cores_parallel=$((cores / number_files))
 		else
@@ -939,18 +1062,18 @@ if [[ $debug_step == "all" || $debug_step == "step4" ]]; then
 				cp "$count_file" "${count_file}.bak_before_gene_filter"
 				head -1 "$count_file" > "${count_file}.tmp"
 				tail -n +2 "$count_file" | eval "$counts_custom_gene_filter" >> "${count_file}.tmp"
-				mv "${count_file}.tmp" "$count_file"
+				mv "$count_file.tmp" "$count_file"
 				echo "  Filtered: $count_file ($(wc -l < "${count_file}.bak_before_gene_filter") -> $(wc -l < "$count_file") lines)"
 			done
 		fi
   			echo -e "R_process_reanalyzer_GSE.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index $genes ${array2[index]} $organism $target $differential_expr_soft $batch_format $covariables $covariables_format $deconvolution $differential_expr_comparisons $perform_differential_analyses $perform_volcano_venn $pattern_to_remove $annotation_file $fc_seq_key $fc_feat_type $sc_count_matrix $sc_phenotype $bulk_expression_matrix\n\n" > $output_folder/$name/R_process_reanalyzer.log
     		R_process_reanalyzer_GSE.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index $genes ${array2[index]} $organism $target $differential_expr_soft $batch_format $covariables $covariables_format $deconvolution $differential_expr_comparisons $perform_differential_analyses $perform_volcano_venn $pattern_to_remove $annotation_file $fc_seq_key $fc_feat_type $sc_count_matrix $sc_phenotype $bulk_expression_matrix | tee -a $output_folder/$name/R_process_reanalyzer.log
-    		echo 'R_qc_figs.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index "edgeR_object_prefilter" "edgeR_object" "edgeR_object_norm" $pattern_to_remove $annotation_file' > $output_folder/$name/R_qc_figs.log
-			R_qc_figs.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index "edgeR_object_prefilter" "edgeR_object" "edgeR_object_norm" $pattern_to_remove $annotation_file | tee -a $output_folder/$name/R_qc_figs.log
+    		echo 'R_qc_figs.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index "edgeR_object_prefilter" "edgeR_object" "edgeR_object_norm" $pattern_to_remove $annotation_file $fc_feat_type' > $output_folder/$name/R_qc_figs.log
+			R_qc_figs.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index "edgeR_object_prefilter" "edgeR_object" "edgeR_object_norm" $pattern_to_remove $annotation_file $fc_feat_type | tee -a $output_folder/$name/R_qc_figs.log
 		if [[ -e "$output_folder/$name/final_results_reanalysis$index/counts_adjusted.txt" ]]; then
 			echo -e "\n\nRemember that batch effect correction/covariables have been only provided to Combat-Seq/limma for visualization purposes, to include covariables in the DGE model after checking the visualization the argument -C will be used\n\n\nQC_PDF adjusted counts\n\nRemember that you have requested batch effect correction/count adjustment, so you have to mind the figures in this QC_PDF from ComBat-seq/limma counts...\n"
-			echo -e 'R_qc_figs.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index "edgeR_object_prefilter_adjusted" "edgeR_object_adjusted" "edgeR_object_norm_adjusted" $pattern_to_remove $annotation_file' > $output_folder/$name/R_qc_figs_adjusted.log
-			R_qc_figs.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index "edgeR_object_prefilter_adjusted" "edgeR_object_adjusted" "edgeR_object_norm_adjusted" $pattern_to_remove $annotation_file | tee -a $output_folder/$name/R_qc_figs_adjusted.log
+			echo -e 'R_qc_figs.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index "edgeR_object_prefilter_adjusted" "edgeR_object_adjusted" "edgeR_object_norm_adjusted" $pattern_to_remove $annotation_file $fc_feat_type' > $output_folder/$name/R_qc_figs_adjusted.log
+			R_qc_figs.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index "edgeR_object_prefilter_adjusted" "edgeR_object_adjusted" "edgeR_object_norm_adjusted" $pattern_to_remove $annotation_file $fc_feat_type | tee -a $output_folder/$name/R_qc_figs_adjusted.log
 		fi
 		cd $output_folder/$name/final_results_reanalysis$index/DGE/
 		tar -cf - $(ls | egrep ".RData$") | pigz -p $cores > allRData.tar.gz; rm -rf $(ls | egrep ".RData$")
@@ -961,6 +1084,7 @@ if [[ $debug_step == "all" || $debug_step == "step4" ]]; then
 		for index in "${!array[@]}"; do
 			final_dir=$output_folder/$name/final_results_reanalysis$index
 			if [ -f "$final_dir/Raw_counts_genes.txt" ] && [ -f "$final_dir/TPM_counts_genes.txt" ] && [ -f "$final_dir/DGE/list_comp.txt" ]; then
+				export ANNOTATION_FILE="${array[index]}"
 				Rscript $CURRENT_DIR/scripts/prepare_SE.R \
 					"$final_dir/Raw_counts_genes.txt" \
 					"$final_dir/TPM_counts_genes.txt" \
@@ -1117,6 +1241,7 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 			if [[ "$organism" == "Mus_musculus" || "$organism" == "Homo_sapiens" || "$organism" == "Mus musculus" || "$organism" == "Homo sapiens" ]]; then
 				echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
     				echo -e "\nPerforming functional enrichment analyses for DEGs. The results up to this point are ready to use (including DEGs and expression table including gene_ids). This step of funtional enrichment analyses may take long if many significant DEGs, comparisons, or analyses...\n"
+				export ANNOTATION_FILE="${array[index]}"
 				cd $output_folder/$name/final_results_reanalysis$index/DGE/
 				ls | egrep "^DGE_analysis_comp[0-9]+.txt$" | parallel --joblog R_clusterProfiler_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_clusterProfiler_analyses_parallel.R $PWD $organism "1" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution '^{}$' $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_{}_funct_enrichment.log"
 				echo -e "\nPerforming autoGO and Panther execution... this may take long if many genes or comparisons...\n"
@@ -1185,6 +1310,38 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 			if [ -n "$error_files" ]; then
 			    echo -e "\nFunctional enrichment analyses done!\nYou may want to check out the following logs, which seem to contain some errors:\n"
 			    echo "$error_files"
+
+			    # Automatic retry: re-run failed enrichment scripts once
+			    echo -e "\nRetrying failed enrichment scripts once..."
+			    cd $output_folder/$name/final_results_reanalysis$index/DGE/
+
+			    # Retry clusterProfiler failures
+			    failed_cp=$(grep -l "Err" clusterProfiler_*_funct_enrichment.log 2>/dev/null | sed 's/clusterProfiler_//g;s/_funct_enrichment.log//g' | sort | uniq)
+			    for ff in $failed_cp; do
+			        if [ -f "$ff" ]; then
+			            echo "  Retrying clusterProfiler for $ff ..."
+			            rm -rf $(echo $ff | sed 's/.txt$//')_funct_enrich_clusterProfiler
+			            R_clusterProfiler_analyses_parallel.R $PWD $organism "1" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution "^${ff}$" $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_${ff}_funct_enrichment_retry.log
+			        fi
+			    done
+
+			    # Retry autoGO+Panther failures
+			    failed_ago=$(grep -l "Err" autoGO_panther_*_funct_enrichment.log 2>/dev/null | sed 's/autoGO_panther_//g;s/_funct_enrichment.log//g' | sort | uniq)
+			    for ff in $failed_ago; do
+			        if [ -f "$ff" ]; then
+			            echo "  Retrying autoGO+Panther for $ff ..."
+			            R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism "1" $databases_function $ff $panther_method $auto_panther_log &> autoGO_panther_${ff}_funct_enrichment_retry.log
+			        fi
+			    done
+
+			    # Check again after retry
+			    retry_errors=$(grep -l "Err" *_funct_enrichment_retry.log 2>/dev/null | sed 's/_funct_enrichment_retry.log//g' | sort | uniq)
+			    if [ -n "$retry_errors" ]; then
+			        echo -e "\nAfter retry, the following still have errors:"
+			        echo "$retry_errors"
+			    else
+			        echo -e "\nRetry completed successfully — no more errors detected."
+			    fi
 			else
 			    echo -e "\nFunctional enrichment analyses done! No errors detected in logs."
 			fi
@@ -1211,6 +1368,8 @@ if [[ $debug_step == "all" || $debug_step == "step7" ]]; then
 	echo -e "\n\nSTEP 7: Starting...\nCurrent date/time: $(date)\n\n"
 	echo -e "\n\nAnnotating list of genes...\n\n"
 	for index in "${!array[@]}"; do
+		# Export the annotation file path so R scripts can use it for ENSEMBL->Symbol mapping
+		export ANNOTATION_FILE="${array[index]}"
 		# All the tables that contain list of genes, annotate them:
 		R_annotate_genes.R $output_folder/$name/final_results_reanalysis$index/ "^DGE_analysis_comp\\d+\\.txt$|^DGE_limma_timecourse_T\\d+_vs_T\\d+\\.txt$|mfuzz_elements_clusters|counts|WGCNA_all_modules_|STRINGdb_all_modules_" $organism			
 
@@ -1228,17 +1387,32 @@ if [[ $debug_step == "all" || $debug_step == "step7" ]]; then
 fi
 
 
-###### STEP 8. Tidy up, prepare for storage if final results have been created and the number of aligned files is equal to the numbers of samples, rename folders, convert tables to xlsx if required... etc
-# Compress the folders
+###### STEP 8. Sum up results in a sphinx report
 if [[ $debug_step == "all" || $debug_step == "step8" ]]; then
-	echo -e "\n\nSTEP 8: Starting...\nCurrent date/time: $(date)\n\n"
+	sphinx_report.sh $output_folder/$name $name
+ 	echo -e "\n\nSTEP 8: Final report DONE\nCurrent date/time: $(date)\n\n"
+fi
+
+
+###### STEP 9. Tidy up, prepare for storage if final results have been created and the number of aligned files is equal to the numbers of samples, rename folders, convert tables to xlsx if required... etc
+# Compress the folders
+if [[ $debug_step == "all" || $debug_step == "step9" ]]; then
+	echo -e "\n\nSTEP 9: Starting...\nCurrent date/time: $(date)\n\n"
 	echo -e "\n\nTidying up, removing empty folders, temp files, compressing...\n\n"
+
+	# Remove decompressed reference files from the indexes subfolder
+	if [ -d "$output_folder/$name/indexes" ]; then
+		for _decomp_file in $(find $output_folder/$name/indexes -maxdepth 1 -type f \( -name '*.fa' -o -name '*.fasta' -o -name '*.gtf' -o -name '*.gff' \) 2>/dev/null); do
+			rm -f "$_decomp_file"
+		done
+	fi
+
 
 	cd $output_folder/$name/ && find . -type f \( -name "*_fdr_05.txt" -o -name "*_logneg.txt" -o -name "*_logpos.txt" \) -exec rm -f {} +
 	if [ "$convert_tables_excel" == "yes" ]; then
 		R_convert_tables.R $output_folder/$name/ $cores "log_parallel|jquery|bamqc|rnaseqqc|samtools|strand" > R_convert_tables.log 2>&1
 	fi
-	
+
 	for index in "${!array[@]}"; do
 	 	cd $output_folder/$name/final_results_reanalysis$index/DGE/
 		find . -type d -empty -delete
@@ -1297,14 +1471,7 @@ if [[ $debug_step == "all" || $debug_step == "step8" ]]; then
 	fi
 
 	export debug_step="all"
-	echo -e "\n\nSTEP 8: DONE\nCurrent date/time: $(date)\n\n"
-fi
-
-
-###### STEP 9. Sum up results in a sphinx report
-if [[ $debug_step == "all" || $debug_step == "step9" ]]; then
-	sphinx_report.sh $output_folder/$name $name
- 	echo -e "\n\nSTEP 9: Final report DONE\nCurrent date/time: $(date)\n\n"
+	echo -e "\n\nSTEP 9: DONE\nCurrent date/time: $(date)\n\n"
 fi
 
 echo -e "\n\n\nALL STEPS DONE! Best wishes\n\n\n"

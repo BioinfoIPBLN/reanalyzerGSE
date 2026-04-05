@@ -1183,45 +1183,64 @@ if (venn_volcano!="no"){
 ###### Merge DGE + expression categories + GTF annotation:
 cat("\n\nGenerating merged expression/DGE + GTF annotation tables...\n")
 tryCatch({
-  # 1. Parse GTF/GFF to extract V9 attributes
+  # 1. Parse GTF/GFF to extract V9 attributes (for gene-level annotation)
   gtf_raw <- data.table::fread(annotation_file, header = FALSE, sep = "\t",
                                 quote = "", comment.char = "#", fill = TRUE)
-  # Filter by feature type (column V3)
-  gtf_filtered <- gtf_raw[gtf_raw$V3 == fc_feat_type, ]
-  cat(paste0("GTF lines matching feature type '", fc_feat_type, "': ", nrow(gtf_filtered), "\n"))
+  # For annotation we only need one row per gene, so prefer "gene" feature type
+  # which has ~62k rows instead of fc_feat_type "exon" which can have millions
+  gtf_filtered <- gtf_raw[gtf_raw$V3 == "gene", ]
+  if (nrow(gtf_filtered) == 0) {
+    cat("No 'gene' feature type found in annotation, falling back to '", fc_feat_type, "'\n")
+    gtf_filtered <- gtf_raw[gtf_raw$V3 == fc_feat_type, ]
+  }
+  cat(paste0("GTF lines used for annotation: ", nrow(gtf_filtered),
+             " (feature type: '", gtf_filtered$V3[1], "')\n"))
 
   # Parse V9 key-value pairs; handle both GTF (key "value";) and GFF3 (key=value;) formats
+  # Vectorized implementation for efficiency
   parse_v9 <- function(v9_strings) {
     is_gff3 <- !any(grepl('"', head(v9_strings, 100)))
-    all_attrs <- list()
-    for (s in v9_strings) {
-      if (is_gff3) {
-        pairs <- unlist(strsplit(trimws(s), ";"))
-        pairs <- pairs[nchar(trimws(pairs)) > 0]
-        kv <- strsplit(trimws(pairs), "=")
-      } else {
-        pairs <- unlist(strsplit(trimws(s), ";"))
-        pairs <- pairs[nchar(trimws(pairs)) > 0]
-        kv <- lapply(pairs, function(p) {
-          p <- trimws(p)
-          sp <- regmatches(p, regexpr("\\s+", p), invert = TRUE)[[1]]
-          if (length(sp) == 2) c(sp[1], gsub('"', '', sp[2])) else c(p, "")
-        })
-      }
-      attrs <- setNames(sapply(kv, `[`, 2), sapply(kv, `[`, 1))
-      all_attrs <- c(all_attrs, list(attrs))
+
+    # 1. Discover all unique attribute keys from a sample of rows
+    sample_size <- min(500, length(v9_strings))
+    sample_lines <- v9_strings[seq_len(sample_size)]
+    if (is_gff3) {
+      sample_pairs <- unlist(strsplit(sample_lines, ";"))
+      sample_pairs <- trimws(sample_pairs[nchar(trimws(sample_pairs)) > 0])
+      all_keys <- unique(sub("=.*", "", sample_pairs))
+    } else {
+      sample_pairs <- unlist(strsplit(sample_lines, ";"))
+      sample_pairs <- trimws(sample_pairs[nchar(trimws(sample_pairs)) > 0])
+      all_keys <- unique(sub("\\s+.*", "", sample_pairs))
     }
-    # Get all unique keys
-    all_keys <- unique(unlist(lapply(all_attrs, names)))
-    # Build data frame
-    df <- as.data.frame(do.call(rbind, lapply(all_attrs, function(a) {
-      sapply(all_keys, function(k) ifelse(k %in% names(a), a[k], NA))
-    })), stringsAsFactors = FALSE)
-    colnames(df) <- paste0("gtf_", all_keys)
+    all_keys <- all_keys[nchar(all_keys) > 0]
+    cat(paste0("  GTF attribute keys detected: ", paste(all_keys, collapse=", "), "\n"))
+
+    # 2. For each key, extract its value from all rows using vectorized regex
+    df <- data.frame(row.names = seq_along(v9_strings))
+    for (key in all_keys) {
+      if (is_gff3) {
+        # GFF3: key=value; — extract value after key=
+        pattern <- paste0("(?:^|;)\\s*", key, "=([^;]*)")
+        rx <- regexpr(pattern, v9_strings, perl = TRUE)
+        has_match <- rx > 0
+        vals <- rep(NA_character_, length(v9_strings))
+        vals[has_match] <- sub(paste0(".*", key, "="), "", regmatches(v9_strings[has_match], rx[has_match]))
+      } else {
+        # GTF: key "value"; — extract quoted value
+        pattern <- paste0('(?:^|;)\\s*', key, '\\s+"([^"]*)"')
+        rx <- regexpr(pattern, v9_strings, perl = TRUE)
+        has_match <- rx > 0
+        vals <- rep(NA_character_, length(v9_strings))
+        vals[has_match] <- sub('^.*"([^"]*)"$', "\\1", regmatches(v9_strings[has_match], rx[has_match]))
+      }
+      df[[paste0("gtf_", key)]] <- vals
+    }
     return(df)
   }
 
   gtf_attrs <- parse_v9(gtf_filtered$V9)
+  cat(paste0("  Parsed ", nrow(gtf_attrs), " rows x ", ncol(gtf_attrs), " attribute columns\n"))
   # Add genomic coordinates
   gtf_attrs$gtf_chr <- gtf_filtered$V1
   gtf_attrs$gtf_start <- gtf_filtered$V4
@@ -1236,7 +1255,7 @@ tryCatch({
     cat("Skipping GTF merge.\n")
     gtf_attrs <- NULL
   } else {
-    # Deduplicate: keep unique per gene (collapse if multiple rows per gene)
+    # Deduplicate: keep unique per gene
     gtf_attrs[[gtf_key_col]] <- tolower(gtf_attrs[[gtf_key_col]])  # Normalize to lowercase for case-insensitive merge
     gtf_attrs <- gtf_attrs[!duplicated(gtf_attrs[[gtf_key_col]]), ]
     rownames(gtf_attrs) <- gtf_attrs[[gtf_key_col]]

@@ -106,6 +106,7 @@ reanalyzerGSE.sh -h
 	        -fp | -fastp_mode # Whether to perform quality filtering on the raw reads by fastp ('yes' or 'no', by default)
 	        -fpa | -fastp_adapter # Whether to perform adapter trimming on the raw reads by fastp ('yes' or 'no', by default, to perform automatic trimming, or a path to a fasta file to perform trimming of its sequences)
 	        -fpt | -fastp_trimming # Whether to trim the raw reads by fastp ('none' by default, if two numbers separated by comma, the indicated number of bases will be trimmed from the front and tail, respectively)
+	        -fpe | -fastp_extra_args # Extra arguments to pass directly to fastp (e.g. '-g' for polyG trimming, '-x' for polyX trimming, '--cut_right', etc.). These are appended to the automatically built fastp command line. Empty by default
 	        -std | -time_course_std # Standard deviation threshold to filter in time course analyses (numeric, 1 by default)
 	        -fuzz | -time_course_fuzz # Fuziness value for the soft clustering approach (by default an estimate is automatically computed but manual testing is encouraged)
 	

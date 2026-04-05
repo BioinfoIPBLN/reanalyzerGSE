@@ -15,6 +15,11 @@ suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(clusterProfiler))
 suppressPackageStartupMessages(library(org.Hs.eg.db))
 
+# Source shared ENSEMBL helper
+script_dir <- dirname(sub("^--file=", "", commandArgs()[grep("--file=", commandArgs())]))
+ensembl_helper <- file.path(script_dir, "R_ensembl_to_symbol.R")
+if (file.exists(ensembl_helper)) source(ensembl_helper)
+
 cat("\n========================================")
 cat("\n  prepare_SE.R - With Pathway Analysis")
 cat("\n========================================\n")
@@ -46,15 +51,30 @@ rownames(tpm_counts) <- toupper(rownames(tpm_counts))
 cat("\n      Sanity check: identical genes in raw counts and tpm counts: ", 
     identical(rownames(raw_counts), rownames(tpm_counts)))
 
+# Detect if gene IDs are ENSEMBL format
+gene_ids_are_ensembl <- exists("is_ensembl_id") && is_ensembl_id(rownames(tpm_counts))
+if (gene_ids_are_ensembl) {
+  cat("\n      Detected ENSEMBL gene IDs (e.g.,", head(rownames(tpm_counts), 2), ")")
+}
+
 
 # === rowData (DE results) ===
 cat("\n\n[3/6] Reading DE results and comparisons...")
 list_comps <- read_tsv(input_list_comp, col_names = F, show_col_types = FALSE)
 deg_results_files <- list.files(input_path_deg_results, pattern_deg_results, full.names = T)
+
+# Parse comparison names and filter out empty/blank ones
 comparisons <- lapply(1:length(deg_results_files), function(i) {
   paste(grep(paste0("Comparison number ", i), list_comps$X1, value = TRUE) %>% gsub(".*__", "", .), collapse = "__")
 }) %>% unlist
-cat("\n      Found", length(comparisons), "comparisons:", paste(comparisons, collapse = ", "))
+# Filter out empty comparison names (from trailing empty entries in list_comp.txt)
+valid_comps <- nchar(trimws(comparisons)) > 0
+if (sum(!valid_comps) > 0) {
+  cat("\n      Filtering out", sum(!valid_comps), "empty comparison entries...")
+}
+comparisons <- comparisons[valid_comps]
+deg_results_files <- deg_results_files[valid_comps]
+cat("\n      Found", length(comparisons), "valid comparisons:", paste(comparisons, collapse = ", "))
 
 de_results <- read_tsv(deg_results_files[1], show_col_types = FALSE)
 check <- identical(sort(rownames(tpm_counts)), sort(toupper(de_results$Gene_ID)))
@@ -64,20 +84,40 @@ if(!check) {
 }
 
 # Build DE results list with annotations
+# For ENSEMBL IDs: match via ensgene (stripping versions) instead of symbol
 de_results_list <- lapply(1:length(deg_results_files), function(i) {
   de_results <- read_tsv(deg_results_files[i], show_col_types = FALSE)
   colnames(de_results) <- c("gene_name", "gene_length", "log2Ratio", "logCPM", "pValue", "fdr")
   de_results$gene_name <- toupper(de_results$gene_name)
   de_results <- de_results[match(rownames(tpm_counts), de_results$gene_name),]
   de_results <- de_results[complete.cases(de_results),]
-  de_results$gene_id <- grch38$ensgene[match(de_results$gene_name, grch38$symbol)]
-  de_results$description <- grch38$description[match(de_results$gene_name, grch38$symbol)]
   
-  # Add Entrez IDs for pathway analysis
-  de_results$entrez_id <- grch38$entrez[match(de_results$gene_name, grch38$symbol)]
+  if (gene_ids_are_ensembl) {
+    # Match ENSEMBL IDs (stripping version) against grch38$ensgene
+    ids_stripped <- toupper(strip_ensembl_version(de_results$gene_name))
+    grch38_stripped <- toupper(grch38$ensgene)
+    match_idx <- match(ids_stripped, grch38_stripped)
+    de_results$gene_id <- grch38$ensgene[match_idx]
+    de_results$description <- grch38$description[match_idx]
+    de_results$entrez_id <- grch38$entrez[match_idx]
+  } else {
+    # Standard symbol-based matching
+    de_results$gene_id <- grch38$ensgene[match(de_results$gene_name, grch38$symbol)]
+    de_results$description <- grch38$description[match(de_results$gene_name, grch38$symbol)]
+    de_results$entrez_id <- grch38$entrez[match(de_results$gene_name, grch38$symbol)]
+  }
   
   de_results
 }) %>% setNames(paste0("contrast_", comparisons))
+
+# Use common genes across all DE result tables for rowData alignment
+common_genes <- Reduce(intersect, lapply(de_results_list, function(x) x$gene_name))
+cat("\n      Genes common across all contrasts:", length(common_genes))
+
+# Subset DE results to common genes
+de_results_list <- lapply(de_results_list, function(x) {
+  x[match(common_genes, x$gene_name), ]
+})
 
 de_results_DF <- DataFrame(row.names = de_results_list[[1]]$gene_name)
 de_results_DF@listData <- de_results_list
@@ -86,17 +126,36 @@ de_results_DF@listData <- de_results_list
 # === colData (sample metadata) ===
 cat("\n\n[4/6] Reading sample metadata...")
 metadata <- read_tsv(input_metadata, col_names = F, show_col_types = FALSE)
-# metadata <- metadata %>% dplyr::select(-X2)
 colnames(metadata) <- c("Name","Tissue [Factor]","Batch [Factor]")
-metadata <- metadata[match(colnames(raw_counts), metadata$Name),]
-cat("\n      Samples matched: ", sum(metadata$Name == colnames(raw_counts)), "/", nrow(metadata))
-
-
-# Subset counts if needed
-if(!check) {
-  raw_counts <- raw_counts[rownames(raw_counts) %in% de_results_DF[[1]]$gene_name,]
-  tpm_counts <- tpm_counts[rownames(tpm_counts) %in% de_results_DF[[1]]$gene_name,]
+# Try matching with and without suffixes (handle _STAR.bam, _condition, etc.)
+sample_names <- colnames(raw_counts)
+# Try direct match first
+direct_match <- match(sample_names, metadata$Name)
+if (all(!is.na(direct_match))) {
+  metadata <- metadata[direct_match, ]
+} else {
+  # Try fuzzy match: strip common suffixes from sample names
+  sample_cores <- sub("(_STAR\\.bam|_hisat2\\.bam|_[^_]+)$", "", sample_names)
+  meta_cores <- sub("(_STAR\\.bam|_hisat2\\.bam|_[^_]+)$", "", metadata$Name)
+  fuzzy_match <- match(sample_cores, meta_cores)
+  if (all(!is.na(fuzzy_match))) {
+    metadata <- metadata[fuzzy_match, ]
+  } else {
+    # Last resort: keep order as-is, pad if needed
+    metadata <- metadata[1:length(sample_names), ]
+  }
 }
+matched_count <- sum(!is.na(match(sample_names, metadata$Name)))
+cat("\n      Samples matched: ", matched_count, "/", nrow(metadata))
+
+
+# Subset counts to common genes
+raw_counts <- raw_counts[rownames(raw_counts) %in% common_genes, , drop = FALSE]
+tpm_counts <- tpm_counts[rownames(tpm_counts) %in% common_genes, , drop = FALSE]
+# Ensure identical row ordering across assays and rowData
+raw_counts <- raw_counts[match(common_genes, rownames(raw_counts)), , drop = FALSE]
+tpm_counts <- tpm_counts[match(common_genes, rownames(tpm_counts)), , drop = FALSE]
+cat("\n      Final gene count for SE:", nrow(raw_counts))
 
 
 # === Pathway Analysis ===
@@ -106,7 +165,7 @@ cat("\n      Universe: genes in TPM counts (n =", nrow(tpm_counts), ")\n")
 
 # Get universe (all genes in TPM counts with Entrez IDs) - must be CHARACTER for clusterProfiler
 universe_genes <- de_results_list[[1]]$gene_name
-universe_entrez <- as.character(grch38$entrez[match(universe_genes, grch38$symbol)])
+universe_entrez <- as.character(de_results_list[[1]]$entrez_id)
 universe_entrez <- universe_entrez[!is.na(universe_entrez) & universe_entrez != "NA"]
 cat("      Genes with Entrez IDs:", length(universe_entrez), "\n")
 
@@ -270,34 +329,49 @@ for (contrast_name in names(de_results_list)) {
 cat("\n\n      Adding GO annotations to rowData...")
 # Get GO terms for each gene
 gene_symbols <- de_results_list[[1]]$gene_name
-entrez_ids <- grch38$entrez[match(gene_symbols, grch38$symbol)]
 
-# Map to GO terms
+if (gene_ids_are_ensembl) {
+  # For ENSEMBL IDs: use entrez_id directly from the already-mapped de_results
+  entrez_ids <- de_results_list[[1]]$entrez_id
+} else {
+  entrez_ids <- grch38$entrez[match(gene_symbols, grch38$symbol)]
+}
+
+# Map to GO terms  
+valid_entrez <- as.character(entrez_ids[!is.na(entrez_ids)])
+valid_entrez <- valid_entrez[valid_entrez != "NA" & nchar(valid_entrez) > 0]
+
 go_bp <- tryCatch({
-  res <- AnnotationDbi::select(org.Hs.eg.db, 
-                                keys = as.character(entrez_ids[!is.na(entrez_ids)]),
-                                columns = "GO",
-                                keytype = "ENTREZID")
-  res <- res[res$ONTOLOGY == "BP", ]
-  split(res$GO, res$ENTREZID)
+  if (length(valid_entrez) == 0) list() else {
+    res <- AnnotationDbi::select(org.Hs.eg.db, 
+                                  keys = valid_entrez,
+                                  columns = "GO",
+                                  keytype = "ENTREZID")
+    res <- res[res$ONTOLOGY == "BP", ]
+    split(res$GO, res$ENTREZID)
+  }
 }, error = function(e) list())
 
 go_mf <- tryCatch({
-  res <- AnnotationDbi::select(org.Hs.eg.db, 
-                                keys = as.character(entrez_ids[!is.na(entrez_ids)]),
-                                columns = "GO",
-                                keytype = "ENTREZID")
-  res <- res[res$ONTOLOGY == "MF", ]
-  split(res$GO, res$ENTREZID)
+  if (length(valid_entrez) == 0) list() else {
+    res <- AnnotationDbi::select(org.Hs.eg.db, 
+                                  keys = valid_entrez,
+                                  columns = "GO",
+                                  keytype = "ENTREZID")
+    res <- res[res$ONTOLOGY == "MF", ]
+    split(res$GO, res$ENTREZID)
+  }
 }, error = function(e) list())
 
 go_cc <- tryCatch({
-  res <- AnnotationDbi::select(org.Hs.eg.db, 
-                                keys = as.character(entrez_ids[!is.na(entrez_ids)]),
-                                columns = "GO",
-                                keytype = "ENTREZID")
-  res <- res[res$ONTOLOGY == "CC", ]
-  split(res$GO, res$ENTREZID)
+  if (length(valid_entrez) == 0) list() else {
+    res <- AnnotationDbi::select(org.Hs.eg.db, 
+                                  keys = valid_entrez,
+                                  columns = "GO",
+                                  keytype = "ENTREZID")
+    res <- res[res$ONTOLOGY == "CC", ]
+    split(res$GO, res$ENTREZID)
+  }
 }, error = function(e) list())
 
 # Add GO columns to each DE result
@@ -328,6 +402,14 @@ de_results_DF@listData <- de_results_list
 
 # === Make SE ===
 cat("\n\n[6/6] Building SummarizedExperiment object...")
+
+# Final alignment check
+stopifnot("Assay/rowData dimension mismatch" = 
+  nrow(raw_counts) == nrow(de_results_DF) && 
+  nrow(tpm_counts) == nrow(de_results_DF))
+stopifnot("Assay/rowData row names mismatch" = 
+  identical(rownames(raw_counts), rownames(de_results_DF)))
+
 se <- SummarizedExperiment(
   assays = SimpleList("counts" = as.matrix(raw_counts), "TPM" = as.matrix(tpm_counts)),
   rowData = de_results_DF,

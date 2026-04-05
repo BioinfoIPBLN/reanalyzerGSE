@@ -14,6 +14,11 @@ suppressMessages(library(parallel,quiet = T,warn.conflicts = F))
 suppressMessages(library(autoGO,quiet = T,warn.conflicts = F))
 suppressMessages(library(rbioapi,quiet = T,warn.conflicts = F))
 
+# Source shared ENSEMBL helper
+script_dir <- dirname(sub("^--file=", "", commandArgs()[grep("--file=", commandArgs())]))
+ensembl_helper <- file.path(script_dir, "R_ensembl_to_symbol.R")
+if (file.exists(ensembl_helper)) source(ensembl_helper)
+
 a <- rba_panther_info(what="organisms")
 org_panther <- as.numeric(a$taxon_id[grep(gsub(" ","_",organism),gsub(" ","_",a$long_name))])
 methods <- rba_panther_info(what = "datasets")$id
@@ -324,9 +329,36 @@ if (grepl("sapiens", organism, fixed=TRUE)){
 
 # Write sets of genes of interest
 key_files <- data.frame()
-for (f in grep("05|_annotation|Gene_ID",list.files(pattern = pattern_search,path=path,recursive=T, full.names=T),invert=T,val=T)){  
+# Detect ENSEMBL IDs and build mapping once
+.ensembl_detected_ago <- FALSE
+.ensembl_map_ago <- NULL
+.dge_files_ago <- grep("05|_annotation|Gene_ID",list.files(pattern = pattern_search,path=path,recursive=T, full.names=T),invert=T,val=T)
+if (exists("is_ensembl_id") && length(.dge_files_ago) > 0) {
+  .test_ids_ago <- data.table::fread(.dge_files_ago[1],head=T,fill=T)$Gene_ID
+  if (is_ensembl_id(.test_ids_ago)) {
+    .ensembl_detected_ago <- TRUE
+    print("Detected ENSEMBL gene IDs — converting to symbols for autoGO/Panther...")
+    .gtf_file_ago <- Sys.getenv("ANNOTATION_FILE", unset = "")
+    .ensembl_map_ago <- if (nchar(.gtf_file_ago) > 0 && file.exists(.gtf_file_ago)) {
+      build_gtf_ensembl_map(.gtf_file_ago)
+    } else NULL
+  }
+}
+
+for (f in .dge_files_ago){  
   try({
     a <- data.table::fread(f,head=T,fill=T)
+    # Convert ENSEMBL IDs to symbols if detected
+    if (.ensembl_detected_ago) {
+      if (!is.null(.ensembl_map_ago)) {
+        stripped <- toupper(strip_ensembl_version(a$Gene_ID))
+        mapped <- .ensembl_map_ago[stripped]
+        found <- !is.na(mapped)
+        a$Gene_ID[found] <- unname(mapped[found])
+      } else if (exists("ensembl_to_symbol")) {
+        a$Gene_ID <- ensembl_to_symbol(a$Gene_ID)
+      }
+    }
     b <- a[a$FDR < 0.05,1]
     d <- a[a$FDR < 0.05 & a$logFC>0,1]
     e <- a[a$FDR < 0.05 & a$logFC<0,1]
@@ -406,7 +438,7 @@ process_file <- function(file){
           print("autoGO with errors"); print(e)
         })
   }
-  invisible(file.rename(path3,sub("//enrichment_tables","_autoGO",path3)))
+  invisible(file.rename(path3,sub("/enrichment_tables/?$","_autoGO",path3)))
 
   # Panther:
   print(paste0("Processing Panther for ",file2," and ",length(read.table(file,head=F)$V1)," genes..."))

@@ -7,6 +7,11 @@ organism <- args[3]
 suppressMessages(library("AnnotationHub",quiet = T,warn.conflicts = F))
 suppressMessages(library("dplyr",quiet = T,warn.conflicts = F))
 
+# Source shared ENSEMBL helper
+script_dir <- dirname(sub("^--file=", "", commandArgs()[grep("--file=", commandArgs())]))
+ensembl_helper <- file.path(script_dir, "R_ensembl_to_symbol.R")
+if (file.exists(ensembl_helper)) source(ensembl_helper)
+
 # Load annotation info:
 organism_cp <- gsub("_"," ",organism)
 if(organism_cp=="Homo sapiens"){
@@ -72,38 +77,97 @@ mode <- check_naming(keys(eval(parse(text=orgDB)), keytype = "SYMBOL"))
 
 if (exists("orgDB")){
   print(paste0("Loaded ",orgDB," annotation to add information to all list of genes in the current analyses..."))
-  # To choose columns with the type of annotation:
-  # columns(eval(parse(text=orgDB)))
-  # All the symbols (take a lot of time)
-  # unname(as.character(eval(parse(text=paste0(gsub(".db","",orgDB),"SYMBOL")))))
 
+  ### Detect if gene IDs are ENSEMBL and handle accordingly
+  rpkm_file <- list.files(path=path,recursive=T, include.dirs=T, full.names=T,pattern="^RPKM_counts_genes.txt")[1]
+  gene_ids_raw <- read.delim(rpkm_file)$Gene_ID
+  
+  # Determine keytype and prepare gene IDs
+  use_ensembl_keytype <- FALSE
+  if (exists("is_ensembl_id") && is_ensembl_id(gene_ids_raw)) {
+    use_ensembl_keytype <- TRUE
+    print("Detected ENSEMBL gene IDs — using ENSEMBL keytype for annotation lookup...")
+    # Strip version suffixes for AnnotationDbi lookup
+    gene_ids_for_lookup <- strip_ensembl_version(gene_ids_raw)
+    # Also try to get symbols via GTF for better downstream matching
+    gtf_file <- Sys.getenv("ANNOTATION_FILE", unset = "")
+    .ensembl_map_annot <- if (nchar(gtf_file) > 0 && file.exists(gtf_file)) {
+      build_gtf_ensembl_map(gtf_file)
+    } else NULL
+  } else {
+    gene_ids_for_lookup <- convert_ids(gene_ids_raw, mode)
+  }
+  
   ### Build a master table for all the genes with quantified normalized expression in the project:
-  annot <- suppressMessages(suppressWarnings(AnnotationDbi::select(eval(parse(text=orgDB)),
-    keys = convert_ids(read.delim(list.files(path=path,recursive=T, include.dirs=T, full.names=T,pattern="^RPKM_counts_genes.txt")[1])$Gene_ID,mode),
-    columns = c("ALIAS","GENENAME","GOALL"),
-    keytype = 'SYMBOL')))
-
-  annot_summary <- as.data.frame(annot %>% 
-    group_by(SYMBOL) %>% 
-    summarise(across(everything(), list(~ paste(unique(.), collapse = ", ")), .names = "concatenated_{col}")))
-
-  colnames(annot_summary) <- gsub("concatenated_","",colnames(annot_summary))
-  annot_summary$GOALL_names <- unlist(lapply(strsplit(annot_summary$GOALL,", "),function(y){paste(GOfuncR::get_names(y)$go_name,collapse=" // ")}))
-  a <- strsplit(annot_summary[,"GOALL"],", ")
-  b <- strsplit(annot_summary[,"GOALL_names"]," // ")
-  d <- strsplit(annot_summary[,"ONTOLOGYALL"],", ")
-  annot_summary$GO_terms <- unlist(apply(annot_summary,1,function(x){suppressWarnings(paste(unname(mapply(paste,strsplit(x["GOALL"],", "),strsplit(x["GOALL_names"]," // "),sep="_")),collapse=" /// "))}))
-  annot_summary_final <- annot_summary[,c(1,2,3,8)]
-
-  ### Take the files and annotate them
-  for (file in grep("annotation",list.files(path=path,recursive=T, include.dirs=T, full.names=T,pattern=pattern_to_match),invert=T,val=T)){
-	a <- as.data.frame(data.table::fread(file))
-    if("Gene_ID" %in% colnames(a)){
-      a$Gene_ID <- convert_ids(a$Gene_ID,mode)
-      annot_summary_final$SYMBOL <- convert_ids(annot_summary_final$SYMBOL,mode)
-      b <- merge(a,annot_summary_final,by.x="Gene_ID",by.y="SYMBOL",all.x=T)
-	  write.table(b,file=gsub(".txt$","_annotation.txt",file),col.names = T,row.names = F,quote = F,sep="\t")	
-      print(paste0("Annotating ",basename(file)," ..."))
+  annot <- tryCatch({
+    if (use_ensembl_keytype) {
+      suppressMessages(suppressWarnings(AnnotationDbi::select(eval(parse(text=orgDB)),
+        keys = unique(gene_ids_for_lookup),
+        columns = c("SYMBOL","ALIAS","GENENAME","GOALL"),
+        keytype = 'ENSEMBL')))
+    } else {
+      suppressMessages(suppressWarnings(AnnotationDbi::select(eval(parse(text=orgDB)),
+        keys = gene_ids_for_lookup,
+        columns = c("ALIAS","GENENAME","GOALL"),
+        keytype = 'SYMBOL')))
     }
+  }, error = function(e) {
+    print(paste0("Warning: Annotation lookup failed: ", e$message))
+    print("Continuing with empty annotation...")
+    NULL
+  })
+
+  if (!is.null(annot) && nrow(annot) > 0) {
+    # Determine the key column name (ENSEMBL or SYMBOL depending on keytype used)
+    key_col <- if (use_ensembl_keytype) "ENSEMBL" else "SYMBOL"
+    
+    annot_summary <- as.data.frame(annot %>% 
+      group_by(across(all_of(key_col))) %>% 
+      summarise(across(everything(), list(~ paste(unique(.), collapse = ", ")), .names = "concatenated_{col}")))
+
+    colnames(annot_summary) <- gsub("concatenated_","",colnames(annot_summary))
+    
+    # Ensure GOALL column exists before processing
+    if ("GOALL" %in% colnames(annot_summary)) {
+      annot_summary$GOALL_names <- unlist(lapply(strsplit(annot_summary$GOALL,", "),function(y){
+        tryCatch(paste(GOfuncR::get_names(y)$go_name,collapse=" // "), error = function(e) NA_character_)
+      }))
+      annot_summary$GO_terms <- unlist(apply(annot_summary,1,function(x){
+        suppressWarnings(paste(unname(mapply(paste,strsplit(x["GOALL"],", "),strsplit(x["GOALL_names"]," // "),sep="_")),collapse=" /// "))
+      }))
+    } else {
+      annot_summary$GOALL_names <- NA_character_
+      annot_summary$GO_terms <- NA_character_
+    }
+    
+    # Select output columns
+    if (use_ensembl_keytype) {
+      # Include SYMBOL for ENSEMBL-keyed results
+      out_cols <- intersect(c(key_col, "SYMBOL", "ALIAS", "GENENAME", "GO_terms"), colnames(annot_summary))
+    } else {
+      out_cols <- intersect(c(key_col, "ALIAS", "GENENAME", "GO_terms"), colnames(annot_summary))
+    }
+    annot_summary_final <- annot_summary[, out_cols, drop = FALSE]
+
+    ### Take the files and annotate them
+    for (file in grep("annotation",list.files(path=path,recursive=T, include.dirs=T, full.names=T,pattern=pattern_to_match),invert=T,val=T)){
+      a <- as.data.frame(data.table::fread(file))
+      if("Gene_ID" %in% colnames(a)){
+        if (use_ensembl_keytype) {
+          # Match by stripping ENSEMBL version from Gene_ID
+          a$Gene_ID_stripped <- strip_ensembl_version(a$Gene_ID)
+          b <- merge(a, annot_summary_final, by.x="Gene_ID_stripped", by.y=key_col, all.x=T)
+          b$Gene_ID_stripped <- NULL  # Remove temp column
+        } else {
+          a$Gene_ID <- convert_ids(a$Gene_ID,mode)
+          annot_summary_final[[key_col]] <- convert_ids(annot_summary_final[[key_col]],mode)
+          b <- merge(a,annot_summary_final,by.x="Gene_ID",by.y=key_col,all.x=T)
+        }
+        write.table(b,file=gsub(".txt$","_annotation.txt",file),col.names = T,row.names = F,quote = F,sep="\t")	
+        print(paste0("Annotating ",basename(file)," ..."))
+      }
+    }
+  } else {
+    print("No annotation data available. Skipping annotation step.")
   }
 }

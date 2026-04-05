@@ -26,6 +26,11 @@ suppressMessages(library(parallel,quiet = T,warn.conflicts = F))
 suppressMessages(library(ggplot2,quiet = T,warn.conflicts = F))
 suppressMessages(library(aPEAR,quiet = T,warn.conflicts = F))
 
+# Source shared ENSEMBL helper
+script_dir <- dirname(sub("^--file=", "", commandArgs()[grep("--file=", commandArgs())]))
+ensembl_helper <- file.path(script_dir, "R_ensembl_to_symbol.R")
+if (file.exists(ensembl_helper)) source(ensembl_helper)
+
 print(paste0("Trying to use as many as ",cores," cores, but if many subsets of genes/comparisons, please expect a lenghty process of at least a few hours"))
 organism_cp <- gsub("_"," ",organism)
 if(organism_cp=="Homo sapiens"){
@@ -44,8 +49,36 @@ entrez_ids_keys$Custom_ID <- paste(entrez_ids_keys$SYMBOL,entrez_ids_keys$ENTREZ
 ### Create objects of interest to iterate later:
 print(paste0("Creating subsets of genes of interest..."))
 files <- list.files(path=path,pattern=pattern_search) # If you are at any time using this script outside the main pipeline be aware of these input files... there may be confounding...
+# Detect if gene IDs are ENSEMBL and build mapping if so
+.ensembl_detected <- FALSE
+.ensembl_map <- NULL
+if (exists("is_ensembl_id") && length(files) > 0) {
+  .test_ids <- read.table(paste0(path,"/",files[1]),head=T)$Gene_ID
+  if (is_ensembl_id(.test_ids)) {
+    .ensembl_detected <- TRUE
+    print("Detected ENSEMBL gene IDs — converting to symbols for enrichment analyses...")
+    # Try GTF from environment variable, then fall back to org.db
+    .gtf_file <- Sys.getenv("ANNOTATION_FILE", unset = "")
+    .ensembl_map <- if (nchar(.gtf_file) > 0 && file.exists(.gtf_file)) {
+      build_gtf_ensembl_map(.gtf_file)
+    } else NULL
+  }
+}
+
 for (f in files){
   a <- read.table(paste0(path,"/",f),head=T)
+  # Convert ENSEMBL IDs to symbols if detected
+  if (.ensembl_detected && exists("ensembl_to_symbol")) {
+    a$Gene_ID_original <- a$Gene_ID
+    if (!is.null(.ensembl_map)) {
+      stripped <- toupper(strip_ensembl_version(a$Gene_ID))
+      mapped <- .ensembl_map[stripped]
+      found <- !is.na(mapped)
+      a$Gene_ID[found] <- unname(mapped[found])
+    } else {
+      a$Gene_ID <- ensembl_to_symbol(a$Gene_ID, orgdb_name = orgDB)
+    }
+  }
   #readlist_cpm_fdr_05 <- a$logCP[a$FDR<0.05]
   #names(readlist_cpm_fdr_05) <- a$Gene_ID[a$FDR<0.05]
   #assign(paste0(f,"_","readlist_cpm_fdr_05"), readlist_cpm_fdr_05,envir = .GlobalEnv)
@@ -143,7 +176,7 @@ mode <- check_naming(keys(eval(parse(text=orgDB)), keytype = "SYMBOL"))
 
 #save.image(file.path(path,"funct_enrich_clusterProfiler_globalenvir1.RData"))
 process_file <- function(file){
-  invisible(biomaRt::biomartCacheClear())
+  tryCatch(invisible(biomaRt::biomartCacheClear()), error = function(e) NULL)
   # file="DGE_analysis_comp1.txt"
   print(paste0("Processing ",file, "_Current date: ",date()))
 
@@ -151,6 +184,15 @@ process_file <- function(file){
   name <- paste0(file,"_genes_of_interest")
   
   a <- read.table(paste0(path,"/",file),head=T)
+  # Convert ENSEMBL IDs to symbols if detected at startup
+  if (.ensembl_detected && !is.null(.ensembl_map)) {
+    stripped <- toupper(strip_ensembl_version(a$Gene_ID))
+    mapped <- .ensembl_map[stripped]
+    found <- !is.na(mapped)
+    a$Gene_ID[found] <- unname(mapped[found])
+  } else if (.ensembl_detected && exists("ensembl_to_symbol")) {
+    a$Gene_ID <- ensembl_to_symbol(a$Gene_ID, orgdb_name = orgDB)
+  }
   a$Gene_ID <- convert_ids(a$Gene_ID,mode)
   a <- a[order(a$Gene_ID),] # Crucial to avoid issues later with genes with numbers or special characters/symbols
   a$logFC_sense <- a$logFC>0
@@ -160,7 +202,7 @@ process_file <- function(file){
   
   # FUNCTION INTERNAL:
   process_file_within <- function(name_internal){
-    invisible(biomaRt::biomartCacheClear())
+    tryCatch(invisible(biomaRt::biomartCacheClear()), error = function(e) NULL)
     print(paste0("Processing ",file,"_",name_internal))
     geneset <- name_internal
     i <- padjustmethod

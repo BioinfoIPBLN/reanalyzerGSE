@@ -15,15 +15,15 @@ for argument in $options; do
 		-h*) echo "reanalyzerGSE v${REANALYZER_VERSION} - usage: reanalyzerGSE.sh [options]
 	        -h | -help # Type this to get help
 	        -options | Provide a YAML configuration file containing the parameters to be used. You can adapt the file 'config_template.yaml' provided in the scripts folder. CLI arguments override values from the YAML file.)
-	        
-	        #### Input/output: 
+
+	        #### Input/output:
 	        -i | -input # GEO_ID (GSEXXXXXX, separated by comma if more than one), or folder containing raw reads (please provide full absolute path, e.g. /path/folder_name/, containing only fastq.gz files and not folders, links or any other item, and please rename samples with meaningful names if possible), or almost any accession from ENA/SRA to download .fastq from (any of the ids with the prefixes PRJEB,PRJNA,PRJDB,ERP,DRP,SRP,SAMD,SAME,SAMN,ERS,DRS,SRS,ERX,DRX,SRX,ERR,DRR,SRR, please separated by commas if more than one id as input)
 	        -iG | -input_GEO_reads # If you want to combine downloading metadata from GEO with reads from GEO or any database already downloaded, maybe from a previous attempt, please provide an absolute path
 	        -n | -name # Name of the project/folder to create and store results
 	        -o | -output_folder # Destination folder
 	        -g | -genes # Genes to highlight their expression in plots (one or several, separated by comma and no space, none by default)
 	        -TMP | -TMPDIR # Directory to export the environmental variable TMPDIR (by default or if left empty an internal folder of the output directory is used, or please enter 'system' to use system's default, or an absolute pathway that will be created if it does not exist)
-	
+
 	        #### Reference and databases:
 	        -r | -reference_genome # Reference genome to be used (.fasta file or .gz, absolute pathway)
 	        -ri | -reference_genome_index # If the reference genome to be used already has an index that would like to reuse, please provide full pathway here (by default the provided genome is indexed)
@@ -34,7 +34,7 @@ for argument in $options; do
 	        -Ds | -sortmerna_databases # The database (absolute pathway) that should be used by SortMeRNA (any input here, e.g. '/path/to/rRNA_databases/smr_v4.3_sensitive_db.fasta', would activate the sortmerna-based rRNA removal step)
 	        -Df | -databases_function # Manually provide a comma separated list of databases to be used in automatic functional enrichment analyses of DEGs (check out the R package autoGO::choose_database(), but the most popular GO terms are used by default)
 	        -nrf | -non_reference_funct_enrichm # Pathway to a file containing functional annotation (GAF, GFF, or GTF) to be used for functional enrichment when the organism is not Human or Mouse. If provided, this overrides the default behavior of using the main annotation file.
-	
+
 	        #### Metadata and sample info:
 	        -D | -design_custom_local # Specifying here the experimental design for the local dataset (by default an interactive prompt will ask for a comma-separated list of the same length than the number of samples, if you want to avoid that manual input please provide the list in this argument. If no design, please provide a dummy one, e.g. with every sample in the same group or a separate one. If more than one design to provide, please input comma-separated list separated by a '/', without spaces. Please avoid naming that would match the same pattern in grep, e.g. XXXX and XXXX_TREAT)
 	        -d | -design_custom # Manually specifying the experimental design for GEO download ('no' by default and if 'yes', please expect an interactive prompt after data download from GEO, and please enter the assignment to groups when asked in the terminal, with a comma-separated list of the same length than the number of samples)
@@ -47,7 +47,7 @@ for argument in $options; do
 	        -C | -covariables # Please input a comma-separated list for the covariable that should be included in the limma model for removeBatchEffect or in the edgeR model for DGE (for now only one covariable allowed, for example an expected batch effect)
 	        -Cf | -covariables_format # Format of the provided covariate ('num' by default for numeric covariables, or 'fact' for factors)
 	        -T | -target # Protopical target file for attempts to differential gene expression analyses (containing filenames and covariates, automatically built if not provided)
-	
+
 	        #### Activate alternative modes:
 	        -Dm | -debug_module # For debugging, step to remove the content of the corresponding folders and to resume a failed or incomplete run without repeating (one of 'step1', 'step1a', 'step1b', 'step1c', 'step1d', 'step2', 'step3a', 'step3b', 'step4', 'step4b', 'step5', 'step6', 'step7', 'step8', step9', or 'all' to execute everything, by default)
 	        -q | -qc_raw_reads # Whether to perform quality control on the raw reads ('yes' by default, or 'no')
@@ -69,7 +69,7 @@ for argument in $options; do
 	        -apl | -auto_panther_log # Whether to perform additional autoGO and Panther analyses for DEGs separated by log2Fc positive or negative ('yes' or 'no', by default)
 	        -eDe | -exploreDE_se # Whether to generate a SummarizedExperiment object (.qs2) for the exploreDE Shiny app ('yes' or 'no', by default). Only works for Human (Homo_sapiens) analyses.
 	        -sO | -splicing_option # Splicing analysis method: 'no' (default), 'saser' (differential splicing via saseR with adapted offsets in edgeR), or 'isoformswitchr' (isoform switch analysis via IsoformSwitchAnalyzeR, requires transcript-level quantification from Kallisto or Salmon)
-	
+
 	        #### Processing parameters:
 	        -s | -strand # Strandness of the library ('yes, 'no', 'reverse'). If not provided and '-t' used, this would be predicted by salmon. Please use this parameter if prediction not correct, see explanations in for example in bit.ly/strandness0 and bit.ly/strandness
 	        -f | -filter # Threshold of gene counts to use ('bin' to capture the lower expressed genes, 'filterbyexpr' to use the edgeR solution, 'or 'standard', by default). Please provide a comma separated list with the filters to use at each quantification if multiple annotation are provided
@@ -78,21 +78,22 @@ for argument in $options; do
 	        -A | -aligner # Aligner software to use ('hisat2' or 'star', by default)
 	        input_filter_regex=""
 	        input_filter_regex_exclude=""
-        alignment_removal=""
-        cores=8
+                alignment_removal=""
+                cores=8
 	        -Des | -differential_expr_software # Software to be used in the differential expression analyses ('edgeR' by default, or 'DESeq2')
 	        -fp | -fastp_mode # Whether to perform quality filtering on the raw reads by fastp ('yes' or 'no', by default)
 	        -fpa | -fastp_adapter # Whether to perform adapter trimming on the raw reads by fastp ('yes' or 'no', by default, to perform automatic trimming, or a path to a fasta file to perform trimming of its sequences)
 	        -fpt | -fastp_trimming # Whether to trim the raw reads by fastp ('none' by default, if two numbers separated by comma, the indicated number of bases will be trimmed from the front and tail, respectively)
+	        -fpe | -fastp_extra_args # Extra arguments to pass directly to fastp (e.g. '-g' for polyG trimming, '-x' for polyX trimming, '--cut_right', etc.). These are appended to the automatically built fastp command line. Empty by default
 	        -std | -time_course_std # Standard deviation threshold to filter in time course analyses (numeric, 1 by default)
 	        -fuzz | -time_course_fuzz # Fuziness value for the soft clustering approach (by default an estimate is automatically computed but manual testing is encouraged)
-	
+
 	        #### Filtering out samples/comparisons:
 	        -G | -GSM_filter # GSM ids (one or several, separated by comma and no space) within the GSE entry to restrict the analysis to. An alternative to requesting a stop with -S to reorganize the downloaded files manually
 	        -S | -stop # Manual stop so the automatically downloaded files can be manually modified ('yes' or 'no', by default)
 	        -pR | -pattern_to_remove # A pattern to exclude matching samples from downstream R processing only, i.e. QC figures and DGE analyses (by default 'none'). Unlike -regex/-regexExclude which filter raw reads before alignment, this option keeps all samples through alignment and counting but excludes matching ones at the R analysis stage. Useful for removing outlier samples without re-running the full pipeline (e.g. resume from -Dm step4)
 	        -Dec | -differential_expr_comparisons # Restrict differential expression analyses to specific comparisons and control log2FC direction ('no' by default). Provide a comma-separated list using 'vs' (or '//' for backward compat) as separator, e.g. 'AvsB,CvsD'. The ORDER matters: the FIRST element is the numerator, so positive log2FC = higher expression in the first element
-	
+
 	        #### Functional enrichment/networking analyses
 	        -cPm | -clusterProfiler_method # Method for adjusting p.value in clusterProfiler iterations (one of 'holm','hochberg','hommel','bonferroni','BH','BY,'none', or 'fdr', by default)
 	        -cPu | -clusterProfiler_universe # Universe to use in clusterProfiler iterations ('all' or 'detected', by default)
@@ -100,7 +101,7 @@ for argument in $options; do
 	        -MGS | -clusterProfiler_maxGSSize # maxGSSize parameter to use in clusterProfiler iterations (a number, '500' by default)
 	        -Pm | -panther_method # Method for adjusting p.value in panther analyses via rbioapi (one of 'NONE','BONFERRONI', or 'FDR', by default)
 	        -rev | -revigo_threshold_similarity # Similarity threshold for Revigo summaries of GO terms (0-1, suggested values are 0.9, 0.7, 0.5, 0.4 for large, medium, small, and tiny levels of similarity, respectively, being default 0.7
-	
+
 	        #### BAM filtering (post-alignment):
 	        -mQ | -bam_mapq_threshold # Min MAPQ for samtools view -q and featureCounts -Q (0 = use default)
 	        -Fex | -bam_exclude_flags # samtools -F flags to exclude, e.g. '4' (unmapped), '256' (secondary), '2308' (combined)
@@ -112,7 +113,7 @@ for argument in $options; do
 	        #### Count-level options (quantification):
 	        -Ofc | -featureCounts_extra_args # Extra arguments to pass to featureCounts (default '-M -O -C -B'). These are appended to the automatically built featureCounts command line after strand, feature type, seqid, threads, and MAPQ options.
 	        -Fgene | -counts_custom_gene_filter # Shell command to filter gene rows from count tables before R processing (e.g. "grep -v als" to remove genes starting with 'als'). Applied to featureCounts .tab and Kallisto abundance.tsv files. Header is always preserved.
-	
+
 	        #### Performance:
 	        -regex | -input_filter_regex # Regex to keep only matching input files in local mode, removing the rest (e.g. "Sample_A|Sample_B")
 	        -regexExclude | -input_filter_regex_exclude # Regex to exclude matching input files in local mode, keeping the rest (e.g. "Sample_Bad|Sample_Outlier")
@@ -130,9 +131,9 @@ for argument in $options; do
 		-n) name=${arguments[index]} ;;
 		-o) output_folder=${arguments[index]} ;;
 		-p) cores=${arguments[index]} ;;
-        -regex | -input_filter_regex) input_filter_regex=${arguments[index]} ;;
-        -regexExclude | -input_filter_regex_exclude) input_filter_regex_exclude=${arguments[index]} ;;
-        -Ar | -alignment_removal) alignment_removal=${arguments[index]} ;;
+                -regex | -input_filter_regex) input_filter_regex=${arguments[index]} ;;
+                -regexExclude | -input_filter_regex_exclude) input_filter_regex_exclude=${arguments[index]} ;;
+                -Ar | -alignment_removal) alignment_removal=${arguments[index]} ;;
 		-pi) cores_index=${arguments[index]} ;;
 		-M) memory_max=${arguments[index]} ;;
 		-s) strand=${arguments[index]} ;;
@@ -178,7 +179,15 @@ for argument in $options; do
 		-vv) perform_volcano_venn=${arguments[index]} ;;
 		-aP) aPEAR_execution=${arguments[index]} ;;
 		-Of) optionsFeatureCounts_feat=${arguments[index]} ;;
-		-O) organism=${arguments[index]} ;;
+		-O)
+			val=${arguments[index]}
+			temp_idx=$((index + 1))
+			while [ $temp_idx -lt ${#arguments[@]} ] && [[ "${arguments[temp_idx]}" != -* ]]; do
+				val="${val}_${arguments[temp_idx]}"
+				temp_idx=$((temp_idx + 1))
+			done
+			organism=$val
+			;;
 		-Os) optionsFeatureCounts_seq=${arguments[index]} ;;
 		-iG) input_geo_reads=${arguments[index]} ;;
 		-cG) compression_level=${arguments[index]} ;;
@@ -199,6 +208,7 @@ for argument in $options; do
 		-fp) fastp_mode=${arguments[index]} ;;
 		-fpa) fastp_adapter=${arguments[index]} ;;
 		-fpt) fastp_trimming=${arguments[index]} ;;
+		-fpe) fastp_extra_args=${arguments[index]} ;;
 		-cR) cores_reads_to_subsample=${arguments[index]} ;;
 		-pR) pattern_to_remove=${arguments[index]} ;;
 		-apl) auto_panther_log=${arguments[index]} ;;
@@ -444,6 +454,9 @@ if [ -z "$fastp_adapter" ]; then
 fi
 if [ -z "$fastp_trimming" ]; then
 	fastp_trimming="none"
+fi
+if [ -z "$fastp_extra_args" ]; then
+	fastp_extra_args=""
 fi
 if [ -z "$auto_panther_log" ]; then
 	auto_panther_log="no"

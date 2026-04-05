@@ -10,6 +10,7 @@ edgeR_object <- eval(as.symbol(args[5]))
 edgeR_object_norm <- eval(as.symbol(args[6]))
 pattern_to_remove <- args[7]
 annotation_file <- args[8]
+fc_feat_type <- ifelse(length(args) >= 9, args[9], "exon")
 label <- basename(path)
 label2 <- sub(".*_","",args[6])
 
@@ -687,23 +688,40 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
           
           cat("Making TxDb...\n")
           suppressWarnings(txdb <- txdbmaker::makeTxDbFromGRanges(gr))
-          cat("Extracting exons for Transcript calculation...\n")
-          exons_by_tx <- exonsBy(txdb, by = "tx", use.names = TRUE)
           
-          # Use all transcripts > 100bp
-          tx_lengths <- sum(width(exons_by_tx))
-          valid_tx <- names(tx_lengths[tx_lengths >= 100])
-          sampled_exons <- exons_by_tx[valid_tx]
+          # Decide aggregation level based on featureCounts feature type
+          if (fc_feat_type == "gene") {
+            cat("Extracting exons grouped by Gene (matching featureCounts -t gene)...\n")
+            exons_grouped <- exonsBy(txdb, by = "gene")
+            feature_label <- "genes"
+          } else {
+            cat("Extracting exons grouped by Transcript...\n")
+            exons_grouped <- exonsBy(txdb, by = "tx", use.names = TRUE)
+            feature_label <- "transcripts"
+          }
+          
+          # Filter to features > 100bp
+          feat_lengths <- sum(width(exons_grouped))
+          valid_tx <- names(feat_lengths[feat_lengths >= 100])
+          
+          # Cap at 50000 features to keep runtime reasonable
+          max_features <- 50000
+          if (length(valid_tx) > max_features) {
+            cat(sprintf("Subsampling %d -> %d %s for gene body coverage (runtime cap)...\n", length(valid_tx), max_features, feature_label))
+            set.seed(42)
+            valid_tx <- sample(valid_tx, max_features)
+          }
+          sampled_exons <- exons_grouped[valid_tx]
           
           bam_files <- list.files(path=input_dir, pattern="\\.bam$", recursive=TRUE, full.names=TRUE)
-          cat(sprintf("\nCalculating Gene Body Coverage for %s BAMs (processing %s transcripts)...\n", length(bam_files), length(valid_tx)))
+          cat(sprintf("\nCalculating Gene Body Coverage for %s BAMs (processing %s %s)...\n", length(bam_files), length(valid_tx), feature_label))
           suppressMessages(library(Rsamtools, quiet = T, warn.conflicts = F))
           suppressMessages(library(GenomicAlignments, quiet = T, warn.conflicts = F))
           suppressMessages(library(BiocParallel, quiet = T, warn.conflicts = F))
           suppressMessages(library(GenomeInfoDb, quiet = T, warn.conflicts = F))
           
           # Setup parallel environment
-          num_workers <- min(12, length(bam_files))
+          num_workers <- length(bam_files)
           bpparam <- MulticoreParam(workers = num_workers)
           
           bin_mat_list <- bplapply(bam_files, function(bfile) {
@@ -773,7 +791,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
                 geom_line(size=1) +
                 theme_bw() +
                 scale_x_continuous(breaks = seq(0, 100, by=25), labels = function(x) paste0(x, "%")) + 
-                labs(title=paste0(length(bam_files), " BAMs, ", length(valid_tx), " transcripts - Gene Body Coverage"), x="Gene body proportion (5' -> 3')", y="Normalized Coverage") +
+                labs(title=paste0(length(bam_files), " BAMs, ", length(valid_tx), " ", feature_label, " - Gene Body Coverage"), x="Gene body proportion (5' -> 3')", y="Normalized Coverage") +
                 theme(legend.position="right")
              print(p)
              cat("Gene body coverage pure R calculation complete (appended to main QC report).\n")

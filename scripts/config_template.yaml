@@ -25,7 +25,7 @@ transcripts: ""                        # Reference transcripts (.fasta cDNA, use
 kraken2_databases: ""                  # Comma-separated Kraken2 DB folders (e.g. '/path/to/core_nt,/path/to/gtdb')
 kraken2_confidence: "0"                # Comma-separated confidence scores (e.g. '0,0.20,0.50')
 sortmerna_databases: ""                # SortMeRNA database path (activates rRNA removal step)
-databases_function: "GO_Biological_Process_2023,GO_Molecular_Function_2023,GO_Cellular_Component_2023"
+databases_function: "GO_Biological_Process_2025,GO_Molecular_Function_2025,GO_Cellular_Component_2025"
 non_reference_funct_enrichm: ""        # Annotation file (GAF, GMT, GFF, GTF) for functional enrichment in non-model organisms
 
 # === Metadata and sample info ===
@@ -73,6 +73,7 @@ differential_expr_soft: "edgeR"        # DGE software ('edgeR' or 'DESeq2')
 fastp_mode: "no"                       # Quality filtering by fastp ('yes' or 'no')
 fastp_adapter: "no"                    # Adapter trimming by fastp ('yes', 'no', or path to fasta)
 fastp_trimming: "none"                 # Trimming by fastp ('none' or 'front,tail' as numbers)
+fastp_extra_args: ""                   # Extra arguments to pass to fastp (e.g. '-g' for polyG, '-x' for polyX, '--cut_right')
 time_course_std: 1                     # SD threshold for time-course filtering
 time_course_fuzz: 0                    # Fuziness for soft clustering (0 = auto-estimate)
 
