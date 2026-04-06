@@ -428,7 +428,7 @@ cat("\n      Pathway data: enrichResultList, enrichInputList in metadata(se)")
 
 
 # === Save ===
-output_dir <- dirname(sub("^--file=", "", commandArgs()[grep("--file=", commandArgs())]))
+output_dir <- input_path_deg_results
 qs2::qs_save(se, file.path(output_dir, paste0("deResults_", bakk_name, ".qs2")))
 qs2::qs_save(se, file.path(output_dir, "deResults.qs2"))
 

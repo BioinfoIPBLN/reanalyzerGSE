@@ -101,10 +101,20 @@ if (exists("orgDB")){
   ### Build a master table for all the genes with quantified normalized expression in the project:
   annot <- tryCatch({
     if (use_ensembl_keytype) {
-      suppressMessages(suppressWarnings(AnnotationDbi::select(eval(parse(text=orgDB)),
-        keys = unique(gene_ids_for_lookup),
-        columns = c("SYMBOL","ALIAS","GENENAME","GOALL"),
-        keytype = 'ENSEMBL')))
+      # Pre-filter to valid ENSEMBL keys in the org.db to avoid "none valid" error
+      valid_ensembl_keys <- keys(eval(parse(text=orgDB)), keytype = "ENSEMBL")
+      lookup_ids <- unique(gene_ids_for_lookup)
+      lookup_ids <- lookup_ids[toupper(lookup_ids) %in% toupper(valid_ensembl_keys)]
+      print(paste0("ENSEMBL IDs matching org.db: ", length(lookup_ids), " / ", length(unique(gene_ids_for_lookup))))
+      if (length(lookup_ids) == 0) {
+        print("No ENSEMBL IDs matched org.db keys. Skipping AnnotationDbi lookup.")
+        NULL
+      } else {
+        suppressMessages(suppressWarnings(AnnotationDbi::select(eval(parse(text=orgDB)),
+          keys = lookup_ids,
+          columns = c("SYMBOL","ALIAS","GENENAME","GOALL"),
+          keytype = 'ENSEMBL')))
+      }
     } else {
       suppressMessages(suppressWarnings(AnnotationDbi::select(eval(parse(text=orgDB)),
         keys = gene_ids_for_lookup,
