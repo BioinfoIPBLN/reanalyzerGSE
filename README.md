@@ -35,130 +35,26 @@ Please go to test_data/README and follow instructions.
 
 
 ## reanalyzerGSE arguments
-Please refer to the help page for futher details. Please be aware that the yml file with all arguments can be provided to '-options'. See the [template](https://github.com/BioinfoIPBLN/reanalyzerGSE/blob/main/scripts/config_template.yaml):
+Please be aware that inline parameters can be provided (see 'reanalyzerGSE.sh -h' or the [options script](https://github.com/BioinfoIPBLN/reanalyzerGSE/blob/main/scripts/parse_options.sh)) or a yaml file with all arguments can be provided via '-options' (see [template](https://github.com/BioinfoIPBLN/reanalyzerGSE/blob/main/scripts/config_template.yaml))
 ```
-reanalyzerGSE.sh -h
-		-h | -help # Type this to get help
-	        -options | Provide a YAML configuration file containing the parameters to be used. You can adapt the file 'config_template.yaml' provided in the scripts folder. CLI arguments override values from the YAML file.)
-	        
-	        #### Input/output: 
-	        -i | -input # GEO_ID (GSEXXXXXX, separated by comma if more than one), or folder containing raw reads (please provide full absolute path, e.g. /path/folder_name/, containing only fastq.gz files and not folders, links or any other item, and please rename samples with meaningful names if possible), or almost any accession from ENA/SRA to download .fastq from (any of the ids with the prefixes PRJEB,PRJNA,PRJDB,ERP,DRP,SRP,SAMD,SAME,SAMN,ERS,DRS,SRS,ERX,DRX,SRX,ERR,DRR,SRR, please separated by commas if more than one id as input)
-	        -iG | -input_GEO_reads # If you want to combine downloading metadata from GEO with reads from GEO or any database already downloaded, maybe from a previous attempt, please provide an absolute path
-	        -regex | -input_filter_regex # Regex to keep only matching input files in local mode, removing the rest (e.g. "Sample_A|Sample_B")
-	        -regexExclude | -input_filter_regex_exclude # Regex to exclude matching input files in local mode, keeping the rest (e.g. "Sample_Bad|Sample_Outlier")
-	        -n | -name # Name of the project/folder to create and store results
-	        -o | -output_folder # Destination folder
-	        -g | -genes # Genes to highlight their expression in plots (one or several, separated by comma and no space, none by default)
-	        -TMP | -TMPDIR # Directory to export the environmental variable TMPDIR (by default or if left empty an internal folder of the output directory is used, or please enter 'system' to use system's default, or an absolute pathway that will be created if it does not exist)
-	
-	        #### Reference and databases:
-	        -r | -reference_genome # Reference genome to be used (.fasta file or .gz, absolute pathway)
-	        -ri | -reference_genome_index # If the reference genome to be used already has an index that would like to reuse, please provide full pathway here (by default the provided genome is indexed)
-	        -a | -annotation # Reference annotation to be used (.gtf file, absolute pathway). If hisat2 is used, a gff file (make sure format is '.gff' and not '.gff3') is accepted (some QC steps like 'qualimap rnaseqqc' may be skipped though). You can provide a comma-separated list of the pathways to different annotation, and multiple/independent quantification/outputs from the same alignments will be generated.
-	        -t | -transcripts # Reference transcripts to be used (.fasta cDNA file, absolute pathway, only used if '-s' argument not provided so salmon prediction of strandness is required)
-	        -Dk | -kraken2_databases # Comma-separated list of Kraken2 database folders (e.g. '/path/to/core_nt,/path/to/gtdb'). Any input here activates the kraken2-based decontamination step. All DB+confidence combinations will be run
-	        -Kc | -kraken2_confidence # Comma-separated confidence scores for Kraken2 classification (default '0', e.g. '0,0.20,0.50'). Each score is run for each database
-	        -Ds | -sortmerna_databases # The database (absolute pathway) that should be used by SortMeRNA (any input here, e.g. '/path/to/rRNA_databases/smr_v4.3_sensitive_db.fasta', would activate the sortmerna-based rRNA removal step)
-	        -Df | -databases_function # Manually provide a comma separated list of databases to be used in automatic functional enrichment analyses of DEGs (check out the R package autoGO::choose_database(), but the most popular GO terms are used by default)
-	
-	        #### Metadata and sample info:
-	        -D | -design_custom_local # Specifying here the experimental design for the local dataset (by default an interactive prompt will ask for a comma-separated list of the same length than the number of samples, if you want to avoid that manual input please provide the list in this argument. If no design, please provide a dummy one, e.g. with every sample in the same group or a separate one. If more than one design to provide, please input comma-separated list separated by a '/', without spaces. Please avoid naming that would match the same pattern in grep, e.g. XXXX and XXXX_TREAT)
-	        -d | -design_custom # Manually specifying the experimental design for GEO download ('no' by default and if 'yes', please expect an interactive prompt after data download from GEO, and please enter the assignment to groups when asked in the terminal, with a comma-separated list of the same length than the number of samples)
-	        -O | -organism # Specifying here the scientific name of the organism for the local dataset (by default an interactive prompt will ask for it, if you want to avoid that manual input please provide the full organism name in this argument, please use underline instead of space)
-	        -Tx | -taxon_id # NCBI's taxon id of the organism
-	        -R | -number_reads_to_subsample # Subsample raw reads to reach an approximate target library size (none by default). Provide a comma-separated pair: path to the 'reads_numbers.txt' file from a previous execution, and target library size (i.e. the number of counted/mapped reads you want to reach, NOT the number of raw reads). The pipeline will use the raw-read and library-size columns in reads_numbers.txt to compute the proportional number of raw reads to keep for each sample so that the resulting library size is approximately +-10% of the target. If the sample already has fewer reads than the target, all its reads are kept.
-	        -bv | -batch_vector # Comma-separated list of numbers for use as batch vector with Combat-seq
-	        -bc | -batch_biological_covariable # Comma-separated list of numbers for use as batch vector of covariables of biological interest with Combat-seq
-		    -bf | -batch_format # Format of the provided batch variables ('num' for numeric/vector variables or 'fact' for factors, by default)
-	        -C | -covariables # Please input a comma-separated list for the covariable that should be included in the limma model for removeBatchEffect or in the edgeR model for DGE (for now only one covariable allowed, for example an expected batch effect)
-	        -Cf | -covariables_format # Format of the provided covariate ('num' by default for numeric covariables, or 'fact' for factors)
-	        -T | -target # Protopical target file for attempts to differential gene expression analyses (containing filenames and covariates, automatically built if not provided)
-	
-	        #### Activate alternative modes:
-	        -Dm | -debug_module # For debugging, step to remove the content of the corresponding folders and to resume a failed or incomplete run without repeating (one of 'step1', 'step1a', 'step1b', 'step1c', 'step2', 'step3a', 'step3b', 'step4', 'step4b', 'step5', 'step6', 'step7', 'step8', step9', or 'all' to execute everything, by default)
-	        -q | -qc_raw_reads # Whether to perform quality control on the raw reads ('yes' by default, or 'no')
-	        -fd | -full_differential_analyses # Whether to perform full differential enrichment analyses (for example including computation of DEGs or Venn diagrams, 'no' or 'yes', by default)
-	        -fe | -functional_enrichment_analyses # Whether to perform functional enrichment analyses ('no' or 'yes', by default)
-	        -cPf | -clusterProfiler_full # Whether to perform additional functional enrichment analyses with multiple databases using clusterProfiler, by default only ORA for GO BP, GO MF and GO CC, and KEGG and REACTOME enrichment, will be performed, as additional analyses may be slow if many significant DEGs or multiple number of comparisons ('yes' or 'no', by default)
-	        -b | -batch # Batch effect present? (no by default, yes if correction through Combat-seq and model is to be performed, and info is going to be required in other arguments or prompts)
-	        -B | -bed_mode # Whether to convert list of files to bed format so they can be visualized in genome browsers ('yes' or 'no', by default)
-	        -Dc | -deconvolution # Deconvolution method for bulk RNA-seq data: 'no' (default), 'CDSeq' (unsupervised, may take hours), or 'BisqueRNA' (reference-based, requires -scM, -scP, and -bulkM)
-	        -scM | -sc_count_matrix # Path to sc/snRNA count matrix for BisqueRNA deconvolution (tab-delimited, first column 'Gene', remaining columns are cells, values are counts)
-	        -scP | -sc_phenotype # Path to sc/snRNA phenotype file for BisqueRNA (tab-delimited, columns: 'SubjectName' and 'cellType', rows = cell IDs matching count matrix columns)
-	        -bulkM | -bulk_expression_matrix # Path to bulk expression matrix for BisqueRNA (tab-delimited, first column 'Gene', remaining columns are samples)
-	        -vv | -perform_volcano_venn # Whether to perform all Volcano plots and Venn diagrams, which may take a long time if many comparisons ('no' or 'yes', by default)
-	        -aP | -aPEAR_execution # Whether to simplify pathway enrichment analysis results by detecting clusters of similar pathways and visualizing enrichment networks by aPEAR package, which may be slow ('yes' or 'no', by default)
-	        -Ti | -tidy_tmp_files # Space-efficient run, with a last step removing raw reads if downloaded, converting bam to cram, removing tmp files... etc ('yes' or 'no', by default)
-	        -Txls | -convert_tables_excel # Convert all tables in results from .txt format, without limitation of size to Excel's .xlsx format, with a limitation of 32,767 characters ('yes' or 'no', by default)
-	        -Tc | -time_course # Whether to perform additional time-course analyses as a last step ('yes' or 'no', by default)
-	        -Na | -network_analyses # Whether to perform network analyses, only for human or mouse analyses ('yes' or 'no', by default)
-	        -apl | -auto_panther_log # Whether to perform additional autoGO and Panther analyses for DEGs separated by log2Fc positive or negative ('yes' or 'no', by default)
-	        -eDe | -exploreDE_se # Whether to generate a SummarizedExperiment object (.qs2) for the exploreDE Shiny app ('no' by default, or 'yes'). Currently only supported for Human (Homo_sapiens) analyses.
-	        -sO | -splicing_option # Splicing analysis method: 'no' (default), 'saser' (differential splicing via saseR), or 'isoformswitchr' (isoform switch analysis via IsoformSwitchAnalyzeR, requires Kallisto or Salmon quant)
-	
-	        #### Processing parameters:
-	        -s | -strand # Strandness of the library ('yes, 'no', 'reverse'). If not provided and '-t' used, this would be predicted by salmon. Please use this parameter if prediction not correct, see explanations in for example in bit.ly/strandness0 and bit.ly/strandness
-	        -f | -filter # Threshold of gene counts to use ('bin' to capture the lower expressed genes, 'filterbyexpr' to use the edgeR solution, 'or 'standard', by default). Please provide a comma separated list with the filters to use at each quantification if multiple annotation are provided
-	        -Of | -options_featureCounts_feat # The feature type to use to count in featureCounts (default 'exon')
-	        -Os | -options_featureCounts_seq # The seqid type to use to count in featureCounts (default 'gene_name')
-	        -A | -aligner # Aligner software to use ('hisat2' or 'star', by default)
-	        -Des | -differential_expr_software # Software to be used in the differential expression analyses ('edgeR' by default, or 'DESeq2')
-	        -fp | -fastp_mode # Whether to perform quality filtering on the raw reads by fastp ('yes' or 'no', by default)
-	        -fpa | -fastp_adapter # Whether to perform adapter trimming on the raw reads by fastp ('yes' or 'no', by default, to perform automatic trimming, or a path to a fasta file to perform trimming of its sequences)
-	        -fpt | -fastp_trimming # Whether to trim the raw reads by fastp ('none' by default, if two numbers separated by comma, the indicated number of bases will be trimmed from the front and tail, respectively)
-	        -fpe | -fastp_extra_args # Extra arguments to pass directly to fastp (e.g. '-g' for polyG trimming, '-x' for polyX trimming, '--cut_right', etc.). These are appended to the automatically built fastp command line. Empty by default
-	        -std | -time_course_std # Standard deviation threshold to filter in time course analyses (numeric, 1 by default)
-	        -fuzz | -time_course_fuzz # Fuziness value for the soft clustering approach (by default an estimate is automatically computed but manual testing is encouraged)
-	
-	        #### Filtering out samples/comparisons:
-	        -G | -GSM_filter # GSM ids (one or several, separated by comma and no space) within the GSE entry to restrict the analysis to. An alternative to requesting a stop with -S to reorganize the downloaded files manually
-	        -S | -stop # Manual stop so the automatically downloaded files can be manually modified ('yes' or 'no', by default)
-	        -pR | -pattern_to_remove # A pattern to exclude matching samples from downstream R processing only, i.e. QC figures and DGE analyses (by default 'none'). Unlike -regex/-regexExclude which filter raw reads before alignment, this option keeps all samples through alignment and counting but excludes matching ones at the R analysis stage. Useful for removing outlier samples without re-running the full pipeline (e.g. resume from -Dm step4)
-	        -Dec | -differential_expr_comparisons # Restrict differential expression analyses to specific comparisons and control log2FC direction ('no' by default). Provide a comma-separated list using 'vs' (or '//' for backward compat) as separator, e.g. 'AvsB,CvsD'. The ORDER matters: the FIRST element is the numerator, so positive log2FC = higher expression in the first element
-	
-	        #### Functional enrichment/networking analyses
-	        -cPm | -clusterProfiler_method # Method for adjusting p.value in clusterProfiler iterations (one of 'holm','hochberg','hommel','bonferroni','BH','BY,'none', or 'fdr', by default)
-	        -cPu | -clusterProfiler_universe # Universe to use in clusterProfiler iterations ('all' or 'detected', by default)
-	        -mGS | -clusterProfiler_minGSSize # minGSSize parameter to use in clusterProfiler iterations (a number, '10' by default)
-	        -MGS | -clusterProfiler_maxGSSize # maxGSSize parameter to use in clusterProfiler iterations (a number, '500' by default)
-	        -Pm | -panther_method # Method for adjusting p.value in panther analyses via rbioapi (one of 'NONE','BONFERRONI', or 'FDR', by default)
-	        -rev | -revigo_threshold_similarity # Similarity threshold for Revigo summaries of GO terms (0-1, suggested values are 0.9, 0.7, 0.5, 0.4 for large, medium, small, and tiny levels of similarity, respectively, being default 0.7
-	
-	        #### BAM filtering (post-alignment):
-	        -mQ | -bam_mapq_threshold # Min MAPQ for samtools view -q and featureCounts -Q (0 = use default)
-	        -Fex | -bam_exclude_flags # samtools -F flags to exclude, e.g. '4' (unmapped), '256' (secondary), '2308' (combined)
-	        -Freq | -bam_require_flags # samtools -f flags to require. Suggestion: use '2' for Paired-End (proper pair), leave empty or '4' for Single-End.
-	        -Fdup | -bam_dedup # Duplicate removal: 'no' (default), 'samtools' (markdup -r), 'picard' (REMOVE_DUPLICATES), 'picard_optical' (REMOVE_SEQUENCING_DUPLICATES)
-	        -Fcust | -bam_custom_filter # Custom shell command to pipe SAM text through post-alignment (e.g. "grep -E '^@|\\<NM:i:0\\>'" for perfect matches). Must preserve header lines (^@).
-	        -bN | -bam_normalization # Normalization method using deeptool's bamCoverage. Choices: RPKM, CPM, BPM, RPGC, None. ('BPM' by default)
-
-	        #### Count-level options (quantification):
-	        -Ofc | -featureCounts_extra_args # Extra arguments to pass to featureCounts (default '-M -O -C -B'). These are appended to the automatically built featureCounts command line after strand, feature type, seqid, threads, and MAPQ options.
-	        -Fgene | -counts_custom_gene_filter # Shell command to filter gene rows from count tables before R processing (e.g. "grep -v als" to remove genes starting with 'als'). Applied to featureCounts .tab and Kallisto abundance.tsv files. Header is always preserved.
-	
-	        #### Performance:
-	        -p | -cores # Number of cores
-	        -cR | -cores_reads_to_subsample # Cores to use in subsampling by seqtk (10 by default)
-	        -pi | -cores_index # Number of cores for genome indexing in aligning step (by default, same than -p)
-	        -M | -memory_max # Max RAM memory to be used by aligner or JAVA in bytes (by default 257698037760, or 240GB, used)
-	        -P | -number_parallel # Number of files to be processed in parallel (10 by default)
-	        -cG | -compression_level # Specify the compression level to gzip the downloaded fastq files from GEO (numeric '0' to '9', default '9')
-	        -Ac | -aligner_index_cache # Whether to try and keep the genome index on the cache/loaded RAM so concurrent jobs do not have to reload it and can use it more easily ('no', which will empty cache at the end, or 'yes', by default)
-	        -K | -Kraken2_fast # DEPRECATED: daemon mode now replaces /dev/shm approach. This option is kept for backward compatibility but has no effect
+# Recommended execution:
+reanalyzerGSE.sh -options config.yaml | tee -a output.log
 ```
 
-Parameters are not positional. If you did not provide a required parameter, the pipeline may exit or use default values if possible (check the help page above, the log after execution, or the 'Arguments and variables' first section in the main script 'reanalyzerGSE.sh'). For example, if the argument '-s' is not provided, strandness will be predicted using Salmon and transcript sequences would be required, so the pipeline would exit if not provided with the argument '-t'. Similarly, reference genome and annotation are likely going to be required for the alignment and quantifying steps (arguments '-r' and '-a').
+See also a [quick example](https://github.com/BioinfoIPBLN/reanalyzerGSE/tree/main/test_data)
 
-In general, from a folder containing raw sequences (.fastq.gz) or a GEO entry (GSEXXXXX) as input (argument '-i'), reanalyzerGSE is going to provide a standard transcriptomic analysis named with the argument '-n', in the folder provided by the argument '-o'. The argument '-p' provides the number of cores to be used when multithreading is possible, '-P' the number of files to be processed simultaneously when possible, leveraging GNU's parallel, and '-M' the maximum amount of RAM memory available (required mostly for the index generation and alignment step). If the reanalysis of a GEO entry is requested, all the samples in the database will be included by default. The parameter '-G' allows to restrict the analysis to some of them (providing GSMXXXXX ids), while '-S' interrupts the pipeline until the user has made manual changes to the downloaded files, and '-d' allows the user to input a custom experimental design, to be used instead of the automatically-detected one.
+Parameters are not positional. If you did not provide a required parameter, the pipeline may exit or use default values if possible. For example, if not provided, strandedness will be predicted using Salmon and transcript sequences would be required. Other input such as reference genome and annotation are always required for the alignment and quantifying steps.
 
-An improved version of miARma-seq has been included in reanalyzerGSE and used by default (subfolder 'external_software'). Amognst others, reanalyzerGSE also includes a module to perform batch correction (the design matrix must be provided in a prompt after using the flag '-b'), the possibility to use multiple thresholds when filtering out low expressed genes (argument '-f'), and a module to output plots from the differential gene expression analyses, highlighting the genes provided with the argument '-g'.
+Several different pipeline modes can be activated but others are automatic. For example, depending on whether a folder containing raw sequences (.fastq.gz) or a GEO entry (GSEXXXXX) are provided as input, GEO reanalysis or local analysis modes will be triggered.
 
-Please refer to the help manual ('-h') or open an [issue](https://github.com/BioinfoIPBLN/reanalyzerGSE/issues) for any further clarification.
+It is advisable to fine tune parameters such as the maximum RAM available, number of cores to be used in steps allowing multithreading, or number of samples to be processed simultaneously when possible (mostly leveraging GNU's parallel).
 
-## Output:
-The output folder contains all results in a structure format. Quality control results, amongst others, are aggregate in a MultiQC HTML report. The results by miARma-seq (i.e. quantification and alignment) are container in the folder 'miARma_out'. The folder "final_results" contain all final results and tables, including a Sphynx HTML report guiding users through the output.
+An updated version of [miARma-seq](https://github.com/eandresleon/miARma-seq) has been included in reanalyzerGSE [here](https://github.com/BioinfoIPBLN/reanalyzerGSE/tree/main/external_software/miARma-seq).
 
-Please refer to the [wiki](https://github.com/BioinfoIPBLN/reanalyzerGSE/wiki) or open an [issue](https://github.com/BioinfoIPBLN/reanalyzerGSE/issues) for any further clarification.
+Please refer to the help ('-h') or contact us for any further clarification.
+
+## Output
+Please refer to the [wiki](https://github.com/BioinfoIPBLN/reanalyzerGSE/wiki) for the output of a test run.
 
 ## Comments
 Please cite this reference when using reanalyzerGSE for your publications:
@@ -178,4 +74,4 @@ Please cite this reference when using reanalyzerGSE for your publications:
 
 
 ## Support
-Please report any [issue](https://github.com/BioinfoIPBLN/reanalyzerGSE/issues) or [contact us](mailto:bioinformatica@ipb.csic.es?subject=[GitHub]%20Source%20reanalyzerGSE%20Support) to request support.
+Please report any [issue](https://github.com/BioinfoIPBLN/reanalyzerGSE/issues) or [contact us](mailto:bioinformatica@ipb.csic.es?subject=[GitHub]%20Source%20reanalyzerGSE%20Support) to request support or any further clarification.

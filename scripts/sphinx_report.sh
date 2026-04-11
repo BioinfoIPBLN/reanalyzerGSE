@@ -53,6 +53,7 @@ html_extra_path = [
 ]
 html_extra_path.extend(glob.glob(\"../miARma_out0/*_results/multibamqc_results\"))
 html_extra_path.extend(glob.glob(\"../miARma_out0/*_results/rnaseqqc_results\"))
+html_extra_path.extend(glob.glob(\"../preliminar_rrna_qc\"))
 html_extra_path = [p for p in html_extra_path if os.path.exists(p)]
 " >> conf.py
 
@@ -346,12 +347,18 @@ Volcano plots
 .. index:: Volcano
 
 
-
 Functional enrichment analyses
 ------------------------------------------------------------------------------------
-$(if [ -f "$path/$final_dir_name/DGE/funct_enrichment_analyses.tar.gz" ]; then echo "Please use the following :download:\`link <../$final_dir_name/DGE/funct_enrichment_analyses.tar.gz>\`"; else echo "Functional enrichment not requested or not available"; fi)
+$(if [ -f "$path/$final_dir_name/DGE/functional_enrichment_report.html" ]; then echo "
+.. raw:: html
+
+   <a href=\"functional_enrichment_report.html\" target=\"_blank\">Click to open Functional Enrichment HTML Report</a><br>
+"; fi)
+$(if [ -f "$path/$final_dir_name/DGE/funct_enrichment_analyses.tar.gz" ]; then echo "You can also download all raw enrichment result files: :download:\`tar.gz archive <../$final_dir_name/DGE/funct_enrichment_analyses.tar.gz>\`"; fi)
+$(if [ ! -f "$path/$final_dir_name/DGE/functional_enrichment_report.html" ] && [ ! -f "$path/$final_dir_name/DGE/funct_enrichment_analyses.tar.gz" ]; then echo "Functional enrichment not requested or not available"; fi)
 
 .. index:: Funct_enrich
+
 
 
 
@@ -376,6 +383,21 @@ $(if [ -f "$path/$final_dir_name/QC_and_others/${project_name}_adjusted_QC.pdf" 
 
 .. index:: QC analyses
 
+
+
+$(if [ -d "$path/preliminar_rrna_qc" ] && [ -f "$path/preliminar_rrna_qc/rRNA_mapping_summary_R1.tsv" ]; then echo "
+Preliminary rRNA QC
+------------------------------------------------------------------------------------
+rRNA contamination was assessed by mapping R1 reads against rRNA reference databases using Bowtie2.
+
+.. raw:: html
+
+   <a href=\"sphinx_report/html/rRNA_mapping_barplot.html\" target=\"_blank\">Click to open interactive rRNA mapping barplot</a><br>
+
+.. literalinclude:: ../preliminar_rrna_qc/rRNA_mapping_summary_R1.tsv
+
+.. index:: rRNA QC
+"; fi)
 
 
 Genome browser visualization (IGV)
@@ -436,6 +458,7 @@ if [ -f "$path/sphinx_report/html/index.html" ]; then
 	sed -i 's,href="RPKM,href="sphinx_report/html/RPKM,g' $path/final_report.html
 	sed -i 's,href="CPM,href="sphinx_report/html/CPM,g' $path/final_report.html
 	sed -i 's,href="DGE_analysis_comp,href="sphinx_report/html/DGE_analysis_comp,g' $path/final_report.html
+	sed -i 's,href="functional_enrichment_report,href="sphinx_report/html/functional_enrichment_report,g' $path/final_report.html
 	sed -i 's,src="_static/,src="sphinx_report/html/_static/,g' $path/final_report.html
 else
 	echo "WARNING: Sphinx build did not produce index.html. Check sphinx_report/sphinx.log for details."

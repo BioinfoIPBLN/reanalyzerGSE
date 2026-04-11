@@ -16,11 +16,20 @@ if [ $? -ne 0 ]; then
 fi
 mkdir -p $TMPDIR
 
+# Initialize step timing log for Gantt chart (only on full runs, preserve on resume)
+STEP_TIMES_FILE="$output_folder/$name/step_times.tsv"
+if [[ $debug_step == "all" ]]; then
+	mkdir -p "$output_folder/$name"
+	echo -e "step\tepoch\tevent" > "$STEP_TIMES_FILE"
+fi
+_log_step() { echo -e "$1\t$(date +%s)\t$2" >> "$STEP_TIMES_FILE" 2>/dev/null; }
+
 ###### STEP 1. Download info from GEO and organize metadata and so:
 if [[ $debug_step == "all" || $debug_step == "step1" ]]; then
 	rm -rf $output_folder/*
 	if [[ $input == G* ]]; then
 		echo -e "\n\nSTEP 1: Starting...\nCurrent date/time: $(date)\n\n"
+_log_step "Step_1_Download" "start"
  	### Download info:
 		echo -e "\nDownloading info from GEO for $input...\n"
 		R_download_GEO_info.R $input $output_folder
@@ -118,8 +127,10 @@ if [[ $debug_step == "all" || $debug_step == "step1" ]]; then
 			echo $organism > $output_folder/$name/GEO_info/organism.txt
 			echo -e "$organism\nPlease request on the next run a stop with parameter '-S' and modify manually the file GEO_info/organism.txt if not required...\n"
 		fi
+_log_step "Step_1_Download" "end"
 		echo -e "\nSTEP 1 DONE. Current time: $(date)\n"
 	fi
+_log_step "Step_1_Download" "end"
   	echo -e "\n\nSTEP 1: DONE\nCurrent date/time: $(date)\n\n"
 	export debug_step="all"
 fi
@@ -241,6 +252,7 @@ if [[ $debug_step == "all" || $debug_step == "step1a" ]]; then
 			pigz --best -p $cores * # gz was lost with seqtk sample
 			echo -e "\nSubsampling (+-10%) completed...\n"
 		fi
+_log_step "Step_1_Download" "end"
 		echo -e "\n\nSTEP 1: DONE\nCurrent date/time: $(date)\n\n"
  	fi
 	export debug_step="all"
@@ -309,6 +321,7 @@ if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
 	mkdir -p $TMPDIR
 	if [[ $input == /* ]]; then
 		echo -e "\n\nSTEP 1b: Preparing the raw reads and metadata provided locally...\nCurrent date/time: $(date)\n\n"
+		_log_step "Step_1b_Fastp" "start"
   		seqs_location=$output_folder/$name/raw_reads
 		rm -rf $seqs_location # I'm now removing the seqs_location at the beginning of this section, in the context of the new system of resuming by -Dm stepx, so this should always be done
 		if [ ! -d "$seqs_location" ]; then
@@ -433,6 +446,7 @@ if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
 			echo "Organism used is $organism"
 		fi
 		echo $organism > $output_folder/$name/GEO_info/organism.txt
+_log_step "Step_1b_Fastp" "end"
 		echo -e "\n\nSTEP 1b: DONE\nCurrent date/time: $(date)\n\n"
  	fi
 	export debug_step="all"
@@ -457,6 +471,7 @@ if [[ $debug_step == "all" || $debug_step == "step1c" ]]; then
 			echo $input | tr ',' '\n' | parallel -j $number_parallel --max-args 1 'if [ $(echo {} | egrep -c "PRJEB|PRJNA|PRJDB|ERX|DRX|SRX|ERP|DRP|SRP") -eq 1 ]; then fastq-dl --cpus $cores_parallel --accession {}; fi && 
 		 																		   if [ $(echo {} | egrep -c "ERS|DRS|SRS|SAMD|SAME|SAMN|ERR|DRR|SRR") -eq 1 ]; then fastq-dl --provider sra --cpus $cores_parallel --accession {}; fi'
 		fi
+_log_step "Step_1_Download" "end"
 		echo -e "\n\nSTEP 1: DONE\nCurrent date/time: $(date)\n\n"
  	fi
 	export debug_step="all"
@@ -619,6 +634,7 @@ fi
 if [[ $debug_step == "all" || $debug_step == "step2" ]]; then
 	if [ ! -z "$kraken2_databases" ]; then
   		echo -e "\n\nSTEP 2: Decontamination starting with Kraken2 (k2 daemon mode)...\nCurrent date/time: $(date)\n\n"
+_log_step "Step_2_Decontamination" "start"
     		rm -rf $output_folder/$name/raw_reads_k2
 		mkdir -p $output_folder/$name/raw_reads_k2
 		cd $output_folder/$name/raw_reads_k2
@@ -718,10 +734,12 @@ if [[ $debug_step == "all" || $debug_step == "step2" ]]; then
 		fi
 
 		for f in $(ls | grep "k2" | egrep ".fastq.gz$"); do fastqc -q -t $cores $f; done
+_log_step "Step_2_Decontamination" "end"
   		echo -e "\n\nSTEP 2: DONE\nCurrent date/time: $(date)\n\n"
 	fi
 	if [ ! -z "$sortmerna_databases" ]; then
 		echo -e "\n\nSTEP 2: Decontamination starting with sortmerna...\nCurrent date/time: $(date)\n\n"
+_log_step "Step_2_Decontamination" "start"
 		mkdir -p $seqs_location\_sortmerna $output_folder/$name/indexes/$(basename $sortmerna_databases)_sortmerna_index
 		cd $seqs_location\_sortmerna
 
@@ -786,7 +804,156 @@ if [[ $debug_step == "all" || $debug_step == "step2" ]]; then
 		ln -sf ../*no_rRNA*.fq.gz .
 		for f in $(ls); do mv $f $(basename $f | sed 's,.fq.gz,.fastq.gz,g;s,_fwd,_1,g;s,_rev,_2,g;s,_no_rRNA,,g'); done
 		export seqs_location=$sortmerna_out/out_noRNA
+_log_step "Step_2_Decontamination" "end"
 		echo -e "\n\nSTEP 2: DONE\nCurrent date/time: $(date)\n\n"
+	fi
+	export debug_step="all"
+fi
+
+
+### STEP 2b. Preliminary rRNA QC (Bowtie2 mapping against rRNA references):
+if [[ $debug_step == "all" || $debug_step == "step2b" ]]; then
+	if [ ! -z "$rrna_qc_databases" ]; then
+		echo -e "\n\nSTEP 2b: Preliminary rRNA QC (Bowtie2 mapping)...\nCurrent date/time: $(date)\n\n"
+_log_step "Step_2b_rRNA_QC" "start"
+
+		RRNA_QC_DIR=$output_folder/$name/preliminar_rrna_qc
+		RRNA_INDEX_DIR=$RRNA_QC_DIR
+		RRNA_INDEX_NAME="rrna_ref"
+		RRNA_MIN_SCORE=$rrna_qc_min_score
+
+		mkdir -p "$RRNA_QC_DIR"
+
+		# Handle comma-separated reference paths
+		IFS=',' read -ra RRNA_REF_ARRAY <<< "$rrna_qc_databases"
+
+		# Step 2b.1: Build Bowtie2 index
+		echo "--- Step 2b.1: Building Bowtie2 Index ---"
+		if [ ! -f "$RRNA_INDEX_DIR/${RRNA_INDEX_NAME}.1.bt2" ]; then
+			echo "Creating combined FASTA from: $rrna_qc_databases"
+			RRNA_COMBINED_FASTA="$RRNA_INDEX_DIR/combined_ref.fasta"
+			> "$RRNA_COMBINED_FASTA"
+
+			for ref_file in "${RRNA_REF_ARRAY[@]}"; do
+				if [[ "$ref_file" == *.gz ]]; then
+					zcat "$ref_file" >> "$RRNA_COMBINED_FASTA"
+				else
+					cat "$ref_file" >> "$RRNA_COMBINED_FASTA"
+				fi
+			done
+
+			# Check if RNA (U) or DNA (T) and convert if needed
+			FIRST_SEQ_LINE=$(grep -v "^>" "$RRNA_COMBINED_FASTA" | head -n 1)
+
+			if echo "${FIRST_SEQ_LINE}" | grep -q -i "U"; then
+				RRNA_CONVERTED_FILE="$RRNA_INDEX_DIR/combined_ref_DNA_converted.fasta.gz"
+				echo "RNA detected (Uracil 'U' found). Converting RNA to DNA..."
+				awk '/^>/ {print; next} {gsub(/U/,"T"); gsub(/u/,"t"); print}' "$RRNA_COMBINED_FASTA" | gzip > "$RRNA_CONVERTED_FILE"
+				rm "$RRNA_COMBINED_FASTA"
+				echo "Converted file saved as: ${RRNA_CONVERTED_FILE}"
+			elif echo "${FIRST_SEQ_LINE}" | grep -q -i "T"; then
+				echo "DNA detected (Thymine 'T' found). No conversion needed."
+				RRNA_CONVERTED_FILE="$RRNA_COMBINED_FASTA"
+			else
+				echo "Warning: Could not detect RNA (U) or DNA (T). Assuming no conversion needed."
+				RRNA_CONVERTED_FILE="$RRNA_COMBINED_FASTA"
+			fi
+
+			echo "Building Bowtie2 index..."
+			bowtie2-build --threads "$cores" "$RRNA_CONVERTED_FILE" "$RRNA_INDEX_DIR/$RRNA_INDEX_NAME" > "$RRNA_INDEX_DIR/${RRNA_INDEX_NAME}_build.log" 2>&1
+			echo "Index built successfully."
+		else
+			echo "Index $RRNA_INDEX_DIR/$RRNA_INDEX_NAME already exists. Skipping build."
+		fi
+
+		# Step 2b.2: Align R1 reads and count
+		echo -e "\n--- Step 2b.2: Aligning and Counting (R1 Only) ---"
+
+		RRNA_SUMMARY_FILE="$RRNA_QC_DIR/rRNA_mapping_summary_R1.tsv"
+		echo -e "Sample\tTotal_Reads\tSense_Count\tAntisense_Count\tSense_Pct\tAntisense_Pct" > "$RRNA_SUMMARY_FILE"
+
+		for fq in "$seqs_location"/*_1.fastq.gz "$seqs_location"/*_R1*.fastq.gz; do
+			# Skip if no fastq files exist
+			[ -e "$fq" ] || continue
+			# Skip duplicates from glob expansion
+			[ -f "$fq" ] || continue
+
+			# Extract sample name
+			nm=$(basename "$fq" | sed -E 's/(_R1(_[0-9]+)?|_1)\.fastq\.gz//')
+
+			echo "Processing sample: $nm"
+
+			# Get total read count
+			TOTAL_READS=$(zcat "$fq" | wc -l | awk '{print $1/4}')
+
+			TMP_COUNTS="$RRNA_QC_DIR/${nm}_tmp_counts.txt"
+			ERR_LOG="$RRNA_QC_DIR/${nm}_bowtie2.err"
+
+			# Run bowtie2
+			bowtie2 -x "$RRNA_INDEX_DIR/$RRNA_INDEX_NAME" -U "$fq" \
+			  -k 10 --trim5 4 --trim3 4 --very-sensitive \
+			  -p "$cores" --no-unal --no-hd --mm 2> "$ERR_LOG" | \
+			grep "AS:i:" | \
+			awk -v OFS='\t' '{
+			    score="";
+			    for(i=12; i<=NF; i++){
+			        if($i ~ /^AS:i:/){
+			            score=substr($i, 6);
+			            break;
+			        }
+			    }
+			    if(score != "") print $1, $2, $3, score
+			}' > "$TMP_COUNTS"
+
+			# Process counts (filtering for best score and min score)
+			counts=$(awk -v min_score="$RRNA_MIN_SCORE" -F'\t' '
+			{
+			    read_id=$1; flag=$2; score=$4;
+			    if((score+0) >= (min_score+0)) {
+			        if (!(read_id in best_score) || (score+0) > (best_score[read_id]+0)) {
+			            best_score[read_id] = score
+			            best_flag[read_id] = flag
+			        }
+			    }
+			}
+			END {
+			    sense_count=0;
+			    antisense_count=0;
+			    for (id in best_score) {
+			        if (best_flag[id] == 0) {
+			            sense_count++
+			        } else if (best_flag[id] == 16) {
+			            antisense_count++
+			        }
+			    }
+			    print sense_count " " antisense_count
+			}' "$TMP_COUNTS")
+
+			SENSE_COUNT=$(echo "$counts" | cut -d' ' -f1)
+			ANTISENSE_COUNT=$(echo "$counts" | cut -d' ' -f2)
+
+			if [ "$TOTAL_READS" -gt 0 ]; then
+			    SENSE_PCT=$(awk -v s="$SENSE_COUNT" -v t="$TOTAL_READS" 'BEGIN { printf "%.2f", (s/t)*100 }')
+			    ANTISENSE_PCT=$(awk -v a="$ANTISENSE_COUNT" -v t="$TOTAL_READS" 'BEGIN { printf "%.2f", (a/t)*100 }')
+			else
+			    SENSE_PCT=0.00
+			    ANTISENSE_PCT=0.00
+			fi
+
+			echo -e "${nm}\t${TOTAL_READS}\t${SENSE_COUNT}\t${ANTISENSE_COUNT}\t${SENSE_PCT}\t${ANTISENSE_PCT}" >> "$RRNA_SUMMARY_FILE"
+
+			rm -f "$TMP_COUNTS"
+		done
+
+		echo -e "\nResults summarized in: $RRNA_SUMMARY_FILE"
+		cat "$RRNA_SUMMARY_FILE"
+
+		# Step 2b.3: Generate interactive barplot
+		echo -e "\n--- Step 2b.3: Generating interactive barplot ---"
+		Rscript $CURRENT_DIR/scripts/R_rrna_qc_plot.R "$RRNA_QC_DIR" 2>&1 | tee -a "$RRNA_QC_DIR/R_rrna_qc_plot.log"
+
+_log_step "Step_2b_rRNA_QC" "end"
+		echo -e "\n\nSTEP 2b: DONE\nCurrent date/time: $(date)\n\n"
 	fi
 	export debug_step="all"
 fi
@@ -795,6 +962,7 @@ fi
 ### STEP3a. Prepare the data and info for running miARma-seq:
 if [[ $debug_step == "all" || $debug_step == "step3a" ]]; then
 	echo -e "\n\nSTEP 3a: Starting...\nCurrent date/time: $(date)\n\n"
+_log_step "Step_3a_Prepare" "start"
  	echo -e "Preparing miARma-seq execution"
 	cd $output_folder/$name/
 	rm -rf mi*
@@ -979,6 +1147,17 @@ if [[ $debug_step == "all" || $debug_step == "step3a" ]]; then
 				fc_extra_escaped=$(printf '%s' "$featureCounts_extra_args" | sed 's/[\\&]/\\&/g')
 				sed -i "s,parameters=-M -O -C -B,parameters=$fc_extra_escaped,g" miarma$index.ini
 			fi
+			if [ ! -z "$aligner_extra_args" ]; then
+				ae_escaped=$(printf '%s' "$aligner_extra_args" | sed 's/[\\&]/\\&/g')
+				if [[ "$aligner" == "star" ]]; then
+					sed -i "s,starparameters=,starparameters=$ae_escaped,g" miarma$index.ini
+				elif [[ "$aligner" == "hisat2" ]]; then
+					sed -i "s,hisat2parameters=,hisat2parameters=$ae_escaped,g" miarma$index.ini
+				elif [[ "$aligner" == "kallisto" ]]; then
+					sed -i "s,kallistoparameters=,kallistoparameters=$ae_escaped,g" miarma$index.ini
+				fi
+				echo "Aligner extra args for $aligner: $aligner_extra_args"
+			fi
 			# Final renaming of fastq raw files if SRR present in the filename:
 			if [ $(ls $seqs_location | grep -c SRR) -gt 0 ]; then
 				for i in $(ls $seqs_location/*); do mv $i $(echo $i | sed 's,_SRR.*_,_,g'); done
@@ -986,6 +1165,7 @@ if [[ $debug_step == "all" || $debug_step == "step3a" ]]; then
 		done
 	fi
 	export debug_step="all"
+_log_step "Step_3a_Prepare" "end"
 	echo -e "\n\nSTEP 3a: DONE\nCurrent date/time: $(date)\n\n"
 fi
 
@@ -995,6 +1175,7 @@ fi
 # Eventually, WIP nicludes to also improve and integrate the rest of modules of miARma, such as adapter cutting, stats, miRNAs...
 if [[ $debug_step == "all" || $debug_step == "step3b" ]]; then
 	echo -e "\n\nSTEP 3b: Starting...\nCurrent date/time: $(date)\n\n"
+_log_step "Step_3b_miARma" "start"
 	rm -rf $output_folder/$name/miARma_out*
 	mkdir -p $TMPDIR
 	# If the running is resumed in this step, the above has to be done
@@ -1034,6 +1215,7 @@ if [[ $debug_step == "all" || $debug_step == "step3b" ]]; then
 
 	echo -e "\nmiARma-seq DONE. Current date/time: $(date)"; time1=`date +%s`; echo -e "Elapsed time (secs): $((time1-start))"; echo -e "Elapsed time (hours): $(echo "scale=2; $((time1-start))/3600" | bc -l)\n"
 	export debug_step="all"
+_log_step "Step_3b_miARma" "end"
 	echo -e "\n\nSTEP 3b: DONE\nCurrent date/time: $(date)\n\n"
 fi
 
@@ -1049,6 +1231,7 @@ if [[ $debug_step == "all" || $debug_step == "step4" ]]; then
 		IFS=', ' read -r -a array <<< "$annotation"
 	fi
 	echo -e "\n\nSTEP 4: Starting...\nCurrent date/time: $(date)\n\n"
+_log_step "Step_4_R_Process" "start"
  	echo -e "Processing output of miARma-seq, QC figures, plots, DGE if requested..."
 	IFS=', ' read -r -a array2 <<< "$filter"
 	for index in "${!array[@]}"; do
@@ -1100,6 +1283,7 @@ if [[ $debug_step == "all" || $debug_step == "step4" ]]; then
 	fi
 
 	export debug_step="all"
+_log_step "Step_4_R_Process" "end"
 	echo -e "\n\nSTEP 4: DONE\nCurrent date/time: $(date)\n\n"
 	if [[ "$perform_differential_analyses" == "no" ]]; then
 		echo "Differential analyses not requested, exiting the pipeline..."; exit 1
@@ -1109,6 +1293,7 @@ fi
 
 ### STEP 4b. Splicing analysis if requested (saseR or IsoformSwitchAnalyzeR)
 if [[ $debug_step == "all" || $debug_step == "step4b" ]]; then
+	_log_step "Step_4b_Splicing" "start"
 	if [ -z "$organism" ]; then
 		organism=$(cat $output_folder/$name/GEO_info/organism.txt | sed 's, ,_,g;s,_+,_,g')
 	fi
@@ -1137,6 +1322,7 @@ if [[ $debug_step == "all" || $debug_step == "step4b" ]]; then
 				"$differential_expr_comparisons" \
 				2>&1 | tee -a $saser_out/saseR_splicing.log
 		done
+_log_step "Step_4b_Splicing" "end"
 		echo -e "\n\nSTEP 4b (saseR): DONE\nCurrent date/time: $(date)\n\n"
 	elif [[ "$splicing_option" == "isoformswitchr" ]]; then
 		if [[ "$aligner" != "kallisto" ]]; then
@@ -1178,6 +1364,7 @@ if [[ $debug_step == "all" || $debug_step == "step4b" ]]; then
 				"$aligner" \
 				2>&1 | tee -a $isoswitch_out/isoformswitch.log
 		done
+_log_step "Step_4b_Splicing" "end"
 		echo -e "\n\nSTEP 4b (IsoformSwitchAnalyzeR): DONE\nCurrent date/time: $(date)\n\n"
 	fi
 	export debug_step="all"
@@ -1189,8 +1376,10 @@ if [[ $debug_step == "all" || $debug_step == "step5" ]]; then
 	for index in "${!array[@]}"; do
 		if [[ "$time_course" == "yes" ]]; then
 			echo -e "\n\nSTEP 5: Starting...\nCurrent date/time: $(date)\n\n"
+_log_step "Step_5_QC_Figs" "start"
    			echo -e "\nPerforming time course analyses."
 			R_process_time_course.R $output_folder/$name/final_results_reanalysis$index/ DGE_analysis_comp1.RData edgeR_object_norm $minstd $mestimate
+_log_step "Step_5_QC_Figs" "end"
    			echo -e "\n\nSTEP 5: DONE\nCurrent date/time: $(date)\n\n"
 		fi
 	done
@@ -1228,6 +1417,7 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 			if [[ $network_analyses == "yes" ]]; then
 				mkdir -p network_analyses && rm -rf network_analyses/* && cd network_analyses
 				echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
+_log_step "Step_6_Enrichment" "start"
     				echo -e "\nPerforming network analyses...\n"
 				R_network_analyses.R $output_folder/$name/final_results_reanalysis$index/DGE/ $output_folder/$name/final_results_reanalysis$index/RM_counts_genes.txt "^DGE_analysis_comp[0-9]+.txt$" $taxonid &> network_analyses_funct_enrichment.log
 			fi
@@ -1236,10 +1426,12 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 		# Functional Enrichment Analyses
 		if [[ "$functional_enrichment_analyses" == "no" ]]; then
 			echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
+_log_step "Step_6_Enrichment" "start"
     			echo -e "\nSkipping functional enrichment analyses\n"
 		else
 			if [[ "$organism" == "Mus_musculus" || "$organism" == "Homo_sapiens" || "$organism" == "Mus musculus" || "$organism" == "Homo sapiens" ]]; then
 				echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
+_log_step "Step_6_Enrichment" "start"
     				echo -e "\nPerforming functional enrichment analyses for DEGs. The results up to this point are ready to use (including DEGs and expression table including gene_ids). This step of funtional enrichment analyses may take long if many significant DEGs, comparisons, or analyses...\n"
 				export ANNOTATION_FILE="${array[index]}"
 				cd $output_folder/$name/final_results_reanalysis$index/DGE/
@@ -1253,6 +1445,7 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 				fi
 			else
 				echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
+_log_step "Step_6_Enrichment" "start"
    				echo "Organism is $organism... Functional analyses apart from human/mouse is not fully supported yet"
 				# Determine which annotation file to use for functional enrichment
 				annot_enrichm=""
@@ -1357,8 +1550,19 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 				echo "No functional enrichment results found?"
 			fi
 		fi
+
+		# Render functional enrichment HTML report (self-contained)
+		if [ -d "$output_folder/$name/final_results_reanalysis$index/DGE" ]; then
+			echo -e "\nRendering functional enrichment HTML report..."
+			Rscript $CURRENT_DIR/scripts/render_enrichment_report.R \
+				"$output_folder/$name/final_results_reanalysis$index/DGE" \
+				"$name" \
+				"$organism" 2>&1 | tee -a "$output_folder/$name/enrichment_report_render.log" || \
+				echo "WARNING: Functional enrichment report rendering failed. Check enrichment_report_render.log"
+		fi
 	done
 	export debug_step="all"
+_log_step "Step_6_Enrichment" "end"
 	echo -e "\n\nSTEP 6: DONE\nCurrent date/time: $(date)\n\n"
 fi
 
@@ -1366,6 +1570,7 @@ fi
 ### STEP 7. Annotation: Tables of DEGs, lists of genes, etc
 if [[ $debug_step == "all" || $debug_step == "step7" ]]; then
 	echo -e "\n\nSTEP 7: Starting...\nCurrent date/time: $(date)\n\n"
+_log_step "Step_7_Annotation" "start"
 	echo -e "\n\nAnnotating list of genes...\n\n"
 	for index in "${!array[@]}"; do
 		# Export the annotation file path so R scripts can use it for ENSEMBL->Symbol mapping
@@ -1383,13 +1588,16 @@ if [[ $debug_step == "all" || $debug_step == "step7" ]]; then
 		fi
 	done
 	export debug_step="all"
+_log_step "Step_7_Annotation" "end"
 	echo -e "\n\nSTEP 7: DONE\nCurrent date/time: $(date)\n\n"
 fi
 
 
 ###### STEP 8. Sum up results in a sphinx report
 if [[ $debug_step == "all" || $debug_step == "step8" ]]; then
+	_log_step "Step_8_Report" "start"
 	sphinx_report.sh $output_folder/$name $name
+_log_step "Step_8_Report" "end"
  	echo -e "\n\nSTEP 8: Final report DONE\nCurrent date/time: $(date)\n\n"
 fi
 
@@ -1398,6 +1606,7 @@ fi
 # Compress the folders
 if [[ $debug_step == "all" || $debug_step == "step9" ]]; then
 	echo -e "\n\nSTEP 9: Starting...\nCurrent date/time: $(date)\n\n"
+_log_step "Step_9_Cleanup" "start"
 	echo -e "\n\nTidying up, removing empty folders, temp files, compressing...\n\n"
 
 	# Remove decompressed reference files from the indexes subfolder
@@ -1471,6 +1680,7 @@ if [[ $debug_step == "all" || $debug_step == "step9" ]]; then
 	fi
 
 	export debug_step="all"
+_log_step "Step_9_Cleanup" "end"
 	echo -e "\n\nSTEP 9: DONE\nCurrent date/time: $(date)\n\n"
 fi
 

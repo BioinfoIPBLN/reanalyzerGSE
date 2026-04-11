@@ -25,6 +25,8 @@ transcripts: ""                        # Reference transcripts (.fasta cDNA, use
 kraken2_databases: ""                  # Comma-separated Kraken2 DB folders (e.g. '/path/to/core_nt,/path/to/gtdb')
 kraken2_confidence: "0"                # Comma-separated confidence scores (e.g. '0,0.20,0.50')
 sortmerna_databases: ""                # SortMeRNA database path (activates rRNA removal step)
+rrna_qc_databases: ""                  # Comma-separated rRNA FASTA paths for preliminary rRNA QC (e.g. '/path/SILVA_138.2_LSURef_NR99_tax_silva.fasta.gz,/path/SILVA_138.2_SSURef_NR99_tax_silva.fasta.gz'). Activates Bowtie2 rRNA mapping QC step
+rrna_qc_min_score: -20                 # Min Bowtie2 alignment score for rRNA QC (default -20)
 databases_function: "GO_Biological_Process_2025,GO_Molecular_Function_2025,GO_Cellular_Component_2025"
 non_reference_funct_enrichm: ""        # Annotation file (GAF, GMT, GFF, GTF) for functional enrichment in non-model organisms
 
@@ -65,7 +67,7 @@ splicing_option: "no"                  # Splicing analysis: 'no' (default), 'sas
 
 # === Processing parameters ===
 strand: ""                             # Strandness ('yes', 'no', 'reverse'; predicted by salmon if empty)
-filter: "standard"                     # Gene count threshold ('bin', 'filterbyexpr', or 'standard')
+filter: "standard"                     # Gene count threshold ('bin', 'filterbyexpr', 'standard', or a numeric value for absolute raw count threshold per group)
 optionsFeatureCounts_feat: "exon"      # featureCounts feature type
 optionsFeatureCounts_seq: "gene_name"  # featureCounts seqid type
 aligner: "star"                        # Aligner ('hisat2' or 'star') or 'kallisto'
@@ -102,6 +104,10 @@ bam_dedup: "no"                        # Duplicate removal: 'no', 'samtools', 'p
                                        #   picard_optical = picard MarkDuplicates REMOVE_SEQUENCING_DUPLICATES=true (optical/sequencing only)
 bam_custom_filter: ""                  # Custom shell command to pipe SAM text through post-alignment (e.g. "grep -E '^@|\\<NM:i:0\\>'" for perfect matches). Must preserve header lines (^@).
 bam_normalization: "BPM"               # Normalization option for bamCoverage. Choices: RPKM, CPM, BPM, RPGC, None. (default "BPM")
+aligner_extra_args: ""                 # Extra arguments appended verbatim to the aligner command line. Examples:
+                                       #   STAR:     "--outSAMmultNmax 1 --alignIntronMax 100000"
+                                       #   hisat2:   "--no-mixed --no-discordant --maxins 800"
+                                       #   kallisto: "--bias"
 
 # === Count-level options (quantification) ===
 featureCounts_extra_args: "-M -O -C -B" # Extra arguments to pass to featureCounts (default '-M -O -C -B').

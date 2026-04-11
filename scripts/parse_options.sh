@@ -32,6 +32,8 @@ for argument in $options; do
 	        -Dk | -kraken2_databases # Comma-separated list of Kraken2 database folders (e.g. '/path/to/core_nt,/path/to/gtdb'). Any input here activates the kraken2-based decontamination step. All DB+confidence combinations will be run
 	        -Kc | -kraken2_confidence # Comma-separated confidence scores for Kraken2 classification (default '0', e.g. '0,0.20,0.50'). Each score is run for each database
 	        -Ds | -sortmerna_databases # The database (absolute pathway) that should be used by SortMeRNA (any input here, e.g. '/path/to/rRNA_databases/smr_v4.3_sensitive_db.fasta', would activate the sortmerna-based rRNA removal step)
+	        -rRq | -rrna_qc_databases # Comma-separated list of rRNA reference FASTA paths for preliminary rRNA QC mapping (e.g. '/path/SILVA_138.2_LSURef_NR99_tax_silva.fasta.gz,/path/SILVA_138.2_SSURef_NR99_tax_silva.fasta.gz'). Any input here activates the Bowtie2-based rRNA mapping QC step. Output goes to preliminar_rrna_qc/
+	        -rRs | -rrna_qc_min_score # Min Bowtie2 alignment score for rRNA QC filtering (default -20)
 	        -Df | -databases_function # Manually provide a comma separated list of databases to be used in automatic functional enrichment analyses of DEGs (check out the R package autoGO::choose_database(), but the most popular GO terms are used by default)
 	        -nrf | -non_reference_funct_enrichm # Pathway to a file containing functional annotation (GAF, GFF, or GTF) to be used for functional enrichment when the organism is not Human or Mouse. If provided, this overrides the default behavior of using the main annotation file.
 
@@ -49,7 +51,7 @@ for argument in $options; do
 	        -T | -target # Protopical target file for attempts to differential gene expression analyses (containing filenames and covariates, automatically built if not provided)
 
 	        #### Activate alternative modes:
-	        -Dm | -debug_module # For debugging, step to remove the content of the corresponding folders and to resume a failed or incomplete run without repeating (one of 'step1', 'step1a', 'step1b', 'step1c', 'step1d', 'step2', 'step3a', 'step3b', 'step4', 'step4b', 'step5', 'step6', 'step7', 'step8', step9', or 'all' to execute everything, by default)
+	        -Dm | -debug_module # For debugging, step to remove the content of the corresponding folders and to resume a failed or incomplete run without repeating (one of 'step1', 'step1a', 'step1b', 'step1c', 'step1d', 'step2', 'step2b', 'step3a', 'step3b', 'step4', 'step4b', 'step5', 'step6', 'step7', 'step8', step9', or 'all' to execute everything, by default)
 	        -q | -qc_raw_reads # Whether to perform quality control on the raw reads ('yes' by default, or 'no')
 	        -fd | -full_differential_analyses # Whether to perform full differential enrichment analyses (for example including computation of DEGs or Venn diagrams, 'no' or 'yes', by default)
 	        -fe | -functional_enrichment_analyses # Whether to perform functional enrichment analyses ('no' or 'yes', by default)
@@ -72,7 +74,7 @@ for argument in $options; do
 
 	        #### Processing parameters:
 	        -s | -strand # Strandness of the library ('yes, 'no', 'reverse'). If not provided and '-t' used, this would be predicted by salmon. Please use this parameter if prediction not correct, see explanations in for example in bit.ly/strandness0 and bit.ly/strandness
-	        -f | -filter # Threshold of gene counts to use ('bin' to capture the lower expressed genes, 'filterbyexpr' to use the edgeR solution, 'or 'standard', by default). Please provide a comma separated list with the filters to use at each quantification if multiple annotation are provided
+	        -f | -filter # Threshold of gene counts to use ('bin' to capture the lower expressed genes, 'filterbyexpr' to use the edgeR solution, 'standard' by default, or a numeric value for an absolute raw count threshold applied per group). Please provide a comma separated list with the filters to use at each quantification if multiple annotation are provided
 	        -Of | -options_featureCounts_feat # The feature type to use to count in featureCounts (default 'exon')
 	        -Os | -options_featureCounts_seq # The seqid type to use to count in featureCounts (default 'gene_name')
 	        -A | -aligner # Aligner software to use ('hisat2' or 'star', by default)
@@ -109,6 +111,7 @@ for argument in $options; do
 	        -Fdup | -bam_dedup # Duplicate removal: 'no' (default), 'samtools' (markdup -r), 'picard' (REMOVE_DUPLICATES), 'picard_optical' (REMOVE_SEQUENCING_DUPLICATES)
 	        -Fcust | -bam_custom_filter # Custom shell command to pipe SAM text through post-alignment (e.g. "grep -E '^@|\\<NM:i:0\\>'" for perfect matches). Must preserve header lines (^@).
 	        -bN | -bam_normalization # Normalization method using deeptool's bamCoverage. Choices: RPKM, CPM, BPM, RPGC, None. ('BPM' by default)
+	        -Ae | -aligner_extra_args # Extra arguments to pass directly to the aligner (STAR, hisat2, or kallisto). These are appended verbatim to the aligner command line (e.g. '--outSAMmultNmax 1 --alignIntronMax 100000' for STAR, or '--no-mixed --no-discordant' for hisat2). Empty by default
 
 	        #### Count-level options (quantification):
 	        -Ofc | -featureCounts_extra_args # Extra arguments to pass to featureCounts (default '-M -O -C -B'). These are appended to the automatically built featureCounts command line after strand, feature type, seqid, threads, and MAPQ options.
@@ -166,6 +169,8 @@ for argument in $options; do
 		-Dk) kraken2_databases=${arguments[index]} ;;
 		-Kc | -kraken2_confidence) kraken2_confidence=${arguments[index]} ;;
 		-Ds) sortmerna_databases=${arguments[index]} ;;
+		-rRq | -rrna_qc_databases) rrna_qc_databases=${arguments[index]} ;;
+		-rRs | -rrna_qc_min_score) rrna_qc_min_score=${arguments[index]} ;;
 		-Des) differential_expr_soft=${arguments[index]} ;;
 		-Dm) debug_module=${arguments[index]} ;;
 		-Dec) differential_expr_comparisons=${arguments[index]} ;;
@@ -218,6 +223,7 @@ for argument in $options; do
 		-Fdup) bam_dedup=${arguments[index]} ;;
 		-Fcust) bam_custom_filter=${arguments[index]} ;;
 		-bN) bam_normalization=${arguments[index]} ;;
+		-Ae | -aligner_extra_args) aligner_extra_args=${arguments[index]} ;;
 		-Ofc) featureCounts_extra_args=${arguments[index]} ;;
 		-Fgene) counts_custom_gene_filter=${arguments[index]} ;;
 		-nrf) non_reference_funct_enrichm=${arguments[index]} ;;
@@ -493,6 +499,15 @@ if [ -z "$exploreDE_se" ]; then
 fi
 if [ -z "$splicing_option" ]; then
 	splicing_option="no"
+fi
+if [ -z "$rrna_qc_databases" ]; then
+	rrna_qc_databases=""
+fi
+if [ -z "$rrna_qc_min_score" ]; then
+	rrna_qc_min_score="-20"
+fi
+if [ -z "$aligner_extra_args" ]; then
+	aligner_extra_args=""
 fi
 echo -e "\nsplicing_option=$splicing_option\n"
 

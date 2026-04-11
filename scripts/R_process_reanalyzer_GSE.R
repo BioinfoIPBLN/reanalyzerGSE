@@ -379,8 +379,18 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
       keep <- filterByExpr(data,group=data$samples$group)
       data <- data[keep,]
     }
+    else if(grepl("^[0-9]+(\\.[0-9]+)?$", filter)){
+      threshold <- as.numeric(filter)
+      cat(paste0("Applying absolute threshold filtering (raw count sum >= ", threshold, " in any group)...\n"))
+      group <- data$samples$group
+      keep <- apply(data$counts, 1, function(row) {
+        any(tapply(row, group, sum) >= threshold)
+      })
+      data <- data[keep, ]
+      data$samples$lib.size <- colSums(data$counts)
+    }
     else{
-      stop("At the moment only bin/standard/filterByExpr, are supported")
+      stop("At the moment only bin/standard/filterByExpr or a numeric threshold are supported")
     }
     return(data)
   }

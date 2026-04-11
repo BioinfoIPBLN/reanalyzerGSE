@@ -57,6 +57,42 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   # c(L, M)
   lcpm.cutoff <- log2(10/M + 2/L)
 
+  # Compute the applied filter threshold in log-CPM space for overlay on density plots
+  applied.cutoff <- NA
+  applied.cutoff.label <- ""
+  if (exists("filter_option")) {
+    if (filter_option == "standard") {
+      applied.cutoff <- log2(1)  # CPM > 1 threshold
+      applied.cutoff.label <- paste0("applied: CPM > 1 (standard)")
+    } else if (filter_option == "bin") {
+      applied.cutoff <- log2(0.1 + 2/L)  # near-zero
+      applied.cutoff.label <- paste0("applied: count > 0 (bin)")
+    } else if (filter_option == "filterbyexpr") {
+      # Estimate effective min CPM from the kept genes
+      min_lcpm_kept <- min(apply(lcpm, 1, max))
+      applied.cutoff <- min_lcpm_kept
+      applied.cutoff.label <- paste0("applied: filterByExpr (~", round(min_lcpm_kept, 2), ")")
+    } else if (grepl("^[0-9]+(\\.[0-9]+)?$", filter_option)) {
+      threshold_val <- as.numeric(filter_option)
+      # Convert absolute count threshold to approx log-CPM using median lib size
+      applied.cutoff <- log2(threshold_val / (M * 1e6) * 1e6)
+      applied.cutoff.label <- paste0("applied: sum >= ", threshold_val, " per group")
+    }
+  }
+  cat(paste0("General lcpm.cutoff (10/M + 2/L): ", round(lcpm.cutoff, 4), "\n"))
+  if (!is.na(applied.cutoff)) cat(paste0("Applied filter cutoff in log-CPM: ", round(applied.cutoff, 4), " (", applied.cutoff.label, ")\n"))
+
+  # Record filter threshold info for downstream use
+  filter_info_file <- file.path(output_dir, "QC_and_others", "filter_threshold_info.txt")
+  tryCatch({
+    writeLines(c(
+      paste0("filter_option=", ifelse(exists("filter_option"), filter_option, "unknown")),
+      paste0("general_lcpm_cutoff=", round(lcpm.cutoff, 6)),
+      paste0("applied_lcpm_cutoff=", ifelse(is.na(applied.cutoff), "NA", round(applied.cutoff, 6))),
+      paste0("applied_cutoff_label=", applied.cutoff.label)
+    ), filter_info_file)
+  }, error = function(e) cat(paste0("Could not write filter info: ", e$message, "\n")))
+
   x2 <- edgeR_object_norm
   if (pattern_to_remove!="none"){
     x2 <- edgeR_object_norm[,grep(pattern_to_remove,colnames(edgeR_object_norm),invert=T,val=T)]
@@ -79,6 +115,9 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   contrast <- sapply(color,colorspace::contrast_ratio); contrast <- contrast[contrast>4] # Ensure a high contrast here and below (>4 on W3C standard)
   contrast2 <- unique(t(combn(unique(names(contrast)),2))[apply(t(combn(unique(names(contrast)),2)),1,function(x){colorspace::contrast_ratio(x[1],col2=x[2])}) > 4])
   levels(col.group) <- sample(contrast2, nlevels(col.group)); col.group <- as.character(col.group)
+  # Name the color vector by sample name for correct mapping after reordering (e.g. corrplot AOE)
+  sample_names_for_col <- gsub("_hisat.*|_STAR.*", "", colnames(x$counts))
+  names(col.group) <- sample_names_for_col
 
   cat("\n\nSummary cpm log=TRUE per sample...\n")
   cat(summary(lcpm))
@@ -110,22 +149,32 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   plot(density(lcpm_prefilter), col=col[1], lwd=2, las=2, main="", xlab="")
   title(main="Raw data", xlab="Log-cpm")
   abline(v=lcpm.cutoff, lty=3)
+  if (!is.na(applied.cutoff)) abline(v=applied.cutoff, lty=1, col="red", lwd=1.5)
   for (i in 2:nsamples){
     den <- density(lcpm_prefilter[,i])
     lines(den$x, den$y, col=col[i], lwd=2)
   }
-  legend("topleft", legend="cutoff: 10/M + 2/L", lty=3, bty="n", cex=0.5)
+  cutoff_legends <- c("general: 10/M + 2/L")
+  cutoff_ltys <- c(3)
+  cutoff_cols <- c("black")
+  if (!is.na(applied.cutoff)) {
+    cutoff_legends <- c(cutoff_legends, applied.cutoff.label)
+    cutoff_ltys <- c(cutoff_ltys, 1)
+    cutoff_cols <- c(cutoff_cols, "red")
+  }
+  legend("topleft", legend=cutoff_legends, lty=cutoff_ltys, col=cutoff_cols, bty="n", cex=0.5)
   legend("topright",legend=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), text.col=col, bty = "n", cex = 0.5)
   
   ### 1.2. Density rawcounts log2, cpm...:
   plot(density(lcpm[,1]), col=col[1], lwd=2, las=2, main="", xlab="")
   title(main="Filtered data", xlab="Log-cpm")
   abline(v=lcpm.cutoff, lty=3)
+  if (!is.na(applied.cutoff)) abline(v=applied.cutoff, lty=1, col="red", lwd=1.5)
   for (i in 2:nsamples){
     den <- density(lcpm[,i])
     lines(den$x, den$y, col=col[i], lwd=2)
   }
-  legend("topleft", legend="cutoff: 10/M + 2/L", lty=3, bty="n", cex=0.5)
+  legend("topleft", legend=cutoff_legends, lty=cutoff_ltys, col=cutoff_cols, bty="n", cex=0.5)
   legend("topright", legend=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), text.col=col, bty="n", cex = 0.5)
   
   ### 2.1. Boxplots non-normalised:
@@ -313,10 +362,18 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   tmp <- lcpm_no_log; colnames(tmp) <- gsub("_hisat.*|_STAR.*","",colnames(tmp))
   # Adjust margins to prevent title cropping
   par(mar=c(2, 2, 4, 3))
-  corrplot(cor(tmp,method="spearman"), order='AOE',type = 'full',title="Spearman_correlation",tl.col = col.group,tl.srt = 45, mar=c(0,0,2,0))
-  corrplot(cor(tmp,method="spearman"), method='number',type = 'full', title="Spearman_correlation",tl.col = col.group,tl.srt = 45, mar=c(0,0,2,0))
-  corrplot(cor(tmp,method="pearson"), order='AOE',type = 'full',title="Pearson_correlation",tl.col = col.group,tl.srt = 45, mar=c(0,0,2,0))
-  corrplot(cor(tmp,method="pearson"), method='number',type = 'full', title="Pearson_correlation",tl.col = col.group,tl.srt = 45, mar=c(0,0,2,0))
+  # Fix: compute AOE order and reorder colors to match (corrplot reorders columns but tl.col stays in original order)
+  cor_sp <- cor(tmp, method="spearman")
+  cor_pe <- cor(tmp, method="pearson")
+  aoe_sp <- corrMatOrder(cor_sp, order="AOE")
+  aoe_pe <- corrMatOrder(cor_pe, order="AOE")
+  col_sp_aoe <- col.group[colnames(cor_sp)[aoe_sp]]
+  col_pe_aoe <- col.group[colnames(cor_pe)[aoe_pe]]
+  col_orig <- col.group[colnames(cor_sp)]  # original order for non-reordered plots
+  corrplot(cor_sp, order='AOE', type = 'full', title="Spearman_correlation", tl.col = col_sp_aoe, tl.srt = 45, mar=c(0,0,2,0))
+  corrplot(cor_sp, method='number', type = 'full', title="Spearman_correlation", tl.col = col_orig, tl.srt = 45, mar=c(0,0,2,0))
+  corrplot(cor_pe, order='AOE', type = 'full', title="Pearson_correlation", tl.col = col_pe_aoe, tl.srt = 45, mar=c(0,0,2,0))
+  corrplot(cor_pe, method='number', type = 'full', title="Pearson_correlation", tl.col = col_orig, tl.srt = 45, mar=c(0,0,2,0))
   
   ### 5.1. MDS_norm
   cat("--- [6/12] MDS-PCoA plots ---\n")
@@ -482,27 +539,35 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
 
     ## Spearman corrplot - top genes
     par(mar = c(2, 2, 4, 3))
-    corrplot(cor(top_clean, method = "spearman", use = "complete.obs"),
+    # Fix: reorder colors to match AOE ordering for top-gene corrplots
+    cor_sp_top <- cor(top_clean, method = "spearman", use = "complete.obs")
+    cor_pe_top <- cor(top_clean, method = "pearson", use = "complete.obs")
+    aoe_sp_top <- corrMatOrder(cor_sp_top, order = "AOE")
+    aoe_pe_top <- corrMatOrder(cor_pe_top, order = "AOE")
+    col_sp_aoe_top <- col.group[colnames(cor_sp_top)[aoe_sp_top]]
+    col_pe_aoe_top <- col.group[colnames(cor_pe_top)[aoe_pe_top]]
+    col_orig_top <- col.group[colnames(cor_sp_top)]
+    corrplot(cor_sp_top,
              order = "AOE", type = "full",
              title = paste0("Spearman correlation (top ", n_top, " genes)"),
-             tl.col = col.group, tl.srt = 45, mar = c(0, 0, 2, 0))
+             tl.col = col_sp_aoe_top, tl.srt = 45, mar = c(0, 0, 2, 0))
 
     ## Spearman with numbers
-    corrplot(cor(top_clean, method = "spearman", use = "complete.obs"),
+    corrplot(cor_sp_top,
              method = "number", type = "full",
              title = paste0("Spearman correlation (top ", n_top, " genes)"),
-             tl.col = col.group, tl.srt = 45, mar = c(0, 0, 2, 0))
+             tl.col = col_orig_top, tl.srt = 45, mar = c(0, 0, 2, 0))
 
     ## Pearson corrplot - top genes
-    corrplot(cor(top_clean, method = "pearson", use = "complete.obs"),
+    corrplot(cor_pe_top,
              order = "AOE", type = "full",
              title = paste0("Pearson correlation (top ", n_top, " genes)"),
-             tl.col = col.group, tl.srt = 45, mar = c(0, 0, 2, 0))
+             tl.col = col_pe_aoe_top, tl.srt = 45, mar = c(0, 0, 2, 0))
 
-    corrplot(cor(top_clean, method = "pearson", use = "complete.obs"),
+    corrplot(cor_pe_top,
              method = "number", type = "full",
              title = paste0("Pearson correlation (top ", n_top, " genes)"),
-             tl.col = col.group, tl.srt = 45, mar = c(0, 0, 2, 0))
+             tl.col = col_orig_top, tl.srt = 45, mar = c(0, 0, 2, 0))
 
     ## Dendrogram using 1 - correlation distance (top genes)
     if (ncol(top_signal) > 2) {
@@ -800,6 +865,57 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
       cat(paste("\nSkipping geneBody_coverage logic:", e$message, "\n"))
     })
   }
+
+  ### 13. Gantt chart of pipeline step timing
+  cat("--- [13/13] Gantt chart of pipeline timing ---\n")
+  tryCatch({
+    step_times_file <- file.path(path, "step_times.tsv")
+    if (file.exists(step_times_file)) {
+      st <- read.delim(step_times_file, header = TRUE, stringsAsFactors = FALSE)
+      # Pivot start/end into wide format
+      st_start <- st[st$event == "start", c("step", "epoch")]
+      st_end   <- st[st$event == "end",   c("step", "epoch")]
+      colnames(st_start) <- c("step", "start_epoch")
+      colnames(st_end)   <- c("step", "end_epoch")
+      st_wide <- merge(st_start, st_end, by = "step", all = TRUE)
+      # Remove steps with missing start or end
+      st_wide <- st_wide[!is.na(st_wide$start_epoch) & !is.na(st_wide$end_epoch), ]
+      if (nrow(st_wide) > 0) {
+        st_wide$duration_min <- (st_wide$end_epoch - st_wide$start_epoch) / 60
+        # Convert epochs to POSIXct for display
+        st_wide$start_time <- as.POSIXct(st_wide$start_epoch, origin = "1970-01-01")
+        st_wide$end_time   <- as.POSIXct(st_wide$end_epoch,   origin = "1970-01-01")
+        # Order by start time
+        st_wide <- st_wide[order(st_wide$start_epoch), ]
+        st_wide$step <- factor(st_wide$step, levels = rev(st_wide$step))
+
+        # Color palette by step category
+        step_colors <- scales::hue_pal()(nrow(st_wide))
+
+        p_gantt <- ggplot(st_wide, aes(y = step)) +
+          geom_segment(aes(x = start_time, xend = end_time, yend = step, color = step),
+                       linewidth = 6) +
+          geom_text(aes(x = start_time + (end_time - start_time)/2,
+                        label = paste0(round(duration_min, 1), " min")),
+                    size = 2.5, color = "black") +
+          scale_x_datetime(date_labels = "%H:%M") +
+          labs(title = "Pipeline Step Timing (Gantt Chart)",
+               x = "Wall-clock time", y = "") +
+          theme_minimal() +
+          theme(legend.position = "none",
+                axis.text.y = element_text(size = 7),
+                plot.title = element_text(hjust = 0.5))
+        print(p_gantt)
+        cat("Gantt chart of pipeline timing done.\n")
+      } else {
+        cat("step_times.tsv found but no complete start/end pairs. Skipping Gantt chart.\n")
+      }
+    } else {
+      cat("step_times.tsv not found. Skipping Gantt chart.\n")
+    }
+  }, error = function(e) {
+    cat(paste("\nSkipping Gantt chart:", e$message, "\n"))
+  })
 
 cat("\n=== [QC] All sections complete, closing PDF ===\n")
 while (!is.null(dev.list())) dev.off()

@@ -25,7 +25,7 @@ From: ubuntu:24.04
       libbz2-dev liblzma-dev libtbb12 libdeflate0 libdeflate-dev libisal2 libisal-dev \
       libhdf5-dev libgl1-mesa-dev libglu1-mesa libnode-dev gsfonts libglpk-dev \
       python3-dev python3-pip python3-venv python3-setuptools python-is-python3 picard-tools \
-      cython3 \
+      cython3 libpoppler-cpp-dev poppler-data \
       fastqc pigz parallel zip unzip bzip2 expat file jq \
       default-jre-headless \
     && locale-gen en_US.UTF-8 \
@@ -269,7 +269,7 @@ pkgs_6 <- c("ASpli@2.20.0", "biovizBase@1.58.0", "ensembldb@2.34.0",
             "Gviz@1.54.0", "interp@1.1-6", "IsoformSwitchAnalyzeR@2.10.0", 
             "latticeExtra@0.6-31", "saseR@1.6.0", "txdbmaker@1.6.2", 
             "tximeta@1.28.3", "VariantAnnotation@1.56.0", "RcppParallel@5.1.11-2", 
-            "stringfish@0.18.0", "qs2@0.1.7")
+            "stringfish@0.18.0", "qs2@0.1.7", "pandoc@0.2.0", "qpdf@1.4.1", "pdftools@3.7.0")
 
 pkg_install(pkgs_1, ask = FALSE); cat("\n\nBLOCK 1 R packages installed!\n\n")
 pkg_install(pkgs_2, ask = FALSE); cat("\n\nBLOCK 2 R packages installed!\n\n")

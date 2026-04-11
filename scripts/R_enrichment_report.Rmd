@@ -1,0 +1,685 @@
+---
+title: "`r paste0('Functional Enrichment Report — ', params$project_name)`"
+date: "`r format(Sys.time(), '%B %d, %Y at %H:%M')`"
+params:
+  dge_dir: ""
+  project_name: "Project"
+  organism: "Unknown"
+output:
+  html_document:
+    toc: true
+    toc_float:
+      collapsed: true
+      smooth_scroll: true
+    toc_depth: 4
+    theme: cosmo
+    self_contained: true
+    number_sections: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+library(data.table)
+library(knitr)
+
+has_pdftools  <- requireNamespace("pdftools",  quietly = TRUE)
+has_kableExtra <- requireNamespace("kableExtra", quietly = TRUE)
+
+dge_dir      <- params$dge_dir
+organism     <- params$organism
+project_name <- params$project_name
+
+# ─── Helper functions ──────────────────────────────────────────────────────────
+
+safe_read <- function(path, ...) {
+  if (!file.exists(path)) return(NULL)
+  tryCatch(data.table::fread(path, fill = TRUE, ...), error = function(e) NULL)
+}
+
+filter_sig <- function(df, threshold = 0.05) {
+  if (is.null(df) || nrow(df) == 0) return(NULL)
+  pcol <- intersect(c("p.adjust","Adjusted.P.value","pvalue","FDR","fdr"), names(df))
+  if (length(pcol) == 0) return(df)
+  pcol <- pcol[1]
+  df[[pcol]] <- suppressWarnings(as.numeric(df[[pcol]]))
+  sig <- df[!is.na(df[[pcol]]) & df[[pcol]] < threshold, ]
+  if (nrow(sig) == 0) return(NULL)
+  sig
+}
+
+select_cols <- function(df) {
+  prio <- c("ONTOLOGY","Description","term.label","Term",
+            "ID","GeneRatio","BgRatio","Count","number_in_list",
+            "pvalue","p.adjust","FDR","fdr","Adjusted.P.value",
+            "fold_enrichment","plus_minus",
+            "Gene_ID_up_num","Gene_ID_down_num","Gene_ID_num",
+            "geneID","Gene_ID","summary_up","summary_down")
+  avail <- intersect(prio, names(df))
+  if (length(avail) < 2) avail <- names(df)[seq_len(min(10, ncol(df)))]
+  df[, avail, with = FALSE]
+}
+
+make_table <- function(df, filename = NULL, max_rows = 20) {
+  if (is.null(df) || nrow(df) == 0) {
+    cat("<p><em>No significant results (adjusted p &lt; 0.05)</em></p>\n\n")
+    return(invisible(NULL))
+  }
+  display <- select_cols(df)
+  shown   <- head(display, max_rows)
+  tbl <- knitr::kable(shown, format = "html", escape = FALSE,
+                       table.attr = 'class="table table-sm table-striped table-hover" style="font-size:11px;"')
+  if (has_kableExtra) {
+    tbl <- kableExtra::kable_styling(tbl,
+             bootstrap_options = c("striped","hover","condensed","responsive"),
+             full_width = FALSE, font_size = 11)
+    tbl <- kableExtra::scroll_box(tbl, width = "100%", height = "400px")
+  }
+  cat(as.character(tbl), "\n\n")
+  if (nrow(df) > max_rows)
+    cat(sprintf("<p><em>Showing top %d of %d results</em></p>\n\n", max_rows, nrow(df)))
+  if (!is.null(filename)) {
+    csv_text <- paste(capture.output(write.csv(df, stdout(), row.names = FALSE)), collapse = "\n")
+    b64 <- xfun::base64_encode(charToRaw(csv_text))
+    cat(sprintf('<p><a href="data:text/csv;base64,%s" download="%s" class="btn btn-sm btn-outline-primary">\u2b07 Download CSV (%d rows)</a></p>\n\n',
+                b64, filename, nrow(df)))
+  }
+}
+
+embed_png <- function(path, caption = "", max_width = "700px") {
+  if (!file.exists(path)) return(invisible(NULL))
+  uri <- xfun::base64_uri(path)
+  fname <- basename(path)
+  # Base64-encode the original file for download
+  dl_b64 <- xfun::base64_encode(readBin(path, "raw", file.info(path)$size))
+  dl_mime <- if (grepl("\\.png$", fname, ignore.case = TRUE)) "image/png" else "image/jpeg"
+  cat(sprintf('<figure style="margin:10px 0;text-align:center;"><img src="%s" style="max-width:%s;border:1px solid #ddd;border-radius:4px;padding:2px;" />',
+              uri, max_width))
+  if (nchar(caption) > 0)
+    cat(sprintf('<figcaption style="font-style:italic;color:#666;font-size:0.9em;">%s</figcaption>', caption))
+  cat(sprintf('<br/><a href="data:%s;base64,%s" download="%s" class="btn btn-sm btn-outline-secondary" style="margin-top:4px;">\u2b07 Download %s</a>',
+              dl_mime, dl_b64, fname, fname))
+  cat('</figure>\n\n')
+}
+
+embed_pdf <- function(pdf_path, caption = "", dpi = 48) {
+  if (!has_pdftools || !file.exists(pdf_path)) return(invisible(NULL))
+  tryCatch({
+    tmp <- tempfile(fileext = ".png")
+    pdftools::pdf_convert(pdf_path, format = "png", pages = 1, dpi = dpi,
+                          filenames = tmp, verbose = FALSE)
+    fname <- basename(pdf_path)
+    # Show rendered PNG preview
+    uri <- xfun::base64_uri(tmp)
+    # Base64-encode the original PDF for download
+    dl_b64 <- xfun::base64_encode(readBin(pdf_path, "raw", file.info(pdf_path)$size))
+    cat(sprintf('<figure style="margin:10px 0;text-align:center;"><img src="%s" style="max-width:700px;border:1px solid #ddd;border-radius:4px;padding:2px;" />', uri))
+    if (nchar(caption) > 0)
+      cat(sprintf('<figcaption style="font-style:italic;color:#666;font-size:0.9em;">%s</figcaption>', caption))
+    cat(sprintf('<br/><a href="data:application/pdf;base64,%s" download="%s" class="btn btn-sm btn-outline-secondary" style="margin-top:4px;">\u2b07 Download PDF</a>',
+                dl_b64, fname))
+    cat('</figure>\n\n')
+    unlink(tmp)
+  }, error = function(e) NULL)
+}
+
+show_file_set <- function(dir_path, table_pattern, label,
+                          plot_dir = NULL, plot_pattern = NULL, dpi = 48) {
+  files <- sort(list.files(dir_path, pattern = table_pattern, full.names = TRUE))
+  files <- files[!grepl("_err\\.txt$|_aPEAR|_clusters|_similarity|revigo", files)]
+  if (length(files) == 0) {
+    cat(sprintf("*%s — not available*\n\n", label))
+    return(invisible(NULL))
+  }
+  for (f in files) {
+    df  <- safe_read(f)
+    if (is.null(df) || nrow(df) == 0) next
+    sig <- filter_sig(df)
+    n_sig <- if (!is.null(sig)) nrow(sig) else 0
+    cat(sprintf("\n**%s** — %d significant of %d tested\n\n", basename(f), n_sig, nrow(df)))
+    if (n_sig > 0) make_table(sig, gsub("\\.txt$", ".csv", basename(f)))
+  }
+  if (!is.null(plot_pattern) && !is.null(plot_dir) && dir.exists(plot_dir)) {
+    plots <- sort(list.files(plot_dir, pattern = plot_pattern, full.names = TRUE))
+    for (p in head(plots, 3)) {
+      ext <- tolower(tools::file_ext(p))
+      if (ext == "pdf") embed_pdf(p, basename(p), dpi = dpi)
+      else if (ext %in% c("png","jpg","jpeg")) embed_png(p, basename(p))
+    }
+  }
+}
+
+# ─── Discover results ──────────────────────────────────────────────────────────
+
+cp_dirs <- sort(list.dirs(dge_dir, recursive = FALSE, full.names = TRUE))
+cp_dirs <- cp_dirs[grepl("_funct_enrich_clusterProfiler$", cp_dirs)]
+comp_names <- gsub("_funct_enrich_clusterProfiler$", "", basename(cp_dirs))
+
+panther_dirs_all <- sort(list.dirs(dge_dir, recursive = FALSE, full.names = TRUE))
+panther_dirs_all <- panther_dirs_all[grepl("_funct_enrichment_panther$", panther_dirs_all)]
+
+if (length(comp_names) == 0) {
+  comp_names <- unique(gsub("_fdr_0[15].*", "", basename(panther_dirs_all)))
+}
+
+comp_labels <- list()
+list_comp_file <- file.path(dge_dir, "list_comp.txt")
+if (file.exists(list_comp_file)) {
+  lc <- readLines(list_comp_file)
+  for (line in lc) {
+    parts <- trimws(unlist(strsplit(line, ":")))
+    if (length(parts) >= 2) {
+      comp_num <- gsub("\\D", "", parts[1])
+      comp_labels[[paste0("DGE_analysis_comp", comp_num)]] <- trimws(parts[2])
+    }
+  }
+}
+
+network_dir <- file.path(dge_dir, "network_analyses")
+has_network  <- dir.exists(network_dir) && length(list.files(network_dir)) > 0
+```
+
+```{r custom-css, results='asis'}
+cat('<style>
+.table { margin-bottom: 5px; }
+figure img { box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+.btn-outline-primary { margin: 5px 0; }
+h1.title { color: #2c3e50; }
+h2 { margin-top: 40px; border-bottom: 2px solid #2c3e50; padding-bottom: 8px; }
+h3 { margin-top: 25px; color: #34495e; }
+h4 { margin-top: 15px; }
+.level4 > .tab-content { padding: 10px 0; }
+</style>\n')
+```
+
+# Overview
+
+```{r overview, results='asis'}
+cat(sprintf("- **Project**: %s\n", project_name))
+cat(sprintf("- **Organism**: %s\n", gsub("_", " ", organism)))
+cat(sprintf("- **Comparisons found**: %d\n", length(comp_names)))
+cat(sprintf("- **Report generated**: %s\n\n", format(Sys.time(), "%Y-%m-%d %H:%M")))
+
+if (file.exists(list_comp_file)) {
+  cat("\n**Comparison labels:**\n\n")
+  for (line in readLines(list_comp_file)) cat(sprintf("- %s\n", line))
+  cat("\n")
+}
+
+cat("\n**Analyses detected:**\n\n")
+if (length(cp_dirs) > 0) cat("- \u2705 clusterProfiler (ORA)\n")
+gsea_found <- length(list.files(cp_dirs, pattern = "GSEA_", recursive = FALSE)) > 0
+if (gsea_found)          cat("- \u2705 Gene Set Enrichment Analysis (GSEA)\n")
+if (length(panther_dirs_all) > 0) {
+  cat("- \u2705 autoGO / Enrichr\n")
+  cat("- \u2705 Panther\n")
+}
+apear_found <- length(list.files(cp_dirs, pattern = "_aPEAR", recursive = FALSE)) > 0
+if (apear_found)         cat("- \u2705 aPEAR pathway clustering\n")
+if (has_network)         cat("- \u2705 Network analyses (STRINGdb)\n")
+cat("\n")
+
+# Link to tar.gz archive
+targz <- file.path(dge_dir, "funct_enrichment_analyses.tar.gz")
+if (file.exists(targz)) {
+  targz_size <- round(file.info(targz)$size / 1024 / 1024, 1)
+  targz_b64 <- xfun::base64_encode(readBin(targz, "raw", file.info(targz)$size))
+  cat(sprintf('
+<div class="alert alert-warning" style="margin:20px 0;border-left:5px solid #f0ad4e;padding:15px;border-radius:4px;">
+<strong>\u26a0\ufe0f Full results archive</strong><br/>
+This report shows <strong>summarised tables and reduced-resolution image previews</strong>.
+The original full-quality plots (PDF vector graphics), complete enrichment tables,
+KEGG pathway snapshots, aPEAR interactive HTML widgets, and all other raw output files
+are available in the compressed archive:<br/><br/>
+<a href="data:application/gzip;base64,%s" download="funct_enrichment_analyses.tar.gz"
+   class="btn btn-warning" style="color:#fff;">
+\u2b07 Download funct_enrichment_analyses.tar.gz (%s MB)</a>
+</div>\n\n', targz_b64, targz_size))
+} else {
+  cat('
+<div class="alert alert-info" style="margin:20px 0;border-left:5px solid #5bc0de;padding:15px;border-radius:4px;">
+<strong>\u2139\ufe0f Note:</strong> The full results archive (<code>funct_enrichment_analyses.tar.gz</code>)
+was not found alongside this report. If the pipeline has finished running, the archive should
+be located in the same DGE directory. It contains the original full-quality plots and complete
+result files.
+</div>\n\n')
+}
+
+if (length(comp_names) == 0)
+  cat("\n> **No functional enrichment results were found in this directory.**\n\n")
+```
+
+```{r main-loop, results='asis'}
+for (idx in seq_along(comp_names)) {
+  comp   <- comp_names[idx]
+  label  <- if (!is.null(comp_labels[[comp]])) comp_labels[[comp]] else comp
+  cp_dir <- cp_dirs[idx]  # may be NA if only panther exists
+
+  cat(sprintf("\n\n# %s — %s {.tabset .tabset-pills}\n\n", comp, label))
+
+  # ── clusterProfiler ORA ────────────────────────────────────────────────────
+  if (!is.na(cp_dir) && dir.exists(cp_dir)) {
+
+    cat("\n## ORA (clusterProfiler) {.tabset}\n\n")
+
+    # ── GO ──
+    cat("\n### Gene Ontology {.tabset}\n\n")
+
+    for (ont in c("BP", "MF", "CC")) {
+      ont_label <- c(BP = "Biological Process", MF = "Molecular Function",
+                     CC = "Cellular Component")[[ont]]
+      cat(sprintf("\n#### GO %s\n\n", ont_label))
+
+      # Table
+      tbl_files <- list.files(cp_dir,
+                              pattern = sprintf("GO_overrepresentation_test_%s_.*\\.txt$", ont),
+                              full.names = TRUE)
+      tbl_files <- tbl_files[!grepl("_err\\.txt$|_aPEAR|_clusters", tbl_files)]
+      if (length(tbl_files) > 0) {
+        df  <- safe_read(tbl_files[1])
+        sig <- filter_sig(df)
+        n_sig <- if (!is.null(sig)) nrow(sig) else 0
+        cat(sprintf("**%d** significant GO %s terms (adjusted p < 0.05)\n\n", n_sig, ont))
+        if (n_sig > 0)
+          make_table(sig, sprintf("%s_GO_%s_ORA.csv", comp, ont))
+      } else {
+        cat("*Not available*\n\n")
+      }
+
+      # Dotplot
+      go_figs <- file.path(cp_dir, "go_figs")
+      if (dir.exists(go_figs)) {
+        dplot <- list.files(go_figs,
+                   pattern = sprintf("overrepresentation_test_%s_.*_dotplot\\.pdf$", ont),
+                   full.names = TRUE)
+        if (length(dplot) > 0) embed_pdf(dplot[1], sprintf("GO %s — Dotplot", ont))
+
+        bplot <- list.files(go_figs,
+                   pattern = sprintf("overrepresentation_test_%s_.*_barplot\\.pdf$", ont),
+                   full.names = TRUE)
+        if (length(bplot) > 0) embed_pdf(bplot[1], sprintf("GO %s — Barplot", ont))
+      }
+    }
+
+    # GO ALL (combined)
+    cat("\n#### GO ALL (combined)\n\n")
+    go_all <- list.files(cp_dir,
+                pattern = "^GO_overrepresentation_test_[A-Z]+_(?!BP|MF|CC).*\\.txt$",
+                full.names = TRUE, perl = TRUE)
+    # Fallback: the ones without BP/MF/CC suffix
+    if (length(go_all) == 0)
+      go_all <- list.files(cp_dir,
+                  pattern = "^GO_overrepresentation_test_[^B][^P].*\\.txt$",
+                  full.names = TRUE)
+    go_all <- go_all[!grepl("_err\\.txt$|_BP_|_MF_|_CC_|_aPEAR|_clusters", go_all)]
+    if (length(go_all) > 0) {
+      df  <- safe_read(go_all[1])
+      sig <- filter_sig(df)
+      n_sig <- if (!is.null(sig)) nrow(sig) else 0
+      cat(sprintf("**%d** significant GO terms (combined, adjusted p < 0.05)\n\n", n_sig))
+      if (n_sig > 0)
+        make_table(sig, sprintf("%s_GO_ALL_ORA.csv", comp))
+    } else {
+      cat("*Not available*\n\n")
+    }
+
+    # ── KEGG ──
+    cat("\n### KEGG {.tabset}\n\n")
+
+    cat("\n#### KEGG Enrichment\n\n")
+    kegg_files <- list.files(cp_dir, pattern = "^KEGG_enrich_.*\\.txt$", full.names = TRUE)
+    kegg_files <- kegg_files[!grepl("_err\\.txt$|_aPEAR|_clusters", kegg_files)]
+    if (length(kegg_files) > 0) {
+      df  <- safe_read(kegg_files[1])
+      sig <- filter_sig(df)
+      n_sig <- if (!is.null(sig)) nrow(sig) else 0
+      cat(sprintf("**%d** significant KEGG pathways\n\n", n_sig))
+      if (n_sig > 0)
+        make_table(sig, sprintf("%s_KEGG_ORA.csv", comp))
+    } else {
+      cat("*Not available*\n\n")
+    }
+    # KEGG pathway snapshots
+    kegg_snap <- file.path(cp_dir, "kegg_paths_snapshots")
+    if (dir.exists(kegg_snap)) {
+      kpngs <- list.files(kegg_snap, pattern = "\\.png$", full.names = TRUE)
+      kpdfs <- list.files(kegg_snap, pattern = "\\.(pdf|PDF)$", full.names = TRUE)
+      for (p in head(kpngs, 5)) embed_png(p, basename(p))
+      for (p in head(kpdfs, 3)) embed_pdf(p, basename(p))
+      if (length(kpngs) + length(kpdfs) > 8)
+        cat(sprintf("*...and %d more pathway images (available in archive)*\n\n",
+                    length(kpngs) + length(kpdfs) - 8))
+    }
+
+    # KEGG barplot/dotplot
+    kegg_figs <- file.path(cp_dir, "kegg_paths_snapshots")
+    if (dir.exists(kegg_figs)) {
+      kbar <- list.files(kegg_figs, pattern = "KEGG.*barplot", full.names = TRUE)
+      kdot <- list.files(kegg_figs, pattern = "KEGG.*dotplot", full.names = TRUE)
+      for (p in head(kbar, 1)) embed_pdf(p, "KEGG — Barplot")
+      for (p in head(kdot, 1)) embed_pdf(p, "KEGG — Dotplot")
+    }
+
+    cat("\n#### KEGG Modules\n\n")
+    mkegg <- list.files(cp_dir, pattern = "^MKEGG_.*\\.txt$", full.names = TRUE)
+    mkegg <- mkegg[!grepl("_err\\.txt$|_aPEAR|_clusters|GSEA", mkegg)]
+    if (length(mkegg) > 0) {
+      df <- safe_read(mkegg[1]); sig <- filter_sig(df)
+      n_sig <- if (!is.null(sig)) nrow(sig) else 0
+      cat(sprintf("**%d** significant KEGG modules\n\n", n_sig))
+      if (n_sig > 0) make_table(sig, sprintf("%s_MKEGG_ORA.csv", comp))
+    } else cat("*Not available*\n\n")
+
+    # ── Reactome ──
+    cat("\n### Reactome\n\n")
+    react_files <- list.files(cp_dir, pattern = "^REACT_[^G].*\\.txt$", full.names = TRUE)
+    react_files <- react_files[!grepl("_err\\.txt$|_aPEAR|_clusters|GSEA", react_files)]
+    if (length(react_files) > 0) {
+      df  <- safe_read(react_files[1])
+      sig <- filter_sig(df)
+      n_sig <- if (!is.null(sig)) nrow(sig) else 0
+      cat(sprintf("**%d** significant Reactome pathways\n\n", n_sig))
+      if (n_sig > 0)
+        make_table(sig, sprintf("%s_Reactome_ORA.csv", comp))
+    } else {
+      cat("*Not available*\n\n")
+    }
+    react_snap <- file.path(cp_dir, "reactome_paths_snapshots")
+    if (dir.exists(react_snap)) {
+      rpdfs <- list.files(react_snap, pattern = "\\.pdf$", full.names = TRUE)
+      rpdfs <- rpdfs[!grepl("_err", rpdfs)]
+      for (p in head(rpdfs, 3)) embed_pdf(p, basename(p))
+      if (length(rpdfs) > 3)
+        cat(sprintf("*...and %d more Reactome pathway figures in archive*\n\n",
+                    length(rpdfs) - 3))
+    }
+
+    # ── WikiPathways ──
+    cat("\n### WikiPathways\n\n")
+    wp <- list.files(cp_dir, pattern = "^WP_[^G].*\\.txt$", full.names = TRUE)
+    wp <- wp[!grepl("_err\\.txt$|_aPEAR|_clusters|GSEA", wp)]
+    if (length(wp) > 0) {
+      df <- safe_read(wp[1]); sig <- filter_sig(df)
+      n_sig <- if (!is.null(sig)) nrow(sig) else 0
+      cat(sprintf("**%d** significant WikiPathways\n\n", n_sig))
+      if (n_sig > 0) make_table(sig, sprintf("%s_WikiPathways_ORA.csv", comp))
+    } else cat("*Not available*\n\n")
+
+    # ── Disease Ontology (human) ──
+    do_files <- list.files(cp_dir, pattern = "^DO_|^NGC_|^DGN_", full.names = TRUE)
+    do_files <- do_files[!grepl("_err\\.txt$|GSEA|_aPEAR", do_files)]
+    if (length(do_files) > 0) {
+      cat("\n### Disease Ontology {.tabset}\n\n")
+      for (f in do_files) {
+        bname <- tools::file_path_sans_ext(basename(f))
+        cat(sprintf("\n#### %s\n\n", bname))
+        df <- safe_read(f); sig <- filter_sig(df)
+        n_sig <- if (!is.null(sig)) nrow(sig) else 0
+        cat(sprintf("**%d** significant terms\n\n", n_sig))
+        if (n_sig > 0) make_table(sig, paste0(bname, ".csv"))
+      }
+    }
+
+    # ── GSEA ──
+    gsea_files <- list.files(cp_dir, pattern = "GSEA_.*\\.txt$", full.names = TRUE)
+    gsea_files <- gsea_files[!grepl("_err\\.txt$|_aPEAR|_clusters|_similarity", gsea_files)]
+    if (length(gsea_files) > 0) {
+      cat("\n## GSEA {.tabset}\n\n")
+
+      # GO GSEA
+      go_gsea <- gsea_files[grepl("^GO_GSEA_", basename(gsea_files))]
+      if (length(go_gsea) > 0) {
+        cat("\n### GO GSEA {.tabset}\n\n")
+        # Try to show one per ont+method combination
+        go_gsea_bp <- go_gsea[grepl("_BP\\.", basename(go_gsea))]
+        go_gsea_mf <- go_gsea[grepl("_MF\\.", basename(go_gsea))]
+        go_gsea_cc <- go_gsea[grepl("_CC\\.", basename(go_gsea))]
+        go_gsea_all <- go_gsea[!grepl("_BP\\.|_MF\\.|_CC\\.", basename(go_gsea))]
+
+        for (g_set in list(
+            list(files = go_gsea_bp,  label = "GO BP GSEA"),
+            list(files = go_gsea_mf,  label = "GO MF GSEA"),
+            list(files = go_gsea_cc,  label = "GO CC GSEA"),
+            list(files = go_gsea_all, label = "GO ALL GSEA")
+        )) {
+          if (length(g_set$files) > 0) {
+            cat(sprintf("\n#### %s\n\n", g_set$label))
+            for (f in head(g_set$files, 2)) {
+              df <- safe_read(f); sig <- filter_sig(df)
+              n_sig <- if (!is.null(sig)) nrow(sig) else 0
+              cat(sprintf("**%s** — %d significant\n\n", basename(f), n_sig))
+              if (n_sig > 0) make_table(sig, gsub("\\.txt$", ".csv", basename(f)))
+            }
+            # Ridgeplot / dotplot if available
+            go_figs <- file.path(cp_dir, "go_figs")
+            if (dir.exists(go_figs)) {
+              ridge <- list.files(go_figs, pattern = sprintf("GSEA.*%s.*ridgeplot", gsub(" .*","",g_set$label)),
+                                  full.names = TRUE)
+              if (length(ridge) > 0) embed_pdf(ridge[1], sprintf("%s — Ridgeplot", g_set$label))
+              dot <- list.files(go_figs, pattern = sprintf("GSEA.*%s.*dotplot", gsub(" .*","",g_set$label)),
+                                full.names = TRUE)
+              if (length(dot) > 0) embed_pdf(dot[1], sprintf("%s — Dotplot", g_set$label))
+            }
+          }
+        }
+      }
+
+      # KEGG GSEA
+      kegg_gsea <- gsea_files[grepl("^KEGG_GSEA_|^KEGG_DOSE_", basename(gsea_files))]
+      if (length(kegg_gsea) > 0) {
+        cat("\n### KEGG GSEA\n\n")
+        for (f in head(kegg_gsea, 2)) {
+          df <- safe_read(f); sig <- filter_sig(df)
+          n_sig <- if (!is.null(sig)) nrow(sig) else 0
+          cat(sprintf("**%s** — %d significant\n\n", basename(f), n_sig))
+          if (n_sig > 0) make_table(sig, gsub("\\.txt$", ".csv", basename(f)))
+        }
+      }
+
+      # MKEGG GSEA
+      mkegg_gsea <- gsea_files[grepl("^MKEGG_GSEA_", basename(gsea_files))]
+      if (length(mkegg_gsea) > 0) {
+        cat("\n### KEGG Module GSEA\n\n")
+        for (f in head(mkegg_gsea, 2)) {
+          df <- safe_read(f); sig <- filter_sig(df)
+          n_sig <- if (!is.null(sig)) nrow(sig) else 0
+          cat(sprintf("**%s** — %d significant\n\n", basename(f), n_sig))
+          if (n_sig > 0) make_table(sig, gsub("\\.txt$", ".csv", basename(f)))
+        }
+      }
+
+      # WikiPathways GSEA
+      wp_gsea <- gsea_files[grepl("^WP_GSEA_", basename(gsea_files))]
+      if (length(wp_gsea) > 0) {
+        cat("\n### WikiPathways GSEA\n\n")
+        for (f in head(wp_gsea, 2)) {
+          df <- safe_read(f); sig <- filter_sig(df)
+          n_sig <- if (!is.null(sig)) nrow(sig) else 0
+          cat(sprintf("**%s** — %d significant\n\n", basename(f), n_sig))
+          if (n_sig > 0) make_table(sig, gsub("\\.txt$", ".csv", basename(f)))
+        }
+      }
+
+      # Reactome GSEA
+      react_gsea <- gsea_files[grepl("^REACT_GSEA_", basename(gsea_files))]
+      if (length(react_gsea) > 0) {
+        cat("\n### Reactome GSEA\n\n")
+        for (f in head(react_gsea, 2)) {
+          df <- safe_read(f); sig <- filter_sig(df)
+          n_sig <- if (!is.null(sig)) nrow(sig) else 0
+          cat(sprintf("**%s** — %d significant\n\n", basename(f), n_sig))
+          if (n_sig > 0) make_table(sig, gsub("\\.txt$", ".csv", basename(f)))
+        }
+      }
+
+      # DO / NCG / DGN GSEA
+      dis_gsea <- gsea_files[grepl("^DO_GSEA_|^NCG_GSEA_|^DGN_GSEA_", basename(gsea_files))]
+      if (length(dis_gsea) > 0) {
+        cat("\n### Disease Ontology GSEA\n\n")
+        for (f in head(dis_gsea, 4)) {
+          df <- safe_read(f); sig <- filter_sig(df)
+          n_sig <- if (!is.null(sig)) nrow(sig) else 0
+          cat(sprintf("**%s** — %d significant\n\n", basename(f), n_sig))
+          if (n_sig > 0) make_table(sig, gsub("\\.txt$", ".csv", basename(f)))
+        }
+      }
+    }
+
+    # ── aPEAR ──
+    apear_files <- list.files(cp_dir, pattern = "_aPEAR_clusters\\.txt$", full.names = TRUE)
+    if (length(apear_files) > 0) {
+      cat("\n## aPEAR Pathway Clusters\n\n")
+      cat("Pathway clusters identified by the aPEAR algorithm, grouping similar enriched terms:\n\n")
+      for (f in head(apear_files, 6)) {
+        bname <- basename(f)
+        df <- safe_read(f)
+        if (!is.null(df) && nrow(df) > 0) {
+          cat(sprintf("\n**%s** — %d clusters\n\n", bname, length(unique(df$Cluster))))
+          make_table(df, gsub("\\.txt$", ".csv", bname), max_rows = 30)
+        }
+      }
+      apear_pdfs <- list.files(cp_dir, pattern = "_aPEAR\\.pdf$", full.names = TRUE)
+      for (p in head(apear_pdfs, 3)) embed_pdf(p, basename(p))
+    }
+
+  } else {
+    cat("\n*clusterProfiler results not found for this comparison*\n\n")
+  }
+
+  # ── autoGO / Enrichr ────────────────────────────────────────────────────────
+  pant_dirs <- panther_dirs_all[grepl(paste0("^", comp, "_"), basename(panther_dirs_all))]
+  if (length(pant_dirs) > 0) {
+    cat("\n## autoGO & Panther {.tabset}\n\n")
+
+    for (pd in pant_dirs) {
+      pd_label <- basename(pd)
+      # Determine if this is all DEGs, up, or down
+      if (grepl("logpos", pd_label)) pd_label_nice <- "Up-regulated DEGs"
+      else if (grepl("logneg", pd_label)) pd_label_nice <- "Down-regulated DEGs"
+      else pd_label_nice <- "All DEGs (FDR < 0.05)"
+
+      cat(sprintf("\n### %s {.tabset}\n\n", pd_label_nice))
+
+      # autoGO results
+      autogo_dirs <- list.dirs(pd, recursive = FALSE, full.names = TRUE)
+      autogo_dirs <- autogo_dirs[grepl("_autoGO$", autogo_dirs)]
+      if (length(autogo_dirs) > 0) {
+        cat("\n#### autoGO / Enrichr\n\n")
+        for (agd in autogo_dirs) {
+          # Show barplots (PNGs)
+          bplots <- list.files(agd, pattern = "_barplot\\.png$", full.names = TRUE)
+          for (p in head(bplots, 4)) embed_png(p, basename(p), max_width = "600px")
+
+          # Show top enrichment table
+          tsvs <- list.files(agd, pattern = "\\.tsv$", full.names = TRUE)
+          for (f in head(tsvs, 3)) {
+            df <- safe_read(f); sig <- filter_sig(df)
+            n_sig <- if (!is.null(sig)) nrow(sig) else 0
+            if (n_sig > 0) {
+              cat(sprintf("\n**%s** — %d significant terms\n\n", basename(f), n_sig))
+              make_table(sig, gsub("\\.tsv$", ".csv", basename(f)), max_rows = 15)
+            }
+          }
+          if (length(bplots) > 4)
+            cat(sprintf("*...and %d more autoGO plots in the archive*\n\n", length(bplots) - 4))
+        }
+      }
+
+      # Panther results
+      panther_files <- list.files(pd, pattern = "^enriched_.*_panther\\.txt$", full.names = TRUE)
+      panther_files <- panther_files[!grepl("_err\\.txt$", panther_files)]
+      if (length(panther_files) > 0) {
+        cat("\n#### Panther enrichment {.tabset}\n\n")
+
+        # Group by test type (fisher/binom) and background (whole/expr)
+        for (test_type in c("fisher_whole_back", "fisher_expr_back",
+                            "binom_whole_back", "binom_expr_back")) {
+          pf <- panther_files[grepl(test_type, panther_files)]
+          if (length(pf) == 0) next
+
+          test_label <- gsub("_", " ", tools::toTitleCase(gsub("_", " ", test_type)))
+          cat(sprintf("\n##### %s\n\n", test_label))
+
+          for (f in head(pf, 5)) {
+            df <- safe_read(f)
+            if (is.null(df) || nrow(df) == 0) next
+            sig <- filter_sig(df)
+            n_sig <- if (!is.null(sig)) nrow(sig) else 0
+            cat(sprintf("**%s** — %d significant results\n\n", basename(f), n_sig))
+            if (n_sig > 0) make_table(sig, gsub("\\.txt$", ".csv", basename(f)), max_rows = 15)
+          }
+        }
+      }
+    }
+  }
+
+  # ── REVIGO results ──────────────────────────────────────────────────────────
+  if (!is.na(cp_dir) && dir.exists(cp_dir)) {
+    revigo_pdfs <- list.files(cp_dir, pattern = "revigo\\.pdf$", full.names = TRUE, recursive = TRUE)
+    if (length(revigo_pdfs) > 0) {
+      cat("\n## REVIGO Semantic Similarity\n\n")
+      cat("REVIGO reduces redundancy among significant GO terms by clustering semantically similar terms:\n\n")
+      for (p in head(revigo_pdfs, 4)) embed_pdf(p, basename(p), dpi = 72)
+      if (length(revigo_pdfs) > 4)
+        cat(sprintf("*...and %d more REVIGO visualisations in the archive*\n\n", length(revigo_pdfs) - 4))
+    }
+  }
+
+  cat("\n\n---\n\n")
+}
+```
+
+
+```{r network, results='asis'}
+if (has_network) {
+  cat("\n\n# Network Analyses\n\n")
+  cat("Results from STRINGdb protein-protein interaction network analysis:\n\n")
+
+  net_files <- list.files(network_dir, pattern = "\\.txt$|\\.tsv$|\\.csv$",
+                          full.names = TRUE, recursive = TRUE)
+  net_files <- net_files[!grepl("_err\\.txt$|log", net_files)]
+
+  for (f in head(net_files, 10)) {
+    df <- safe_read(f)
+    if (is.null(df) || nrow(df) == 0) next
+    cat(sprintf("\n## %s\n\n", basename(f)))
+    make_table(df, gsub("\\.(txt|tsv|csv)$", ".csv", basename(f)), max_rows = 20)
+  }
+
+  net_imgs <- list.files(network_dir, pattern = "\\.(png|pdf)$",
+                         full.names = TRUE, recursive = TRUE)
+  for (p in head(net_imgs, 5)) {
+    if (tools::file_ext(p) == "pdf") embed_pdf(p, basename(p))
+    else embed_png(p, basename(p))
+  }
+}
+```
+
+# File Inventory
+
+```{r inventory, results='asis'}
+cat("Complete listing of functional enrichment files found in this analysis:\n\n")
+cat('<div style="max-height:400px;overflow-y:auto;background:#f8f9fa;padding:10px;border-radius:4px;font-size:11px;font-family:monospace;">\n')
+
+# clusterProfiler
+for (d in cp_dirs) {
+  cat(sprintf("<strong>%s/</strong><br>\n", basename(d)))
+  ff <- list.files(d, recursive = TRUE)
+  for (f in ff) cat(sprintf("&nbsp;&nbsp;%s<br>\n", f))
+}
+# panther/autoGO
+for (d in panther_dirs_all) {
+  cat(sprintf("<strong>%s/</strong><br>\n", basename(d)))
+  ff <- list.files(d, recursive = TRUE)
+  for (f in ff) cat(sprintf("&nbsp;&nbsp;%s<br>\n", f))
+}
+# network
+if (has_network) {
+  cat(sprintf("<strong>%s/</strong><br>\n", "network_analyses"))
+  ff <- list.files(network_dir, recursive = TRUE)
+  for (f in ff) cat(sprintf("&nbsp;&nbsp;%s<br>\n", f))
+}
+cat('</div>\n\n')
+
+cat("\n\n---\n\n")
+cat(sprintf("*Report generated by reanalyzerGSE on %s*\n", format(Sys.time(), "%Y-%m-%d %H:%M")))
+```
