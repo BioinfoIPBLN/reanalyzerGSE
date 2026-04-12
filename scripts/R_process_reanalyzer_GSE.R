@@ -777,6 +777,25 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
       geom_text_repel(data=selected_FC, aes(label=Gene),colour="black",size=3) + ggtitle(main) + theme(plot.title = element_text(hjust = 0.5)) #adding text for the top1 20 genes  
     ggsave(p, filename = file,width=30, height=30)
     suppressWarnings(htmlwidgets::saveWidget(widget = ggplotly(p),file = gsub("pdf","html",file),selfcontained = TRUE))
+
+    # EnhancedVolcano version
+    tryCatch({
+      suppressMessages(library(EnhancedVolcano, quiet = TRUE, warn.conflicts = FALSE))
+      enhanced_file <- gsub("\\.pdf$", "_enhanced.pdf", file)
+      ev <- EnhancedVolcano(data,
+        lab = data$Gene,
+        x = 'logFC',
+        y = 'FDR',
+        title = main,
+        subtitle = 'EnhancedVolcano',
+        pCutoff = 0.05,
+        FCcutoff = 1,
+        pointSize = 2.0,
+        labSize = 3.0)
+      ggsave(ev, filename = enhanced_file, width = 12, height = 10)
+    }, error = function(e) {
+      warning(paste0("EnhancedVolcano plot could not be generated: ", e$message))
+    })
   }
   DGE <- function(comp,object=edgeR_object_norm, organism="mouse", myFDR=0.05, myFC=0){
     et <- exactTest(object,pair = rev(comp))

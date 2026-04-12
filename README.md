@@ -9,6 +9,7 @@ We suggest alternatives for installation. Please choose one of:
 1.1) Use the .def file to create the .sif image by executing:
 ```
 git clone https://github.com/BioinfoIPBLN/reanalyzerGSE
+# May need to set or clean APPTAINER_TMPDIR or APPTAINER_CACHEDIR
 apptainer build reanalyzerGSE.sif reanalyzerGSE/external_software/installation/reanalyzerGSE.def | tee -a reanalyzerGSE.sif.build.log
 ```
 1.2) Download the ready-to-use .sif image:
@@ -56,7 +57,7 @@ Please refer to the help ('-h') or contact us for any further clarification.
 ## Output
 Please refer to the [wiki](https://github.com/BioinfoIPBLN/reanalyzerGSE/wiki) for the output of a test run.
 
-## Comments
+## Citation
 Please cite this reference when using reanalyzerGSE for your publications:
 
 > Ruiz, J. L., Terrón-Camero, L. C., Castillo-González, J., Fernández-Rengel, I., Delgado, M., Gonzalez-Rey, E., & Andrés-León, E. (2023). reanalyzerGSE: tackling the everlasting lack of reproducibility and reanalyses in transcriptomics. bioRxiv, 2023-07. https://doi.org/10.1101/2023.07.12.548663
@@ -70,8 +71,10 @@ Please cite this reference when using reanalyzerGSE for your publications:
   year={2023},
   publisher={Cold Spring Harbor Laboratory}
 }
+
 ```
 
+Please cite as well the tools used by the pipeline that have been relevant to your analyses.
 
 ## Support
 Please report any [issue](https://github.com/BioinfoIPBLN/reanalyzerGSE/issues) or [contact us](mailto:bioinformatica@ipb.csic.es?subject=[GitHub]%20Source%20reanalyzerGSE%20Support) to request support or any further clarification.
