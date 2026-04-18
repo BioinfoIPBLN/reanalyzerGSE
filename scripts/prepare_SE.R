@@ -8,19 +8,37 @@ input_list_comp <- args[4]
 input_path_deg_results <- args[5]
 pattern_deg_results <- args[6]
 bakk_name <- args[7]
+organism_arg <- if (length(args) >= 8 && nchar(trimws(args[8])) > 0) args[8] else "Homo_sapiens"
 
 suppressPackageStartupMessages(library(SummarizedExperiment))
 suppressPackageStartupMessages(library(annotables))
 suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(clusterProfiler))
-suppressPackageStartupMessages(library(org.Hs.eg.db))
+
+# Organism-aware setup: select OrgDb and annotables table
+organism_clean <- gsub("[_ ]+", "_", organism_arg)
+if (grepl("Mus", organism_clean, ignore.case = TRUE)) {
+  suppressPackageStartupMessages(library(org.Mm.eg.db))
+  orgdb <- org.Mm.eg.db
+  anno_tbl <- grcm38
+  ref_build <- "Mus_musculus/GENCODE/GRCm38"
+  organism_label <- "Mus_musculus"
+  cat("\n  Organism: Mouse (Mus musculus)\n")
+} else {
+  suppressPackageStartupMessages(library(org.Hs.eg.db))
+  orgdb <- org.Hs.eg.db
+  anno_tbl <- grch38
+  ref_build <- "Homo_sapiens/GENCODE/GRCh38"
+  organism_label <- "Homo_sapiens"
+  cat("\n  Organism: Human (Homo sapiens)\n")
+}
 
 # Source shared ENSEMBL helper
 script_dir <- dirname(sub("^--file=", "", commandArgs()[grep("--file=", commandArgs())]))
 ensembl_helper <- file.path(script_dir, "R_ensembl_to_symbol.R")
 if (file.exists(ensembl_helper)) source(ensembl_helper)
 
-cat("\n========================================")
+cat("========================================")
 cat("\n  prepare_SE.R - With Pathway Analysis")
 cat("\n========================================\n")
 
@@ -57,7 +75,6 @@ if (gene_ids_are_ensembl) {
   cat("\n      Detected ENSEMBL gene IDs (e.g.,", head(rownames(tpm_counts), 2), ")")
 }
 
-
 # === rowData (DE results) ===
 cat("\n\n[3/6] Reading DE results and comparisons...")
 list_comps <- read_tsv(input_list_comp, col_names = F, show_col_types = FALSE)
@@ -93,18 +110,18 @@ de_results_list <- lapply(1:length(deg_results_files), function(i) {
   de_results <- de_results[complete.cases(de_results),]
   
   if (gene_ids_are_ensembl) {
-    # Match ENSEMBL IDs (stripping version) against grch38$ensgene
+    # Match ENSEMBL IDs (stripping version) against anno_tbl$ensgene
     ids_stripped <- toupper(strip_ensembl_version(de_results$gene_name))
-    grch38_stripped <- toupper(grch38$ensgene)
-    match_idx <- match(ids_stripped, grch38_stripped)
-    de_results$gene_id <- grch38$ensgene[match_idx]
-    de_results$description <- grch38$description[match_idx]
-    de_results$entrez_id <- grch38$entrez[match_idx]
+    anno_stripped <- toupper(anno_tbl$ensgene)
+    match_idx <- match(ids_stripped, anno_stripped)
+    de_results$gene_id <- anno_tbl$ensgene[match_idx]
+    de_results$description <- anno_tbl$description[match_idx]
+    de_results$entrez_id <- anno_tbl$entrez[match_idx]
   } else {
     # Standard symbol-based matching
-    de_results$gene_id <- grch38$ensgene[match(de_results$gene_name, grch38$symbol)]
-    de_results$description <- grch38$description[match(de_results$gene_name, grch38$symbol)]
-    de_results$entrez_id <- grch38$entrez[match(de_results$gene_name, grch38$symbol)]
+    de_results$gene_id <- anno_tbl$ensgene[match(de_results$gene_name, anno_tbl$symbol)]
+    de_results$description <- anno_tbl$description[match(de_results$gene_name, anno_tbl$symbol)]
+    de_results$entrez_id <- anno_tbl$entrez[match(de_results$gene_name, anno_tbl$symbol)]
   }
   
   de_results
@@ -135,19 +152,21 @@ if (all(!is.na(direct_match))) {
   metadata <- metadata[direct_match, ]
 } else {
   # Try fuzzy match: strip common suffixes from sample names
-  sample_cores <- sub("(_STAR\\.bam|_hisat2\\.bam|_[^_]+)$", "", sample_names)
-  meta_cores <- sub("(_STAR\\.bam|_hisat2\\.bam|_[^_]+)$", "", metadata$Name)
-  fuzzy_match <- match(sample_cores, meta_cores)
-  if (all(!is.na(fuzzy_match))) {
-    metadata <- metadata[fuzzy_match, ]
-  } else {
-    # Last resort: keep order as-is, pad if needed
-    metadata <- metadata[1:length(sample_names), ]
+  sample_cores <- sub("(_STAR\\.bam|_hisat2\\.bam|_(?!(Rep|R)\\d+$)[^_]+)$", "", sample_names, perl = T)
+  meta_cores <- sub("(_STAR\\.bam|_hisat2\\.bam|_(?!(Rep|R)\\d+$)[^_]+)$", "", metadata$Name, perl = T)
+  direct_match <- match(sample_cores, meta_cores)
+  if (all(!is.na(direct_match))) {
+    metadata <- metadata[direct_match, ]
   }
 }
-matched_count <- sum(!is.na(match(sample_names, metadata$Name)))
+matched_count <- sum(direct_match!=0)
 cat("\n      Samples matched: ", matched_count, "/", nrow(metadata))
-
+# Ensure metadata$Name matches the actual count matrix column names
+metadata$Name <- sample_names
+if (matched_count < nrow(metadata)) {
+  message("Terminating... no valid SE object can be created")
+  quit(save = "no", status = 1, runLast = FALSE)
+}
 
 # Subset counts to common genes
 raw_counts <- raw_counts[rownames(raw_counts) %in% common_genes, , drop = FALSE]
@@ -172,7 +191,8 @@ cat("      Genes with Entrez IDs:", length(universe_entrez), "\n")
 # Parameters for pathway analysis
 param <- list(
   runGO = TRUE,
-  refBuild = "Homo_sapiens/GENCODE/GRCh38",
+  refBuild = ref_build,
+  organism = organism_label,
   fdrThreshORA = 0.05,
   fdrThreshGSEA = 0.05,
   pValThreshGO = 0.05,
@@ -183,7 +203,12 @@ param <- list(
 enrichResultList <- list()
 enrichInputList <- list()
 
-for (contrast_name in names(de_results_list)) {
+suppressPackageStartupMessages(library(parallel))
+n_cores <- min(length(de_results_list), parallel::detectCores() - 1, 8)
+if(n_cores < 1) n_cores <- 1
+cat(sprintf("\n      Parallelizing %d contrasts across %d cores...", length(de_results_list), n_cores))
+
+enrichOutput_parallel <- mclapply(names(de_results_list), function(contrast_name) {
   cat("\n      Processing:", contrast_name)
   
   de_data <- de_results_list[[contrast_name]]
@@ -203,7 +228,7 @@ for (contrast_name in names(de_results_list)) {
   both_entrez <- c(up_entrez, down_entrez)
   
   # Store enrichment input
-  enrichInputList[[contrast_name]] <- list(
+  enrichInput_item <- list(
     selections = list(
       upGenes = up_genes$gene_id[!is.na(up_genes$gene_id)],
       downGenes = down_genes$gene_id[!is.na(down_genes$gene_id)],
@@ -228,16 +253,17 @@ for (contrast_name in names(de_results_list)) {
     # ORA for upGenes
     if (length(up_entrez) >= 5) {
       tryCatch({
+        suppressMessages(suppressWarnings(
         ora_results[[ont]]$upGenes <- enrichGO(
           gene = up_entrez,
           universe = universe_entrez,
-          OrgDb = org.Hs.eg.db,
+          OrgDb = orgdb,
           ont = ont,
           pAdjustMethod = "BH",
           pvalueCutoff = 1,  # Keep all for visualization
           qvalueCutoff = 1,
           readable = TRUE
-        )
+        )))
         # Add geneName column for compatibility
         if (!is.null(ora_results[[ont]]$upGenes) && nrow(ora_results[[ont]]$upGenes@result) > 0) {
           ora_results[[ont]]$upGenes@result$geneName <- ora_results[[ont]]$upGenes@result$geneID
@@ -248,16 +274,17 @@ for (contrast_name in names(de_results_list)) {
     # ORA for downGenes
     if (length(down_entrez) >= 5) {
       tryCatch({
+        suppressMessages(suppressWarnings(
         ora_results[[ont]]$downGenes <- enrichGO(
           gene = down_entrez,
           universe = universe_entrez,
-          OrgDb = org.Hs.eg.db,
+          OrgDb = orgdb,
           ont = ont,
           pAdjustMethod = "BH",
           pvalueCutoff = 1,
           qvalueCutoff = 1,
           readable = TRUE
-        )
+        )))
         if (!is.null(ora_results[[ont]]$downGenes) && nrow(ora_results[[ont]]$downGenes@result) > 0) {
           ora_results[[ont]]$downGenes@result$geneName <- ora_results[[ont]]$downGenes@result$geneID
         }
@@ -267,16 +294,17 @@ for (contrast_name in names(de_results_list)) {
     # ORA for bothGenes
     if (length(both_entrez) >= 5) {
       tryCatch({
+        suppressMessages(suppressWarnings(
         ora_results[[ont]]$bothGenes <- enrichGO(
           gene = both_entrez,
           universe = universe_entrez,
-          OrgDb = org.Hs.eg.db,
+          OrgDb = orgdb,
           ont = ont,
           pAdjustMethod = "BH",
           pvalueCutoff = 1,
           qvalueCutoff = 1,
           readable = TRUE
-        )
+        )))
         if (!is.null(ora_results[[ont]]$bothGenes) && nrow(ora_results[[ont]]$bothGenes@result) > 0) {
           ora_results[[ont]]$bothGenes@result$geneName <- ora_results[[ont]]$bothGenes@result$geneID
         }
@@ -300,16 +328,17 @@ for (contrast_name in names(de_results_list)) {
     
     if (length(gene_list) >= 10) {
       tryCatch({
+        suppressMessages(suppressWarnings(
         gsea_results[[ont]] <- gseGO(
           geneList = gene_list,
-          OrgDb = org.Hs.eg.db,
+          OrgDb = orgdb,
           ont = ont,
           minGSSize = 10,
           maxGSSize = 500,
           pvalueCutoff = 1,
           pAdjustMethod = "BH",
           verbose = FALSE
-        )
+        )))
         # Add geneName column for compatibility
         if (!is.null(gsea_results[[ont]]) && nrow(gsea_results[[ont]]@result) > 0) {
           gsea_results[[ont]]@result$geneName <- gsea_results[[ont]]@result$core_enrichment
@@ -318,10 +347,16 @@ for (contrast_name in names(de_results_list)) {
     }
   }
   
-  enrichResultList[[contrast_name]] <- list(
-    ora = ora_results,
-    gsea = gsea_results
-  )
+  return(list(
+    contrast_name = contrast_name,
+    enrichInput = enrichInput_item,
+    enrichResult = list(ora = ora_results, gsea = gsea_results)
+  ))
+}, mc.cores = n_cores)
+
+for(res in enrichOutput_parallel) {
+  enrichResultList[[res$contrast_name]] <- res$enrichResult
+  enrichInputList[[res$contrast_name]] <- res$enrichInput
 }
 
 
@@ -334,7 +369,7 @@ if (gene_ids_are_ensembl) {
   # For ENSEMBL IDs: use entrez_id directly from the already-mapped de_results
   entrez_ids <- de_results_list[[1]]$entrez_id
 } else {
-  entrez_ids <- grch38$entrez[match(gene_symbols, grch38$symbol)]
+  entrez_ids <- anno_tbl$entrez[match(gene_symbols, anno_tbl$symbol)]
 }
 
 # Map to GO terms  
@@ -343,10 +378,10 @@ valid_entrez <- valid_entrez[valid_entrez != "NA" & nchar(valid_entrez) > 0]
 
 go_bp <- tryCatch({
   if (length(valid_entrez) == 0) list() else {
-    res <- AnnotationDbi::select(org.Hs.eg.db, 
+    res <- suppressMessages(suppressWarnings(AnnotationDbi::select(orgdb, 
                                   keys = valid_entrez,
                                   columns = "GO",
-                                  keytype = "ENTREZID")
+                                  keytype = "ENTREZID")))
     res <- res[res$ONTOLOGY == "BP", ]
     split(res$GO, res$ENTREZID)
   }
@@ -354,10 +389,10 @@ go_bp <- tryCatch({
 
 go_mf <- tryCatch({
   if (length(valid_entrez) == 0) list() else {
-    res <- AnnotationDbi::select(org.Hs.eg.db, 
+    res <- suppressMessages(suppressWarnings(AnnotationDbi::select(orgdb, 
                                   keys = valid_entrez,
                                   columns = "GO",
-                                  keytype = "ENTREZID")
+                                  keytype = "ENTREZID")))
     res <- res[res$ONTOLOGY == "MF", ]
     split(res$GO, res$ENTREZID)
   }
@@ -365,10 +400,10 @@ go_mf <- tryCatch({
 
 go_cc <- tryCatch({
   if (length(valid_entrez) == 0) list() else {
-    res <- AnnotationDbi::select(org.Hs.eg.db, 
+    res <- suppressMessages(suppressWarnings(AnnotationDbi::select(orgdb, 
                                   keys = valid_entrez,
                                   columns = "GO",
-                                  keytype = "ENTREZID")
+                                  keytype = "ENTREZID")))
     res <- res[res$ONTOLOGY == "CC", ]
     split(res$GO, res$ENTREZID)
   }
@@ -429,11 +464,11 @@ cat("\n      Pathway data: enrichResultList, enrichInputList in metadata(se)")
 
 # === Save ===
 output_dir <- input_path_deg_results
-qs2::qs_save(se, file.path(output_dir, paste0("deResults_", bakk_name, ".qs2")))
+#qs2::qs_save(se, file.path(output_dir, paste0("deResults_", bakk_name, ".qs2")))
 qs2::qs_save(se, file.path(output_dir, "deResults.qs2"))
 
 cat("\n\n========================================")
 cat("\n  Output saved to:")
-cat("\n    ", file.path(output_dir, paste0("deResults_", bakk_name, ".qs2")))
+# cat("\n    ", file.path(output_dir, paste0("deResults_", bakk_name, ".qs2")))
 cat("\n    ", file.path(output_dir, "deResults.qs2"))
 cat("\n========================================\n\n")

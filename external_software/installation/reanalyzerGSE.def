@@ -104,6 +104,10 @@ From: ubuntu:24.04
     git clone -q https://github.com/jenniferlu717/KrakenTools
     chmod +x KrakenTools/* && mv KrakenTools/* /bin_external/
 
+    # Bowtie2
+    curl -fsSL --retry 10 https://github.com/BenLangmead/bowtie2/releases/download/v2.5.5/bowtie2-2.5.5-linux-x86_64.zip -o bowtie2.zip
+    unzip -qqo bowtie2.zip && mv bowtie2*/bowtie* /bin_external/
+
     # --------------------------------------------------------------------------
     # 3. Python Environment (Python 3.12)
     # --------------------------------------------------------------------------

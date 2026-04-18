@@ -22,7 +22,7 @@ if [[ $debug_step == "all" ]]; then
 	mkdir -p "$output_folder/$name"
 	echo -e "step\tepoch\tevent" > "$STEP_TIMES_FILE"
 fi
-_log_step() { echo -e "$1\t$(date +%s)\t$2" >> "$STEP_TIMES_FILE" 2>/dev/null; }
+_log_step() { mkdir -p "$(dirname "$STEP_TIMES_FILE")" 2>/dev/null; echo -e "$1\t$(date +%s)\t$2" >> "$STEP_TIMES_FILE" 2>/dev/null; }
 
 ###### STEP 1. Download info from GEO and organize metadata and so:
 if [[ $debug_step == "all" || $debug_step == "step1" ]]; then
@@ -334,7 +334,7 @@ if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
 			if [ ! -z "$input_filter_regex" ]; then
 				echo -e "\nFiltering input files with regex: $input_filter_regex\n"
 				cd $seqs_location
-				ls | egrep -v "$input_filter_regex" | xargs rm
+				ls | egrep -v "$input_filter_regex" | xargs -r rm -f
 				if [ $(ls | wc -l) -eq 0 ]; then
 					echo "Error: No files matched the regex '$input_filter_regex'. Exiting..."
 					exit 1
@@ -344,7 +344,7 @@ if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
 			if [ ! -z "$input_filter_regex_exclude" ]; then
 				echo -e "\nExcluding input files matching regex: $input_filter_regex_exclude\n"
 				cd $seqs_location
-				ls | egrep "$input_filter_regex_exclude" | xargs rm -f
+				ls | egrep "$input_filter_regex_exclude" | xargs -r rm -f
 				if [ $(ls | wc -l) -eq 0 ]; then
 					echo "Error: All files were excluded by the regex '$input_filter_regex_exclude'. Exiting..."
 					exit 1
@@ -548,8 +548,7 @@ if [[ "$transcripts" == *.gz ]]; then
 fi
 
 if [ ${#files_to_decompress[@]} -gt 0 ]; then
-	echo -e "\nDecompressing gzipped reference inputs in parallel...\n"
-	parallel --tmpdir $TMPDIR -j $number_parallel 'echo "Decompressing {1} -> {2}"; gunzip -c "{1}" > "{2}"' ::: "${files_to_decompress[@]}" :::+ "${decompressed_outputs[@]}"
+	parallel --tmpdir $TMPDIR -j $number_parallel 'echo "Using {1} -> {2}"; gunzip -c "{1}" > "{2}"' ::: "${files_to_decompress[@]}" :::+ "${decompressed_outputs[@]}"
 fi
 
 ### STEP 1. Deal with fastp if required:
@@ -814,7 +813,7 @@ fi
 ### STEP 2b. Preliminary rRNA QC (Bowtie2 mapping against rRNA references):
 if [[ $debug_step == "all" || $debug_step == "step2b" ]]; then
 	if [ ! -z "$rrna_qc_databases" ]; then
-		echo -e "\n\nSTEP 2b: Preliminary rRNA QC (Bowtie2 mapping)...\nCurrent date/time: $(date)\n\n"
+		echo -e "\n\nSTEP 2b: rRNA QC ...\nCurrent date/time: $(date)\n\n"
 _log_step "Step_2b_rRNA_QC" "start"
 
 		RRNA_QC_DIR=$output_folder/$name/preliminar_rrna_qc
@@ -827,8 +826,6 @@ _log_step "Step_2b_rRNA_QC" "start"
 		# Handle comma-separated reference paths
 		IFS=',' read -ra RRNA_REF_ARRAY <<< "$rrna_qc_databases"
 
-		# Step 2b.1: Build Bowtie2 index
-		echo "--- Step 2b.1: Building Bowtie2 Index ---"
 		if [ ! -f "$RRNA_INDEX_DIR/${RRNA_INDEX_NAME}.1.bt2" ]; then
 			echo "Creating combined FASTA from: $rrna_qc_databases"
 			RRNA_COMBINED_FASTA="$RRNA_INDEX_DIR/combined_ref.fasta"
@@ -859,29 +856,23 @@ _log_step "Step_2b_rRNA_QC" "start"
 				RRNA_CONVERTED_FILE="$RRNA_COMBINED_FASTA"
 			fi
 
-			echo "Building Bowtie2 index..."
 			bowtie2-build --threads "$cores" "$RRNA_CONVERTED_FILE" "$RRNA_INDEX_DIR/$RRNA_INDEX_NAME" > "$RRNA_INDEX_DIR/${RRNA_INDEX_NAME}_build.log" 2>&1
-			echo "Index built successfully."
 		else
 			echo "Index $RRNA_INDEX_DIR/$RRNA_INDEX_NAME already exists. Skipping build."
 		fi
 
-		# Step 2b.2: Align R1 reads and count
-		echo -e "\n--- Step 2b.2: Aligning and Counting (R1 Only) ---"
-
+		# Step 2b: Align R1 reads and count
 		RRNA_SUMMARY_FILE="$RRNA_QC_DIR/rRNA_mapping_summary_R1.tsv"
 		echo -e "Sample\tTotal_Reads\tSense_Count\tAntisense_Count\tSense_Pct\tAntisense_Pct" > "$RRNA_SUMMARY_FILE"
 
 		for fq in "$seqs_location"/*_1.fastq.gz "$seqs_location"/*_R1*.fastq.gz; do
 			# Skip if no fastq files exist
 			[ -e "$fq" ] || continue
-			# Skip duplicates from glob expansion
+			# Skip duplicates
 			[ -f "$fq" ] || continue
 
 			# Extract sample name
 			nm=$(basename "$fq" | sed -E 's/(_R1(_[0-9]+)?|_1)\.fastq\.gz//')
-
-			echo "Processing sample: $nm"
 
 			# Get total read count
 			TOTAL_READS=$(zcat "$fq" | wc -l | awk '{print $1/4}')
@@ -946,10 +937,6 @@ _log_step "Step_2b_rRNA_QC" "start"
 		done
 
 		echo -e "\nResults summarized in: $RRNA_SUMMARY_FILE"
-		cat "$RRNA_SUMMARY_FILE"
-
-		# Step 2b.3: Generate interactive barplot
-		echo -e "\n--- Step 2b.3: Generating interactive barplot ---"
 		Rscript $CURRENT_DIR/scripts/R_rrna_qc_plot.R "$RRNA_QC_DIR" 2>&1 | tee -a "$RRNA_QC_DIR/R_rrna_qc_plot.log"
 
 _log_step "Step_2b_rRNA_QC" "end"
@@ -989,7 +976,7 @@ _log_step "Step_3a_Prepare" "start"
 				echo -e "\nPredicting strandness with salmon on random sample: $rand_sample\n"
 				salmon quant -i $salmon_idx -l A -r $seqs_location/$rand_sample -p $cores -o $output_folder/$name/strand_prediction/salmon_out/ --skipQuant &> $output_folder/$name/strand_prediction/salmon_out/salmon_out.log
 			elif [[ $(find $output_folder/$name -name library_layout_info.txt | xargs cat) == "PAIRED" ]]; then
-				rand_sample_root=$(ls $seqs_location | sed 's,_[12].fastq.gz,,g' | sort | uniq | shuf | head -1)
+				rand_sample_root=$(ls $seqs_location | sed 's,_[12].fastq.gz,,g' | uniq | shuf | head -1)
 				rand_sample="${rand_sample_root}_1.fastq.gz / ${rand_sample_root}_2.fastq.gz"
 				echo -e "\nPredicting strandness with salmon on random sample: $rand_sample\n"
 				salmon quant -i $salmon_idx -l A -1 $seqs_location/${rand_sample_root}_1.fastq.gz -2 $seqs_location/${rand_sample_root}_2.fastq.gz -p $cores -o $output_folder/$name/strand_prediction/salmon_out/ --skipQuant &> $output_folder/$name/strand_prediction/salmon_out/salmon_out.log
@@ -1027,7 +1014,7 @@ _log_step "Step_3a_Prepare" "start"
 
 	### Prepare other info required by the updated version of miARma...
 		echo -e "\nPreparing miARma-seq execution...\n"
-		number_files=$(ls $seqs_location | sed 's,_[12].fastq.gz.*,,g' | sort | uniq | wc -l)
+		number_files=$(ls $seqs_location | sed 's,_[12].fastq.gz.*,,g' | uniq | wc -l)
 		if [ $number_files -le $number_parallel ]; then
 			cores_parallel=$((cores / number_files))
 		else
@@ -1104,6 +1091,7 @@ _log_step "Step_3a_Prepare" "start"
 			fi
 
 			# ── Validate featureCounts parameters against annotation file ──
+			mkdir -p $TMPDIR
 			fc_feat_val="${array3[index]:-exon}"
 			fc_seq_val="${array2[index]:-gene_name}"
 			if [ -f "$gff" ]; then
@@ -1183,7 +1171,7 @@ _log_step "Step_3b_miARma" "start"
 		organism=$(cat $output_folder/$name/GEO_info/organism.txt | sed 's, ,_,g;s,_+,_,g')
 	fi
 
-	echo -e "\n\nmiARma configuration:"
+	echo -e "\n\nmiARma configuration .ini:"
         cat miarma$index.ini
 	echo -e "\nPlease double check all the parameters above for miARma, in particular the stranded or the reference genome files and annotation used. Proceeding with miARma execution in..."
 	secs=$((1 * 15))
@@ -1274,8 +1262,9 @@ _log_step "Step_4_R_Process" "start"
 					"$output_folder/$name/GEO_info/samples_info.txt" \
 					"$final_dir/DGE/list_comp.txt" \
 					"$final_dir/DGE" \
-					"DGE_analysis_comp" \
-					"$name" 2>&1 | tee -a "$final_dir/prepare_SE.log"
+					"^DGE_analysis_comp[0-9].txt$" \
+					"$name" \
+					"$organism" 2>&1 | tee -a "$final_dir/prepare_SE.log"
 			else
 				echo "Skipping exploreDE SE generation for index $index: required files not found"
 			fi

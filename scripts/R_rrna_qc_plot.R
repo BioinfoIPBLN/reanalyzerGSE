@@ -16,10 +16,8 @@ if (!file.exists(summary_file)) {
 suppressPackageStartupMessages(library(plotly))
 suppressPackageStartupMessages(library(htmlwidgets))
 
-cat("Reading rRNA mapping summary from:", summary_file, "\n")
 rRnaData <- read.delim(summary_file, stringsAsFactors = FALSE)
 
-cat("Generating interactive stacked barplot...\n")
 p <- plot_ly(rRnaData,
              x = ~Sample,
              y = ~Sense_Pct,
@@ -35,4 +33,3 @@ p <- plot_ly(rRnaData,
 output_html <- file.path(output_dir, "rRNA_mapping_barplot.html")
 saveWidget(p, file = output_html, selfcontained = TRUE)
 
-cat("Interactive plot saved successfully to", output_html, "\n")

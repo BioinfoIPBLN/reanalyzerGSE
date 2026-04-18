@@ -84,6 +84,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
 
   # Record filter threshold info for downstream use
   filter_info_file <- file.path(output_dir, "QC_and_others", "filter_threshold_info.txt")
+  cat(paste0("Noise filtering threshoild in: ",file.path(output_dir, "QC_and_others", "filter_threshold_info.txt")))
   tryCatch({
     writeLines(c(
       paste0("filter_option=", ifelse(exists("filter_option"), filter_option, "unknown")),
@@ -119,16 +120,12 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   sample_names_for_col <- gsub("_hisat.*|_STAR.*", "", colnames(x$counts))
   names(col.group) <- sample_names_for_col
 
-  cat("\n\nSummary cpm log=TRUE per sample...\n")
-  cat(summary(lcpm))
-
-
 ### QC figures:
-  cat("\n=== [QC] Opening PDF ===")
+  cat("\n Final QC PDF: "); print(paste0(output_dir,"/QC_and_others/",label,"_",label2,"_QC.pdf") 
   pdf(paste0(output_dir,"/QC_and_others/",label,"_",label2,"_QC.pdf"),paper="A4")
   
   ### 0. Reminder of the samples:
-  cat("\n--- [1/12] Sample table ---\n")
+  cat("\n[1/13] Sample table\n")
   ggplot() + theme_void(base_size=1) + coord_flip() +
     annotate(geom = "table",
                    x = 0,
@@ -137,7 +134,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
                    label = list(as.data.frame(targets)))
   
   ### 1.1. Density rawcounts log2, cpm...:
-  cat("--- [2/12] Density plots (raw + filtered) ---\n")
+  cat("\n[2/13] Density plots (raw + filtered)\n")
   col <- RColorBrewer::brewer.pal(nsamples, "Paired")
   
   if(sum(duplicated(col))>0){
@@ -154,7 +151,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
     den <- density(lcpm_prefilter[,i])
     lines(den$x, den$y, col=col[i], lwd=2)
   }
-  cutoff_legends <- c("general: 10/M + 2/L")
+  cutoff_legends <- c("approx recommended: 10/M + 2/L")
   cutoff_ltys <- c(3)
   cutoff_cols <- c("black")
   if (!is.na(applied.cutoff)) {
@@ -178,7 +175,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   legend("topright", legend=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), text.col=col, bty="n", cex = 0.5)
   
   ### 2.1. Boxplots non-normalised:
-  cat("--- [3/12] Boxplots (unnorm + norm) ---\n")
+  cat("\n[3/13] Boxplots (unnorm + norm)\n")
   par(mfrow=c(1,2))
   boxplot(lcpm, las=2, col=col.group, main="", names=targets$Name, cex.axis=0.4)
   title(main="Unnormalized data (lcpm)",ylab="Log-cpm")
@@ -188,15 +185,15 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   title(main="Normalized data (lcpm2)",ylab="Log-cpm")
   
   ### 3. Library size and read counts figures:
-  cat("--- [4/12] Library size barplots ---\n")
+  cat("\n[4/13] Library size barplots\n")
   par(mfrow=c(1,1))
   par(mar = c(7, 5, 4, 2))
   bar_mids <- barplot(x$samples$lib.size,names.arg = gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name),
-                       las=2, main="Library Size",col=col.group, ylim=range(pretty(c(0, x$samples$lib.size))))
+                       las=2, main="Library Size",col=col.group, ylim=c(0, max(x$samples$lib.size) * 1.25))
   # Values on top of each bar
   for (i in 1:length(bar_mids)) {
-    y_pos <- x$samples$lib.size[i] + 0.01 * max(x$samples$lib.size)
-    text(bar_mids[i], y_pos, labels = format(x$samples$lib.size[i], big.mark = ","), cex = 0.8, pos = 3)
+    y_pos <- x$samples$lib.size[i] + 0.02 * max(x$samples$lib.size)
+    text(bar_mids[i], y_pos, labels = format(x$samples$lib.size[i], big.mark = ","), cex = 0.8, pos = 3, srt = 45, adj = c(0, 0), xpd = TRUE)
   }
   
   # Labeled
@@ -214,7 +211,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
     las = 1,
     main = "Library Size",
     col = col.group,
-    ylim = c(0, max(x$samples$lib.size) * 1.2)  # 1.2 gives enough headroom for labels
+    ylim=c(0, max(x$samples$lib.size) * 1.25))
   )
   
   # Rotated x-axis labels
@@ -231,53 +228,52 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   # Values on top of each bar
   for (i in 1:length(bar_mids)) {
     y_pos <- x$samples$lib.size[i] + 0.01 * max(x$samples$lib.size)
-    text(bar_mids[i], y_pos, labels = format(x$samples$lib.size[i], big.mark = ","), cex = 0.8, pos = 3)
+    text(bar_mids[i], y_pos, labels = format(x$samples$lib.size[i], big.mark = ","), cex = 0.8, pos = 3, srt = 45, adj = c(0, 0), xpd = TRUE)
   }
   
-  
+  # bam_files 
   
   bam_files_present <- length(list.files(path=input_dir, pattern="\\.bam$", recursive=TRUE)) > 0
 
   if(bam_files_present) {
-
-  if(length(grep("_skip_",list.files(path=input_dir,full.names=T,recursive=T)))==0 & length(grep("_stats.txt",list.files(path=input_dir,full.names=T,recursive=T)))>0){
+   if(length(grep("_skip_",list.files(path=input_dir,full.names=T,recursive=T)))==0 & length(grep("_stats.txt",list.files(path=input_dir,full.names=T,recursive=T)))>0){
     ### Figures with the number of reads
-    cat("--- [4b/12] BAM/FASTQ read count barplots ---\n")
+    cat("\n[4b/13] BAM/FASTQ read count barplots\n")
     reads <- c()
     files <- grep("_flagstat.txt",list.files(path=input_dir,full.names=T,recursive=T),val=T)
     for (f in files){reads <- c(reads,sub(" .*","",read.delim(f)[9,]))}
-    bam_reads_2 <- data.frame(names=sub("_hisat2.*|_STAR.*","",basename(files)),reads=as.numeric(reads))
+    bam_reads_2 <- data.frame(Samples=sub("_hisat2.*|_STAR.*","",basename(files)),reads=as.numeric(reads))
     bam_reads_2$color <- col.group
   
-    cat("Please check ordering and number of bam reads...\n"); print(bam_reads_2)  
+    cat("\nOrdering and number of bam reads...\n"); print(bam_reads_2)  
   
     ## Barplot 1 no. of reads
     bar_plot <- ggbarplot(
       bam_reads_2, 
-      x = "names", 
+      x = "Samples", 
       y = "reads", 
       fill = "color",
       color = "color",
       stat = "identity"
     ) + theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
     print(bar_plot + 
-      geom_text(aes(label = reads), vjust = -0.5, color = "black", size=3) + labs(title="bam_read1") + guides(color = "none") + theme(legend.position = "none"))
-  
-  
+     scale_y_continuous(expand = expansion(mult = c(0, 0.25))) + 
+     geom_text(aes(label = reads), angle = 45, hjust = 0, nudge_y = max(bam_reads_2$reads) * 0.02, color = "black", size = 3) + labs(title="bam_read1") + guides(color = "none") + scale_fill_identity() + scale_color_identity() + theme(legend.position = "none"))
+    
     reads <- c()
     files <- grep("_1_fastqc.zip",list.files(path=input_dir,full.names=T,recursive=T),val=T)
     for (f in files){reads <- c(reads,read.delim(unz(f, file.path(sub(".zip","",(basename(f))),"fastqc_data.txt")))[6,2])}
     
     ## Barplot 2 no. of reads
     if(length(files)!=0){ # Control that sometimes if these are repeated runs, fastqc is not going to be executed    
-      fastq_reads_2 <- data.frame(names=as.character(gsub("_1_fastqc.*","",basename(files))),reads=as.numeric(reads))    
+      fastq_reads_2 <- data.frame(Samples=as.character(gsub("_1_fastqc.*","",basename(files))),reads=as.numeric(reads))
       fastq_reads_2$color <- col.group
           
-      cat("Please check ordering and number of fastq reads...\n"); print(fastq_reads_2)
+      cat("\nOrdering and number of fastq reads...\n"); print(fastq_reads_2)
       
       bar_plot <- ggbarplot(
         fastq_reads_2, 
-        x = "names", 
+        x = "Samples", 
         y = "reads", 
         fill = "color",
         color = "color",
@@ -287,14 +283,12 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
       for (i in 1:length(reads)){perc<-c(perc,round(bam_reads_2$reads[i]*100/fastq_reads_2$reads[i],2))}
       print(bar_plot + 
         geom_text(aes(label = paste0(reads, "\n(bam/fastq: ", perc, " %)")), 
-                  vjust = -0.3, color = "black", size = 2.5) +
-        scale_y_continuous(expand = expansion(mult = c(0, 0.2))) +  # 20% padding on top
+                  angle = 45, hjust = 0, nudge_y = max(bam_reads_2$reads) * 0.02, color = "black", size = 3) +
+        scale_y_continuous(expand = expansion(mult = c(0, 0.2))) +
         labs(title = "fastq_reads") + 
         guides(color = "none") + 
-        theme(legend.position = "none"))
-      
-    }
-    
+        theme(legend.position = "none")) + scale_color_identity() + scale_fill_identity()      
+    }    
     
     reads_info <- fastq_reads_2[,1:2]
     reads_info$library_size <- x$samples$lib.size
@@ -303,7 +297,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   }
 
   ## Barplot 3 no. of alignments
-  cat("--- [4c/12] Alignment category barplots ---\n")
+  cat("\n[4c/13] Alignment category barplots\n")
   multiqc_dir <- file.path(input_dir,"../multiqc_out/multiqc_report_data/")
   aln_files <- grep("pe_plot.txt|star_alignment",list.files(multiqc_dir,full=T),val=T)
   if(length(aln_files) > 0) {
@@ -358,11 +352,10 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   
   
   ### 4. Corrplot no log
-  cat("--- [5/12] Correlation plots (all genes) ---\n")
+  cat("\n[5/13] Correlation plots (all genes)\n")
   tmp <- lcpm_no_log; colnames(tmp) <- gsub("_hisat.*|_STAR.*","",colnames(tmp))
   # Adjust margins to prevent title cropping
   par(mar=c(2, 2, 4, 3))
-  # Fix: compute AOE order and reorder colors to match (corrplot reorders columns but tl.col stays in original order)
   cor_sp <- cor(tmp, method="spearman")
   cor_pe <- cor(tmp, method="pearson")
   aoe_sp <- corrMatOrder(cor_sp, order="AOE")
@@ -371,36 +364,40 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   col_pe_aoe <- col.group[colnames(cor_pe)[aoe_pe]]
   col_orig <- col.group[colnames(cor_sp)]  # original order for non-reordered plots
   corrplot(cor_sp, order='AOE', type = 'full', title="Spearman_correlation", tl.col = col_sp_aoe, tl.srt = 45, mar=c(0,0,2,0))
-  corrplot(cor_sp, method='number', type = 'full', title="Spearman_correlation", tl.col = col_orig, tl.srt = 45, mar=c(0,0,2,0))
+  corrplot(cor_sp, method='number', type = 'full', title="Spearman_correlation", tl.col = col_orig, tl.srt = 45, mar=c(0,0,2,0), number.cex = 0.75)
   corrplot(cor_pe, order='AOE', type = 'full', title="Pearson_correlation", tl.col = col_pe_aoe, tl.srt = 45, mar=c(0,0,2,0))
-  corrplot(cor_pe, method='number', type = 'full', title="Pearson_correlation", tl.col = col_orig, tl.srt = 45, mar=c(0,0,2,0))
+  corrplot(cor_pe, method='number', type = 'full', title="Pearson_correlation", tl.col = col_orig, tl.srt = 45, mar=c(0,0,2,0), number.cex = 0.75)
   
   ### 5.1. MDS_norm
-  cat("--- [6/12] MDS-PCoA plots ---\n")
+  cat("\n[6/13] MDS-PCoA plots\n")
   par(mar = c(5, 4, 4, 2))
   z <- plotMDS(lcpm2_no_log, labels=targets$Name, col=col.group, gene.selection = "pairwise", plot=F)
   edge <- sd(z$x)
   plotMDS(lcpm2_no_log, labels=targets$Name, col=col.group, gene.selection = "pairwise",xlim=c(min(z$x)-edge,max(z$x) + edge))
+  abline(h = 0, v = 0, col = "lightgray", lty = "dashed")
   title(main="MDS-PCoA Sample Names Norm")
   
   z <- plotMDS(lcpm2_no_log, labels=targets$Filename, col=col.group, gene.selection = "pairwise", plot=F)
   edge <- sd(z$x)
   plotMDS(lcpm2_no_log, labels=targets$Filename, col=col.group, gene.selection = "pairwise",xlim=c(min(z$x)-edge,max(z$x) + edge))
+  abline(h = 0, v = 0, col = "lightgray", lty = "dashed")
   title(main="MDS-PCoA Sample Names Norm")
 
   ### 5.2. MDS_log_norm
   z <- plotMDS(lcpm2, labels=targets$Name, col=col.group, gene.selection = "pairwise", plot=F)
   edge <- sd(z$x)
   plotMDS(lcpm2, labels=targets$Name, col=col.group, gene.selection = "pairwise",xlim=c(min(z$x)-edge,max(z$x) + edge))
+  abline(h = 0, v = 0, col = "lightgray", lty = "dashed")
   title(main="MDS-PCoA Sample Names log2 Norm")
   
   z <- plotMDS(lcpm2, labels=targets$Filename, col=col.group, gene.selection = "pairwise", plot=F)
   edge <- sd(z$x)
   plotMDS(lcpm2, labels=targets$Filename, col=col.group, gene.selection = "pairwise",xlim=c(min(z$x)-edge,max(z$x) + edge))
+  abline(h = 0, v = 0, col = "lightgray", lty = "dashed")
   title(main="MDS-PCoA Sample Names log2 Norm")
   
-  ### 6. PCA por tipos
-  cat("--- [7/12] PCA plots ---\n")
+  ### 6. PCA
+  cat("\n[7/13] PCA plots\n")
   data_pca <- as.matrix(x)
   data_pca <- as.data.frame(t(data_pca))
   rownames(data_pca) <- targets$Name
@@ -411,43 +408,43 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   autoplot(data_pca.PC,label=T,data=data_pca,colour=col.group,xlim = c(-0.8,0.8),label.size=3,label.repel=T) + theme_minimal() + ggtitle("PCA")
   
   rownames(data_pca) <- data_pca$Filename
-  autoplot(data_pca.PC,label=T,data=data_pca,colour=col.group,xlim = c(-0.8,0.8),label.size=3,label.repel=T) + theme_minimal() + ggtitle("PCA")
+  print(suppressWarnings(autoplot(data_pca.PC,label=T,data=data_pca,colour=col.group,xlim = c(-0.8,0.8),label.size=3,label.repel=T) + theme_minimal() + ggtitle("PCA")))
   
-  ### 7. Heatmap 250 mots differential entities
-  cat("--- [8/12] Heatmap (top 250 most variable) ---\n")
+  ### 7. Heatmap 250 most differential entities
+  cat("\n[8/13] Heatmap (top 250 most variable)\n")
   rsd <- rowSds(as.matrix(x))
   sel <- order(rsd, decreasing=TRUE)[1:250]
   
   heatmap(na.omit(as.matrix(x[sel,])),margins=c(10,8),main="Heatmap 250 most diff entities raw counts",cexRow=0.01,cexCol=0.5,labCol=sub("_hisat2.*|_STAR.*","",rownames(x$samples)))
   
   ### 8.1. Dendogram cluster raw norm
-  cat("--- [9/12] Dendrograms (all genes) ---\n")
+  cat("\n[9/13] Dendrograms (all genes)\n")
   par(mfrow=c(1,1), mar=c(8, 4, 4, 2),col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
   pr.hc.c <- hclust(na.omit(dist(t(cpm(x2$counts,log=F)),method = "euclidean")))
   pr.hc.c$labels <- sub("_hisat2.*|_STAR.*","",pr.hc.c$labels)
-  plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of normalized counts from samples of ", label, sep=""), cex=0.5)
+  plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of normalized counts all genes from samples of ", label, sep=""), cex=0.5)
   
   ### 8.2. Dendogram cluster raw norm colored
   groups <- as.factor(x$samples$group)
   group_index <- as.numeric(groups[pr.hc.c$order])
-  ggdendrogram(pr.hc.c, rotate = FALSE, theme_dendro=F) + theme_minimal() + theme(axis.text.x = element_text(face="bold", color=unique(col.group)[group_index])) + 
-    labs(title=paste("Hierarchical Clustering of normalized counts from samples of ", label, sep=""), y="Height",x="Samples") + ggpubr::rotate_x_text() + ylim(c(min(pr.hc.c$height),tail(sort(pr.hc.c$height),2)[1]))
+  suppressWarnings(print(ggdendrogram(pr.hc.c, rotate = FALSE, theme_dendro=F) + theme_minimal() + theme(axis.text.x = element_text(face="bold", color=unique(col.group)[group_index])) + 
+    labs(title=paste("Hierarchical Clustering of normalized counts from samples of ", label, sep=""), y="Height",x="Samples") + ggpubr::rotate_x_text() + ylim(c(min(pr.hc.c$height),tail(sort(pr.hc.c$height),2)[1]))))
   
   ### 8.3. Dendogram cluster raw norm log
   par(mfrow=c(1,1), mar=c(8, 4, 4, 2),col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
   pr.hc.c <- hclust(na.omit(dist(t(cpm(x2$counts,log=T)),method = "euclidean")))
   pr.hc.c$labels <- sub("_hisat2.*|_STAR.*","",pr.hc.c$labels)
-  plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of log2 normalized counts from samples of ", label, sep=""), cex=0.5)
+  plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of log2 normalized counts all genes from samples of ", label, sep=""), cex=0.5)
   
   ### 8.4. Dendogram cluster raw norm log colored
   groups <- as.factor(x$samples$group)
   group_index <- as.numeric(groups[pr.hc.c$order])
-  ggdendrogram(pr.hc.c, rotate = FALSE, theme_dendro=F) + theme_minimal() + theme(axis.text.x = element_text(face="bold", color=unique(col.group)[group_index])) +
-    labs(title=paste("Hierarchical Clustering of normalized counts from samples of ", label, sep=""), y="Height",x="Samples") + ggpubr::rotate_x_text() + ylim(c(min(pr.hc.c$height),tail(sort(pr.hc.c$height),2)[1]))
+  suppressWarnings(print(ggdendrogram(pr.hc.c, rotate = FALSE, theme_dendro=F) + theme_minimal() + theme(axis.text.x = element_text(face="bold", color=unique(col.group)[group_index])) +
+    labs(title=paste("Hierarchical Clustering of normalized counts from samples of ", label, sep=""), y="Height",x="Samples") + ggpubr::rotate_x_text() + ylim(c(min(pr.hc.c$height),tail(sort(pr.hc.c$height),2)[1]))))
 
 
   ### 9. Top N over-represented genes per sample (inspired by ezRun CountQC)
-  cat("--- [10/12] Top N over-represented genes ---\n")
+  cat("\n[10/13] Top N over-represented genes\n")
   tryCatch({
     counts_mat <- as.matrix(x$counts)
     countFrac <- sweep(counts_mat, 2, colSums(counts_mat), FUN = "/")
@@ -525,7 +522,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
 
 
   ### 10. Correlation and clustering using only the top 100 most variable genes
-  cat("--- [11a/12] Correlation/clustering (top 100 genes) ---\n")
+  cat("\n[11a/13] Correlation/clustering (top 100 genes)\n")
   tryCatch({
     log2signal <- lcpm2  # log2 normalized CPM
     gene_sds <- apply(log2signal, 1, sd, na.rm = TRUE)
@@ -556,7 +553,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
     corrplot(cor_sp_top,
              method = "number", type = "full",
              title = paste0("Spearman correlation (top ", n_top, " genes)"),
-             tl.col = col_orig_top, tl.srt = 45, mar = c(0, 0, 2, 0))
+             tl.col = col_orig_top, tl.srt = 45, mar = c(0, 0, 2, 0), number.cex = 0.75)
 
     ## Pearson corrplot - top genes
     corrplot(cor_pe_top,
@@ -567,7 +564,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
     corrplot(cor_pe_top,
              method = "number", type = "full",
              title = paste0("Pearson correlation (top ", n_top, " genes)"),
-             tl.col = col_orig_top, tl.srt = 45, mar = c(0, 0, 2, 0))
+             tl.col = col_orig_top, tl.srt = 45, mar = c(0, 0, 2, 0), number.cex = 0.75)
 
     ## Dendrogram using 1 - correlation distance (top genes)
     if (ncol(top_signal) > 2) {
@@ -587,7 +584,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
       # ggdendro colored version
       groups_top <- as.factor(x$samples$group)
       group_index_top <- as.numeric(groups_top[hc_top$order])
-      p_dend <- ggdendrogram(hc_top, rotate = FALSE, theme_dendro = FALSE) +
+      p_dend <- suppressWarnings(ggdendrogram(hc_top, rotate = FALSE, theme_dendro = FALSE) +
         theme_minimal() +
         theme(axis.text.x = element_text(face = "bold",
                                          color = unique(col.group)[group_index_top])) +
@@ -595,7 +592,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
              y = "Height", x = "Samples") +
         ggpubr::rotate_x_text() +
         ylim(c(min(hc_top$height),
-               tail(sort(hc_top$height), 2)[1]))
+               tail(sort(hc_top$height), 2)[1])))
       print(p_dend)
     }
     cat(paste0("\nCorrelation/clustering plots for top ", n_top, " genes done.\n"))
@@ -605,7 +602,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
 
 
   ### 11. Scatter plots by condition (pairwise condition averages)
-  cat("--- [11b/12] Scatter plots by condition ---\n")
+  cat("\n[11b/13] Scatter plots by condition\n")
   tryCatch({
     conds <- as.character(x$samples$group)
     unique_conds <- unique(conds)
@@ -652,10 +649,9 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
 
   ### 12. geneBody_coverage logic
   if (args[6] == "edgeR_object_norm" && bam_files_present) {
-    cat("--- [12/12] Gene body coverage ---\n")
+    cat("\n[12/13] Gene body coverage\n")
     tryCatch({
       cat("Preparing annotation for geneBody_coverage...\n")
-      cat("Importing GTF/GFF3 using rtracklayer...\n")
       suppressMessages(library(rtracklayer, quiet = T, warn.conflicts = F))
       suppressMessages(library(GenomicFeatures, quiet = T, warn.conflicts = F))
       suppressMessages(library(txdbmaker, quiet = T, warn.conflicts = F))
@@ -751,7 +747,6 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
           
           mcols(gr) <- mc
           
-          cat("Making TxDb...\n")
           suppressWarnings(txdb <- txdbmaker::makeTxDbFromGRanges(gr))
           
           # Decide aggregation level based on featureCounts feature type
@@ -853,13 +848,12 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
           if (length(bin_mat_list) > 0) {
              plot_df <- do.call(rbind, bin_mat_list)
              p <- ggplot(plot_df, aes(x=Percentage, y=Coverage, color=Sample)) +
-                geom_line(size=1) +
+                geom_line(linewidth=1) +
                 theme_bw() +
                 scale_x_continuous(breaks = seq(0, 100, by=25), labels = function(x) paste0(x, "%")) + 
                 labs(title=paste0(length(bam_files), " BAMs, ", length(valid_tx), " ", feature_label, " - Gene Body Coverage"), x="Gene body proportion (5' -> 3')", y="Normalized Coverage") +
                 theme(legend.position="right")
              print(p)
-             cat("Gene body coverage pure R calculation complete (appended to main QC report).\n")
           }
     }, error = function(e) {
       cat(paste("\nSkipping geneBody_coverage logic:", e$message, "\n"))
@@ -867,55 +861,64 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   }
 
   ### 13. Gantt chart of pipeline step timing
-  cat("--- [13/13] Gantt chart of pipeline timing ---\n")
+  cat("\n[13/13] Gantt chart of pipeline timing\n")
   tryCatch({
-    step_times_file <- file.path(path, "step_times.tsv")
-    if (file.exists(step_times_file)) {
-      st <- read.delim(step_times_file, header = TRUE, stringsAsFactors = FALSE)
-      # Pivot start/end into wide format
-      st_start <- st[st$event == "start", c("step", "epoch")]
-      st_end   <- st[st$event == "end",   c("step", "epoch")]
-      colnames(st_start) <- c("step", "start_epoch")
-      colnames(st_end)   <- c("step", "end_epoch")
-      st_wide <- merge(st_start, st_end, by = "step", all = TRUE)
-      # Remove steps with missing start or end
-      st_wide <- st_wide[!is.na(st_wide$start_epoch) & !is.na(st_wide$end_epoch), ]
-      if (nrow(st_wide) > 0) {
-        st_wide$duration_min <- (st_wide$end_epoch - st_wide$start_epoch) / 60
-        # Convert epochs to POSIXct for display
-        st_wide$start_time <- as.POSIXct(st_wide$start_epoch, origin = "1970-01-01")
-        st_wide$end_time   <- as.POSIXct(st_wide$end_epoch,   origin = "1970-01-01")
-        # Order by start time
-        st_wide <- st_wide[order(st_wide$start_epoch), ]
-        st_wide$step <- factor(st_wide$step, levels = rev(st_wide$step))
+   step_times_file <- file.path(path, "step_times.tsv")
+   if (file.exists(step_times_file) && file.info(step_times_file)$size > 0) {
+    
+    # Set header = FALSE because the TSV lacks column names
+    st <- read.delim(step_times_file, header = FALSE, stringsAsFactors = FALSE)
+    
+    # Manually assign the column names based on the data structure
+    colnames(st) <- c("step", "epoch", "event")
+    
+    # Pivot start/end into wide format
+    st_start <- st[st$event == "start", c("step", "epoch"), drop = FALSE]
+    st_end   <- st[st$event == "end",   c("step", "epoch"), drop = FALSE]
+    colnames(st_start) <- c("step", "start_epoch")
+    colnames(st_end)   <- c("step", "end_epoch")
+    st_wide <- merge(st_start, st_end, by = "step", all = TRUE)
+    
+    # Remove steps with missing start or end
+    st_wide <- st_wide[!is.na(st_wide$start_epoch) & !is.na(st_wide$end_epoch), ]
+    
+    if (nrow(st_wide) > 0) {
+      st_wide$duration_min <- (st_wide$end_epoch - st_wide$start_epoch) / 60
+      
+      # Convert epochs to POSIXct for display
+      st_wide$start_time <- as.POSIXct(st_wide$start_epoch, origin = "1970-01-01")
+      st_wide$end_time   <- as.POSIXct(st_wide$end_epoch,   origin = "1970-01-01")
+      
+      # Order by start time
+      st_wide <- st_wide[order(st_wide$start_epoch), ]
+      st_wide$step <- factor(st_wide$step, levels = rev(st_wide$step))
 
-        # Color palette by step category
-        step_colors <- scales::hue_pal()(nrow(st_wide))
+      # Color palette by step category
+      step_colors <- scales::hue_pal()(nrow(st_wide))
 
-        p_gantt <- ggplot(st_wide, aes(y = step)) +
-          geom_segment(aes(x = start_time, xend = end_time, yend = step, color = step),
-                       linewidth = 6) +
-          geom_text(aes(x = start_time + (end_time - start_time)/2,
-                        label = paste0(round(duration_min, 1), " min")),
-                    size = 2.5, color = "black") +
-          scale_x_datetime(date_labels = "%H:%M") +
-          labs(title = "Pipeline Step Timing (Gantt Chart)",
-               x = "Wall-clock time", y = "") +
-          theme_minimal() +
-          theme(legend.position = "none",
-                axis.text.y = element_text(size = 7),
-                plot.title = element_text(hjust = 0.5))
-        print(p_gantt)
-        cat("Gantt chart of pipeline timing done.\n")
-      } else {
-        cat("step_times.tsv found but no complete start/end pairs. Skipping Gantt chart.\n")
-      }
+      p_gantt <- ggplot(st_wide, aes(y = step)) +
+        geom_segment(aes(x = start_time, xend = end_time, yend = step, color = step),
+                     linewidth = 6) +
+        geom_text(aes(x = start_time + (end_time - start_time)/2,
+                      label = paste0(round(duration_min, 1), " min")),
+                  size = 2.5, color = "black") +
+        scale_x_datetime(date_labels = "%H:%M") +
+        labs(title = "Pipeline Step Timing (Gantt Chart)",
+             x = "Wall-clock time", y = "") +
+        theme_minimal() +
+        theme(legend.position = "none",
+              axis.text.y = element_text(size = 7),
+              plot.title = element_text(hjust = 0.5))
+      print(p_gantt)
+      cat("Gantt chart of pipeline timing done.\n")
     } else {
-      cat("step_times.tsv not found. Skipping Gantt chart.\n")
+      cat("step_times.tsv found but no complete start/end pairs. Skipping Gantt chart.\n")
     }
-  }, error = function(e) {
-    cat(paste("\nSkipping Gantt chart:", e$message, "\n"))
-  })
-
-cat("\n=== [QC] All sections complete, closing PDF ===\n")
-while (!is.null(dev.list())) dev.off()
+   } else {
+    cat("step_times.tsv not found. Skipping Gantt chart.\n")
+   }
+ }, error = function(e) {
+  cat(paste("\nSkipping Gantt chart:", e$message, "\n"))
+ })
+ cat("\n[QC] All sections complete, closing PDF\n")
+ while (!is.null(dev.list())) dev.off()

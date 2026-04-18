@@ -15,14 +15,6 @@ dge_dir      <- args[1]
 project_name <- args[2]
 organism     <- args[3]
 
-# Fail loudly if rmarkdown is not installed
-if (!requireNamespace("rmarkdown", quietly = TRUE))
-  stop("ERROR: 'rmarkdown' package is not installed. Install it with: install.packages('rmarkdown')")
-
-# Fail loudly if pandoc is not available
-if (!rmarkdown::pandoc_available())
-  stop("ERROR: pandoc is not available. Install pandoc or ensure it is on your PATH.")
-
 # Locate the template (same directory as this script)
 script_dir <- dirname(sub("^--file=", "", commandArgs()[grep("--file=", commandArgs())]))
 if (length(script_dir) == 0 || script_dir == "") script_dir <- "."
@@ -33,7 +25,7 @@ if (!file.exists(template))
 
 output_file <- file.path(dge_dir, "functional_enrichment_report.html")
 
-cat(sprintf("Rendering functional enrichment report...\n  DGE dir:  %s\n  Project:  %s\n  Organism: %s\n  Output:   %s\n",
+cat(sprintf("DGE dir:  %s\n  Project:  %s\n  Organism: %s\n  Output:   %s\n",
             dge_dir, project_name, organism, output_file))
 
 rmarkdown::render(

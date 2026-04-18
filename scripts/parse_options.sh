@@ -74,14 +74,10 @@ for argument in $options; do
 
 	        #### Processing parameters:
 	        -s | -strand # Strandness of the library ('yes, 'no', 'reverse'). If not provided and '-t' used, this would be predicted by salmon. Please use this parameter if prediction not correct, see explanations in for example in bit.ly/strandness0 and bit.ly/strandness
-	        -f | -filter # Threshold of gene counts to use ('bin' to capture the lower expressed genes, 'filterbyexpr' to use the edgeR solution, 'standard' by default, or a numeric value for an absolute raw count threshold applied per group). Please provide a comma separated list with the filters to use at each quantification if multiple annotation are provided
+	        -f | -filter # Threshold of gene counts to use ('bin' to capture the lower expressed genes, 'filterbyexpr' to use the edgeR solution, 'standard' by default (can be customized via 'standard,X', e.g. 'standard,5', defaults to 3), or a numeric value for an absolute raw count threshold applied per group). Please provide a comma separated list with the filters to use at each quantification if multiple annotation are provided
 	        -Of | -options_featureCounts_feat # The feature type to use to count in featureCounts (default 'exon')
 	        -Os | -options_featureCounts_seq # The seqid type to use to count in featureCounts (default 'gene_name')
 	        -A | -aligner # Aligner software to use ('hisat2' or 'star', by default)
-	        input_filter_regex=""
-	        input_filter_regex_exclude=""
-                alignment_removal=""
-                cores=8
 	        -Des | -differential_expr_software # Software to be used in the differential expression analyses ('edgeR' by default, or 'DESeq2')
 	        -fp | -fastp_mode # Whether to perform quality filtering on the raw reads by fastp ('yes' or 'no', by default)
 	        -fpa | -fastp_adapter # Whether to perform adapter trimming on the raw reads by fastp ('yes' or 'no', by default, to perform automatic trimming, or a path to a fasta file to perform trimming of its sequences)
@@ -508,6 +504,15 @@ if [ -z "$rrna_qc_min_score" ]; then
 fi
 if [ -z "$aligner_extra_args" ]; then
 	aligner_extra_args=""
+fi
+if [ -z "$input_filter_regex" ]; then
+	input_filter_regex=""
+fi
+if [ -z "$input_filter_regex_exclude" ]; then
+	input_filter_regex_exclude=""
+fi
+if [ -z "$alignment_removal" ]; then
+	alignment_removal=""
 fi
 echo -e "\nsplicing_option=$splicing_option\n"
 

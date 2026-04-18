@@ -67,7 +67,7 @@ splicing_option: "no"                  # Splicing analysis: 'no' (default), 'sas
 
 # === Processing parameters ===
 strand: ""                             # Strandness ('yes', 'no', 'reverse'; predicted by salmon if empty)
-filter: "standard"                     # Gene count threshold ('bin', 'filterbyexpr', 'standard', or a numeric value for absolute raw count threshold per group)
+filter: "standard"                     # Gene count threshold ('bin', 'filterbyexpr', 'standard' or 'standard,X' to set min_group, or a numeric value for absolute raw count threshold per group)
 optionsFeatureCounts_feat: "exon"      # featureCounts feature type
 optionsFeatureCounts_seq: "gene_name"  # featureCounts seqid type
 aligner: "star"                        # Aligner ('hisat2' or 'star') or 'kallisto'

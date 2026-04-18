@@ -362,8 +362,11 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
 
 ###### Filter counts:
   filter <- function(filter="standard",data,min_group=3){
-    if(filter == "standard"){
-      print("Applying standard filtering...")
+    if(startsWith(filter, "standard")){
+      if(grepl(",", filter)){
+        min_group <- as.numeric(strsplit(filter, ",")[[1]][2])
+      }
+      print(paste0("Applying standard filtering with min_group=", min_group, "..."))
       keep <- rowSums(cpm(data)>1) >= min_group
       data <- data[keep,]
       data$samples$lib.size <- colSums(data$counts)
@@ -605,7 +608,7 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
   dir.create(paste0(output_dir,""),showWarnings = FALSE)
   dir.create(paste0(output_dir,"/QC_and_others"),showWarnings = FALSE)
   dir.create(paste0(output_dir,"/violin"),showWarnings = FALSE)
-  write.table(c(paste0("PLEASE NOTE:","This folder contains barplots and violin plots for the expression of the of interest: ",genes,". In the filenames the statistical tests attempted are shown. If any of the violin plots do not display the expected statistics based on the title, it's because the test wasn't possible due to the data distribution or similar reasons, and therefore it's not the most suitable")),
+  write.table(c(paste0("PLEASE NOTE:","This folder contains barplots and violin plots for the expression of the genes of interest: ",genes," required. In the filenames the statistical tests attempted are shown. If any of the violin plots do not display the expected statistics based on the title, it's because the test wasn't possible due to the data distribution or similar reasons, and therefore it's not the most suitable. Please rerun if needed providing genes of interest or use external Shiny apps or genome browsers")),
         file=paste0(output_dir,"/violin/readme.txt"),quote = F,row.names = F, col.names = F,sep = "\n")
   if (!exists("adjusted_counts")){
     gene_counts_rpkm_to_plot <- gene_counts_rpkm
@@ -770,7 +773,11 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
     colnames(data)[grep("logFC",colnames(data))] <- "logFC"
     real_DE<-data[data$FDR<=0.05,]
     selected_FC<-head(real_DE[order(abs(real_DE$logFC),decreasing = T),], 20)
-    max_value=max(abs(real_DE$logFC))
+    if(nrow(real_DE) > 0) {
+      max_value=max(abs(real_DE$logFC), na.rm=TRUE)
+    } else {
+      max_value=max(abs(data$logFC), na.rm=TRUE)
+    }
     p <- ggplot(data=data, aes(x=logFC, y=-log10(FDR), colour=threshold)) + coord_cartesian(xlim = c(-max_value, max_value )) +
       geom_point(alpha=0.4, size=1.75) +
       xlab("log2 fold change") + ylab("-log10 adj.P.Val") +
@@ -782,16 +789,18 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
     tryCatch({
       suppressMessages(library(EnhancedVolcano, quiet = TRUE, warn.conflicts = FALSE))
       enhanced_file <- gsub("\\.pdf$", "_enhanced.pdf", file)
-      ev <- EnhancedVolcano(data,
-        lab = data$Gene,
-        x = 'logFC',
-        y = 'FDR',
-        title = main,
-        subtitle = 'EnhancedVolcano',
-        pCutoff = 0.05,
-        FCcutoff = 1,
-        pointSize = 2.0,
-        labSize = 3.0)
+      suppressWarnings({
+        ev <- EnhancedVolcano(data,
+          lab = data$Gene,
+          x = 'logFC',
+          y = 'FDR',
+          title = main,
+          subtitle = 'EnhancedVolcano',
+          pCutoff = 0.05,
+          FCcutoff = 1,
+          pointSize = 2.0,
+          labSize = 3.0)
+      })
       ggsave(ev, filename = enhanced_file, width = 12, height = 10)
     }, error = function(e) {
       warning(paste0("EnhancedVolcano plot could not be generated: ", e$message))
@@ -803,12 +812,13 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
     top1 <- topTags(et, n=nrow(et), adjust.method="BH",sort.by="PValue")
     print(summary(decideTests(et)))
     print(nrow(top1$table[top1$table$FDR<=myFDR & abs(top1$table$logFC)>= myFC,]))
-    print(comp); print("Top 10 results (each sense):"); top2 <- top1[top1$table$FDR<=myFDR,3:6]
+    print(comp); print("Top 10 results (each sense log2FC):"); top2 <- top1[top1$table$FDR<=myFDR,3:6]
     if(dim(top2)[1] > 20){
       print(as.data.frame(top2)[order(as.data.frame(top2)$logFC)[c(as.numeric(dim(top2)[1]):as.numeric(dim(top2)[1]-10),1:10)],])
     } else {
       print(as.data.frame(top2)[order(as.data.frame(top2)$logFC),])
     }   
+    cat("\n")
     if (venn_volcano!="no"){
       myLabel1=gsub("^_","",gsub("_+","_",gsub("[^[:alnum:]_]+", "_", paste(comp, collapse = '_vs_'))))
       Volcano(top1,paste(output_dir,"/DGE/Volcano_plot_",myLabel1,".pdf", sep=""),myLabel1)
@@ -1030,8 +1040,7 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
           }
         }
         conflicts <- intersect(ls(envir = environment()), ls(envir = .GlobalEnv))
-        if (length(conflicts) > 0) {warning("The following objects will be overwritten in the global environment: ", paste(conflicts, collapse = ", "))}
-        list2env(as.list(environment()), envir = .GlobalEnv); save.image(file=paste0(output_dir,"/DGE/DGE_analysis_comp",i+existing,".RData"))
+        suppressWarnings(list2env(as.list(environment()), envir = .GlobalEnv)); save.image(file=paste0(output_dir,"/DGE/DGE_analysis_comp",i+existing,".RData"))
         write.table(edgeR_results$table,
                 file=paste0(output_dir,"/DGE/DGE_analysis_comp",i+existing,".txt"),quote = F,row.names = F, col.names = T,sep = "\t")
       }
@@ -1249,19 +1258,17 @@ tryCatch({
     df <- data.frame(row.names = seq_along(v9_strings))
     for (key in all_keys) {
       if (is_gff3) {
-        # GFF3: key=value; — extract value after key=
-        pattern <- paste0("(?:^|;)\\s*", key, "=([^;]*)")
-        rx <- regexpr(pattern, v9_strings, perl = TRUE)
-        has_match <- rx > 0
+        # GFF3: key=value; - extract value after key=
+        pattern <- paste0(".*(?:^|;)\\s*", key, "=([^;]*).*")
+        has_key <- grepl(paste0("(?:^|;)\\s*", key, "="), v9_strings, perl = TRUE)
         vals <- rep(NA_character_, length(v9_strings))
-        vals[has_match] <- sub(paste0(".*", key, "="), "", regmatches(v9_strings[has_match], rx[has_match]))
+        vals[has_key] <- sub(pattern, "\\1", v9_strings[has_key], perl = TRUE)
       } else {
-        # GTF: key "value"; — extract quoted value
-        pattern <- paste0('(?:^|;)\\s*', key, '\\s+"([^"]*)"')
-        rx <- regexpr(pattern, v9_strings, perl = TRUE)
-        has_match <- rx > 0
+        # GTF: key "value"; - extract quoted value
+        pattern <- paste0('.*(?:^|;)\\s*', key, '\\s+"([^"]*)".*')
+        has_key <- grepl(paste0('(?:^|;)\\s*', key, '\\s+"'), v9_strings, perl = TRUE)
         vals <- rep(NA_character_, length(v9_strings))
-        vals[has_match] <- sub('^.*"([^"]*)"$', "\\1", regmatches(v9_strings[has_match], rx[has_match]))
+        vals[has_key] <- sub(pattern, "\\1", v9_strings[has_key], perl = TRUE)
       }
       df[[paste0("gtf_", key)]] <- vals
     }
@@ -1362,8 +1369,6 @@ tryCatch({
         rpkm_categ_sub <- rpkm_categ[, rpkm_keep, drop = FALSE]
         tpm_categ_sub <- tpm_categ[, tpm_keep, drop = FALSE]
         cpm_categ_sub <- cpm_categ[, cpm_keep, drop = FALSE]
-        cat(paste0("  Comparison: ", comp_str, " -> keeping expression columns for ",
-                   length(comp_samples), " samples (conditions: ", paste(comp_conditions, collapse=", "), ")\n"))
       } else {
         rpkm_categ_sub <- rpkm_categ
         tpm_categ_sub <- tpm_categ
@@ -1413,14 +1418,13 @@ tryCatch({
                 quote = FALSE, row.names = FALSE, col.names = TRUE, sep = "\t")
     cat("Merged expression+GTF tables written (no DGE requested).\n")
   }
-  cat(paste0("Merge completed. Current date: ", date(), "\n"))
 }, error = function(e) {
   cat(paste0("\nWARNING: Merging expression/DGE + GTF failed: ", e$message, "\nContinuing...\n"))
 })
 
 conflicts <- intersect(ls(envir = environment()), ls(envir = .GlobalEnv))
-if (length(conflicts) > 0) {warning("The following objects will be overwritten in the global environment: ", paste(conflicts, collapse = ", "))}
-list2env(as.list(environment()), envir = .GlobalEnv); save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
+cat("\nSaved R global environment in 'QC_and_others/globalenvir.RData'")
+suppressWarnings(list2env(as.list(environment()), envir = .GlobalEnv)); save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
 
 ###### WIP add DESeq2 as a full alternative to edgeR, for now, generate and provide/write independently the counts if the user ask for it:
 if (diff_soft=="DESeq2"){  

@@ -303,8 +303,9 @@ for (idx in seq_along(comp_names)) {
     # GO ALL (combined)
     cat("\n#### GO ALL (combined)\n\n")
     go_all <- list.files(cp_dir,
-                pattern = "^GO_overrepresentation_test_[A-Z]+_(?!BP|MF|CC).*\\.txt$",
-                full.names = TRUE, perl = TRUE)
+                pattern = "^GO_overrepresentation_test_.*\\.txt$",
+                full.names = TRUE)
+    go_all <- go_all[grepl("^GO_overrepresentation_test_[A-Z]+_(?!BP|MF|CC).*\\.txt$", basename(go_all), perl = TRUE)]
     # Fallback: the ones without BP/MF/CC suffix
     if (length(go_all) == 0)
       go_all <- list.files(cp_dir,
