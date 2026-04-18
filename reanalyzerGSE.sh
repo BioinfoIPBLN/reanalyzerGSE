@@ -1171,7 +1171,7 @@ _log_step "Step_3b_miARma" "start"
 		organism=$(cat $output_folder/$name/GEO_info/organism.txt | sed 's, ,_,g;s,_+,_,g')
 	fi
 
-	echo -e "\n\nmiARma configuration .ini:"
+	echo -e "miARma configuration .ini:"
         cat miarma$index.ini
 	echo -e "\nPlease double check all the parameters above for miARma, in particular the stranded or the reference genome files and annotation used. Proceeding with miARma execution in..."
 	secs=$((1 * 15))

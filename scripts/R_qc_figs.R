@@ -121,7 +121,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   names(col.group) <- sample_names_for_col
 
 ### QC figures:
-  cat("\n Final QC PDF: "); print(paste0(output_dir,"/QC_and_others/",label,"_",label2,"_QC.pdf") 
+  cat("\nFinal QC PDF:"); print(paste0(output_dir,"/QC_and_others/",label,"_",label2,"_QC.pdf"))
   pdf(paste0(output_dir,"/QC_and_others/",label,"_",label2,"_QC.pdf"),paper="A4")
   
   ### 0. Reminder of the samples:
