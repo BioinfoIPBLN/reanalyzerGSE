@@ -536,9 +536,9 @@ install_pkgs_batched(pkgs_4); cat("\n\n\n\n\nBLOCK 4 R packages installed!\n\n\n
 install_pkgs_batched(pkgs_5); cat("\n\n\n\n\nBLOCK 5 R packages installed!\n\n\n\n\n")
 install_pkgs_batched(pkgs_6); cat("\n\n\n\n\nBLOCK 6 R packages installed!\n\n\n\n\n")
 install_pkgs_batched(pkgs_7); cat("\n\n\n\n\nBLOCK 7 R packages installed!\n\n\n\n\n")
-install_pkgs_batched(pkgs_8); cat("\n\n\n\n\nBLOCK 7 R packages installed!\n\n\n\n\n")
-install_pkgs_batched(pkgs_9); cat("\n\n\n\n\nBLOCK 7 R packages installed!\n\n\n\n\n")
-install_pkgs_batched(pkgs_10); cat("\n\n\n\n\nBLOCK 7 R packages installed!\n\n\n\n\n")
+install_pkgs_batched(pkgs_8); cat("\n\n\n\n\nBLOCK 8 R packages installed!\n\n\n\n\n")
+install_pkgs_batched(pkgs_9); cat("\n\n\n\n\nBLOCK 9 R packages installed!\n\n\n\n\n")
+install_pkgs_batched(pkgs_10); cat("\n\n\n\n\nBLOCK 10 R packages installed!\n\n\n\n\n")
 
 pkg_install(c("url::https://cran.r-project.org/src/contrib/Archive/bayesbio/bayesbio_1.0.0.tar.gz",
 	      "stephenturner/annotables@5bf7dc0"), dependencies = F, ask = FALSE)
