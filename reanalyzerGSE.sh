@@ -1095,21 +1095,16 @@ _log_step "Step_3a_Prepare" "start"
 			fc_feat_val="${array3[index]:-exon}"
 			fc_seq_val="${array2[index]:-gene_name}"
 			if [ -f "$gff" ]; then
-				# Handle gzipped files
-				cmd_cat="cat"
-				if [[ "$gff" == *.gz ]]; then
-					cmd_cat="gzip -dc"
-				fi
 				# Check feature type (-t) exists in column 3
-				available_feats=$($cmd_cat "$gff" | awk -F'\t' '!/^#/ && NF>=9 {print $3}' | sort -u | tr '\n' ', ' | sed 's/,$//')
-				if ! $cmd_cat "$gff" | awk -F'\t' -v ft="$fc_feat_val" '!/^#/ && NF>=9 && $3==ft {found=1; exit} END {exit !found}'; then
+				available_feats=$(zcat -f "$gff" | awk -F'\t' '!/^#/ && NF>=9 {print $3}' | sort -u | tr '\n' ', ' | sed 's/,$//')
+				if ! zcat -f "$gff" | awk -F'\t' -v ft="$fc_feat_val" '!/^#/ && NF>=9 && $3==ft {found=1; exit} END {exit !found}'; then
 					echo -e "\n\033[1;31mERROR:\033[0m Feature type '$fc_feat_val' (optionsFeatureCounts_feat / -t) was NOT found in column 3 of annotation file:\n  $gff\n\nAvailable feature types: $available_feats\n\nPlease set 'optionsFeatureCounts_feat' in your YAML config to one of the above (e.g. 'exon' for GTF, 'gene' for some GFF3 files).\n" >&2
 					exit 1
 				fi
 				# Check attribute name (-g) exists as a proper key in column 9 (not substring) for the given feature type
-				if ! $cmd_cat "$gff" | awk -F'\t' -v ft="$fc_feat_val" -v attr="$fc_seq_val" '!/^#/ && NF>=9 && $3==ft { n=split($9,pairs,";"); for(i=1;i<=n;i++){ gsub(/^[ \t]+/,"",pairs[i]); split(pairs[i],kv,/[ =]+/); if(kv[1]==attr){found=1; exit} } } END {exit !found}'; then
+				if ! zcat -f "$gff" | awk -F'\t' -v ft="$fc_feat_val" -v attr="$fc_seq_val" '!/^#/ && NF>=9 && $3==ft { n=split($9,pairs,";"); for(i=1;i<=n;i++){ gsub(/^[ \t]+/,"",pairs[i]); split(pairs[i],kv,/[ =]+/); if(kv[1]==attr){found=1; exit} } } END {exit !found}'; then
 					# Extract example attributes from the first data line with the selected feature type
-					example_attrs=$($cmd_cat "$gff" | awk -F'\t' -v ft="$fc_feat_val" '!/^#/ && NF>=9 && $3==ft {print $9; exit}')
+					example_attrs=$(zcat -f "$gff" | awk -F'\t' -v ft="$fc_feat_val" '!/^#/ && NF>=9 && $3==ft {print $9; exit}')
 					echo -e "\n\033[1;31mERROR:\033[0m Attribute name '$fc_seq_val' (optionsFeatureCounts_seq / -g) was NOT found in column 9 of annotation file (for feature type '$fc_feat_val'):\n  $gff\n\nExample attributes from your file (for '$fc_feat_val'):\n  $example_attrs\n\nFor GTF files, typical values are 'gene_id' or 'gene_name'.\nFor GFF3 files, typical values are 'ID', 'Name', or 'gene_id' (or 'Parent' if feature type is 'exon').\nPlease set 'optionsFeatureCounts_seq' and 'optionsFeatureCounts_feat' in your YAML config accordingly.\n" >&2
 					exit 1
 				fi
