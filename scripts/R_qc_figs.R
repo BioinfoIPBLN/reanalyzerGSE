@@ -211,7 +211,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
     las = 1,
     main = "Library Size",
     col = col.group,
-    ylim=c(0, max(x$samples$lib.size) * 1.25))
+    ylim=c(0, max(x$samples$lib.size) * 1.25)
   )
   
   # Rotated x-axis labels
