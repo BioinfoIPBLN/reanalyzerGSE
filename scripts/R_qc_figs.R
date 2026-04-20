@@ -125,7 +125,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   pdf(paste0(output_dir,"/QC_and_others/",label,"_",label2,"_QC.pdf"),paper="A4")
   
   ### 0. Reminder of the samples:
-  cat("\n[1/13] Sample table\n")
+  cat("\n[1/12] Sample table\n")
   ggplot() + theme_void(base_size=1) + coord_flip() +
     annotate(geom = "table",
                    x = 0,
@@ -134,7 +134,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
                    label = list(as.data.frame(targets)))
   
   ### 1.1. Density rawcounts log2, cpm...:
-  cat("\n[2/13] Density plots (raw + filtered)\n")
+  cat("\n[2/12] Density plots (raw + filtered)\n")
   col <- RColorBrewer::brewer.pal(nsamples, "Paired")
   
   if(sum(duplicated(col))>0){
@@ -175,7 +175,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   legend("topright", legend=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), text.col=col, bty="n", cex = 0.5)
   
   ### 2.1. Boxplots non-normalised:
-  cat("\n[3/13] Boxplots (unnorm + norm)\n")
+  cat("\n[3/12] Boxplots (unnorm + norm)\n")
   par(mfrow=c(1,2))
   boxplot(lcpm, las=2, col=col.group, main="", names=targets$Name, cex.axis=0.4)
   title(main="Unnormalized data (lcpm)",ylab="Log-cpm")
@@ -185,7 +185,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   title(main="Normalized data (lcpm2)",ylab="Log-cpm")
   
   ### 3. Library size and read counts figures:
-  cat("\n[4/13] Library size barplots\n")
+  cat("\n[4/12] Library size barplots\n")
   par(mfrow=c(1,1))
   par(mar = c(7, 5, 4, 2))
   bar_mids <- barplot(x$samples$lib.size,names.arg = gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name),
@@ -238,7 +238,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   if(bam_files_present) {
    if(length(grep("_skip_",list.files(path=input_dir,full.names=T,recursive=T)))==0 & length(grep("_stats.txt",list.files(path=input_dir,full.names=T,recursive=T)))>0){
     ### Figures with the number of reads
-    cat("\n[4b/13] BAM/FASTQ read count barplots\n")
+    cat("\n[4b/12] BAM/FASTQ read count barplots\n")
     reads <- c()
     files <- grep("_flagstat.txt",list.files(path=input_dir,full.names=T,recursive=T),val=T)
     for (f in files){reads <- c(reads,sub(" .*","",read.delim(f)[9,]))}
@@ -258,8 +258,8 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
     ) + theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
     print(bar_plot + 
      scale_y_continuous(expand = expansion(mult = c(0, 0.25))) + 
-     geom_text(aes(label = reads), angle = 45, hjust = 0, nudge_y = max(bam_reads_2$reads) * 0.02, color = "black", size = 3) + labs(title="bam_read1") + guides(color = "none") + scale_fill_identity() + scale_color_identity() + theme(legend.position = "none"))
-    
+     geom_text(aes(label = format(reads, big.mark = ",")), angle = 45, hjust = 0, nudge_y = max(bam_reads_2$reads) * 0.02, color = "black", size = 3) + labs(title="BAM reads R1") + guides(color = "none") + scale_fill_identity() + scale_color_identity() + theme(legend.position = "none"))
+
     reads <- c()
     files <- grep("_1_fastqc.zip",list.files(path=input_dir,full.names=T,recursive=T),val=T)
     for (f in files){reads <- c(reads,read.delim(unz(f, file.path(sub(".zip","",(basename(f))),"fastqc_data.txt")))[6,2])}
@@ -282,10 +282,10 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
       perc <- c()
       for (i in 1:length(reads)){perc<-c(perc,round(bam_reads_2$reads[i]*100/fastq_reads_2$reads[i],2))}
       print(bar_plot + 
-        geom_text(aes(label = paste0(reads, "\n(bam/fastq: ", perc, " %)")), 
+        geom_text(aes(label = paste0(format(reads, big.mark=","), "\n(bam/fastq: ", perc, " %)")), 
                   angle = 45, hjust = 0, nudge_y = max(bam_reads_2$reads) * 0.02, color = "black", size = 3) +
         scale_y_continuous(expand = expansion(mult = c(0, 0.2))) +
-        labs(title = "fastq_reads") + 
+        labs(title = "FASTQ reads") + 
         guides(color = "none") + 
         theme(legend.position = "none")) + scale_color_identity() + scale_fill_identity()      
     }    
@@ -297,7 +297,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   }
 
   ## Barplot 3 no. of alignments
-  cat("\n[4c/13] Alignment category barplots\n")
+  cat("\n[4c/12] Alignment category barplots\n")
   multiqc_dir <- file.path(input_dir,"../multiqc_out/multiqc_report_data/")
   aln_files <- grep("pe_plot.txt|star_alignment",list.files(multiqc_dir,full=T),val=T)
   if(length(aln_files) > 0) {
@@ -352,7 +352,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   
   
   ### 4. Corrplot no log
-  cat("\n[5/13] Correlation plots (all genes)\n")
+  cat("\n[5/12] Correlation plots (all genes)\n")
   tmp <- lcpm_no_log; colnames(tmp) <- gsub("_hisat.*|_STAR.*","",colnames(tmp))
   # Adjust margins to prevent title cropping
   par(mar=c(2, 2, 4, 3))
@@ -369,7 +369,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   corrplot(cor_pe, method='number', type = 'full', title="Pearson_correlation", tl.col = col_orig, tl.srt = 45, mar=c(0,0,2,0), number.cex = 0.75)
   
   ### 5.1. MDS_norm
-  cat("\n[6/13] MDS-PCoA plots\n")
+  cat("\n[6/12] MDS-PCoA plots\n")
   par(mar = c(5, 4, 4, 2))
   z <- plotMDS(lcpm2_no_log, labels=targets$Name, col=col.group, gene.selection = "pairwise", plot=F)
   edge <- sd(z$x)
@@ -397,7 +397,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   title(main="MDS-PCoA Sample Names log2 Norm")
   
   ### 6. PCA
-  cat("\n[7/13] PCA plots\n")
+  cat("\n[7/12] PCA plots\n")
   data_pca <- as.matrix(x)
   data_pca <- as.data.frame(t(data_pca))
   rownames(data_pca) <- targets$Name
@@ -411,14 +411,14 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   print(suppressWarnings(autoplot(data_pca.PC,label=T,data=data_pca,colour=col.group,xlim = c(-0.8,0.8),label.size=3,label.repel=T) + theme_minimal() + ggtitle("PCA")))
   
   ### 7. Heatmap 250 most differential entities
-  cat("\n[8/13] Heatmap (top 250 most variable)\n")
+  cat("\n[8/12] Heatmap (top 250 most variable)\n")
   rsd <- rowSds(as.matrix(x))
   sel <- order(rsd, decreasing=TRUE)[1:250]
   
   heatmap(na.omit(as.matrix(x[sel,])),margins=c(10,8),main="Heatmap 250 most diff entities raw counts",cexRow=0.01,cexCol=0.5,labCol=sub("_hisat2.*|_STAR.*","",rownames(x$samples)))
   
   ### 8.1. Dendogram cluster raw norm
-  cat("\n[9/13] Dendrograms (all genes)\n")
+  cat("\n[9/12] Dendrograms (all genes)\n")
   par(mfrow=c(1,1), mar=c(8, 4, 4, 2),col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
   pr.hc.c <- hclust(na.omit(dist(t(cpm(x2$counts,log=F)),method = "euclidean")))
   pr.hc.c$labels <- sub("_hisat2.*|_STAR.*","",pr.hc.c$labels)
@@ -444,7 +444,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
 
 
   ### 9. Top N over-represented genes per sample (inspired by ezRun CountQC)
-  cat("\n[10/13] Top N over-represented genes\n")
+  cat("\n[10/12] Top N over-represented genes\n")
   tryCatch({
     counts_mat <- as.matrix(x$counts)
     countFrac <- sweep(counts_mat, 2, colSums(counts_mat), FUN = "/")
@@ -522,7 +522,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
 
 
   ### 10. Correlation and clustering using only the top 100 most variable genes
-  cat("\n[11a/13] Correlation/clustering (top 100 genes)\n")
+  cat("\n[11a/12] Correlation/clustering (top 100 genes)\n")
   tryCatch({
     log2signal <- lcpm2  # log2 normalized CPM
     gene_sds <- apply(log2signal, 1, sd, na.rm = TRUE)
@@ -602,7 +602,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
 
 
   ### 11. Scatter plots by condition (pairwise condition averages)
-  cat("\n[11b/13] Scatter plots by condition\n")
+  cat("\n[11b/12] Scatter plots by condition\n")
   tryCatch({
     conds <- as.character(x$samples$group)
     unique_conds <- unique(conds)
@@ -649,7 +649,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
 
   ### 12. geneBody_coverage logic
   if (args[6] == "edgeR_object_norm" && bam_files_present) {
-    cat("\n[12/13] Gene body coverage\n")
+    cat("\n[12/12] Gene body coverage\n")
     tryCatch({
       cat("Preparing annotation for geneBody_coverage...\n")
       suppressMessages(library(rtracklayer, quiet = T, warn.conflicts = F))
@@ -860,65 +860,5 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
     })
   }
 
-  ### 13. Gantt chart of pipeline step timing
-  cat("\n[13/13] Gantt chart of pipeline timing\n")
-  tryCatch({
-   step_times_file <- file.path(path, "step_times.tsv")
-   if (file.exists(step_times_file) && file.info(step_times_file)$size > 0) {
-    
-    # Set header = FALSE because the TSV lacks column names
-    st <- read.delim(step_times_file, header = FALSE, stringsAsFactors = FALSE)
-    
-    # Manually assign the column names based on the data structure
-    colnames(st) <- c("step", "epoch", "event")
-    
-    # Pivot start/end into wide format
-    st_start <- st[st$event == "start", c("step", "epoch"), drop = FALSE]
-    st_end   <- st[st$event == "end",   c("step", "epoch"), drop = FALSE]
-    colnames(st_start) <- c("step", "start_epoch")
-    colnames(st_end)   <- c("step", "end_epoch")
-    st_wide <- merge(st_start, st_end, by = "step", all = TRUE)
-    
-    # Remove steps with missing start or end
-    st_wide <- st_wide[!is.na(st_wide$start_epoch) & !is.na(st_wide$end_epoch), ]
-    
-    if (nrow(st_wide) > 0) {
-      st_wide$duration_min <- (st_wide$end_epoch - st_wide$start_epoch) / 60
-      
-      # Convert epochs to POSIXct for display
-      st_wide$start_time <- as.POSIXct(st_wide$start_epoch, origin = "1970-01-01")
-      st_wide$end_time   <- as.POSIXct(st_wide$end_epoch,   origin = "1970-01-01")
-      
-      # Order by start time
-      st_wide <- st_wide[order(st_wide$start_epoch), ]
-      st_wide$step <- factor(st_wide$step, levels = rev(st_wide$step))
-
-      # Color palette by step category
-      step_colors <- scales::hue_pal()(nrow(st_wide))
-
-      p_gantt <- ggplot(st_wide, aes(y = step)) +
-        geom_segment(aes(x = start_time, xend = end_time, yend = step, color = step),
-                     linewidth = 6) +
-        geom_text(aes(x = start_time + (end_time - start_time)/2,
-                      label = paste0(round(duration_min, 1), " min")),
-                  size = 2.5, color = "black") +
-        scale_x_datetime(date_labels = "%H:%M") +
-        labs(title = "Pipeline Step Timing (Gantt Chart)",
-             x = "Wall-clock time", y = "") +
-        theme_minimal() +
-        theme(legend.position = "none",
-              axis.text.y = element_text(size = 7),
-              plot.title = element_text(hjust = 0.5))
-      print(p_gantt)
-      cat("Gantt chart of pipeline timing done.\n")
-    } else {
-      cat("step_times.tsv found but no complete start/end pairs. Skipping Gantt chart.\n")
-    }
-   } else {
-    cat("step_times.tsv not found. Skipping Gantt chart.\n")
-   }
- }, error = function(e) {
-  cat(paste("\nSkipping Gantt chart:", e$message, "\n"))
- })
  cat("\n[QC] All sections complete, closing PDF\n")
  while (!is.null(dev.list())) dev.off()

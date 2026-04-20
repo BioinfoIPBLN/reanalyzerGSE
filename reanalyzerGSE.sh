@@ -1673,4 +1673,14 @@ _log_step "Step_9_Cleanup" "end"
 	echo -e "\n\nSTEP 9: DONE\nCurrent date/time: $(date)\n\n"
 fi
 
+# Final Gantt chart with all steps (rendered after everything completes)
+if [ -f "$STEP_TIMES_FILE" ]; then
+	for qc_dir in $(find "$output_folder/$name" -maxdepth 2 -type d -name "QC_and_others" 2>/dev/null); do
+		gantt_out="$qc_dir/pipeline_gantt_chart.pdf"
+		echo -e "\nRendering final pipeline Gantt chart..."
+		Rscript $CURRENT_DIR/scripts/R_gantt_chart.R "$STEP_TIMES_FILE" "$gantt_out" 2>&1 || \
+			echo "WARNING: Gantt chart rendering failed."
+	done
+fi
+
 echo -e "\n\n\nALL STEPS DONE! Best wishes\n\n\n"
