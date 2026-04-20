@@ -23,13 +23,17 @@ template <- file.path(script_dir, "R_enrichment_report.Rmd")
 if (!file.exists(template))
   stop(paste0("ERROR: RMarkdown template not found at: ", template))
 
+# Copy template to the final output directory to prevent read-only filesystem errors
+tmp_template <- file.path(dge_dir, basename(template))
+file.copy(template, tmp_template, overwrite = TRUE)
+
 output_file <- file.path(dge_dir, "functional_enrichment_report.html")
 
 cat(sprintf("DGE dir:  %s\n  Project:  %s\n  Organism: %s\n  Output:   %s\n",
             dge_dir, project_name, organism, output_file))
 
 rmarkdown::render(
-  input       = template,
+  input       = tmp_template,
   output_file = output_file,
   params      = list(
     dge_dir      = normalizePath(dge_dir),
