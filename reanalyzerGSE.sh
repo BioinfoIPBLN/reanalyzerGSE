@@ -1541,7 +1541,7 @@ _log_step "Step_6_Enrichment" "start"
 		fi
 
 		# Render functional enrichment HTML report (self-contained)
-		if [ -d "$output_folder/$name/final_results_reanalysis$index/DGE" ]; then
+		if [[ "$functional_enrichment_analyses" != "no" ]] && [ -d "$output_folder/$name/final_results_reanalysis$index/DGE" ]; then
 			echo -e "\nRendering functional enrichment HTML report..."
 			Rscript $CURRENT_DIR/scripts/render_enrichment_report.R \
 				"$output_folder/$name/final_results_reanalysis$index/DGE" \
