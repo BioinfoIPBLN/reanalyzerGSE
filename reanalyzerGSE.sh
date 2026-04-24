@@ -1446,17 +1446,31 @@ _log_step "Step_6_Enrichment" "start"
 					annot_enrichm="$annotation_file"
 				fi
 
+				enrichment_results_found="no"
 				if [ ! -z "$annot_enrichm" ]; then
 					cd $output_folder/$name/final_results_reanalysis$index/DGE/
-					echo "An automatic approach based on clusterProfiler's enrichr function and automatically extracted GO terms from the annotation can be applied for DEGs..."
+					echo "Applying clusterProfiler enrichr with GO terms extracted from the provided annotation..."
 
 					# Check if input is GAF (Gene Association File)
 					if [[ "$annot_enrichm" == *.gaf ]] || [[ "$annot_enrichm" == *.gaf.gz ]]; then
-						echo "Detected GAF format. Extracting Gene IDs and GO terms..."
-						# GAF 2.1 format: Column 2 is DB Object ID (Gene ID), Column 5 is GO ID.
-						# Handle .gz or plain text
-						# Extract cols 2 and 5, skip comments (!), minimal cleaning
-						zcat -f "$annot_enrichm" | grep -v "^!" | cut -f 2,5 | sort -u > $output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annot_enrichm).automatically_extracted_GO_terms.txt
+						# Detect number of columns to handle standard (17-col) vs simplified (2-col) GAF
+						gaf_ncols=$(zcat -f "$annot_enrichm" | grep -v "^!" | head -1 | awk -F'\t' '{print NF}')
+						if [ "$gaf_ncols" -le 2 ]; then
+							echo "Detected simplified ${gaf_ncols}-column GAF file. Extracting GeneID and GO term columns..."
+							# Determine column order: one col has GO:xxxx pattern, the other is the gene ID
+							first_col=$(zcat -f "$annot_enrichm" | grep -v "^!" | head -1 | cut -f1)
+							if [[ "$first_col" == GO:* ]]; then
+								# Format: GO_ID<tab>GeneID -> swap to GeneID<tab>GO_ID
+								zcat -f "$annot_enrichm" | grep -v "^!" | awk -F'\t' '{print $2"\t"$1}' | sort -u > $output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annot_enrichm).automatically_extracted_GO_terms.txt
+							else
+								# Format: GeneID<tab>GO_ID (already correct)
+								zcat -f "$annot_enrichm" | grep -v "^!" | cut -f 1,2 | sort -u > $output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annot_enrichm).automatically_extracted_GO_terms.txt
+							fi
+						else
+							echo "Detected standard ${gaf_ncols}-column GAF format. Extracting Gene IDs (col2) and GO terms (col5)..."
+							# Standard GAF 2.x: Column 2 = DB Object ID (Gene ID), Column 5 = GO ID
+							zcat -f "$annot_enrichm" | grep -v "^!" | cut -f 2,5 | sort -u > $output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annot_enrichm).automatically_extracted_GO_terms.txt
+						fi
 
 					elif [[ "$annot_enrichm" == *.gmt ]] || [[ "$annot_enrichm" == *.gmt.gz ]]; then
 						echo "Detected GMT format. Transforming to GeneID-TermID format..."
@@ -1470,20 +1484,23 @@ _log_step "Step_6_Enrichment" "start"
 						zcat -f "$annot_enrichm" | awk -F'\t' '{term=$1; for(i=3;i<=NF;i++) print $i"\t"term}' | sort -u > $output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annot_enrichm).automatically_extracted_GO_terms.txt
 
 					else
-						# Assume GFF/GTF/GFF3
+						# Assume GFF/GTF/GFF3 — extract Gene ID and GO terms
 						echo "Detected GFF/GTF format. Extracting Gene IDs and GO terms..."
-						paste <(egrep "GO:|,GO:|Ontology|tology_term|tology term" $annot_enrichm | sed 's,.*ID=,,g;s,.*Parent=,,g;s,;.*,,g') <(egrep "GO:|,GO:|Ontology|tology_term|tology term" $annot_enrichm | sed 's,.*tology_term=,,g') | sort -t $'\t' -k1,1 -k2,2 | awk -F'\t' '!a[$1,$2]++' | awk -F'\t' '{ a[$1] = (a[$1] ? a[$1]","$2 : $2); } END { for (i in a) print i"\t"a[i]; }' | awk -F '\t' '{n=split($2,a,","); for (i=1; i<=n; i++) print $1,a[i]}' | uniq > $output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annot_enrichm).automatically_extracted_GO_terms.txt
+						zcat -f "$annot_enrichm" | awk -F'\t' '/GO:/ && !/^#/ { attrs=$9; gid=""; go=""; if(match(attrs,/gene_id "([^"]+)"/,m)) gid=m[1]; if(gid=="" && match(attrs,/ID=([^;]+)/,m)) gid=m[1]; if(gid=="" && match(attrs,/Parent=([^;]+)/,m)) gid=m[1]; if(match(attrs,/[Oo]ntology_term[= ]*"?([^";]+)"?/,m)) go=m[1]; if(gid!="" && go!=""){ n=split(go,a,","); for(i=1;i<=n;i++) if(a[i]~/^GO:/) print gid"\t"a[i] } }' | sort -u > $output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annot_enrichm).automatically_extracted_GO_terms.txt
 					fi
 
 					annotation_go=$output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annot_enrichm).automatically_extracted_GO_terms.txt
-					sed -i '1s/^/source_id\tComputed_GO_Process_IDs\n/' $annotation_go
-
-					if [ -s "$annotation_go" ]; then
+					go_data_lines=$(grep -c "GO:" "$annotation_go" 2>/dev/null || echo 0)
+					if [ "$go_data_lines" -lt 2 ]; then
+						echo "WARNING: GO term extraction produced $go_data_lines valid entries. The input file may have an unexpected format. Skipping enrichment."
+					else
+						echo "Extracted $go_data_lines gene-GO associations. Running enrichr..."
+						sed -i '1s/^/source_id\tComputed_GO_Process_IDs\n/' $annotation_go
 						R_clusterProfiler_enrichr.R $annotation_go $output_folder/$name/final_results_reanalysis$index/RPKM_counts_genes.txt $output_folder/$name/final_results_reanalysis$index/DGE "^DGE_analysis_comp[0-9]+.txt$" &> clusterProfiler_enrichr_funct_enrichment.log
-						echo "DONE. Please double check the attempt of executing enrichr with automatically detected GO terms from the annotation"
+						echo "enrichr execution completed. Please double check the results and the log: clusterProfiler_enrichr_funct_enrichment.log"
 					fi
 				else
-					echo "For $organism and the annotation $annotation_file (or provided enrichment file), it does not seem there's GO or functional information available..."
+					echo "For $organism and the annotation $annotation_file, no GO or functional information found. Consider providing a GAF, GMT, or GO-annotated GFF/GTF via 'non_reference_funct_enrichm'"
 				fi
 			fi
 
@@ -1530,24 +1547,29 @@ _log_step "Step_6_Enrichment" "start"
 
 			# Add to the tables of functional enrichment the number of genes up/down:
 			cd $output_folder/$name/final_results_reanalysis$index/
-			echo "Processing results if any..."
 			files_to_process=$(find . \( -name "*.txt" -o -name "*.tsv" -o -name "*.csv" \) | grep funct | grep -v _err.txt)
 			if [ -n "$files_to_process" ]; then
+				enrichment_results_found="yes"
 				cd $output_folder/$name/final_results_reanalysis$index/DGE/
+				echo "Formatting $(echo $files_to_process | wc -w) functional enrichment result file(s)..."
 				echo $files_to_process | parallel --joblog R_enrich_format_analyses_parallel_log_parallel.txt -j $cores "file={}; R_enrich_format.R \"\$file\" \$(echo \"\$file\" | sed 's,DGE/.*,DGE/,g')\$(echo \"\$file\" | sed 's,.*DGE_analysis_comp,DGE_analysis_comp,g;s,_pval.*,,g;s,_fdr.*,,g;s,_funct.*,,g;s,_cluster.*,,g' | sed 's,.txt,,g').txt $organism $rev_thr" &> $PWD/enrichment_format.log
 			else
-				echo "No functional enrichment results found?"
+				echo "No functional enrichment results found. Report will not be rendered."
 			fi
 		fi
 
-		# Render functional enrichment HTML report (self-contained)
-		if [[ "$functional_enrichment_analyses" != "no" ]] && [ -d "$output_folder/$name/final_results_reanalysis$index/DGE" ]; then
-			echo -e "\nRendering functional enrichment HTML report..."
+		# Render functional enrichment HTML report (self-contained), only if results exist
+		if [[ "$functional_enrichment_analyses" != "no" ]] && [[ "$enrichment_results_found" == "yes" ]] && [ -d "$output_folder/$name/final_results_reanalysis$index/DGE" ]; then
+			echo -e "Rendering functional enrichment HTML report..."
 			Rscript $CURRENT_DIR/scripts/render_enrichment_report.R \
 				"$output_folder/$name/final_results_reanalysis$index/DGE" \
 				"$name" \
-				"$organism" 2>&1 | tee -a "$output_folder/$name/enrichment_report_render.log" || \
+				"$organism" &> "$output_folder/$name/enrichment_report_render.log"
+			if [ $? -eq 0 ] && [ -f "$output_folder/$name/final_results_reanalysis$index/DGE/functional_enrichment_report.html" ]; then
+				echo "Done! Report: $output_folder/$name/final_results_reanalysis$index/DGE/functional_enrichment_report.html"
+			else
 				echo "WARNING: Functional enrichment report rendering failed. Check enrichment_report_render.log"
+			fi
 		fi
 	done
 	export debug_step="all"
