@@ -1486,11 +1486,18 @@ _log_step "Step_6_Enrichment" "start"
 					else
 						# Assume GFF/GTF/GFF3 — extract Gene ID and GO terms
 						echo "Detected GFF/GTF format. Extracting Gene IDs and GO terms..."
-						zcat -f "$annot_enrichm" | awk -F'\t' '/GO:/ && !/^#/ { attrs=$9; gid=""; go=""; if(match(attrs,/gene_id "([^"]+)"/,m)) gid=m[1]; if(gid=="" && match(attrs,/ID=([^;]+)/,m)) gid=m[1]; if(gid=="" && match(attrs,/Parent=([^;]+)/,m)) gid=m[1]; if(match(attrs,/[Oo]ntology_term[= ]*"?([^";]+)"?/,m)) go=m[1]; if(gid!="" && go!=""){ n=split(go,a,","); for(i=1;i<=n;i++) if(a[i]~/^GO:/) print gid"\t"a[i] } }' | sort -u > $output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annot_enrichm).automatically_extracted_GO_terms.txt
+						zcat -f "$annot_enrichm" | awk -F'\t' '/GO:/ && !/^#/ {
+						attrs = $9; gid = ""; go = ""
+						if (attrs ~ /gene_id "/) { tmp = attrs; sub(/.*gene_id "/, "", tmp); sub(/".*/, "", tmp); gid = tmp }
+						if (gid == "" && attrs ~ /ID=/) { tmp = attrs; sub(/.*ID=/, "", tmp); sub(/[;].*/, "", tmp); gid = tmp }
+						if (gid == "" && attrs ~ /Parent=/) { tmp = attrs; sub(/.*Parent=/, "", tmp); sub(/[;].*/, "", tmp); gid = tmp }
+						if (attrs ~ /[Oo]ntology_term/) { tmp = attrs; sub(/.*[Oo]ntology_term[= ]*"?/, "", tmp); sub(/"?[;].*/, "", tmp); sub(/"$/, "", tmp); go = tmp }
+						if (gid != "" && go != "") { n = split(go, a, ","); for (i = 1; i <= n; i++) if (a[i] ~ /^GO:/) print gid "\t" a[i] }
+					}' | sort -u > $output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annot_enrichm).automatically_extracted_GO_terms.txt
 					fi
 
 					annotation_go=$output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annot_enrichm).automatically_extracted_GO_terms.txt
-					go_data_lines=$(grep -c "GO:" "$annotation_go" 2>/dev/null || echo 0)
+					go_data_lines=$(grep "GO:" "$annotation_go" 2>/dev/null | wc -l)
 					if [ "$go_data_lines" -lt 2 ]; then
 						echo "WARNING: GO term extraction produced $go_data_lines valid entries. The input file may have an unexpected format. Skipping enrichment."
 					else
