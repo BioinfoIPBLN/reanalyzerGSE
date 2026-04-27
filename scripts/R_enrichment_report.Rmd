@@ -259,10 +259,8 @@ are available in the compressed archive:<br/><br/>
 } else {
   cat('
 <div class="alert alert-info" style="margin:20px 0;border-left:5px solid #5bc0de;padding:15px;border-radius:4px;">
-<strong>\u2139\ufe0f Note:</strong> The full results archive (<code>funct_enrichment_analyses.tar.gz</code>)
-was not found alongside this report. If the pipeline has finished running, the archive should
-be located in the same DGE directory. It contains the original full-quality plots and complete
-result files.
+If enrichment result files cannot be found in the DGE directory, they have been compressed in
+<code>funct_enrichment_analyses.tar.gz</code>.
 </div>\n\n')
 }
 
@@ -276,7 +274,8 @@ for (idx in seq_along(comp_names)) {
   label  <- if (!is.null(comp_labels[[comp]])) comp_labels[[comp]] else comp
   cp_dir <- cp_dirs[idx]  # may be NA if only panther exists
 
-  cat(sprintf("\n\n# %s — %s {.tabset .tabset-pills}\n\n", comp, label))
+  clean_label <- gsub("^__+", "", label)
+  cat(sprintf("\n\n# %s — %s {.tabset .tabset-pills}\n\n", comp, clean_label))
 
   # ── clusterProfiler ORA ────────────────────────────────────────────────────
   if (!is.na(cp_dir) && dir.exists(cp_dir)) {
@@ -571,9 +570,9 @@ for (idx in seq_along(comp_names)) {
     # Discover DEG sets for this comparison (e.g. fdr_05, fdr_05_logneg, fdr_05_logpos, pval_05, ...)
     all_enrichr_txt <- list.files(enrichr_dir, pattern = "\\.txt$", full.names = TRUE)
     all_enrichr_txt <- all_enrichr_txt[!grepl("_aPEAR|_similarity", all_enrichr_txt)]
-    # Extract DEG set labels from file names: everything between comp_ and _functional_
+    # Extract DEG set labels from file names: everything between comp_ and _Gene_IDs_functional_
     deg_sets <- unique(gsub("^.*?_(fdr_|pval_)", "\\1",
-                   gsub("_functional_clusterProfiler_enrichr_.*", "", basename(all_enrichr_txt))))
+                   gsub("_Gene_IDs_functional_clusterProfiler_enrichr_.*", "", basename(all_enrichr_txt))))
     deg_sets <- deg_sets[grepl("^(fdr|pval)_", deg_sets)]
     deg_sets <- sort(unique(deg_sets))
 
