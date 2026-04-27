@@ -349,6 +349,8 @@ Volcano plots
 
 Functional enrichment analyses
 ------------------------------------------------------------------------------------
+Please use the following links:
+
 $(if [ -f "$path/$final_dir_name/DGE/functional_enrichment_report.html" ]; then echo "
 .. raw:: html
 

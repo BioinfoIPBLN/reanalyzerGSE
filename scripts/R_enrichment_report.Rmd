@@ -157,6 +157,18 @@ comp_names <- gsub("_funct_enrich_clusterProfiler$", "", basename(cp_dirs))
 panther_dirs_all <- sort(list.dirs(dge_dir, recursive = FALSE, full.names = TRUE))
 panther_dirs_all <- panther_dirs_all[grepl("_funct_enrichment_panther$", panther_dirs_all)]
 
+# Discover enrichr_clusterProfiler flat folder (non-model organism enrichr path)
+enrichr_dir <- file.path(dge_dir, "enrichr_clusterProfiler")
+has_enrichr <- dir.exists(enrichr_dir) && length(list.files(enrichr_dir, pattern = "\\.txt$")) > 0
+if (has_enrichr) {
+  enrichr_files_all <- list.files(enrichr_dir, pattern = "\\.txt$", full.names = TRUE)
+  enrichr_files_all <- enrichr_files_all[!grepl("_aPEAR|_similarity", enrichr_files_all)]
+  # Derive comparison names from enrichr file names
+  enrichr_comp_names <- unique(gsub("_(fdr|pval)_0[15].*", "", basename(enrichr_files_all)))
+  enrichr_comp_names <- enrichr_comp_names[grepl("^DGE_analysis_comp", enrichr_comp_names)]
+  if (length(comp_names) == 0) comp_names <- enrichr_comp_names
+}
+
 if (length(comp_names) == 0) {
   comp_names <- unique(gsub("_fdr_0[15].*", "", basename(panther_dirs_all)))
 }
@@ -209,13 +221,23 @@ cat("\n**Analyses detected:**\n\n")
 if (length(cp_dirs) > 0) cat("- \u2705 clusterProfiler (ORA)\n")
 gsea_found <- length(list.files(cp_dirs, pattern = "GSEA_", recursive = FALSE)) > 0
 if (gsea_found)          cat("- \u2705 Gene Set Enrichment Analysis (GSEA)\n")
+if (has_enrichr)         cat("- \u2705 clusterProfiler enrichr (custom GO annotation)\n")
 if (length(panther_dirs_all) > 0) {
   cat("- \u2705 autoGO / Enrichr\n")
   cat("- \u2705 Panther\n")
 }
 apear_found <- length(list.files(cp_dirs, pattern = "_aPEAR", recursive = FALSE)) > 0
 if (apear_found)         cat("- \u2705 aPEAR pathway clustering\n")
-if (has_network)         cat("- \u2705 Network analyses (STRINGdb)\n")
+if (has_enrichr) {
+  apear_enrichr <- length(list.files(enrichr_dir, pattern = "_aPEAR", recursive = FALSE)) > 0
+  if (apear_enrichr) cat("- \u2705 aPEAR pathway clustering (enrichr)\n")
+}
+if (has_network) {
+  cat("- \u2705 Network analyses (WGCNA")
+  if (dir.exists(file.path(network_dir, "STRINGdb"))) cat(" + STRINGdb")
+  if (dir.exists(file.path(network_dir, "BONOBO")))   cat(" + BONOBO")
+  cat(")\n")
+}
 cat("\n")
 
 # Link to tar.gz archive
@@ -542,6 +564,79 @@ for (idx in seq_along(comp_names)) {
       for (p in head(apear_pdfs, 3)) embed_pdf(p, basename(p))
     }
 
+  } else if (has_enrichr) {
+    # Enrichr results from non-model organism path (flat folder)
+    cat("\n## Enrichr (custom GO annotation) {.tabset}\n\n")
+
+    # Discover DEG sets for this comparison (e.g. fdr_05, fdr_05_logneg, fdr_05_logpos, pval_05, ...)
+    all_enrichr_txt <- list.files(enrichr_dir, pattern = "\\.txt$", full.names = TRUE)
+    all_enrichr_txt <- all_enrichr_txt[!grepl("_aPEAR|_similarity", all_enrichr_txt)]
+    # Extract DEG set labels from file names: everything between comp_ and _functional_
+    deg_sets <- unique(gsub("^.*?_(fdr_|pval_)", "\\1",
+                   gsub("_functional_clusterProfiler_enrichr_.*", "", basename(all_enrichr_txt))))
+    deg_sets <- deg_sets[grepl("^(fdr|pval)_", deg_sets)]
+    deg_sets <- sort(unique(deg_sets))
+
+    # Create readable labels
+    deg_label <- function(s) {
+      parts <- c()
+      if (grepl("fdr", s))  parts <- c(parts, "FDR < 0.05")
+      if (grepl("pval", s)) parts <- c(parts, "p-value < 0.05")
+      if (grepl("logpos", s)) parts <- c(parts, "Up-regulated")
+      else if (grepl("logneg", s)) parts <- c(parts, "Down-regulated")
+      else parts <- c(parts, "All DEGs")
+      paste(parts, collapse = " — ")
+    }
+
+    for (deg_set in deg_sets) {
+      cat(sprintf("\n### %s {.tabset}\n\n", deg_label(deg_set)))
+
+      for (ont in c("BP", "MF", "CC")) {
+        ont_label <- c(BP = "Biological Process", MF = "Molecular Function",
+                       CC = "Cellular Component")[[ont]]
+        cat(sprintf("\n#### GO %s {.tabset}\n\n", ont_label))
+
+        # Match files for this DEG set + ontology, only primary results (_1.txt)
+        set_pattern <- sprintf("^%s_%s_Gene_IDs_functional_clusterProfiler_enrichr_%s_",
+                               comp, deg_set, ont)
+        ont_files <- list.files(enrichr_dir, pattern = set_pattern, full.names = TRUE)
+        ont_files <- ont_files[grepl("\\.txt$", ont_files)]
+        ont_files <- ont_files[!grepl("_aPEAR|_similarity", ont_files)]
+        # Keep only primary (_1) results, skip secondary (_2)
+        ont_files <- ont_files[grepl("_1\\.txt$|_expr_1\\.txt$", ont_files)]
+
+        if (length(ont_files) > 0) {
+          for (f in ont_files) {
+            df  <- safe_read(f)
+            sig <- filter_sig(df)
+            n_sig <- if (!is.null(sig)) nrow(sig) else 0
+            bg_label <- if (grepl("_expr_1\\.txt$", f)) "Expressed genes background" else "Whole annotation background"
+            cat(sprintf("\n##### %s\n\n", bg_label))
+            cat(sprintf("**%d** significant GO %s terms (adjusted p < 0.05)\n\n", n_sig, ont))
+            if (n_sig > 0)
+              make_table(sig, sprintf("%s_%s_enrichr_GO_%s_%s.csv", comp, deg_set, ont, bg_label))
+          }
+
+          # aPEAR plots for this DEG set + ontology
+          apear_pattern <- sprintf("^%s_%s_.*enrichr_%s_.*_aPEAR\\.pdf$", comp, deg_set, ont)
+          apear_pdfs <- list.files(enrichr_dir, pattern = apear_pattern, full.names = TRUE)
+          for (p in head(apear_pdfs, 2)) embed_pdf(p, basename(p))
+
+          # aPEAR cluster tables
+          apear_cl_pattern <- sprintf("^%s_%s_.*enrichr_%s_.*_aPEAR_clusters\\.txt$", comp, deg_set, ont)
+          apear_clusters <- list.files(enrichr_dir, pattern = apear_cl_pattern, full.names = TRUE)
+          for (f in head(apear_clusters, 2)) {
+            df <- safe_read(f)
+            if (!is.null(df) && nrow(df) > 0) {
+              cat(sprintf("\n**aPEAR clusters** — %d clusters\n\n", length(unique(df$Cluster))))
+              make_table(df, gsub("\\.txt$", ".csv", basename(f)), max_rows = 20)
+            }
+          }
+        } else {
+          cat("*Not available*\n\n")
+        }
+      }
+    }
   } else {
     cat("\n*clusterProfiler results not found for this comparison*\n\n")
   }
@@ -632,25 +727,145 @@ for (idx in seq_along(comp_names)) {
 
 ```{r network, results='asis'}
 if (has_network) {
-  cat("\n\n# Network Analyses\n\n")
-  cat("Results from STRINGdb protein-protein interaction network analysis:\n\n")
+  cat("\n\n# Network Analyses {.tabset}\n\n")
 
-  net_files <- list.files(network_dir, pattern = "\\.txt$|\\.tsv$|\\.csv$",
-                          full.names = TRUE, recursive = TRUE)
-  net_files <- net_files[!grepl("_err\\.txt$|log", net_files)]
+  wgcna_dir  <- file.path(network_dir, "WGCNA")
+  string_dir <- file.path(network_dir, "STRINGdb")
+  bonobo_dir <- file.path(network_dir, "BONOBO")
 
-  for (f in head(net_files, 10)) {
-    df <- safe_read(f)
-    if (is.null(df) || nrow(df) == 0) next
-    cat(sprintf("\n## %s\n\n", basename(f)))
-    make_table(df, gsub("\\.(txt|tsv|csv)$", ".csv", basename(f)), max_rows = 20)
+  has_wgcna  <- dir.exists(wgcna_dir) && length(list.files(wgcna_dir)) > 0
+  has_string <- dir.exists(string_dir) && length(list.files(string_dir)) > 0
+  has_bonobo <- dir.exists(bonobo_dir) && length(list.files(bonobo_dir, recursive = TRUE)) > 0
+
+  # ── WGCNA ──────────────────────────────────────────────────────────────────
+  if (has_wgcna) {
+    cat("\n## WGCNA {.tabset}\n\n")
+    cat("Weighted Gene Co-expression Network Analysis — module detection via `blockwiseModules()`:\n\n")
+
+    # Module-condition heatmap (PNG)
+    heatmaps <- list.files(wgcna_dir, pattern = "WGCNA_module_type_.*\\.png$", full.names = TRUE)
+    for (p in heatmaps) embed_png(p, gsub("WGCNA_module_type_|\\.png$", "", basename(p)))
+
+    # Hub genes
+    hub_files <- list.files(wgcna_dir, pattern = "WGCNA_top10_hub_genes_", full.names = TRUE)
+    if (length(hub_files) > 0) {
+      cat("\n### Hub Genes\n\n")
+      cat("Top 10 hub genes per module ranked by intramodular connectivity (kWithin):\n\n")
+      for (f in hub_files) {
+        df <- safe_read(f)
+        if (!is.null(df) && nrow(df) > 0) {
+          cat(sprintf("\n**%s**\n\n", gsub("WGCNA_top10_hub_genes_|\\.txt$", "", basename(f))))
+          make_table(df, gsub("\\.txt$", ".csv", basename(f)), max_rows = 30)
+        }
+      }
+    }
+
+    # Module assignments
+    mod_files <- list.files(wgcna_dir, pattern = "WGCNA_all_modules_", full.names = TRUE)
+    if (length(mod_files) > 0) {
+      cat("\n### Module Assignments\n\n")
+      for (f in mod_files) {
+        df <- safe_read(f)
+        if (!is.null(df) && nrow(df) > 0) {
+          n_mods <- length(unique(df$clusters))
+          cat(sprintf("**%s** — %d modules, %d genes\n\n", basename(f), n_mods, nrow(df)))
+          make_table(df, gsub("\\.txt$", ".csv", basename(f)), max_rows = 20)
+        }
+      }
+    }
+
+    # Module-trait correlation
+    cor_files <- list.files(wgcna_dir, pattern = "WGCNA_module_trait_cor_", full.names = TRUE)
+    if (length(cor_files) > 0) {
+      cat("\n### Module-Trait Correlation\n\n")
+      for (f in cor_files) {
+        df <- safe_read(f)
+        if (!is.null(df) && nrow(df) > 0) {
+          cat(sprintf("**%s**\n\n", basename(f)))
+          make_table(df, gsub("\\.txt$", ".csv", basename(f)), max_rows = 30)
+        }
+      }
+    }
+
+    # Dendrograms / other PDFs
+    wgcna_pdfs <- list.files(wgcna_dir, pattern = "\\.pdf$", full.names = TRUE)
+    wgcna_pdfs <- head(wgcna_pdfs[!grepl("blockwiseModules", wgcna_pdfs)], 5)
+    if (length(wgcna_pdfs) > 0) {
+      cat("\n### WGCNA Plots\n\n")
+      for (p in wgcna_pdfs) embed_pdf(p, basename(p))
+    }
   }
 
-  net_imgs <- list.files(network_dir, pattern = "\\.(png|pdf)$",
-                         full.names = TRUE, recursive = TRUE)
-  for (p in head(net_imgs, 5)) {
-    if (tools::file_ext(p) == "pdf") embed_pdf(p, basename(p))
-    else embed_png(p, basename(p))
+  # ── STRINGdb ───────────────────────────────────────────────────────────────
+  if (has_string) {
+    cat("\n## STRINGdb {.tabset}\n\n")
+    cat("Protein-protein interaction network analysis via STRINGdb (score threshold ≥ 400):\n\n")
+
+    # PPI enrichment test
+    ppi_files <- list.files(string_dir, pattern = "STRINGdb_PPI_enrichment_test_", full.names = TRUE)
+    for (f in ppi_files) {
+      df <- safe_read(f)
+      if (!is.null(df) && nrow(df) > 0) {
+        cat(sprintf("**PPI enrichment test** (%s):\n\n", gsub("STRINGdb_PPI_enrichment_test_|\\.txt$", "", basename(f))))
+        make_table(df, gsub("\\.txt$", ".csv", basename(f)))
+      }
+    }
+
+    # Functional enrichment from STRING
+    enrich_files <- list.files(string_dir, pattern = "STRINGdb_functional_enrichment_", full.names = TRUE)
+    if (length(enrich_files) > 0) {
+      cat("\n### Functional Enrichment\n\n")
+      for (f in enrich_files) {
+        df <- safe_read(f); sig <- filter_sig(df)
+        n_sig <- if (!is.null(sig)) nrow(sig) else 0
+        cat(sprintf("**%s** — %d significant terms\n\n", basename(f), n_sig))
+        if (n_sig > 0) make_table(sig, gsub("\\.txt$", ".csv", basename(f)))
+      }
+    }
+
+    # Cluster assignments
+    cluster_files <- list.files(string_dir, pattern = "STRINGdb_all_modules_", full.names = TRUE)
+    if (length(cluster_files) > 0) {
+      cat("\n### Network Clusters\n\n")
+      for (f in cluster_files) {
+        df <- safe_read(f)
+        if (!is.null(df) && nrow(df) > 0) {
+          cat(sprintf("**%s** — %d clusters\n\n", basename(f), length(unique(df$clusters))))
+          make_table(df, gsub("\\.txt$", ".csv", basename(f)), max_rows = 20)
+        }
+      }
+    }
+
+    # Network plots
+    string_pdfs <- list.files(string_dir, pattern = "\\.pdf$", full.names = TRUE)
+    if (length(string_pdfs) > 0) {
+      cat("\n### Network Plots\n\n")
+      for (p in head(string_pdfs, 5)) embed_pdf(p, basename(p))
+      if (length(string_pdfs) > 5)
+        cat(sprintf("*...and %d more network plots in the archive*\n\n", length(string_pdfs) - 5))
+    }
+  }
+
+  # ── BONOBO ─────────────────────────────────────────────────────────────────
+  if (has_bonobo) {
+    cat("\n## BONOBO\n\n")
+    cat("Bayesian Optimized Networks (BONOBO) via netZooPy — regulatory network inference:\n\n")
+    bonobo_files <- list.files(bonobo_dir, pattern = "\\.csv$", full.names = TRUE, recursive = TRUE)
+    if (length(bonobo_files) > 0) {
+      for (f in head(bonobo_files, 5)) {
+        df <- safe_read(f)
+        if (!is.null(df) && nrow(df) > 0) {
+          cat(sprintf("**%s** — %d rows\n\n", basename(f), nrow(df)))
+          make_table(df, basename(f), max_rows = 15)
+        }
+      }
+    } else {
+      cat("*BONOBO output files not found.*\n\n")
+    }
+  }
+
+  if (!has_wgcna && !has_string && !has_bonobo) {
+    cat("*Network analyses were requested but no output files were found.*\n\n")
   }
 }
 ```
@@ -665,6 +880,12 @@ cat('<div style="max-height:400px;overflow-y:auto;background:#f8f9fa;padding:10p
 for (d in cp_dirs) {
   cat(sprintf("<strong>%s/</strong><br>\n", basename(d)))
   ff <- list.files(d, recursive = TRUE)
+  for (f in ff) cat(sprintf("&nbsp;&nbsp;%s<br>\n", f))
+}
+# enrichr_clusterProfiler (non-model organism)
+if (has_enrichr) {
+  cat(sprintf("<strong>%s/</strong><br>\n", "enrichr_clusterProfiler"))
+  ff <- list.files(enrichr_dir, recursive = TRUE)
   for (f in ff) cat(sprintf("&nbsp;&nbsp;%s<br>\n", f))
 }
 # panther/autoGO

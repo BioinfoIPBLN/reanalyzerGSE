@@ -950,7 +950,6 @@ fi
 if [[ $debug_step == "all" || $debug_step == "step3a" ]]; then
 	echo -e "\n\nSTEP 3a: Starting...\nCurrent date/time: $(date)\n\n"
 _log_step "Step_3a_Prepare" "start"
- 	echo -e "Preparing miARma-seq execution"
 	cd $output_folder/$name/
 	rm -rf mi*
 	mkdir -p $TMPDIR
@@ -1401,15 +1400,13 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 			annotation_file=${array[index]}
 		fi
 
-		# Network analyses (Only implemented for Human/Mouse)
-		if [[ "$organism" == "Mus_musculus" || "$organism" == "Homo_sapiens" || "$organism" == "Mus musculus" || "$organism" == "Homo sapiens" ]]; then
-			if [[ $network_analyses == "yes" ]]; then
-				mkdir -p network_analyses && rm -rf network_analyses/* && cd network_analyses
-				echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
+		# Network analyses (WGCNA is organism-agnostic; STRINGdb supports any organism with a valid taxon ID)
+		if [[ $network_analyses == "yes" ]]; then
+			mkdir -p network_analyses && rm -rf network_analyses/* && cd network_analyses
+			echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
 _log_step "Step_6_Enrichment" "start"
-    				echo -e "\nPerforming network analyses...\n"
-				R_network_analyses.R $output_folder/$name/final_results_reanalysis$index/DGE/ $output_folder/$name/final_results_reanalysis$index/RM_counts_genes.txt "^DGE_analysis_comp[0-9]+.txt$" $taxonid &> network_analyses_funct_enrichment.log
-			fi
+    			echo -e "\nPerforming network analyses (WGCNA mode: $wgcna_mode)...\n"
+			R_network_analyses.R $output_folder/$name/final_results_reanalysis$index/DGE/ $output_folder/$name/final_results_reanalysis$index/RM_counts_genes.txt "^DGE_analysis_comp[0-9]+.txt$" $taxonid $wgcna_mode &> network_analyses_funct_enrichment.log
 		fi
 
 		# Functional Enrichment Analyses
@@ -1554,7 +1551,7 @@ _log_step "Step_6_Enrichment" "start"
 
 			# Add to the tables of functional enrichment the number of genes up/down:
 			cd $output_folder/$name/final_results_reanalysis$index/
-			files_to_process=$(find . \( -name "*.txt" -o -name "*.tsv" -o -name "*.csv" \) | grep funct | grep -v _err.txt)
+			files_to_process=$(find . \( -name "*.txt" -o -name "*.tsv" -o -name "*.csv" \) | grep funct | grep -v '_err.txt\|_aPEAR\|_similarity')
 			if [ -n "$files_to_process" ]; then
 				enrichment_results_found="yes"
 				cd $output_folder/$name/final_results_reanalysis$index/DGE/
@@ -1571,7 +1568,7 @@ _log_step "Step_6_Enrichment" "start"
 			Rscript $CURRENT_DIR/scripts/render_enrichment_report.R \
 				"$output_folder/$name/final_results_reanalysis$index/DGE" \
 				"$name" \
-				"$organism" &> "$output_folder/$name/enrichment_report_render.log"
+				"$organism" &> "$output_folder/$name/final_results_reanalysis$index/DGE/enrichment_report_render.log"
 			if [ $? -eq 0 ] && [ -f "$output_folder/$name/final_results_reanalysis$index/DGE/functional_enrichment_report.html" ]; then
 				echo "Done! Report: $output_folder/$name/final_results_reanalysis$index/DGE/functional_enrichment_report.html"
 			else
@@ -1614,6 +1611,11 @@ fi
 ###### STEP 8. Sum up results in a sphinx report
 if [[ $debug_step == "all" || $debug_step == "step8" ]]; then
 	_log_step "Step_8_Report" "start"
+	# Convert tables to xlsx before sphinx so download links work in the report
+	if [ "$convert_tables_excel" == "yes" ]; then
+		echo -e "Converting tables to xlsx..."
+		R_convert_tables.R $output_folder/$name/ $cores "log_parallel|jquery|bamqc|rnaseqqc|samtools|strand" > $output_folder/$name/R_convert_tables.log 2>&1
+	fi
 	sphinx_report.sh $output_folder/$name $name
 _log_step "Step_8_Report" "end"
  	echo -e "\n\nSTEP 8: Final report DONE\nCurrent date/time: $(date)\n\n"
@@ -1636,9 +1638,7 @@ _log_step "Step_9_Cleanup" "start"
 
 
 	cd $output_folder/$name/ && find . -type f \( -name "*_fdr_05.txt" -o -name "*_logneg.txt" -o -name "*_logpos.txt" \) -exec rm -f {} +
-	if [ "$convert_tables_excel" == "yes" ]; then
-		R_convert_tables.R $output_folder/$name/ $cores "log_parallel|jquery|bamqc|rnaseqqc|samtools|strand" > R_convert_tables.log 2>&1
-	fi
+	# Note: xlsx conversion now happens in STEP 8 (before sphinx report), not here
 
 	for index in "${!array[@]}"; do
 	 	cd $output_folder/$name/final_results_reanalysis$index/DGE/

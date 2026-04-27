@@ -67,7 +67,8 @@ for argument in $options; do
 	        -Ti | -tidy_tmp_files # Space-efficient run, with a last step removing raw reads if downloaded, converting bam to cram, removing tmp files... etc ('yes' or 'no', by default)
 	        -Txls | -convert_tables_excel # Convert all tables in results from .txt format, without limitation of size to Excel's .xlsx format, with a limitation of 32,767 characters ('yes' or 'no', by default)
 	        -Tc | -time_course # Whether to perform additional time-course analyses as a last step ('yes' or 'no', by default)
-	        -Na | -network_analyses # Whether to perform network analyses, only for human or mouse analyses ('yes' or 'no', by default)
+	        -Na | -network_analyses # Whether to perform network analyses ('yes' or 'no', by default). WGCNA is organism-agnostic; STRINGdb supports any organism with a valid taxon ID
+	        -Wm | -wgcna_mode # WGCNA mode: 'all' (canonical, runs on all expressed genes, by default) or 'degs' (runs on DEGs only, per comparison)
 	        -apl | -auto_panther_log # Whether to perform additional autoGO and Panther analyses for DEGs separated by log2Fc positive or negative ('yes' or 'no', by default)
 	        -eDe | -exploreDE_se # Whether to generate a SummarizedExperiment object (.qs2) for the exploreDE Shiny app ('yes' or 'no', by default). Only works for Human (Homo_sapiens) analyses.
 	        -sO | -splicing_option # Splicing analysis method: 'no' (default), 'saser' (differential splicing via saseR with adapted offsets in edgeR), or 'isoformswitchr' (isoform switch analysis via IsoformSwitchAnalyzeR, requires transcript-level quantification from Kallisto or Salmon)
@@ -206,6 +207,7 @@ for argument in $options; do
 		-MGS) clusterProfiler_maxGSSize=${arguments[index]} ;;
 		-Pm) panther_method=${arguments[index]} ;;
 		-Na) network_analyses=${arguments[index]} ;;
+		-Wm) wgcna_mode=${arguments[index]} ;;
 		-fp) fastp_mode=${arguments[index]} ;;
 		-fpa) fastp_adapter=${arguments[index]} ;;
 		-fpt) fastp_trimming=${arguments[index]} ;;
@@ -419,6 +421,9 @@ if [ -z "$tidy_tmp_files" ]; then
 fi
 if [ -z "$network_analyses" ]; then
 	network_analyses="no"
+fi
+if [ -z "$wgcna_mode" ]; then
+	wgcna_mode="all"
 fi
 if [ -z "$clusterProfiler_universe" ]; then
 	clusterProfiler_universe="detected"

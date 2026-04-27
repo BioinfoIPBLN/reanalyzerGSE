@@ -1324,6 +1324,57 @@ tryCatch({
     return(result)
   }
 
+  # 3b. Helper to resolve GO IDs to human-readable descriptions using GO.db
+  #     Adds a "GO_Description" column next to any column containing GO:XXXXXXX IDs
+  has_go_db <- requireNamespace("GO.db", quietly = TRUE) && requireNamespace("AnnotationDbi", quietly = TRUE)
+  if (has_go_db) {
+    suppressMessages(library(GO.db, quietly = TRUE))
+    suppressMessages(library(AnnotationDbi, quietly = TRUE))
+    # Pre-build a lookup table of all GO terms for fast vectorized resolution
+    go_all_terms <- tryCatch({
+      gt <- AnnotationDbi::select(GO.db, keys = AnnotationDbi::keys(GO.db, "GOID"),
+                                   columns = c("GOID", "TERM", "ONTOLOGY"), keytype = "GOID")
+      setNames(paste0(gt$GOID, " ", gt$TERM, " [", gt$ONTOLOGY, "]"), gt$GOID)
+    }, error = function(e) NULL)
+    cat(paste0("GO.db loaded: ", length(go_all_terms), " GO terms available for annotation.\n"))
+  } else {
+    go_all_terms <- NULL
+    cat("GO.db not available — GO term descriptions will not be added to merged tables.\n")
+  }
+
+  resolve_go_terms <- function(df) {
+    if (is.null(go_all_terms)) return(df)
+    # Find columns that contain GO:XXXXXXX patterns
+    go_cols <- c()
+    for (col in colnames(df)) {
+      vals <- df[[col]][!is.na(df[[col]]) & df[[col]] != ""]
+      if (length(vals) > 0 && any(grepl("^GO:\\d{7}", head(vals, 50)))) {
+        go_cols <- c(go_cols, col)
+      }
+    }
+    if (length(go_cols) == 0) return(df)
+
+    for (col in go_cols) {
+      desc_col <- paste0(col, "_Description")
+      df[[desc_col]] <- sapply(df[[col]], function(x) {
+        if (is.na(x) || x == "") return(NA_character_)
+        ids <- trimws(unlist(strsplit(as.character(x), ",")))
+        descs <- go_all_terms[ids]
+        descs[is.na(descs)] <- ids[is.na(descs)]  # Keep original ID if not found
+        paste(descs, collapse = " | ")
+      }, USE.NAMES = FALSE)
+      # Place description column right after the GO ID column
+      col_idx <- which(colnames(df) == col)
+      desc_idx <- which(colnames(df) == desc_col)
+      if (length(col_idx) == 1 && length(desc_idx) == 1 && desc_idx != col_idx + 1) {
+        new_order <- setdiff(seq_len(ncol(df)), desc_idx)
+        new_order <- append(new_order, desc_idx, after = col_idx)
+        df <- df[, new_order, drop = FALSE]
+      }
+    }
+    return(df)
+  }
+
   # 4. If DGE tables exist, merge each with expression + GTF
   dge_files <- list.files(path = paste0(output_dir, "/DGE"),
                           full.names = TRUE, pattern = "^DGE_analysis_comp\\d+\\.txt$")
@@ -1375,26 +1426,26 @@ tryCatch({
         cpm_categ_sub <- cpm_categ
       }
 
-      # Merge DGE + RPKM categ + GTF
       merged_rpkm <- merge(dge, rpkm_categ_sub, by = "Gene_ID", all.x = TRUE)
       merged_rpkm <- merge_tables(merged_rpkm)
       colnames(merged_rpkm) <- sub("gtf_","",colnames(merged_rpkm))
+      merged_rpkm <- resolve_go_terms(merged_rpkm)
       write.table(merged_rpkm,
                   file = paste0(output_dir, "/DGE/", comp_name, "_merged_RPKM.txt"),
                   quote = FALSE, row.names = FALSE, col.names = TRUE, sep = "\t")
 
-      # Merge DGE + TPM categ + GTF
       merged_tpm <- merge(dge, tpm_categ_sub, by = "Gene_ID", all.x = TRUE)
       merged_tpm <- merge_tables(merged_tpm)
       colnames(merged_tpm) <- sub("gtf_","",colnames(merged_tpm))
+      merged_tpm <- resolve_go_terms(merged_tpm)
       write.table(merged_tpm,
                   file = paste0(output_dir, "/DGE/", comp_name, "_merged_TPM.txt"),
                   quote = FALSE, row.names = FALSE, col.names = TRUE, sep = "\t")
 
-      # Merge DGE + CPM categ + GTF
       merged_cpm <- merge(dge, cpm_categ_sub, by = "Gene_ID", all.x = TRUE)
       merged_cpm <- merge_tables(merged_cpm)
       colnames(merged_cpm) <- sub("gtf_","",colnames(merged_cpm))
+      merged_cpm <- resolve_go_terms(merged_cpm)
       write.table(merged_cpm,
                   file = paste0(output_dir, "/DGE/", comp_name, "_merged_CPM.txt"),
                   quote = FALSE, row.names = FALSE, col.names = TRUE, sep = "\t")
@@ -1403,16 +1454,19 @@ tryCatch({
   } else {
     # No DGE: just write expression + GTF to main output dir
     merged_rpkm_all <- merge_tables(rpkm_categ)
+    merged_rpkm_all <- resolve_go_terms(merged_rpkm_all)
     write.table(merged_rpkm_all,
                 file = paste0(output_dir, "/expression_merged_RPKM.txt"),
                 quote = FALSE, row.names = FALSE, col.names = TRUE, sep = "\t")
 
     merged_tpm_all <- merge_tables(tpm_categ)
+    merged_tpm_all <- resolve_go_terms(merged_tpm_all)
     write.table(merged_tpm_all,
                 file = paste0(output_dir, "/expression_merged_TPM.txt"),
                 quote = FALSE, row.names = FALSE, col.names = TRUE, sep = "\t")
 
     merged_cpm_all <- merge_tables(cpm_categ)
+    merged_cpm_all <- resolve_go_terms(merged_cpm_all)
     write.table(merged_cpm_all,
                 file = paste0(output_dir, "/expression_merged_CPM.txt"),
                 quote = FALSE, row.names = FALSE, col.names = TRUE, sep = "\t")
