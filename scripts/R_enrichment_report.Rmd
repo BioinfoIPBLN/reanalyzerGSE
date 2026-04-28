@@ -274,8 +274,8 @@ for (idx in seq_along(comp_names)) {
   label  <- if (!is.null(comp_labels[[comp]])) comp_labels[[comp]] else comp
   cp_dir <- cp_dirs[idx]  # may be NA if only panther exists
 
-  clean_label <- gsub("^__+", "", label)
-  cat(sprintf("\n\n# %s — %s {.tabset .tabset-pills}\n\n", comp, clean_label))
+  comp_num <- gsub("\\D", "", comp)
+  cat(sprintf("\n\n# Comparison %s {.tabset .tabset-pills}\n\n", comp_num))
 
   # ── clusterProfiler ORA ────────────────────────────────────────────────────
   if (!is.na(cp_dir) && dir.exists(cp_dir)) {

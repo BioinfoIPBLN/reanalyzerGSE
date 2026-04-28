@@ -817,11 +817,11 @@ if [[ $debug_step == "all" || $debug_step == "step2b" ]]; then
 _log_step "Step_2b_rRNA_QC" "start"
 
 		RRNA_QC_DIR=$output_folder/$name/preliminar_rrna_qc
-		RRNA_INDEX_DIR=$RRNA_QC_DIR
+		RRNA_INDEX_DIR=$output_folder/$name/indexes/rrna_bowtie2_idx
 		RRNA_INDEX_NAME="rrna_ref"
 		RRNA_MIN_SCORE=$rrna_qc_min_score
 
-		mkdir -p "$RRNA_QC_DIR"
+		mkdir -p "$RRNA_QC_DIR" "$RRNA_INDEX_DIR"
 
 		# Handle comma-separated reference paths
 		IFS=',' read -ra RRNA_REF_ARRAY <<< "$rrna_qc_databases"
@@ -1689,6 +1689,11 @@ _log_step "Step_9_Cleanup" "start"
 				rm -rf $(ls | egrep ".bam$") $TMPDIR
 			fi
 		done
+		# Remove the indexes folder since data has been converted to CRAM
+		if [ -d "$output_folder/$name/indexes" ]; then
+			echo "Removing indexes folder: $output_folder/$name/indexes"
+			rm -rf "$output_folder/$name/indexes"
+		fi
 	fi
 
 	### Deploy igvShinyApp.R to final results folders
