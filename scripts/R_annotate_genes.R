@@ -23,8 +23,10 @@ if(organism_cp=="Homo sapiens"){
   orgDB <- "org.Mm.eg.db"
   suppressMessages(library("org.Mm.eg.db",quiet = T,warn.conflicts = F))
 } else {
-  print("For now the only organisms supported for further adding annotation and info to gene IDs are human and mouse. There are plans to add more in the future, including both the already available orgDB and support via annotationForge to build custom databases...")
-  stop(paste0(organism," is currently not supported..."))
+  cat("\nINFO: Organism '", organism, "' is not yet supported for AnnotationDbi gene annotation (only Human and Mouse are currently supported).\n", sep="")
+  cat("Skipping gene annotation step. The pipeline will continue with the original gene IDs.\n")
+  # Exit gracefully so the pipeline continues
+  quit(save="no", status=0)
 }
 
 

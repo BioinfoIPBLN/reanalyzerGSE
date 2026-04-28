@@ -1238,6 +1238,11 @@ _log_step "Step_4_R_Process" "start"
 		fi
   			echo -e "R_process_reanalyzer_GSE.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index $genes ${array2[index]} $organism $target $differential_expr_soft $batch_format $covariables $covariables_format $deconvolution $differential_expr_comparisons $perform_differential_analyses $perform_volcano_venn $pattern_to_remove $annotation_file $fc_seq_key $fc_feat_type $sc_count_matrix $sc_phenotype $bulk_expression_matrix\n\n" > $output_folder/$name/R_process_reanalyzer.log
     		R_process_reanalyzer_GSE.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index $genes ${array2[index]} $organism $target $differential_expr_soft $batch_format $covariables $covariables_format $deconvolution $differential_expr_comparisons $perform_differential_analyses $perform_volcano_venn $pattern_to_remove $annotation_file $fc_seq_key $fc_feat_type $sc_count_matrix $sc_phenotype $bulk_expression_matrix | tee -a $output_folder/$name/R_process_reanalyzer.log
+		if [ ! -d "$output_folder/$name/final_results_reanalysis$index" ]; then
+			echo -e "\nWARNING: R_process_reanalyzer_GSE.R did not create $output_folder/$name/final_results_reanalysis$index."
+			echo "Check $output_folder/$name/R_process_reanalyzer.log for details. Skipping remaining post-processing for this index."
+			continue
+		fi
     		echo 'R_qc_figs.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index "edgeR_object_prefilter" "edgeR_object" "edgeR_object_norm" $pattern_to_remove $annotation_file $fc_feat_type' > $output_folder/$name/R_qc_figs.log
 			R_qc_figs.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index "edgeR_object_prefilter" "edgeR_object" "edgeR_object_norm" $pattern_to_remove $annotation_file $fc_feat_type | tee -a $output_folder/$name/R_qc_figs.log
 		if [[ -e "$output_folder/$name/final_results_reanalysis$index/counts_adjusted.txt" ]]; then
@@ -1245,8 +1250,10 @@ _log_step "Step_4_R_Process" "start"
 			echo -e 'R_qc_figs.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index "edgeR_object_prefilter_adjusted" "edgeR_object_adjusted" "edgeR_object_norm_adjusted" $pattern_to_remove $annotation_file $fc_feat_type' > $output_folder/$name/R_qc_figs_adjusted.log
 			R_qc_figs.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index "edgeR_object_prefilter_adjusted" "edgeR_object_adjusted" "edgeR_object_norm_adjusted" $pattern_to_remove $annotation_file $fc_feat_type | tee -a $output_folder/$name/R_qc_figs_adjusted.log
 		fi
-		cd $output_folder/$name/final_results_reanalysis$index/DGE/
-		tar -cf - $(ls | egrep ".RData$") | pigz -p $cores > allRData.tar.gz; rm -rf $(ls | egrep ".RData$")
+		if [ -d "$output_folder/$name/final_results_reanalysis$index/DGE/" ]; then
+			cd $output_folder/$name/final_results_reanalysis$index/DGE/
+			tar -cf - $(ls | egrep ".RData$") | pigz -p $cores > allRData.tar.gz; rm -rf $(ls | egrep ".RData$")
+		fi
 	done
 	### Generate SummarizedExperiment for exploreDE app if requested
 	if [[ "$exploreDE_se" == "yes" ]]; then
@@ -1394,6 +1401,10 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 	fi
 
 	for index in "${!array[@]}"; do
+		if [ ! -d "$output_folder/$name/final_results_reanalysis$index/DGE/" ]; then
+			echo -e "\nWARNING: DGE directory not found at $output_folder/$name/final_results_reanalysis$index/DGE/. Skipping enrichment for index $index."
+			continue
+		fi
 		cd $output_folder/$name/final_results_reanalysis$index/DGE/
 		rm -rf $(find . -type d \( -name "*_autoGO" -o -name "*_clusterProfiler" -o -name "*_panther" -o -name "*funct_enr*" \)) $(find . -type f \( -name "*_autoGO" -o -name "*_clusterProfiler" -o -name "*_panther" -o -name "*funct_enr*" \)) # So it's redone if resuming
 		if [ -z "$annotation_file" ]; then
@@ -1641,6 +1652,9 @@ _log_step "Step_9_Cleanup" "start"
 	# Note: xlsx conversion now happens in STEP 8 (before sphinx report), not here
 
 	for index in "${!array[@]}"; do
+	 	if [ ! -d "$output_folder/$name/final_results_reanalysis$index/DGE/" ]; then
+			continue
+		fi
 	 	cd $output_folder/$name/final_results_reanalysis$index/DGE/
 		find . -type d -empty -delete
 		folders_funct=$(find . -type d \( -name "*_autoGO" -o -name "*_clusterProfiler" -o -name "*_panther" \) -o -type f \( -name "*_funct_enrichment.log" -o -name "funct_enrich_*" \))

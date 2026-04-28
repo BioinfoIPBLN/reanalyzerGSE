@@ -2808,14 +2808,14 @@ sub hisat2{
 				$samtools_pipeline_pe = $custom_filter_part . $filter_part . " | samtools sort -n -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M - " .
 					" | samtools fixmate -m - - " .
 					" | samtools sort -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M - " .
-					" | samtools markdup -r --write-index - {}_hisat2.bam##idx##{}_hisat2.bam.bai ";
+					" | samtools markdup -r --write-index - {}_hisat2.bam##idx##{}_hisat2.bam.csi ";
 			} elsif (defined $bam_dedup && ($bam_dedup eq "picard" || $bam_dedup eq "picard_optical")) {
 				my $p_opts = ($bam_dedup eq "picard_optical") ? "REMOVE_SEQUENCING_DUPLICATES=true" : "REMOVE_DUPLICATES=true";
-				$samtools_pipeline_pe = $custom_filter_part . $filter_part . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_hisat2.bam##idx##{}_hisat2.bam.bai - && " .
+				$samtools_pipeline_pe = $custom_filter_part . $filter_part . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_hisat2.bam##idx##{}_hisat2.bam.csi - && " .
 					" picard MarkDuplicates I={}_hisat2.bam O={}_hisat2.dedup.bam M={}_hisat2.dup_metrics.txt $p_opts VALIDATION_STRINGENCY=LENIENT QUIET=true && " .
-					" mv {}_hisat2.dedup.bam {}_hisat2.bam && samtools index {}_hisat2.bam";
+					" mv {}_hisat2.dedup.bam {}_hisat2.bam && samtools index -c {}_hisat2.bam";
 			} else {
-				$samtools_pipeline_pe = $custom_filter_part . $filter_part . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_hisat2.bam##idx##{}_hisat2.bam.bai - ";
+				$samtools_pipeline_pe = $custom_filter_part . $filter_part . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_hisat2.bam##idx##{}_hisat2.bam.csi - ";
 			}
    			
 			if($file =~ /.*_R?1\.f.*/){
@@ -2859,16 +2859,16 @@ sub hisat2{
                                                                   if [ \$CONTIG_COUNT -gt 1000 ]; then
                                                                     echo "Genome has \$CONTIG_COUNT contigs (>1000), using top 100 largest contigs for QC" | tee qc4.log
                                                                     samtools idxstats \$(ls *.bam | shuf | head -1) | sort -k2,2nr | head -100 | awk '{print \$1"\\t0\\t"\$2}' > top100_regions.bed
-                                                                    multiBamSummary BED-file --BED top100_regions.bed -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz >> qc4.log 2>&1
+                                                                    multiBamSummary BED-file --BED top100_regions.bed -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz >> qc4.log 2>&1 || true
                                                                   else
-                                                                    multiBamSummary bins -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz >> qc4.log 2>&1
+                                                                    multiBamSummary bins -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz >> qc4.log 2>&1 || true
                                                                   fi
 
-		  						  plotCorrelation --corData deeptools_all_bams.npz --corMethod spearman --plotFile deeptools_all_bams.npz_correlation_spearman.pdf --whatToPlot heatmap --skipZeros --plotTitle \"Spearman Correlation\" --outFileCorMatrix deeptools_all_bams.npz_correlation_spearman_scores.tab --plotNumbers >> qc4.log 2>&1
-		  						  plotCorrelation --corData deeptools_all_bams.npz --corMethod pearson --plotFile deeptools_all_bams.npz_correlation_pearson.pdf --whatToPlot heatmap --skipZeros --plotTitle \"Pearson Correlation\" --outFileCorMatrix deeptools_all_bams.npz_correlation_pearson_scores.tab --plotNumbers >> qc4.log 2>&1
-		   						  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA.pdf --outFileNameData deeptools_all_bams.npz_PCA.tab >> qc4.log 2>&1
-		   						  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_2.pdf --outFileNameData deeptools_all_bams.npz_PCA_2.tab --rowCenter >> qc4.log 2>&1
-		   						  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_3.pdf --outFileNameData deeptools_all_bams.npz_PCA_3.tab --transpose  >> qc4.log 2>&1
+		  						  plotCorrelation --corData deeptools_all_bams.npz --corMethod spearman --plotFile deeptools_all_bams.npz_correlation_spearman.pdf --whatToPlot heatmap --skipZeros --plotTitle \"Spearman Correlation\" --outFileCorMatrix deeptools_all_bams.npz_correlation_spearman_scores.tab --plotNumbers >> qc4.log 2>&1 || true
+		  						  plotCorrelation --corData deeptools_all_bams.npz --corMethod pearson --plotFile deeptools_all_bams.npz_correlation_pearson.pdf --whatToPlot heatmap --skipZeros --plotTitle \"Pearson Correlation\" --outFileCorMatrix deeptools_all_bams.npz_correlation_pearson_scores.tab --plotNumbers >> qc4.log 2>&1 || true
+		   						  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA.pdf --outFileNameData deeptools_all_bams.npz_PCA.tab >> qc4.log 2>&1 || true
+		   						  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_2.pdf --outFileNameData deeptools_all_bams.npz_PCA_2.tab --rowCenter >> qc4.log 2>&1 || true
+		   						  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_3.pdf --outFileNameData deeptools_all_bams.npz_PCA_3.tab --transpose  >> qc4.log 2>&1 || true
 	    						    fi};
 					}
 				}
@@ -2914,14 +2914,14 @@ sub hisat2{
 				$samtools_pipeline_se = $custom_filter_part_se . $filter_part_se . " | samtools sort -n -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M - " .
 					" | samtools fixmate -m - - " .
 					" | samtools sort -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M - " .
-					" | samtools markdup -r --write-index - {}_hisat2.bam##idx##{}_hisat2.bam.bai ";
+					" | samtools markdup -r --write-index - {}_hisat2.bam##idx##{}_hisat2.bam.csi ";
 			} elsif (defined $bam_dedup && ($bam_dedup eq "picard" || $bam_dedup eq "picard_optical")) {
 				my $p_opts = ($bam_dedup eq "picard_optical") ? "REMOVE_SEQUENCING_DUPLICATES=true" : "REMOVE_DUPLICATES=true";
-				$samtools_pipeline_se = $custom_filter_part_se . $filter_part_se . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_hisat2.bam##idx##{}_hisat2.bam.bai - && " .
+				$samtools_pipeline_se = $custom_filter_part_se . $filter_part_se . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_hisat2.bam##idx##{}_hisat2.bam.csi - && " .
 					" picard MarkDuplicates I={}_hisat2.bam O={}_hisat2.dedup.bam M={}_hisat2.dup_metrics.txt $p_opts VALIDATION_STRINGENCY=LENIENT QUIET=true && " .
-					" mv {}_hisat2.dedup.bam {}_hisat2.bam && samtools index {}_hisat2.bam";
+					" mv {}_hisat2.dedup.bam {}_hisat2.bam && samtools index -c {}_hisat2.bam";
 			} else {
-				$samtools_pipeline_se = $custom_filter_part_se . $filter_part_se . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_hisat2.bam##idx##{}_hisat2.bam.bai - ";
+				$samtools_pipeline_se = $custom_filter_part_se . $filter_part_se . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_hisat2.bam##idx##{}_hisat2.bam.csi - ";
 			}
 			print STDOUT "\tHISAT 2 :: ".date()." Checking $file for hisat2 (single-end) analysis\n" if($verbose);
 						$command=qq{if [ \$(ls $projectdir$output_dir | wc -l) -eq 0 ]; then
@@ -2954,16 +2954,16 @@ sub hisat2{
                                                                   if [ \$CONTIG_COUNT -gt 1000 ]; then
                                                                     echo "Genome has \$CONTIG_COUNT contigs (>1000), using top 100 largest contigs for QC" | tee qc4.log
                                                                     samtools idxstats \$(ls *.bam | shuf | head -1) | sort -k2,2nr | head -100 | awk '{print \$1"\\t0\\t"\$2}' > top100_regions.bed
-                                                                    multiBamSummary BED-file --BED top100_regions.bed -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz >> qc4.log 2>&1
+                                                                    multiBamSummary BED-file --BED top100_regions.bed -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz >> qc4.log 2>&1 || true
                                                                   else
-                                                                    multiBamSummary bins -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz >> qc4.log 2>&1
+                                                                    multiBamSummary bins -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz >> qc4.log 2>&1 || true
                                                                   fi
 
-		  						  plotCorrelation --corData deeptools_all_bams.npz --corMethod spearman --plotFile deeptools_all_bams.npz_correlation_spearman.pdf --whatToPlot heatmap --skipZeros --plotTitle \"Spearman Correlation\" --outFileCorMatrix deeptools_all_bams.npz_correlation_spearman_scores.tab --plotNumbers >> qc4.log 2>&1
-		  						  plotCorrelation --corData deeptools_all_bams.npz --corMethod pearson --plotFile deeptools_all_bams.npz_correlation_pearson.pdf --whatToPlot heatmap --skipZeros --plotTitle \"Pearson Correlation\" --outFileCorMatrix deeptools_all_bams.npz_correlation_pearson_scores.tab --plotNumbers >> qc4.log 2>&1
-		   						  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA.pdf --outFileNameData deeptools_all_bams.npz_PCA.tab >> qc4.log 2>&1
-		   						  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_2.pdf --outFileNameData deeptools_all_bams.npz_PCA_2.tab --rowCenter >> qc4.log 2>&1
-		   						  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_3.pdf --outFileNameData deeptools_all_bams.npz_PCA_3.tab --transpose  >> qc4.log 2>&1
+		  						  plotCorrelation --corData deeptools_all_bams.npz --corMethod spearman --plotFile deeptools_all_bams.npz_correlation_spearman.pdf --whatToPlot heatmap --skipZeros --plotTitle \"Spearman Correlation\" --outFileCorMatrix deeptools_all_bams.npz_correlation_spearman_scores.tab --plotNumbers >> qc4.log 2>&1 || true
+		  						  plotCorrelation --corData deeptools_all_bams.npz --corMethod pearson --plotFile deeptools_all_bams.npz_correlation_pearson.pdf --whatToPlot heatmap --skipZeros --plotTitle \"Pearson Correlation\" --outFileCorMatrix deeptools_all_bams.npz_correlation_pearson_scores.tab --plotNumbers >> qc4.log 2>&1 || true
+		   						  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA.pdf --outFileNameData deeptools_all_bams.npz_PCA.tab >> qc4.log 2>&1 || true
+		   						  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_2.pdf --outFileNameData deeptools_all_bams.npz_PCA_2.tab --rowCenter >> qc4.log 2>&1 || true
+		   						  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_3.pdf --outFileNameData deeptools_all_bams.npz_PCA_3.tab --transpose  >> qc4.log 2>&1 || true
 	    						    fi};
 		}
 		
@@ -3325,14 +3325,14 @@ sub star{
 			$samtools_pipeline_pe = $filter_part . $custom_filter_part . " | samtools sort -n -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M - " .
 				" | samtools fixmate -m - - " .
 				" | samtools sort -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M - " .
-				" | samtools markdup -r --write-index - {}_STAR.bam##idx##{}_STAR.bam.bai ";
+				" | samtools markdup -r --write-index - {}_STAR.bam##idx##{}_STAR.bam.csi ";
 		} elsif (defined $bam_dedup && ($bam_dedup eq "picard" || $bam_dedup eq "picard_optical")) {
 			my $p_opts = ($bam_dedup eq "picard_optical") ? "REMOVE_SEQUENCING_DUPLICATES=true" : "REMOVE_DUPLICATES=true";
-			$samtools_pipeline_pe = $filter_part . $custom_filter_part . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_STAR.bam##idx##{}_STAR.bam.bai - && " .
+			$samtools_pipeline_pe = $filter_part . $custom_filter_part . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_STAR.bam##idx##{}_STAR.bam.csi - && " .
 				" picard MarkDuplicates I={}_STAR.bam O={}_STAR.dedup.bam M={}_STAR.dup_metrics.txt $p_opts VALIDATION_STRINGENCY=LENIENT QUIET=true && " .
-				" mv {}_STAR.dedup.bam {}_STAR.bam && samtools index {}_STAR.bam";
+				" mv {}_STAR.dedup.bam {}_STAR.bam && samtools index -c {}_STAR.bam";
 		} else {
-			$samtools_pipeline_pe = $filter_part . $custom_filter_part . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_STAR.bam##idx##{}_STAR.bam.bai - ";
+			$samtools_pipeline_pe = $filter_part . $custom_filter_part . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_STAR.bam##idx##{}_STAR.bam.csi - ";
 		}
 		
 		my $command;
@@ -3358,14 +3358,14 @@ sub star{
 			$samtools_pipeline_se = $filter_part_se . $custom_filter_part_se . " | samtools sort -n -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M - " .
 				" | samtools fixmate -m - - " .
 				" | samtools sort -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M - " .
-				" | samtools markdup -r --write-index - {}_STAR.bam##idx##{}_STAR.bam.bai ";
+				" | samtools markdup -r --write-index - {}_STAR.bam##idx##{}_STAR.bam.csi ";
 		} elsif (defined $bam_dedup && ($bam_dedup eq "picard" || $bam_dedup eq "picard_optical")) {
 			my $p_opts = ($bam_dedup eq "picard_optical") ? "REMOVE_SEQUENCING_DUPLICATES=true" : "REMOVE_DUPLICATES=true";
-			$samtools_pipeline_se = $filter_part_se . $custom_filter_part_se . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_STAR.bam##idx##{}_STAR.bam.bai - && " .
+			$samtools_pipeline_se = $filter_part_se . $custom_filter_part_se . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_STAR.bam##idx##{}_STAR.bam.csi - && " .
 				" picard MarkDuplicates I={}_STAR.bam O={}_STAR.dedup.bam M={}_STAR.dup_metrics.txt $p_opts VALIDATION_STRINGENCY=LENIENT QUIET=true && " .
-				" mv {}_STAR.dedup.bam {}_STAR.bam && samtools index {}_STAR.bam";
+				" mv {}_STAR.dedup.bam {}_STAR.bam && samtools index -c {}_STAR.bam";
 		} else {
-			$samtools_pipeline_se = $filter_part_se . $custom_filter_part_se . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_STAR.bam##idx##{}_STAR.bam.bai - ";
+			$samtools_pipeline_se = $filter_part_se . $custom_filter_part_se . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_STAR.bam##idx##{}_STAR.bam.csi - ";
 		}
 
 		if(lc($Seqtype) eq "pairedend" or lc($Seqtype) eq "paired" or lc($Seqtype) eq "paired-end"){
@@ -3407,16 +3407,16 @@ sub star{
                                                                   if [ \$CONTIG_COUNT -gt 1000 ]; then
                                                                     echo "Genome has \$CONTIG_COUNT contigs (>1000), using top 100 largest contigs for QC" | tee qc4.log
                                                                     samtools idxstats \$(ls *.bam | shuf | head -1) | sort -k2,2nr | head -100 | awk '{print \$1"\\t0\\t"\$2}' > top100_regions.bed
-                                                                    multiBamSummary BED-file --BED top100_regions.bed -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz >> qc4.log 2>&1
+                                                                    multiBamSummary BED-file --BED top100_regions.bed -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz >> qc4.log 2>&1 || true
                                                                   else
-                                                                    multiBamSummary bins -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz >> qc4.log 2>&1
+                                                                    multiBamSummary bins -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz >> qc4.log 2>&1 || true
                                                                   fi
 
-					                          plotCorrelation --corData deeptools_all_bams.npz --corMethod spearman --plotFile deeptools_all_bams.npz_correlation_spearman.pdf --whatToPlot heatmap --skipZeros --plotTitle "Spearman Correlation" --outFileCorMatrix deeptools_all_bams.npz_correlation_spearman_scores.tab --plotNumbers
-								  plotCorrelation --corData deeptools_all_bams.npz --corMethod pearson --plotFile deeptools_all_bams.npz_correlation_pearson.pdf --whatToPlot heatmap --skipZeros --plotTitle "Pearson Correlation" --outFileCorMatrix deeptools_all_bams.npz_correlation_pearson_scores.tab --plotNumbers >> qc4.log 2>&1
-					                          plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA.pdf --outFileNameData deeptools_all_bams.npz_PCA.tab
-								  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_2.pdf --outFileNameData deeptools_all_bams.npz_PCA_2.tab --rowCenter
-								  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_3.pdf --outFileNameData deeptools_all_bams.npz_PCA_3.tab --transpose >> qc4.log 2>&1
+					                          plotCorrelation --corData deeptools_all_bams.npz --corMethod spearman --plotFile deeptools_all_bams.npz_correlation_spearman.pdf --whatToPlot heatmap --skipZeros --plotTitle "Spearman Correlation" --outFileCorMatrix deeptools_all_bams.npz_correlation_spearman_scores.tab --plotNumbers >> qc4.log 2>&1 || true
+								  plotCorrelation --corData deeptools_all_bams.npz --corMethod pearson --plotFile deeptools_all_bams.npz_correlation_pearson.pdf --whatToPlot heatmap --skipZeros --plotTitle "Pearson Correlation" --outFileCorMatrix deeptools_all_bams.npz_correlation_pearson_scores.tab --plotNumbers >> qc4.log 2>&1 || true
+					                          plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA.pdf --outFileNameData deeptools_all_bams.npz_PCA.tab >> qc4.log 2>&1 || true
+								  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_2.pdf --outFileNameData deeptools_all_bams.npz_PCA_2.tab --rowCenter >> qc4.log 2>&1 || true
+								  plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_3.pdf --outFileNameData deeptools_all_bams.npz_PCA_3.tab --transpose >> qc4.log 2>&1 || true
 					                    fi};
 					}
 				}
@@ -3465,14 +3465,14 @@ sub star{
 				$samtools_pipeline_se = $filter_part_se . $custom_filter_part_se . " | samtools sort -n -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M - " .
 					" | samtools fixmate -m - - " .
 					" | samtools sort -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M - " .
-					" | samtools markdup -r --write-index - {}_STAR.bam##idx##{}_STAR.bam.bai ";
+					" | samtools markdup -r --write-index - {}_STAR.bam##idx##{}_STAR.bam.csi ";
 			} elsif (defined $bam_dedup && ($bam_dedup eq "picard" || $bam_dedup eq "picard_optical")) {
 				my $p_opts = ($bam_dedup eq "picard_optical") ? "REMOVE_SEQUENCING_DUPLICATES=true" : "REMOVE_DUPLICATES=true";
-				$samtools_pipeline_se = $filter_part_se . $custom_filter_part_se . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_STAR.bam##idx##{}_STAR.bam.bai - && " .
+				$samtools_pipeline_se = $filter_part_se . $custom_filter_part_se . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_STAR.bam##idx##{}_STAR.bam.csi - && " .
 					" picard MarkDuplicates I={}_STAR.bam O={}_STAR.dedup.bam M={}_STAR.dup_metrics.txt $p_opts VALIDATION_STRINGENCY=LENIENT QUIET=true && " .
-					" mv {}_STAR.dedup.bam {}_STAR.bam && samtools index {}_STAR.bam";
+					" mv {}_STAR.dedup.bam {}_STAR.bam && samtools index -c {}_STAR.bam";
 			} else {
-				$samtools_pipeline_se = $filter_part_se . $custom_filter_part_se . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_STAR.bam##idx##{}_STAR.bam.bai - ";
+				$samtools_pipeline_se = $filter_part_se . $custom_filter_part_se . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_STAR.bam##idx##{}_STAR.bam.csi - ";
 			}
 
 			$command=qq{if [ \$(ls $projectdir$output_dir | wc -l) -eq 0 ]; then
@@ -3490,16 +3490,16 @@ sub star{
                                           if [ \$CONTIG_COUNT -gt 1000 ]; then
                                              echo "Genome has \$CONTIG_COUNT contigs (>1000), using top 100 largest contigs for QC" | tee qc4.log
                                              samtools idxstats \$(ls *.bam | shuf | head -1) | sort -k2,2nr | head -100 | awk '{print \$1"\\t0\\t"\$2}' > top100_regions.bed
-                                             multiBamSummary BED-file --BED top100_regions.bed -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz >> qc4.log 2>&1
+                                             multiBamSummary BED-file --BED top100_regions.bed -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz >> qc4.log 2>&1 || true
                                           else
-                                             multiBamSummary bins -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz >> qc4.log 2>&1
+                                             multiBamSummary bins -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz >> qc4.log 2>&1 || true
                                           fi
 
-		                          plotCorrelation --corData deeptools_all_bams.npz --corMethod spearman --plotFile deeptools_all_bams.npz_correlation_spearman.pdf --whatToPlot heatmap --skipZeros --plotTitle "Spearman Correlation" --outFileCorMatrix deeptools_all_bams.npz_correlation_spearman_scores.tab --plotNumbers >> qc4.log 2>&1 && \\
-		                          plotCorrelation --corData deeptools_all_bams.npz --corMethod pearson --plotFile deeptools_all_bams.npz_correlation_pearson.pdf --whatToPlot heatmap --skipZeros --plotTitle "Pearson Correlation" --outFileCorMatrix deeptools_all_bams.npz_correlation_pearson_scores.tab --plotNumbers >> qc4.log 2>&1 && \\
-		                          plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA.pdf --outFileNameData deeptools_all_bams.npz_PCA.tab >> qc4.log 2>&1 && \\
-		                          plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_2.pdf --outFileNameData deeptools_all_bams.npz_PCA_2.tab --rowCenter >> qc4.log 2>&1 && \\
-		                          plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_3.pdf --outFileNameData deeptools_all_bams.npz_PCA_3.tab --transpose >> qc4.log 2>&1
+		                          plotCorrelation --corData deeptools_all_bams.npz --corMethod spearman --plotFile deeptools_all_bams.npz_correlation_spearman.pdf --whatToPlot heatmap --skipZeros --plotTitle "Spearman Correlation" --outFileCorMatrix deeptools_all_bams.npz_correlation_spearman_scores.tab --plotNumbers >> qc4.log 2>&1 || true
+		                          plotCorrelation --corData deeptools_all_bams.npz --corMethod pearson --plotFile deeptools_all_bams.npz_correlation_pearson.pdf --whatToPlot heatmap --skipZeros --plotTitle "Pearson Correlation" --outFileCorMatrix deeptools_all_bams.npz_correlation_pearson_scores.tab --plotNumbers >> qc4.log 2>&1 || true
+		                          plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA.pdf --outFileNameData deeptools_all_bams.npz_PCA.tab >> qc4.log 2>&1 || true
+		                          plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_2.pdf --outFileNameData deeptools_all_bams.npz_PCA_2.tab --rowCenter >> qc4.log 2>&1 || true
+		                          plotPCA --corData deeptools_all_bams.npz --plotFile deeptools_all_bams.npz_PCA_3.pdf --outFileNameData deeptools_all_bams.npz_PCA_3.tab --transpose >> qc4.log 2>&1 || true
 		                    fi};
 		}
 		
