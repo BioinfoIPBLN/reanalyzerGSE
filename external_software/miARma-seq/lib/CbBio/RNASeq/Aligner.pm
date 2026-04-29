@@ -2724,9 +2724,16 @@ sub hisat2{
 	my $bam_dedup=$args{"bam_dedup"};
 	my $bam_custom_filter=$args{"bam_custom_filter"};
 	my $bam_normalization=$args{"bam_normalization"};
+	my $save_unaligned=$args{"save_unaligned"};
 	my $norm_cmd = "";
 	if (defined $bam_normalization && lc($bam_normalization) ne "none") {
 		$norm_cmd = "--normalizeUsing " . uc($bam_normalization);
+	}
+	my $unaligned_cmd_pe = "";
+	my $unaligned_cmd_se = "";
+	if (defined $save_unaligned && lc($save_unaligned) eq "yes") {
+		$unaligned_cmd_pe = "--un-conc-gz {}_no_aligned.fastq.gz";
+		$unaligned_cmd_se = "--un-gz {}_no_aligned.fastq.gz";
 	}
 	
 	#Variable declaration and describing results directory 
@@ -2836,7 +2843,7 @@ sub hisat2{
 	      							  'hisat2 -q -t --mm --seed 123 --very-sensitive $hisatpardef -x $hisat2idx_final \\
 	      							    -1 \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \\
 	      							    -2 \$(cat $tmp_file | xargs dirname | uniq)/{}_2.fastq.gz \\
-	      							    --met-file {}.metrics --un-conc-gz {}_no_aligned.fastq.gz \\
+	      							    --met-file {}.metrics $unaligned_cmd_pe \\
 	      							    --new-summary --summary-file {}_hisat2.log \\
 	      							  $samtools_pipeline_pe && \\
 	      							  echo Done...{}_hisat2.bam && \\
@@ -2931,7 +2938,7 @@ sub hisat2{
 	      							  'hisat2 -q -t --mm --seed 123 --very-sensitive $hisatpardef -x $hisat2idx_final \\
 	      							    -U \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \\
 	      							    -U \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \\
-	      							    --met-file {}.metrics --un-conc-gz {}_no_aligned.fastq.gz \\
+	      							    --met-file {}.metrics $unaligned_cmd_se \\
 	      							    --new-summary --summary-file {}_hisat2.log \\
 	      							  $samtools_pipeline_se && \\
 	      							  echo Done...{}_hisat2.bam && \\

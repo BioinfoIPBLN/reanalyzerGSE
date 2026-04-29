@@ -724,6 +724,7 @@ sub run_miARma{
 						bam_dedup=>$cfg->val("Aligner","bam_dedup") || "no",
 						bam_custom_filter=>$cfg->val("Aligner","bam_custom_filter") || undef,
 						bam_normalization=>$cfg->val("Aligner","bam_normalization") || "BPM",
+						save_unaligned=>$cfg->val("Aligner","save_unaligned") || "no",
 						strand=>$cfg->val("General","strand")|| "yes",
 					);
 					push(@alignes,$file);

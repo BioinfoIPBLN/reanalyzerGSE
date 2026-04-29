@@ -105,6 +105,7 @@ bam_dedup: "no"                        # Duplicate removal: 'no', 'samtools', 'p
                                        #   picard_optical = picard MarkDuplicates REMOVE_SEQUENCING_DUPLICATES=true (optical/sequencing only)
 bam_custom_filter: ""                  # Custom shell command to pipe SAM text through post-alignment (e.g. "grep -E '^@|\\<NM:i:0\\>'" for perfect matches). Must preserve header lines (^@).
 bam_normalization: "BPM"               # Normalization option for bamCoverage. Choices: RPKM, CPM, BPM, RPGC, None. (default "BPM")
+save_unaligned: "no"                   # Save unaligned reads from hisat2/STAR to compressed fastq files ('yes' or 'no')
 aligner_extra_args: ""                 # Extra arguments appended verbatim to the aligner command line. Examples:
                                        #   STAR:     "--outSAMmultNmax 1 --alignIntronMax 100000"
                                        #   hisat2:   "--no-mixed --no-discordant --maxins 800"

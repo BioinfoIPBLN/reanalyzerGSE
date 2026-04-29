@@ -1130,6 +1130,9 @@ _log_step "Step_3a_Prepare" "start"
 			if [ ! -z "$bam_normalization" ]; then
 				sed -i "s,bam_normalization=,bam_normalization=$bam_normalization,g" miarma$index.ini
 			fi
+			if [ "$save_unaligned" == "yes" ]; then
+				sed -i "s,save_unaligned=no,save_unaligned=yes,g" miarma$index.ini
+			fi
 			if [ ! -z "$featureCounts_extra_args" ]; then
 				fc_extra_escaped=$(printf '%s' "$featureCounts_extra_args" | sed 's/[\\&]/\\&/g')
 				sed -i "s,parameters=-M -O -C -B,parameters=$fc_extra_escaped,g" miarma$index.ini
@@ -1467,17 +1470,21 @@ _log_step "Step_6_Enrichment" "start"
 							echo "Detected simplified ${gaf_ncols}-column GAF file. Extracting GeneID and GO term columns..."
 							# Determine column order: one col has GO:xxxx pattern, the other is the gene ID
 							first_col=$(zcat -f "$annot_enrichm" | grep -v "^!" | head -1 | cut -f1)
+							GO_OUTFILE=$output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annot_enrichm).automatically_extracted_GO_terms.txt
+							echo -e "source_id\tComputed_GO_Process_IDs" > "$GO_OUTFILE"
 							if [[ "$first_col" == GO:* ]]; then
 								# Format: GO_ID<tab>GeneID -> swap to GeneID<tab>GO_ID
-								zcat -f "$annot_enrichm" | grep -v "^!" | awk -F'\t' '{print $2"\t"$1}' | sort -u > $output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annot_enrichm).automatically_extracted_GO_terms.txt
+								zcat -f "$annot_enrichm" | grep -v "^!" | awk -F'\t' '{print $2"\t"$1}' | sort -u >> "$GO_OUTFILE"
 							else
 								# Format: GeneID<tab>GO_ID (already correct)
-								zcat -f "$annot_enrichm" | grep -v "^!" | cut -f 1,2 | sort -u > $output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annot_enrichm).automatically_extracted_GO_terms.txt
+								zcat -f "$annot_enrichm" | grep -v "^!" | cut -f 1,2 | sort -u >> "$GO_OUTFILE"
 							fi
 						else
-							echo "Detected standard ${gaf_ncols}-column GAF format. Extracting Gene IDs (col2) and GO terms (col5)..."
-							# Standard GAF 2.x: Column 2 = DB Object ID (Gene ID), Column 5 = GO ID
-							zcat -f "$annot_enrichm" | grep -v "^!" | cut -f 2,5 | sort -u > $output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annot_enrichm).automatically_extracted_GO_terms.txt
+							echo "Detected standard ${gaf_ncols}-column GAF format. Extracting Gene Symbols (col3) and GO terms (col5)..."
+							# Standard GAF 2.x: Column 3 = Symbol (gene name), Column 5 = GO ID
+							GO_OUTFILE=$output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annot_enrichm).automatically_extracted_GO_terms.txt
+							echo -e "source_id\tComputed_GO_Process_IDs" > "$GO_OUTFILE"
+							zcat -f "$annot_enrichm" | grep -v "^!" | cut -f 3,5 | sort -u >> "$GO_OUTFILE"
 						fi
 
 					elif [[ "$annot_enrichm" == *.gmt ]] || [[ "$annot_enrichm" == *.gmt.gz ]]; then
@@ -1510,7 +1517,10 @@ _log_step "Step_6_Enrichment" "start"
 						echo "WARNING: GO term extraction produced $go_data_lines valid entries. The input file may have an unexpected format. Skipping enrichment."
 					else
 						echo "Extracted $go_data_lines gene-GO associations. Running enrichr..."
-						sed -i '1s/^/source_id\tComputed_GO_Process_IDs\n/' $annotation_go
+						# Add header if not already present (GAF extraction adds it directly)
+						if ! head -1 "$annotation_go" | grep -q "^source_id"; then
+							sed -i '1s/^/source_id\tComputed_GO_Process_IDs\n/' "$annotation_go"
+						fi
 						R_clusterProfiler_enrichr.R $annotation_go $output_folder/$name/final_results_reanalysis$index/RPKM_counts_genes.txt $output_folder/$name/final_results_reanalysis$index/DGE "^DGE_analysis_comp[0-9]+.txt$" &> clusterProfiler_enrichr_funct_enrichment.log
 						echo "enrichr execution completed. Please double check the results and the log: clusterProfiler_enrichr_funct_enrichment.log"
 					fi

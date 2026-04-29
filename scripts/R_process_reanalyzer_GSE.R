@@ -1070,6 +1070,15 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
     
           #sink("HK_genes.log")
           target <- readTargets("temp_targets.txt")
+          # Pre-filter genes with zero variance or NA values (NormFinder/stabMeasureRho
+          # crash on these with "missing value where TRUE/FALSE needed")
+          gene_vars <- apply(RPKM, 1, var, na.rm = TRUE)
+          valid_genes <- !is.na(gene_vars) & gene_vars > 0
+          if (sum(valid_genes) < nrow(RPKM)) {
+            cat(paste0("Housekeeping: filtered out ", sum(!valid_genes), " zero-variance/NA genes from ", nrow(RPKM), " total\n"))
+            writeLines(rownames(RPKM)[!valid_genes], "HK_zero_variance_genes.txt")
+          }
+          RPKM <- RPKM[valid_genes, , drop = FALSE]
           matriz_obj<-new("qPCRBatch", exprs=as.matrix(RPKM))
           
           ### Get a number of HK genes: 10 by default

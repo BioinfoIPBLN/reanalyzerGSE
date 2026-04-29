@@ -108,6 +108,7 @@ for argument in $options; do
 	        -Fdup | -bam_dedup # Duplicate removal: 'no' (default), 'samtools' (markdup -r), 'picard' (REMOVE_DUPLICATES), 'picard_optical' (REMOVE_SEQUENCING_DUPLICATES)
 	        -Fcust | -bam_custom_filter # Custom shell command to pipe SAM text through post-alignment (e.g. "grep -E '^@|\\<NM:i:0\\>'" for perfect matches). Must preserve header lines (^@).
 	        -bN | -bam_normalization # Normalization method using deeptool's bamCoverage. Choices: RPKM, CPM, BPM, RPGC, None. ('BPM' by default)
+	        -Su | -save_unaligned # Save unaligned reads from hisat2/STAR ('no' by default, or 'yes'). When enabled, reads that did not align to the reference genome are written to compressed fastq files alongside the BAM files
 	        -Ae | -aligner_extra_args # Extra arguments to pass directly to the aligner (STAR, hisat2, or kallisto). These are appended verbatim to the aligner command line (e.g. '--outSAMmultNmax 1 --alignIntronMax 100000' for STAR, or '--no-mixed --no-discordant' for hisat2). Empty by default
 
 	        #### Count-level options (quantification):
@@ -221,6 +222,7 @@ for argument in $options; do
 		-Fdup) bam_dedup=${arguments[index]} ;;
 		-Fcust) bam_custom_filter=${arguments[index]} ;;
 		-bN) bam_normalization=${arguments[index]} ;;
+		-Su | -save_unaligned) save_unaligned=${arguments[index]} ;;
 		-Ae | -aligner_extra_args) aligner_extra_args=${arguments[index]} ;;
 		-Ofc) featureCounts_extra_args=${arguments[index]} ;;
 		-Fgene) counts_custom_gene_filter=${arguments[index]} ;;
@@ -488,6 +490,9 @@ if [ -z "$bam_custom_filter" ]; then
 fi
 if [ -z "$bam_normalization" ]; then
 	bam_normalization="BPM"
+fi
+if [ -z "$save_unaligned" ]; then
+	save_unaligned="no"
 fi
 if [ -z "$featureCounts_extra_args" ]; then
 	featureCounts_extra_args="-M -O -C -B"
