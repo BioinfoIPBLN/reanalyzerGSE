@@ -61,7 +61,7 @@ select_cols <- function(df) {
 
 make_table <- function(df, filename = NULL, max_rows = 20) {
   if (is.null(df) || nrow(df) == 0) {
-    cat("<p><em>No significant results (adjusted p &lt; 0.05)</em></p>\n\n")
+    cat("<p><em>No results found</em></p>\n\n")
     return(invisible(NULL))
   }
   display <- select_cols(df)
@@ -136,7 +136,7 @@ show_file_set <- function(dir_path, table_pattern, label,
     sig <- filter_sig(df)
     n_sig <- if (!is.null(sig)) nrow(sig) else 0
     cat(sprintf("\n**%s** — %d significant of %d tested\n\n", basename(f), n_sig, nrow(df)))
-    if (n_sig > 0) make_table(sig, gsub("\\.txt$", ".csv", basename(f)))
+    make_table(df, gsub("\\.txt$", ".csv", basename(f)))
   }
   if (!is.null(plot_pattern) && !is.null(plot_dir) && dir.exists(plot_dir)) {
     plots <- sort(list.files(plot_dir, pattern = plot_pattern, full.names = TRUE))
@@ -300,8 +300,7 @@ for (idx in seq_along(comp_names)) {
         sig <- filter_sig(df)
         n_sig <- if (!is.null(sig)) nrow(sig) else 0
         cat(sprintf("**%d** significant GO %s terms (adjusted p < 0.05)\n\n", n_sig, ont))
-        if (n_sig > 0)
-          make_table(sig, sprintf("%s_GO_%s_ORA.csv", comp, ont))
+          make_table(df, sprintf("%s_GO_%s_ORA.csv", comp, ont))
       } else {
         cat("*Not available*\n\n")
       }
@@ -338,8 +337,7 @@ for (idx in seq_along(comp_names)) {
       sig <- filter_sig(df)
       n_sig <- if (!is.null(sig)) nrow(sig) else 0
       cat(sprintf("**%d** significant GO terms (combined, adjusted p < 0.05)\n\n", n_sig))
-      if (n_sig > 0)
-        make_table(sig, sprintf("%s_GO_ALL_ORA.csv", comp))
+        make_table(df, sprintf("%s_GO_ALL_ORA.csv", comp))
     } else {
       cat("*Not available*\n\n")
     }
@@ -355,8 +353,7 @@ for (idx in seq_along(comp_names)) {
       sig <- filter_sig(df)
       n_sig <- if (!is.null(sig)) nrow(sig) else 0
       cat(sprintf("**%d** significant KEGG pathways\n\n", n_sig))
-      if (n_sig > 0)
-        make_table(sig, sprintf("%s_KEGG_ORA.csv", comp))
+        make_table(df, sprintf("%s_KEGG_ORA.csv", comp))
     } else {
       cat("*Not available*\n\n")
     }
@@ -388,7 +385,7 @@ for (idx in seq_along(comp_names)) {
       df <- safe_read(mkegg[1]); sig <- filter_sig(df)
       n_sig <- if (!is.null(sig)) nrow(sig) else 0
       cat(sprintf("**%d** significant KEGG modules\n\n", n_sig))
-      if (n_sig > 0) make_table(sig, sprintf("%s_MKEGG_ORA.csv", comp))
+      make_table(df, sprintf("%s_MKEGG_ORA.csv", comp))
     } else cat("*Not available*\n\n")
 
     # ── Reactome ──
@@ -400,8 +397,7 @@ for (idx in seq_along(comp_names)) {
       sig <- filter_sig(df)
       n_sig <- if (!is.null(sig)) nrow(sig) else 0
       cat(sprintf("**%d** significant Reactome pathways\n\n", n_sig))
-      if (n_sig > 0)
-        make_table(sig, sprintf("%s_Reactome_ORA.csv", comp))
+        make_table(df, sprintf("%s_Reactome_ORA.csv", comp))
     } else {
       cat("*Not available*\n\n")
     }
@@ -423,7 +419,7 @@ for (idx in seq_along(comp_names)) {
       df <- safe_read(wp[1]); sig <- filter_sig(df)
       n_sig <- if (!is.null(sig)) nrow(sig) else 0
       cat(sprintf("**%d** significant WikiPathways\n\n", n_sig))
-      if (n_sig > 0) make_table(sig, sprintf("%s_WikiPathways_ORA.csv", comp))
+      make_table(df, sprintf("%s_WikiPathways_ORA.csv", comp))
     } else cat("*Not available*\n\n")
 
     # ── Disease Ontology (human) ──
@@ -437,7 +433,7 @@ for (idx in seq_along(comp_names)) {
         df <- safe_read(f); sig <- filter_sig(df)
         n_sig <- if (!is.null(sig)) nrow(sig) else 0
         cat(sprintf("**%d** significant terms\n\n", n_sig))
-        if (n_sig > 0) make_table(sig, paste0(bname, ".csv"))
+        make_table(df, paste0(bname, ".csv"))
       }
     }
 
@@ -469,7 +465,7 @@ for (idx in seq_along(comp_names)) {
               df <- safe_read(f); sig <- filter_sig(df)
               n_sig <- if (!is.null(sig)) nrow(sig) else 0
               cat(sprintf("**%s** — %d significant\n\n", basename(f), n_sig))
-              if (n_sig > 0) make_table(sig, gsub("\\.txt$", ".csv", basename(f)))
+              make_table(df, gsub("\\.txt$", ".csv", basename(f)))
             }
             # Ridgeplot / dotplot if available
             go_figs <- file.path(cp_dir, "go_figs")
@@ -493,7 +489,7 @@ for (idx in seq_along(comp_names)) {
           df <- safe_read(f); sig <- filter_sig(df)
           n_sig <- if (!is.null(sig)) nrow(sig) else 0
           cat(sprintf("**%s** — %d significant\n\n", basename(f), n_sig))
-          if (n_sig > 0) make_table(sig, gsub("\\.txt$", ".csv", basename(f)))
+          make_table(df, gsub("\\.txt$", ".csv", basename(f)))
         }
       }
 
@@ -505,7 +501,7 @@ for (idx in seq_along(comp_names)) {
           df <- safe_read(f); sig <- filter_sig(df)
           n_sig <- if (!is.null(sig)) nrow(sig) else 0
           cat(sprintf("**%s** — %d significant\n\n", basename(f), n_sig))
-          if (n_sig > 0) make_table(sig, gsub("\\.txt$", ".csv", basename(f)))
+          make_table(df, gsub("\\.txt$", ".csv", basename(f)))
         }
       }
 
@@ -517,7 +513,7 @@ for (idx in seq_along(comp_names)) {
           df <- safe_read(f); sig <- filter_sig(df)
           n_sig <- if (!is.null(sig)) nrow(sig) else 0
           cat(sprintf("**%s** — %d significant\n\n", basename(f), n_sig))
-          if (n_sig > 0) make_table(sig, gsub("\\.txt$", ".csv", basename(f)))
+          make_table(df, gsub("\\.txt$", ".csv", basename(f)))
         }
       }
 
@@ -529,7 +525,7 @@ for (idx in seq_along(comp_names)) {
           df <- safe_read(f); sig <- filter_sig(df)
           n_sig <- if (!is.null(sig)) nrow(sig) else 0
           cat(sprintf("**%s** — %d significant\n\n", basename(f), n_sig))
-          if (n_sig > 0) make_table(sig, gsub("\\.txt$", ".csv", basename(f)))
+          make_table(df, gsub("\\.txt$", ".csv", basename(f)))
         }
       }
 
@@ -541,7 +537,7 @@ for (idx in seq_along(comp_names)) {
           df <- safe_read(f); sig <- filter_sig(df)
           n_sig <- if (!is.null(sig)) nrow(sig) else 0
           cat(sprintf("**%s** — %d significant\n\n", basename(f), n_sig))
-          if (n_sig > 0) make_table(sig, gsub("\\.txt$", ".csv", basename(f)))
+          make_table(df, gsub("\\.txt$", ".csv", basename(f)))
         }
       }
     }
@@ -612,8 +608,7 @@ for (idx in seq_along(comp_names)) {
             bg_label <- if (grepl("_expr_1\\.txt$", f)) "Expressed genes background" else "Whole annotation background"
             cat(sprintf("\n##### %s\n\n", bg_label))
             cat(sprintf("**%d** significant GO %s terms (adjusted p < 0.05)\n\n", n_sig, ont))
-            if (n_sig > 0)
-              make_table(sig, sprintf("%s_%s_enrichr_GO_%s_%s.csv", comp, deg_set, ont, bg_label))
+              make_table(df, sprintf("%s_%s_enrichr_GO_%s_%s.csv", comp, deg_set, ont, bg_label))
           }
 
           # aPEAR plots for this DEG set + ontology
@@ -653,8 +648,7 @@ for (idx in seq_along(comp_names)) {
           bg_label <- if (grepl("_expr_1\\.txt$", f)) "Expressed genes background" else "Whole annotation background"
           cat(sprintf("\n##### %s\n\n", bg_label))
           cat(sprintf("**%d** significant KEGG terms (adjusted p < 0.05)\n\n", n_sig))
-          if (n_sig > 0)
-            make_table(sig, sprintf("%s_%s_enrichr_KEGG_%s.csv", comp, deg_set, bg_label))
+            make_table(df, sprintf("%s_%s_enrichr_KEGG_%s.csv", comp, deg_set, bg_label))
         }
         kegg_apear <- list.files(enrichr_dir,
                      pattern = sprintf("^%s_%s_.*enrichr_KEGG_.*_aPEAR\\.pdf$", comp, deg_set),
@@ -697,10 +691,8 @@ for (idx in seq_along(comp_names)) {
           for (f in head(tsvs, 3)) {
             df <- safe_read(f); sig <- filter_sig(df)
             n_sig <- if (!is.null(sig)) nrow(sig) else 0
-            if (n_sig > 0) {
-              cat(sprintf("\n**%s** — %d significant terms\n\n", basename(f), n_sig))
-              make_table(sig, gsub("\\.tsv$", ".csv", basename(f)), max_rows = 15)
-            }
+            cat(sprintf("\n**%s** — %d significant terms\n\n", basename(f), n_sig))
+            make_table(df, gsub("\\.tsv$", ".csv", basename(f)), max_rows = 15)
           }
           if (length(bplots) > 4)
             cat(sprintf("*...and %d more autoGO plots in the archive*\n\n", length(bplots) - 4))
@@ -728,7 +720,7 @@ for (idx in seq_along(comp_names)) {
             sig <- filter_sig(df)
             n_sig <- if (!is.null(sig)) nrow(sig) else 0
             cat(sprintf("**%s** — %d significant results\n\n", basename(f), n_sig))
-            if (n_sig > 0) make_table(sig, gsub("\\.txt$", ".csv", basename(f)), max_rows = 15)
+            make_table(df, gsub("\\.txt$", ".csv", basename(f)), max_rows = 15)
           }
         }
       }
@@ -846,7 +838,7 @@ if (has_network) {
         df <- safe_read(f); sig <- filter_sig(df)
         n_sig <- if (!is.null(sig)) nrow(sig) else 0
         cat(sprintf("**%s** — %d significant terms\n\n", basename(f), n_sig))
-        if (n_sig > 0) make_table(sig, gsub("\\.txt$", ".csv", basename(f)))
+        make_table(df, gsub("\\.txt$", ".csv", basename(f)))
       }
     }
 

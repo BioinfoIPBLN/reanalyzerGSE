@@ -1383,6 +1383,51 @@ tryCatch({
     }
     return(df)
   }
+  # 3c. Helper to merge GAF-derived GO terms into merged tables
+  #     Looks for .automatically_extracted_GO_terms.txt in the DGE directory.
+  #     Collapses multiple GO IDs per gene, merges case-insensitively, then resolves descriptions.
+  gaf_go_file <- list.files(paste0(output_dir, "/DGE"),
+                            pattern = "\\.automatically_extracted_GO_terms\\.txt$",
+                            full.names = TRUE)
+  gaf_go_collapsed <- NULL
+  if (length(gaf_go_file) > 0) {
+    gaf_go_file <- gaf_go_file[1]
+    cat(paste0("Found GAF-derived GO terms file: ", basename(gaf_go_file), "\n"))
+    tryCatch({
+      gaf_raw <- data.table::fread(gaf_go_file, header = TRUE, fill = TRUE, stringsAsFactors = FALSE)
+      if (ncol(gaf_raw) >= 2) {
+        colnames(gaf_raw)[1:2] <- c("source_id", "GO_ID")
+        gaf_raw$source_id <- toupper(trimws(gaf_raw$source_id))
+        gaf_raw$GO_ID <- trimws(gaf_raw$GO_ID)
+        gaf_raw <- gaf_raw[gaf_raw$GO_ID != "" & !is.na(gaf_raw$GO_ID), ]
+        # Collapse multiple GO IDs per gene
+        gaf_go_collapsed <- aggregate(GO_ID ~ source_id, data = gaf_raw,
+                                      FUN = function(x) paste(unique(x), collapse = ";"))
+        colnames(gaf_go_collapsed) <- c(".merge_key_gaf", "GAF_GO_IDs")
+        cat(paste0("  Collapsed to ", nrow(gaf_go_collapsed), " gene-GO mappings from GAF.\n"))
+      }
+    }, error = function(e) {
+      cat(paste0("  WARNING: Could not read GAF GO terms file: ", e$message, "\n"))
+    })
+  }
+
+  merge_gaf_go_terms <- function(df) {
+    if (is.null(gaf_go_collapsed) || !"Gene_ID" %in% colnames(df)) return(df)
+    df$.merge_key_gaf <- toupper(df$Gene_ID)
+    df <- merge(df, gaf_go_collapsed, by = ".merge_key_gaf", all.x = TRUE)
+    df$.merge_key_gaf <- NULL
+    # Resolve descriptions if GO.db is available
+    if (!is.null(go_all_terms)) {
+      df$GAF_GO_Descriptions <- sapply(df$GAF_GO_IDs, function(x) {
+        if (is.na(x) || x == "") return(NA_character_)
+        ids <- trimws(unlist(strsplit(as.character(x), ";")))
+        descs <- go_all_terms[ids]
+        descs[is.na(descs)] <- ids[is.na(descs)]
+        paste(descs, collapse = " | ")
+      }, USE.NAMES = FALSE)
+    }
+    return(df)
+  }
 
   # 4. If DGE tables exist, merge each with expression + GTF
   dge_files <- list.files(path = paste0(output_dir, "/DGE"),
@@ -1438,6 +1483,7 @@ tryCatch({
       merged_rpkm <- merge(dge, rpkm_categ_sub, by = "Gene_ID", all.x = TRUE)
       merged_rpkm <- merge_tables(merged_rpkm)
       colnames(merged_rpkm) <- sub("gtf_","",colnames(merged_rpkm))
+      merged_rpkm <- merge_gaf_go_terms(merged_rpkm)
       merged_rpkm <- resolve_go_terms(merged_rpkm)
       write.table(merged_rpkm,
                   file = paste0(output_dir, "/DGE/", comp_name, "_merged_RPKM.txt"),
@@ -1446,6 +1492,7 @@ tryCatch({
       merged_tpm <- merge(dge, tpm_categ_sub, by = "Gene_ID", all.x = TRUE)
       merged_tpm <- merge_tables(merged_tpm)
       colnames(merged_tpm) <- sub("gtf_","",colnames(merged_tpm))
+      merged_tpm <- merge_gaf_go_terms(merged_tpm)
       merged_tpm <- resolve_go_terms(merged_tpm)
       write.table(merged_tpm,
                   file = paste0(output_dir, "/DGE/", comp_name, "_merged_TPM.txt"),
@@ -1454,6 +1501,7 @@ tryCatch({
       merged_cpm <- merge(dge, cpm_categ_sub, by = "Gene_ID", all.x = TRUE)
       merged_cpm <- merge_tables(merged_cpm)
       colnames(merged_cpm) <- sub("gtf_","",colnames(merged_cpm))
+      merged_cpm <- merge_gaf_go_terms(merged_cpm)
       merged_cpm <- resolve_go_terms(merged_cpm)
       write.table(merged_cpm,
                   file = paste0(output_dir, "/DGE/", comp_name, "_merged_CPM.txt"),
@@ -1463,18 +1511,21 @@ tryCatch({
   } else {
     # No DGE: just write expression + GTF to main output dir
     merged_rpkm_all <- merge_tables(rpkm_categ)
+    merged_rpkm_all <- merge_gaf_go_terms(merged_rpkm_all)
     merged_rpkm_all <- resolve_go_terms(merged_rpkm_all)
     write.table(merged_rpkm_all,
                 file = paste0(output_dir, "/expression_merged_RPKM.txt"),
                 quote = FALSE, row.names = FALSE, col.names = TRUE, sep = "\t")
 
     merged_tpm_all <- merge_tables(tpm_categ)
+    merged_tpm_all <- merge_gaf_go_terms(merged_tpm_all)
     merged_tpm_all <- resolve_go_terms(merged_tpm_all)
     write.table(merged_tpm_all,
                 file = paste0(output_dir, "/expression_merged_TPM.txt"),
                 quote = FALSE, row.names = FALSE, col.names = TRUE, sep = "\t")
 
     merged_cpm_all <- merge_tables(cpm_categ)
+    merged_cpm_all <- merge_gaf_go_terms(merged_cpm_all)
     merged_cpm_all <- resolve_go_terms(merged_cpm_all)
     write.table(merged_cpm_all,
                 file = paste0(output_dir, "/expression_merged_CPM.txt"),
