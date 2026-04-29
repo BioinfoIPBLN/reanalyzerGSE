@@ -1070,15 +1070,23 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
     
           #sink("HK_genes.log")
           target <- readTargets("temp_targets.txt")
-          # Pre-filter genes with zero variance or NA values (NormFinder/stabMeasureRho
-          # crash on these with "missing value where TRUE/FALSE needed")
-          gene_vars <- apply(RPKM, 1, var, na.rm = TRUE)
-          valid_genes <- !is.na(gene_vars) & gene_vars > 0
-          if (sum(valid_genes) < nrow(RPKM)) {
-            cat(paste0("Housekeeping: filtered out ", sum(!valid_genes), " zero-variance/NA genes from ", nrow(RPKM), " total\n"))
-            writeLines(rownames(RPKM)[!valid_genes], "HK_zero_variance_genes.txt")
+          # Pre-filter genes with zero within-group variance or NA values.
+          # NormFinder/stabMeasureRho compute per-group variance; if a gene has
+          # identical expression across all samples in ANY group, the within-group
+          # variance is NA, causing "missing value where TRUE/FALSE needed".
+          Class <- as.factor(target$Type)
+          group_var_ok <- apply(RPKM, 1, function(row) {
+            all(tapply(row, Class, function(x) {
+              v <- var(x, na.rm = TRUE)
+              !is.na(v) && v > 0
+            }))
+          })
+          if (sum(!group_var_ok) > 0) {
+            cat(paste0("Housekeeping: filtered out ", sum(!group_var_ok),
+                       " genes with zero within-group variance from ", nrow(RPKM), " total\n"))
+            writeLines(rownames(RPKM)[!group_var_ok], "HK_zero_variance_genes.txt")
           }
-          RPKM <- RPKM[valid_genes, , drop = FALSE]
+          RPKM <- RPKM[group_var_ok, , drop = FALSE]
           matriz_obj<-new("qPCRBatch", exprs=as.matrix(RPKM))
           
           ### Get a number of HK genes: 10 by default
