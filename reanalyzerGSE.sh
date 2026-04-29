@@ -1513,15 +1513,70 @@ _log_step "Step_6_Enrichment" "start"
 
 					annotation_go=$output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annot_enrichm).automatically_extracted_GO_terms.txt
 					go_data_lines=$(grep "GO:" "$annotation_go" 2>/dev/null | wc -l)
-					if [ "$go_data_lines" -lt 2 ]; then
-						echo "WARNING: GO term extraction produced $go_data_lines valid entries. The input file may have an unexpected format. Skipping enrichment."
+
+					# Also extract KEGG terms if present (K00001-style KEGG Orthology IDs)
+					annotation_kegg=$output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annot_enrichm).automatically_extracted_KEGG_terms.txt
+					if [[ "$annot_enrichm" == *.gaf ]] || [[ "$annot_enrichm" == *.gaf.gz ]]; then
+						# GAF: KEGG IDs may appear in col5 (qualifier/aspect) or dedicated columns
+						zcat -f "$annot_enrichm" | grep -v "^!" | awk -F'\t' '{
+							for (i=1; i<=NF; i++) {
+								if ($i ~ /K[0-9]{5}/) {
+									n = split($i, arr, /[,; ]/);
+									for (j=1; j<=n; j++) {
+										if (arr[j] ~ /^(ko:)?K[0-9]{5}$/) {
+											kid = arr[j]; sub(/^ko:/, "", kid)
+											if ('"$gaf_ncols"' <= 2) print ($1 ~ /^K[0-9]/ ? $2 : $1) "\t" kid
+											else print $3 "\t" kid
+										}
+									}
+								}
+							}
+						}' | sort -u > "$annotation_kegg"
+					elif [[ "$annot_enrichm" == *.gmt ]] || [[ "$annot_enrichm" == *.gmt.gz ]]; then
+						# GMT: KEGG pathway IDs in col1 (e.g. map00010, ko00010, K00001)
+						zcat -f "$annot_enrichm" | awk -F'\t' '$1 ~ /^(ko|map|K[0-9])/ { term=$1; for(i=3;i<=NF;i++) print $i"\t"term }' | sort -u > "$annotation_kegg"
 					else
-						echo "Extracted $go_data_lines gene-GO associations. Running enrichr..."
-						# Add header if not already present (GAF extraction adds it directly)
-						if ! head -1 "$annotation_go" | grep -q "^source_id"; then
-							sed -i '1s/^/source_id\tComputed_GO_Process_IDs\n/' "$annotation_go"
+						# GFF/GTF: look for KEGG KO IDs in Dbxref, KEGG_ko, Note, or Ontology_term attributes
+						zcat -f "$annot_enrichm" | awk -F'\t' '/K[0-9]{5}/ && !/^#/ {
+						attrs = $9; gid = ""
+						if (attrs ~ /gene_id "/) { tmp = attrs; sub(/.*gene_id "/, "", tmp); sub(/".*/, "", tmp); gid = tmp }
+						if (gid == "" && attrs ~ /ID=/) { tmp = attrs; sub(/.*ID=/, "", tmp); sub(/[;].*/, "", tmp); gid = tmp }
+						if (gid == "" && attrs ~ /Parent=/) { tmp = attrs; sub(/.*Parent=/, "", tmp); sub(/[;].*/, "", tmp); gid = tmp }
+						if (gid != "") {
+							n = split(attrs, parts, /[,;= "]+/)
+							for (i = 1; i <= n; i++) {
+								if (parts[i] ~ /^(ko:)?K[0-9]{5}$/) {
+									kid = parts[i]; sub(/^ko:/, "", kid)
+									print gid "\t" kid
+								}
+							}
+						}
+						}' | sort -u > "$annotation_kegg"
+					fi
+					kegg_data_lines=$(wc -l < "$annotation_kegg" 2>/dev/null || echo 0)
+					if [ "$kegg_data_lines" -gt 1 ]; then
+						echo "Extracted $kegg_data_lines gene-KEGG associations."
+						sed -i '1s/^/source_id\tKEGG_KO_ID\n/' "$annotation_kegg"
+					else
+						echo "No KEGG terms found in the annotation."
+						rm -f "$annotation_kegg"
+						annotation_kegg=""
+					fi
+
+					if [ "$go_data_lines" -lt 2 ] && [ -z "$annotation_kegg" ]; then
+						echo "WARNING: Neither GO nor KEGG term extraction produced valid entries. The input file may have an unexpected format. Skipping enrichment."
+					else
+						if [ "$go_data_lines" -ge 2 ]; then
+							echo "Extracted $go_data_lines gene-GO associations. Running enrichr..."
+							# Add header if not already present (GAF extraction adds it directly)
+							if ! head -1 "$annotation_go" | grep -q "^source_id"; then
+								sed -i '1s/^/source_id\tComputed_GO_Process_IDs\n/' "$annotation_go"
+							fi
+						else
+							echo "No GO terms found, skipping GO enrichment."
+							annotation_go=""
 						fi
-						R_clusterProfiler_enrichr.R $annotation_go $output_folder/$name/final_results_reanalysis$index/RPKM_counts_genes.txt $output_folder/$name/final_results_reanalysis$index/DGE "^DGE_analysis_comp[0-9]+.txt$" &> clusterProfiler_enrichr_funct_enrichment.log
+						R_clusterProfiler_enrichr.R "$annotation_go" $output_folder/$name/final_results_reanalysis$index/RPKM_counts_genes.txt $output_folder/$name/final_results_reanalysis$index/DGE "^DGE_analysis_comp[0-9]+.txt$" "$annotation_kegg" &> clusterProfiler_enrichr_funct_enrichment.log
 						echo "enrichr execution completed. Please double check the results and the log: clusterProfiler_enrichr_funct_enrichment.log"
 					fi
 				else

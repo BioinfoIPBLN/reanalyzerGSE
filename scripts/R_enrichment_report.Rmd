@@ -635,6 +635,34 @@ for (idx in seq_along(comp_names)) {
           cat("*Not available*\n\n")
         }
       }
+
+      # --- KEGG Orthology tab ---
+      cat("\n#### KEGG Orthology {.tabset}\n\n")
+      kegg_pattern <- sprintf("^%s_%s_Gene_IDs_functional_clusterProfiler_enrichr_KEGG_",
+                               comp, deg_set)
+      kegg_files <- list.files(enrichr_dir, pattern = kegg_pattern, full.names = TRUE)
+      kegg_files <- kegg_files[grepl("\\.txt$", kegg_files)]
+      kegg_files <- kegg_files[!grepl("_aPEAR|_similarity", kegg_files)]
+      kegg_files <- kegg_files[grepl("_1\\.txt$|_expr_1\\.txt$", kegg_files)]
+
+      if (length(kegg_files) > 0) {
+        for (f in kegg_files) {
+          df  <- safe_read(f)
+          sig <- filter_sig(df)
+          n_sig <- if (!is.null(sig)) nrow(sig) else 0
+          bg_label <- if (grepl("_expr_1\\.txt$", f)) "Expressed genes background" else "Whole annotation background"
+          cat(sprintf("\n##### %s\n\n", bg_label))
+          cat(sprintf("**%d** significant KEGG terms (adjusted p < 0.05)\n\n", n_sig))
+          if (n_sig > 0)
+            make_table(sig, sprintf("%s_%s_enrichr_KEGG_%s.csv", comp, deg_set, bg_label))
+        }
+        kegg_apear <- list.files(enrichr_dir,
+                     pattern = sprintf("^%s_%s_.*enrichr_KEGG_.*_aPEAR\\.pdf$", comp, deg_set),
+                     full.names = TRUE)
+        for (p in head(kegg_apear, 2)) embed_pdf(p, basename(p))
+      } else {
+        cat("*Not available*\n\n")
+      }
     }
   } else {
     cat("\n*clusterProfiler results not found for this comparison*\n\n")

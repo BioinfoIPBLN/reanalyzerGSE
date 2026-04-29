@@ -1,9 +1,10 @@
 #!/usr/bin/env Rscript
 args = commandArgs(trailingOnly=TRUE)
-annotation <- args[1]
+annotation <- args[1]      # GO annotation file (can be empty string "")
 expression <- args[2]
 path <- args[3]
 pattern_search <- args[4]
+kegg_annotation <- if (length(args) >= 5 && nchar(args[5]) > 0) args[5] else NULL
 
 suppressMessages(library(clusterProfiler,quiet = T,warn.conflicts = F))
 suppressMessages(library(aPEAR,quiet = T,warn.conflicts = F))
@@ -56,6 +57,12 @@ for (f in list.files(pattern = pattern_search)){
 for (file in list.files(path = path, pattern = "_Gene_IDs\\.txt$")){
   print(paste0("Processing ",file," ..."))
   elements_interest <- data.table::fread(paste0(file),head=F)$V1
+  elements_interest <- toupper(elements_interest)
+  expression_table$Gene_ID <- toupper(expression_table$Gene_ID)
+
+  # --- GO enrichment (only if GO annotation provided) ---
+  has_go <- nchar(annotation) > 0 && file.exists(annotation)
+  if (has_go) {
   a <- as.data.frame(data.table::fread(paste0(annotation),head=T,fill=T)[,1:2])
   a$source_id <- gsub(":.*","",a$source_id)
   colnames(a)[2] <- "Computed_GO_Process_IDs"
@@ -63,9 +70,7 @@ for (file in list.files(path = path, pattern = "_Gene_IDs\\.txt$")){
   a$"Computed GO Processes" <- b$go_name
   a$Type <- b$root_node
   
-  elements_interest <- toupper(elements_interest)
   a$source_id <- toupper(a$source_id)
-  expression_table$Gene_ID <- toupper(expression_table$Gene_ID)
   a_2 <- a[a$source_id %in% expression_table$Gene_ID,]
 
 
@@ -282,6 +287,48 @@ for (file in list.files(path = path, pattern = "_Gene_IDs\\.txt$")){
     write.table(clusters$clusters,file=paste0(gsub(".txt","",file),"_functional_clusterProfiler_enrichr_CC_expr_2_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
     write.table(clusters$similarity,file=paste0(gsub(".txt","",file),"_functional_clusterProfiler_enrichr_CC_expr_2_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
   },silent=T)
+
+  } # end if (has_go)
+
+  # --- KEGG Orthology enrichment (only if KEGG annotation provided) ---
+  if (!is.null(kegg_annotation) && file.exists(kegg_annotation)) {
+    print(paste0("  Running KEGG enrichment for ", file, " ..."))
+    kegg_df <- as.data.frame(data.table::fread(kegg_annotation, head=T, fill=T)[,1:2])
+    colnames(kegg_df) <- c("source_id", "KEGG_KO_ID")
+    kegg_df$source_id <- toupper(gsub(":.*", "", kegg_df$source_id))
+    kegg_df <- kegg_df[kegg_df$KEGG_KO_ID != "" & !is.na(kegg_df$KEGG_KO_ID),]
+    kegg_df_expr <- kegg_df[kegg_df$source_id %in% expression_table$Gene_ID,]
+
+    # Whole annotation background
+    try({
+      bg <- data.frame(KEGG_ID = kegg_df$KEGG_KO_ID, Gene = kegg_df$source_id)
+      bg <- bg[complete.cases(bg),]
+      kegg_res <- clusterProfiler::enricher(elements_interest, pvalueCutoff = 0.05, TERM2GENE = bg)
+      write_k <- as.data.frame(kegg_res@result)
+      write.table(write_k, file = paste0(gsub(".txt", "", file), "_functional_clusterProfiler_enrichr_KEGG_1.txt"), col.names = T, row.names = F, quote = F, sep = "\t")
+      p <- enrichmentNetwork(write_k, repelLabels = TRUE, drawEllipses = TRUE)
+      ggsave(p, filename = paste0(gsub(".txt", "", file), "_functional_clusterProfiler_enrichr_KEGG_1_aPEAR.pdf"), width = 30, height = 30)
+      suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p), file = paste0(gsub(".txt", "", file), "_functional_clusterProfiler_enrichr_KEGG_1_aPEAR.html"), selfcontained = TRUE))
+      clusters <- findPathClusters(write_k)
+      write.table(clusters$clusters, file = paste0(gsub(".txt", "", file), "_functional_clusterProfiler_enrichr_KEGG_1_aPEAR_clusters.txt"), col.names = T, row.names = F, quote = F, sep = "\t")
+      write.table(clusters$similarity, file = paste0(gsub(".txt", "", file), "_functional_clusterProfiler_enrichr_KEGG_1_aPEAR_similarity.txt"), col.names = T, row.names = F, quote = F, sep = "\t")
+    }, silent = T)
+
+    # Expressed genes background
+    try({
+      bg_expr <- data.frame(KEGG_ID = kegg_df_expr$KEGG_KO_ID, Gene = kegg_df_expr$source_id)
+      bg_expr <- bg_expr[complete.cases(bg_expr),]
+      kegg_res <- clusterProfiler::enricher(elements_interest, pvalueCutoff = 0.05, TERM2GENE = bg_expr)
+      write_k <- as.data.frame(kegg_res@result)
+      write.table(write_k, file = paste0(gsub(".txt", "", file), "_functional_clusterProfiler_enrichr_KEGG_expr_1.txt"), col.names = T, row.names = F, quote = F, sep = "\t")
+      p <- enrichmentNetwork(write_k, repelLabels = TRUE, drawEllipses = TRUE)
+      ggsave(p, filename = paste0(gsub(".txt", "", file), "_functional_clusterProfiler_enrichr_KEGG_expr_1_aPEAR.pdf"), width = 30, height = 30)
+      suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p), file = paste0(gsub(".txt", "", file), "_functional_clusterProfiler_enrichr_KEGG_expr_1_aPEAR.html"), selfcontained = TRUE))
+      clusters <- findPathClusters(write_k)
+      write.table(clusters$clusters, file = paste0(gsub(".txt", "", file), "_functional_clusterProfiler_enrichr_KEGG_expr_1_aPEAR_clusters.txt"), col.names = T, row.names = F, quote = F, sep = "\t")
+      write.table(clusters$similarity, file = paste0(gsub(".txt", "", file), "_functional_clusterProfiler_enrichr_KEGG_expr_1_aPEAR_similarity.txt"), col.names = T, row.names = F, quote = F, sep = "\t")
+    }, silent = T)
+  } # end KEGG
 }
 
 dir.create(file.path(getwd(), "enrichr_clusterProfiler")); save.image(file.path(getwd(), "enrichr_clusterProfiler/globalenvir.RData"))
