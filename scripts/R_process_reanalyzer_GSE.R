@@ -1069,6 +1069,19 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
                       file="temp_targets.txt",quote = F,row.names = T, col.names = T,sep = "\t")
     
           #sink("HK_genes.log")
+          # Use the actual experimental design groups (targets$Type) from the pipeline
+          # instead of re-deriving from column names (the regex heuristic fails for
+          # samples like pea_pgm3_01_hisat2.bam → pea_pgm3_01 instead of PGM).
+          # If pattern_to_remove filtered some columns, subset targets accordingly.
+          if (pattern_to_remove != "none" && ncol(RPKM) < length(targets$Type)) {
+            kept_idx <- grep(pattern_to_remove, bakktarget$Filename, invert = TRUE)
+            target_hk <- data.frame(Type = targets$Type[kept_idx])
+          } else {
+            target_hk <- data.frame(Type = targets$Type)
+          }
+          rownames(target_hk) <- colnames(RPKM)
+          write.table(target_hk,
+                      file="temp_targets.txt",quote = F,row.names = T, col.names = T,sep = "\t")
           target <- readTargets("temp_targets.txt")
           # Pre-filter genes with zero within-group variance or NA values.
           # NormFinder/stabMeasureRho compute per-group variance; if a gene has

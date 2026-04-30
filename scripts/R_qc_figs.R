@@ -243,7 +243,11 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
     files <- grep("_flagstat.txt",list.files(path=input_dir,full.names=T,recursive=T),val=T)
     for (f in files){reads <- c(reads,sub(" .*","",read.delim(f)[9,]))}
     bam_reads_2 <- data.frame(Samples=sub("_hisat2.*|_STAR.*","",basename(files)),reads=as.numeric(reads))
-    bam_reads_2$color <- col.group
+    # Filter to only samples present in the edgeR object (avoids stale/extra flagstat files)
+    edger_samples <- gsub("_hisat2.*|_STAR.*", "", colnames(x$counts))
+    bam_reads_2 <- bam_reads_2[bam_reads_2$Samples %in% edger_samples, , drop = FALSE]
+    # Match colors by sample name
+    bam_reads_2$color <- col.group[match(bam_reads_2$Samples, names(col.group))]
   
     cat("\nOrdering and number of bam reads...\n"); print(bam_reads_2)  
   
@@ -267,7 +271,9 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
     ## Barplot 2 no. of reads
     if(length(files)!=0){ # Control that sometimes if these are repeated runs, fastqc is not going to be executed    
       fastq_reads_2 <- data.frame(Samples=as.character(gsub("_1_fastqc.*","",basename(files))),reads=as.numeric(reads))
-      fastq_reads_2$color <- col.group
+      # Filter to only samples present in the edgeR object
+      fastq_reads_2 <- fastq_reads_2[fastq_reads_2$Samples %in% edger_samples, , drop = FALSE]
+      fastq_reads_2$color <- col.group[match(fastq_reads_2$Samples, names(col.group))]
           
       cat("\nOrdering and number of fastq reads...\n"); print(fastq_reads_2)
       
