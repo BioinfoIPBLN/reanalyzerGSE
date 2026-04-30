@@ -1087,47 +1087,62 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
             writeLines(rownames(RPKM)[!group_var_ok], "HK_zero_variance_genes.txt")
           }
           RPKM <- RPKM[group_var_ok, , drop = FALSE]
-          matriz_obj<-new("qPCRBatch", exprs=as.matrix(RPKM))
-          
-          ### Get a number of HK genes: 10 by default
-          hk_genes_number_input <- 10
-          #max_number_degs <- max(unname(sapply(list.files(path=output_dir,pattern="DGE_analysis_comp*",recursive=T,full=T),function(x){length(unique(read.delim(x)$Gene_ID[read.delim(x)$FDR<0.05]))})))
-          #for (hk_genes_number in c(hk_genes_number_input,100,max_number_degs)){
-          for (hk_genes_number in c(hk_genes_number_input,100)){
-            #1
-            pData(matriz_obj)<-data.frame(Name=colnames(RPKM),Type=target$Type)
-            Class <- as.factor(pData(matriz_obj)[,"Type"])
-            HK_normPCR_normfinder <- selectHKs(matriz_obj,Symbols=featureNames(matriz_obj),method="NormFinder",group=Class,minNrHKs=hk_genes_number,trace=F)
-            ranking_NormFinder <- data.frame(
-              rank=c(1:hk_genes_number),
-              Name=as.character(HK_normPCR_normfinder$ranking)[1:hk_genes_number],
-              Rho=as.numeric(HK_normPCR_normfinder$rho)[1:hk_genes_number],
-              AveExp=as.numeric(rowMeans(RPKM[as.character(HK_normPCR_normfinder$ranking)[1:hk_genes_number],])),
-              MedianExp=as.numeric(rowMedians(as.matrix(RPKM[as.character(HK_normPCR_normfinder$ranking)[1:hk_genes_number],])))
-            )
-            #2
-            matriz_rho <- stabMeasureRho(matriz_obj, group = Class)
-            matriz_rho <- sort(matriz_rho)
-            ranking_Rho <- data.frame(
-              rank=c(1:hk_genes_number),
-              Name=names(matriz_rho)[1:hk_genes_number],
-              Rho=as.numeric(matriz_rho)[1:hk_genes_number],
-              AveExp=as.numeric(rowMeans(RPKM[names(matriz_rho)[1:hk_genes_number],])),
-              MedianExp=as.numeric(rowMedians(as.matrix(RPKM[names(matriz_rho)[1:hk_genes_number],])))
-            )
-            #3
-            #print(paste0("Top ",hk_genes_number," hallmark/house-keeping genes according to NormFinder and Rho methods, respectively:"))
-            #print(ranking_NormFinder)
-            #print(ranking_Rho)          
+
+          n_remaining <- nrow(RPKM)
+          min_required <- 100  # largest hk_genes_number we request
+          if (n_remaining < 3) {
+            cat(paste0("WARNING: Only ", n_remaining, " genes remain after zero-variance filtering. ",
+                       "Need at least 3 for NormFinder/Rho. Skipping housekeeping computation.\n"))
+            writeLines(paste0("Skipped: only ", n_remaining, " genes with non-zero within-group variance (need >= 3)"),
+                       "HK_error.txt")
+          } else {
+            matriz_obj<-new("qPCRBatch", exprs=as.matrix(RPKM))
             
-            write.table(ranking_NormFinder,file=paste0("HK_genes_normfinder_",hk_genes_number,".txt"),row.names = F,sep="\t",quote = F)
-            write.table(ranking_Rho,file=paste0("HK_genes_rho_",hk_genes_number,".txt"),row.names = F,sep="\t",quote = F)
-      
-            #print("Hallmark/house-keeping genes NormFinder and Rho methods combined:")
-            hallmarks_comb <- intersect(ranking_NormFinder$Name,ranking_Rho$Name)
-            #print(hallmarks_comb)
-            write.table(hallmarks_comb,file=paste0("HK_genes_combined_",hk_genes_number,".txt"),row.names = F,sep="\t",quote = F,col.names=F)
-            print(paste0("Computed ",hk_genes_number," HK genes!"))
+            ### Get a number of HK genes: 10 by default
+            hk_genes_number_input <- 10
+            #max_number_degs <- max(unname(sapply(list.files(path=output_dir,pattern="DGE_analysis_comp*",recursive=T,full=T),function(x){length(unique(read.delim(x)$Gene_ID[read.delim(x)$FDR<0.05]))})))
+            #for (hk_genes_number in c(hk_genes_number_input,100,max_number_degs)){
+            for (hk_genes_number in c(hk_genes_number_input,100)){
+              # Skip if we don't have enough genes for this tier
+              if (hk_genes_number > n_remaining) {
+                cat(paste0("Skipping HK tier ", hk_genes_number, ": only ", n_remaining, " genes available\n"))
+                next
+              }
+              #1
+              pData(matriz_obj)<-data.frame(Name=colnames(RPKM),Type=target$Type)
+              Class <- as.factor(pData(matriz_obj)[,"Type"])
+              HK_normPCR_normfinder <- selectHKs(matriz_obj,Symbols=featureNames(matriz_obj),method="NormFinder",group=Class,minNrHKs=hk_genes_number,trace=F)
+              ranking_NormFinder <- data.frame(
+                rank=c(1:hk_genes_number),
+                Name=as.character(HK_normPCR_normfinder$ranking)[1:hk_genes_number],
+                Rho=as.numeric(HK_normPCR_normfinder$rho)[1:hk_genes_number],
+                AveExp=as.numeric(rowMeans(RPKM[as.character(HK_normPCR_normfinder$ranking)[1:hk_genes_number],])),
+                MedianExp=as.numeric(rowMedians(as.matrix(RPKM[as.character(HK_normPCR_normfinder$ranking)[1:hk_genes_number],])))
+              )
+              #2
+              matriz_rho <- stabMeasureRho(matriz_obj, group = Class)
+              matriz_rho <- sort(matriz_rho)
+              ranking_Rho <- data.frame(
+                rank=c(1:hk_genes_number),
+                Name=names(matriz_rho)[1:hk_genes_number],
+                Rho=as.numeric(matriz_rho)[1:hk_genes_number],
+                AveExp=as.numeric(rowMeans(RPKM[names(matriz_rho)[1:hk_genes_number],])),
+                MedianExp=as.numeric(rowMedians(as.matrix(RPKM[names(matriz_rho)[1:hk_genes_number],])))
+              )
+              #3
+              #print(paste0("Top ",hk_genes_number," hallmark/house-keeping genes according to NormFinder and Rho methods, respectively:"))
+              #print(ranking_NormFinder)
+              #print(ranking_Rho)          
+              
+              write.table(ranking_NormFinder,file=paste0("HK_genes_normfinder_",hk_genes_number,".txt"),row.names = F,sep="\t",quote = F)
+              write.table(ranking_Rho,file=paste0("HK_genes_rho_",hk_genes_number,".txt"),row.names = F,sep="\t",quote = F)
+        
+              #print("Hallmark/house-keeping genes NormFinder and Rho methods combined:")
+              hallmarks_comb <- intersect(ranking_NormFinder$Name,ranking_Rho$Name)
+              #print(hallmarks_comb)
+              write.table(hallmarks_comb,file=paste0("HK_genes_combined_",hk_genes_number,".txt"),row.names = F,sep="\t",quote = F,col.names=F)
+              print(paste0("Computed ",hk_genes_number," HK genes!"))
+            }
           }
           
           #sink()
@@ -1150,7 +1165,7 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
         # file.remove(list.files(pattern="KOvsWT12m_hallmark_bars_"))
         file.remove(list.files(pattern="temp_targets.txt"))
         }, error = function(e) {
-            writeLines(as.character(e), paste0("Housekeeping_err.txt"))
+            writeLines(as.character(e), paste0("HK_error.txt"))
         })
       }
     
