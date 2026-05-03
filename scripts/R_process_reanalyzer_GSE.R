@@ -1267,6 +1267,11 @@ if (venn_volcano!="no"){
 cat("\n\nGenerating merged expression/DGE + GTF annotation tables...\n")
 tryCatch({
   # 1. Parse GTF/GFF to extract V9 attributes (for gene-level annotation)
+  #    This is optional — in Kallisto mode with no GTF, gtf_attrs will be NULL
+  #    and the merge continues without genomic coordinates.
+  gtf_attrs <- NULL
+  if (!is.na(annotation_file) && annotation_file != "" && file.exists(annotation_file)) {
+  tryCatch({
   gtf_raw <- data.table::fread(annotation_file, header = FALSE, sep = "\t",
                                 quote = "", comment.char = "#", fill = TRUE)
   # For annotation we only need one row per gene, so prefer "gene" feature type
@@ -1341,6 +1346,13 @@ tryCatch({
     gtf_attrs <- gtf_attrs[!duplicated(gtf_attrs[[gtf_key_col]]), ]
     rownames(gtf_attrs) <- gtf_attrs[[gtf_key_col]]
     cat(paste0("Unique GTF entries for merge key '", fc_seq_key, "': ", nrow(gtf_attrs), "\n"))
+  }
+  }, error = function(e) {
+    cat(paste0("\nWARNING: GTF/GFF annotation loading failed: ", e$message, "\n  Continuing without genomic coordinates.\n"))
+    gtf_attrs <<- NULL
+  })
+  } else {
+    cat("No GTF/GFF annotation file provided — skipping genomic coordinate annotation.\n")
   }
 
   # 2. Prepare expression categ tables (already in memory)
@@ -1440,7 +1452,12 @@ tryCatch({
         gaf_go_collapsed <- aggregate(GO_ID ~ source_id, data = gaf_raw,
                                       FUN = function(x) paste(unique(x), collapse = ";"))
         colnames(gaf_go_collapsed) <- c(".merge_key_gaf", "GAF_GO_IDs")
-        cat(paste0("  Collapsed to ", nrow(gaf_go_collapsed), " gene-GO mappings from GAF.\n"))
+        if (nrow(gaf_go_collapsed) == 0) {
+          cat("  No valid gene-GO mappings after collapsing — skipping GAF GO merge.\n")
+          gaf_go_collapsed <- NULL
+        } else {
+          cat(paste0("  Collapsed to ", nrow(gaf_go_collapsed), " gene-GO mappings from GAF.\n"))
+        }
       }
     }, error = function(e) {
       cat(paste0("  WARNING: Could not read GAF GO terms file: ", e$message, "\n"))
@@ -1448,7 +1465,7 @@ tryCatch({
   }
 
   merge_gaf_go_terms <- function(df) {
-    if (is.null(gaf_go_collapsed) || !"Gene_ID" %in% colnames(df)) return(df)
+    if (is.null(gaf_go_collapsed) || nrow(gaf_go_collapsed) == 0 || !"Gene_ID" %in% colnames(df)) return(df)
     df$.merge_key_gaf <- toupper(df$Gene_ID)
     df <- merge(df, gaf_go_collapsed, by = ".merge_key_gaf", all.x = TRUE)
     df$.merge_key_gaf <- NULL
@@ -1462,6 +1479,44 @@ tryCatch({
         paste(descs, collapse = " | ")
       }, USE.NAMES = FALSE)
     }
+    return(df)
+  }
+
+  # 3d. Helper to merge pre-extracted KEGG terms into merged tables
+  kegg_file <- list.files(paste0(output_dir, "/DGE"),
+                          pattern = "\\.automatically_extracted_KEGG_terms\\.txt$",
+                          full.names = TRUE)
+  kegg_collapsed <- NULL
+  if (length(kegg_file) > 0) {
+    kegg_file <- kegg_file[1]
+    cat(paste0("Found KEGG terms file: ", basename(kegg_file), "\n"))
+    tryCatch({
+      kegg_raw <- data.table::fread(kegg_file, header = TRUE, fill = TRUE, stringsAsFactors = FALSE)
+      if (ncol(kegg_raw) >= 2) {
+        colnames(kegg_raw)[1:2] <- c("source_id", "KEGG_ID")
+        kegg_raw$source_id <- toupper(trimws(kegg_raw$source_id))
+        kegg_raw$KEGG_ID <- trimws(kegg_raw$KEGG_ID)
+        kegg_raw <- kegg_raw[kegg_raw$KEGG_ID != "" & !is.na(kegg_raw$KEGG_ID), ]
+        kegg_collapsed <- aggregate(KEGG_ID ~ source_id, data = kegg_raw,
+                                     FUN = function(x) paste(unique(x), collapse = ";"))
+        colnames(kegg_collapsed) <- c(".merge_key_kegg", "KEGG_KO_IDs")
+        if (nrow(kegg_collapsed) == 0) {
+          cat("  No valid gene-KEGG mappings after collapsing — skipping KEGG merge.\n")
+          kegg_collapsed <- NULL
+        } else {
+          cat(paste0("  Collapsed to ", nrow(kegg_collapsed), " gene-KEGG mappings.\n"))
+        }
+      }
+    }, error = function(e) {
+      cat(paste0("  WARNING: Could not read KEGG terms file: ", e$message, "\n"))
+    })
+  }
+
+  merge_kegg_terms <- function(df) {
+    if (is.null(kegg_collapsed) || nrow(kegg_collapsed) == 0 || !"Gene_ID" %in% colnames(df)) return(df)
+    df$.merge_key_kegg <- toupper(df$Gene_ID)
+    df <- merge(df, kegg_collapsed, by = ".merge_key_kegg", all.x = TRUE)
+    df$.merge_key_kegg <- NULL
     return(df)
   }
 
@@ -1520,6 +1575,7 @@ tryCatch({
       merged_rpkm <- merge_tables(merged_rpkm)
       colnames(merged_rpkm) <- sub("gtf_","",colnames(merged_rpkm))
       merged_rpkm <- merge_gaf_go_terms(merged_rpkm)
+      merged_rpkm <- merge_kegg_terms(merged_rpkm)
       merged_rpkm <- resolve_go_terms(merged_rpkm)
       write.table(merged_rpkm,
                   file = paste0(output_dir, "/DGE/", comp_name, "_merged_RPKM.txt"),
@@ -1529,6 +1585,7 @@ tryCatch({
       merged_tpm <- merge_tables(merged_tpm)
       colnames(merged_tpm) <- sub("gtf_","",colnames(merged_tpm))
       merged_tpm <- merge_gaf_go_terms(merged_tpm)
+      merged_tpm <- merge_kegg_terms(merged_tpm)
       merged_tpm <- resolve_go_terms(merged_tpm)
       write.table(merged_tpm,
                   file = paste0(output_dir, "/DGE/", comp_name, "_merged_TPM.txt"),
@@ -1538,6 +1595,7 @@ tryCatch({
       merged_cpm <- merge_tables(merged_cpm)
       colnames(merged_cpm) <- sub("gtf_","",colnames(merged_cpm))
       merged_cpm <- merge_gaf_go_terms(merged_cpm)
+      merged_cpm <- merge_kegg_terms(merged_cpm)
       merged_cpm <- resolve_go_terms(merged_cpm)
       write.table(merged_cpm,
                   file = paste0(output_dir, "/DGE/", comp_name, "_merged_CPM.txt"),
@@ -1548,6 +1606,7 @@ tryCatch({
     # No DGE: just write expression + GTF to main output dir
     merged_rpkm_all <- merge_tables(rpkm_categ)
     merged_rpkm_all <- merge_gaf_go_terms(merged_rpkm_all)
+    merged_rpkm_all <- merge_kegg_terms(merged_rpkm_all)
     merged_rpkm_all <- resolve_go_terms(merged_rpkm_all)
     write.table(merged_rpkm_all,
                 file = paste0(output_dir, "/expression_merged_RPKM.txt"),
@@ -1555,6 +1614,7 @@ tryCatch({
 
     merged_tpm_all <- merge_tables(tpm_categ)
     merged_tpm_all <- merge_gaf_go_terms(merged_tpm_all)
+    merged_tpm_all <- merge_kegg_terms(merged_tpm_all)
     merged_tpm_all <- resolve_go_terms(merged_tpm_all)
     write.table(merged_tpm_all,
                 file = paste0(output_dir, "/expression_merged_TPM.txt"),
@@ -1562,6 +1622,7 @@ tryCatch({
 
     merged_cpm_all <- merge_tables(cpm_categ)
     merged_cpm_all <- merge_gaf_go_terms(merged_cpm_all)
+    merged_cpm_all <- merge_kegg_terms(merged_cpm_all)
     merged_cpm_all <- resolve_go_terms(merged_cpm_all)
     write.table(merged_cpm_all,
                 file = paste0(output_dir, "/expression_merged_CPM.txt"),

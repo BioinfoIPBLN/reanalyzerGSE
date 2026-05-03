@@ -1239,6 +1239,99 @@ _log_step "Step_4_R_Process" "start"
 				echo "  Filtered: $count_file ($(wc -l < "${count_file}.bak_before_gene_filter") -> $(wc -l < "$count_file") lines)"
 			done
 		fi
+		# Pre-extract GO terms into the DGE folder so that R_process_reanalyzer_GSE.R
+		# can merge them into the final expression tables (otherwise they'd only be
+		# extracted in Step 6, too late for the merged tables).
+		_pre_go_annot=""
+		if [ ! -z "$non_reference_funct_enrichm" ]; then
+			_pre_go_annot="$non_reference_funct_enrichm"
+		elif [ ! -z "$annotation_file" ] && [ -f "$annotation_file" ] && [ $(zcat -f "$annotation_file" 2>/dev/null | head -500 | egrep -c "GO:|Ontology|tology_term") -gt 0 ]; then
+			_pre_go_annot="$annotation_file"
+		fi
+		if [ ! -z "$_pre_go_annot" ]; then
+			_pre_go_outdir=$output_folder/$name/final_results_reanalysis$index/DGE
+			mkdir -p "$_pre_go_outdir"
+			_pre_go_outfile="$_pre_go_outdir/$(basename $_pre_go_annot).automatically_extracted_GO_terms.txt"
+			if [ ! -f "$_pre_go_outfile" ]; then
+				echo "Pre-extracting GO terms from $_pre_go_annot for merged tables..."
+				if [[ "$_pre_go_annot" == *.gaf ]] || [[ "$_pre_go_annot" == *.gaf.gz ]]; then
+					gaf_ncols_pre=$(zcat -f "$_pre_go_annot" | grep -v "^!" | head -1 | awk -F'\t' '{print NF}')
+					echo -e "source_id\tComputed_GO_Process_IDs" > "$_pre_go_outfile"
+					if [ "$gaf_ncols_pre" -le 2 ]; then
+						first_col_pre=$(zcat -f "$_pre_go_annot" | grep -v "^!" | head -1 | cut -f1)
+						if [[ "$first_col_pre" == GO:* ]]; then
+							zcat -f "$_pre_go_annot" | grep -v "^!" | awk -F'\t' '{print $2"\t"$1}' | sort -u >> "$_pre_go_outfile"
+						else
+							zcat -f "$_pre_go_annot" | grep -v "^!" | cut -f 1,2 | sort -u >> "$_pre_go_outfile"
+						fi
+					else
+						zcat -f "$_pre_go_annot" | grep -v "^!" | cut -f 3,5 | sort -u >> "$_pre_go_outfile"
+					fi
+				elif [[ "$_pre_go_annot" == *.gmt ]] || [[ "$_pre_go_annot" == *.gmt.gz ]]; then
+					echo -e "source_id\tComputed_GO_Process_IDs" > "$_pre_go_outfile"
+					zcat -f "$_pre_go_annot" | awk -F'\t' '{term=$1; for(i=3;i<=NF;i++) print $i"\t"term}' | sort -u >> "$_pre_go_outfile"
+				else
+					echo -e "source_id\tComputed_GO_Process_IDs" > "$_pre_go_outfile"
+					zcat -f "$_pre_go_annot" | awk -F'\t' '/GO:/ && !/^#/ {
+					attrs = $9; gid = ""
+					if (attrs ~ /gene_id "/) { tmp = attrs; sub(/.*gene_id "/, "", tmp); sub(/".*/, "", tmp); gid = tmp }
+					if (gid == "" && attrs ~ /ID=/) { tmp = attrs; sub(/.*ID=/, "", tmp); sub(/[;].*/, "", tmp); gid = tmp }
+					if (gid == "" && attrs ~ /Parent=/) { tmp = attrs; sub(/.*Parent=/, "", tmp); sub(/[;].*/, "", tmp); gid = tmp }
+					if (attrs ~ /[Oo]ntology_term/) { tmp = attrs; sub(/.*[Oo]ntology_term[= ]*"?/, "", tmp); sub(/"?[;].*/, "", tmp); sub(/"$/, "", tmp); go = tmp }
+					if (gid != "" && go != "") { n = split(go, a, ","); for (i = 1; i <= n; i++) if (a[i] ~ /^GO:/) print gid "\t" a[i] }
+					}' | sort -u >> "$_pre_go_outfile"
+				fi
+				go_pre_lines=$(grep "GO:" "$_pre_go_outfile" 2>/dev/null | wc -l)
+				echo "  Pre-extracted $go_pre_lines gene-GO associations for merged tables."
+			fi
+			# Also pre-extract KEGG terms (K00001-style KEGG Orthology IDs)
+			_pre_kegg_outfile="$_pre_go_outdir/$(basename $_pre_go_annot).automatically_extracted_KEGG_terms.txt"
+			if [ ! -f "$_pre_kegg_outfile" ]; then
+				if [[ "$_pre_go_annot" == *.gaf ]] || [[ "$_pre_go_annot" == *.gaf.gz ]]; then
+					gaf_ncols_pre=${gaf_ncols_pre:-$(zcat -f "$_pre_go_annot" | grep -v "^!" | head -1 | awk -F'\t' '{print NF}')}
+					zcat -f "$_pre_go_annot" | grep -v "^!" | awk -F'\t' '{
+						for (i=1; i<=NF; i++) {
+							if ($i ~ /K[0-9]{5}/) {
+								n = split($i, arr, /[,; ]/);
+								for (j=1; j<=n; j++) {
+									if (arr[j] ~ /^(ko:)?K[0-9]{5}$/) {
+										kid = arr[j]; sub(/^ko:/, "", kid)
+										if ('"$gaf_ncols_pre"' <= 2) print ($1 ~ /^K[0-9]/ ? $2 : $1) "\t" kid
+										else print $3 "\t" kid
+									}
+								}
+							}
+						}
+					}' | sort -u > "$_pre_kegg_outfile"
+				elif [[ "$_pre_go_annot" == *.gmt ]] || [[ "$_pre_go_annot" == *.gmt.gz ]]; then
+					zcat -f "$_pre_go_annot" | awk -F'\t' '$1 ~ /^(ko|map|K[0-9])/ { term=$1; for(i=3;i<=NF;i++) print $i"\t"term }' | sort -u > "$_pre_kegg_outfile"
+				else
+					zcat -f "$_pre_go_annot" | awk -F'\t' '/K[0-9]{5}/ && !/^#/ {
+					attrs = $9; gid = ""
+					if (attrs ~ /gene_id "/) { tmp = attrs; sub(/.*gene_id "/, "", tmp); sub(/".*/, "", tmp); gid = tmp }
+					if (gid == "" && attrs ~ /ID=/) { tmp = attrs; sub(/.*ID=/, "", tmp); sub(/[;].*/, "", tmp); gid = tmp }
+					if (gid == "" && attrs ~ /Parent=/) { tmp = attrs; sub(/.*Parent=/, "", tmp); sub(/[;].*/, "", tmp); gid = tmp }
+					if (gid != "") {
+						n = split(attrs, parts, /[,;= "]+/)
+						for (i = 1; i <= n; i++) {
+							if (parts[i] ~ /^(ko:)?K[0-9]{5}$/) {
+								kid = parts[i]; sub(/^ko:/, "", kid)
+								print gid "\t" kid
+							}
+						}
+					}
+					}' | sort -u > "$_pre_kegg_outfile"
+				fi
+				kegg_pre_lines=$(wc -l < "$_pre_kegg_outfile" 2>/dev/null || echo 0)
+				if [ "$kegg_pre_lines" -gt 0 ]; then
+					sed -i '1s/^/source_id\tKEGG_KO_ID\n/' "$_pre_kegg_outfile"
+					echo "  Pre-extracted $kegg_pre_lines gene-KEGG associations for merged tables."
+				else
+					echo "  No KEGG terms found in annotation."
+					rm -f "$_pre_kegg_outfile"
+				fi
+			fi
+		fi
   			echo -e "R_process_reanalyzer_GSE.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index $genes ${array2[index]} $organism $target $differential_expr_soft $batch_format $covariables $covariables_format $deconvolution $differential_expr_comparisons $perform_differential_analyses $perform_volcano_venn $pattern_to_remove $annotation_file $fc_seq_key $fc_feat_type $sc_count_matrix $sc_phenotype $bulk_expression_matrix\n\n" > $output_folder/$name/R_process_reanalyzer.log
     		R_process_reanalyzer_GSE.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index $genes ${array2[index]} $organism $target $differential_expr_soft $batch_format $covariables $covariables_format $deconvolution $differential_expr_comparisons $perform_differential_analyses $perform_volcano_venn $pattern_to_remove $annotation_file $fc_seq_key $fc_feat_type $sc_count_matrix $sc_phenotype $bulk_expression_matrix | tee -a $output_folder/$name/R_process_reanalyzer.log
 		if [ ! -d "$output_folder/$name/final_results_reanalysis$index" ]; then
@@ -1462,105 +1555,20 @@ _log_step "Step_6_Enrichment" "start"
 					cd $output_folder/$name/final_results_reanalysis$index/DGE/
 					echo "Applying clusterProfiler enrichr with GO terms extracted from the provided annotation..."
 
-					# Check if input is GAF (Gene Association File)
-					if [[ "$annot_enrichm" == *.gaf ]] || [[ "$annot_enrichm" == *.gaf.gz ]]; then
-						# Detect number of columns to handle standard (17-col) vs simplified (2-col) GAF
-						gaf_ncols=$(zcat -f "$annot_enrichm" | grep -v "^!" | head -1 | awk -F'\t' '{print NF}')
-						if [ "$gaf_ncols" -le 2 ]; then
-							echo "Detected simplified ${gaf_ncols}-column GAF file. Extracting GeneID and GO term columns..."
-							# Determine column order: one col has GO:xxxx pattern, the other is the gene ID
-							first_col=$(zcat -f "$annot_enrichm" | grep -v "^!" | head -1 | cut -f1)
-							GO_OUTFILE=$output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annot_enrichm).automatically_extracted_GO_terms.txt
-							echo -e "source_id\tComputed_GO_Process_IDs" > "$GO_OUTFILE"
-							if [[ "$first_col" == GO:* ]]; then
-								# Format: GO_ID<tab>GeneID -> swap to GeneID<tab>GO_ID
-								zcat -f "$annot_enrichm" | grep -v "^!" | awk -F'\t' '{print $2"\t"$1}' | sort -u >> "$GO_OUTFILE"
-							else
-								# Format: GeneID<tab>GO_ID (already correct)
-								zcat -f "$annot_enrichm" | grep -v "^!" | cut -f 1,2 | sort -u >> "$GO_OUTFILE"
-							fi
-						else
-							echo "Detected standard ${gaf_ncols}-column GAF format. Extracting Gene Symbols (col3) and GO terms (col5)..."
-							# Standard GAF 2.x: Column 3 = Symbol (gene name), Column 5 = GO ID
-							GO_OUTFILE=$output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annot_enrichm).automatically_extracted_GO_terms.txt
-							echo -e "source_id\tComputed_GO_Process_IDs" > "$GO_OUTFILE"
-							zcat -f "$annot_enrichm" | grep -v "^!" | cut -f 3,5 | sort -u >> "$GO_OUTFILE"
-						fi
-
-					elif [[ "$annot_enrichm" == *.gmt ]] || [[ "$annot_enrichm" == *.gmt.gz ]]; then
-						echo "Detected GMT format. Transforming to GeneID-TermID format..."
-						# GMT format: TermID <tab> Description <tab> Gene1 <tab> Gene2 ...
-						# We need: GeneID <tab> TermID
-						# Process GMT:
-						# 1. Read line
-						# 2. Extract Term (col 1)
-						# 3. Iterate from col 3 to end (Gene IDs)
-						# 4. Print "GeneID \t TermID"
-						zcat -f "$annot_enrichm" | awk -F'\t' '{term=$1; for(i=3;i<=NF;i++) print $i"\t"term}' | sort -u > $output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annot_enrichm).automatically_extracted_GO_terms.txt
-
-					else
-						# Assume GFF/GTF/GFF3 — extract Gene ID and GO terms
-						echo "Detected GFF/GTF format. Extracting Gene IDs and GO terms..."
-						zcat -f "$annot_enrichm" | awk -F'\t' '/GO:/ && !/^#/ {
-						attrs = $9; gid = ""; go = ""
-						if (attrs ~ /gene_id "/) { tmp = attrs; sub(/.*gene_id "/, "", tmp); sub(/".*/, "", tmp); gid = tmp }
-						if (gid == "" && attrs ~ /ID=/) { tmp = attrs; sub(/.*ID=/, "", tmp); sub(/[;].*/, "", tmp); gid = tmp }
-						if (gid == "" && attrs ~ /Parent=/) { tmp = attrs; sub(/.*Parent=/, "", tmp); sub(/[;].*/, "", tmp); gid = tmp }
-						if (attrs ~ /[Oo]ntology_term/) { tmp = attrs; sub(/.*[Oo]ntology_term[= ]*"?/, "", tmp); sub(/"?[;].*/, "", tmp); sub(/"$/, "", tmp); go = tmp }
-						if (gid != "" && go != "") { n = split(go, a, ","); for (i = 1; i <= n; i++) if (a[i] ~ /^GO:/) print gid "\t" a[i] }
-					}' | sort -u > $output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annot_enrichm).automatically_extracted_GO_terms.txt
-					fi
-
+					# GO terms were already pre-extracted in Step 4 for merged tables.
+					# Just reference the existing file.
 					annotation_go=$output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annot_enrichm).automatically_extracted_GO_terms.txt
 					go_data_lines=$(grep "GO:" "$annotation_go" 2>/dev/null | wc -l)
 
-					# Also extract KEGG terms if present (K00001-style KEGG Orthology IDs)
+					# KEGG terms were already pre-extracted in Step 4 for merged tables.
+					# Just reference the existing file.
 					annotation_kegg=$output_folder/$name/final_results_reanalysis$index/DGE/$(basename $annot_enrichm).automatically_extracted_KEGG_terms.txt
-					if [[ "$annot_enrichm" == *.gaf ]] || [[ "$annot_enrichm" == *.gaf.gz ]]; then
-						# GAF: KEGG IDs may appear in col5 (qualifier/aspect) or dedicated columns
-						zcat -f "$annot_enrichm" | grep -v "^!" | awk -F'\t' '{
-							for (i=1; i<=NF; i++) {
-								if ($i ~ /K[0-9]{5}/) {
-									n = split($i, arr, /[,; ]/);
-									for (j=1; j<=n; j++) {
-										if (arr[j] ~ /^(ko:)?K[0-9]{5}$/) {
-											kid = arr[j]; sub(/^ko:/, "", kid)
-											if ('"$gaf_ncols"' <= 2) print ($1 ~ /^K[0-9]/ ? $2 : $1) "\t" kid
-											else print $3 "\t" kid
-										}
-									}
-								}
-							}
-						}' | sort -u > "$annotation_kegg"
-					elif [[ "$annot_enrichm" == *.gmt ]] || [[ "$annot_enrichm" == *.gmt.gz ]]; then
-						# GMT: KEGG pathway IDs in col1 (e.g. map00010, ko00010, K00001)
-						zcat -f "$annot_enrichm" | awk -F'\t' '$1 ~ /^(ko|map|K[0-9])/ { term=$1; for(i=3;i<=NF;i++) print $i"\t"term }' | sort -u > "$annotation_kegg"
-					else
-						# GFF/GTF: look for KEGG KO IDs in Dbxref, KEGG_ko, Note, or Ontology_term attributes
-						zcat -f "$annot_enrichm" | awk -F'\t' '/K[0-9]{5}/ && !/^#/ {
-						attrs = $9; gid = ""
-						if (attrs ~ /gene_id "/) { tmp = attrs; sub(/.*gene_id "/, "", tmp); sub(/".*/, "", tmp); gid = tmp }
-						if (gid == "" && attrs ~ /ID=/) { tmp = attrs; sub(/.*ID=/, "", tmp); sub(/[;].*/, "", tmp); gid = tmp }
-						if (gid == "" && attrs ~ /Parent=/) { tmp = attrs; sub(/.*Parent=/, "", tmp); sub(/[;].*/, "", tmp); gid = tmp }
-						if (gid != "") {
-							n = split(attrs, parts, /[,;= "]+/)
-							for (i = 1; i <= n; i++) {
-								if (parts[i] ~ /^(ko:)?K[0-9]{5}$/) {
-									kid = parts[i]; sub(/^ko:/, "", kid)
-									print gid "\t" kid
-								}
-							}
-						}
-						}' | sort -u > "$annotation_kegg"
-					fi
-					kegg_data_lines=$(wc -l < "$annotation_kegg" 2>/dev/null || echo 0)
-					if [ "$kegg_data_lines" -gt 1 ]; then
-						echo "Extracted $kegg_data_lines gene-KEGG associations."
-						sed -i '1s/^/source_id\tKEGG_KO_ID\n/' "$annotation_kegg"
-					else
+					if [ ! -f "$annotation_kegg" ]; then
 						echo "No KEGG terms found in the annotation."
-						rm -f "$annotation_kegg"
 						annotation_kegg=""
+					else
+						kegg_data_lines=$(wc -l < "$annotation_kegg" 2>/dev/null || echo 0)
+						echo "Found $kegg_data_lines gene-KEGG associations (pre-extracted)."
 					fi
 
 					if [ "$go_data_lines" -lt 2 ] && [ -z "$annotation_kegg" ]; then
