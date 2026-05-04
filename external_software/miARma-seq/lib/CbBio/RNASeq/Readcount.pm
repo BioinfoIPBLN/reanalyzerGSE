@@ -215,13 +215,20 @@ sub featureCount{
 				#Altough htseq can count redas in a BAM file, it needs several software, so we are going to create a sam file from a bam file
 				$name= fileparse($file, qr{\.bam.*});
 			}
-			# else{
-			# 	print STDERR "SEQCOUNT ERROR :: $inputformat has an invalid value. Allowed values are: sam or bam\n";
-			# 	exit;
-			# }
+			else{
+				# Skip non-SAM/BAM entries (e.g. subdirectories picked up by readdir)
+				next;
+			}
 			#Checking the processation of the sample to classify it correctly
 			$name =~ /.*_([a-z]{2,3}_bw[1-2]|his|str|hisat2|STAR)/;
 			my $prefix=$1;
+			# Skip if prefix could not be determined (e.g. stale/unrecognized BAM)
+			unless (defined $prefix && $prefix ne '') {
+				die "SEQCOUNT ERROR :: Could not determine aligner prefix from BAM file '$file' (parsed name: '$name').\n"
+				  . "  The filename must contain '_hisat2' or '_STAR' before the .bam extension.\n"
+				  . "  This usually means there is a stale or unexpected BAM file in the alignment results directory.\n"
+				  . "  Please remove or rename the offending file and re-run the pipeline.\n";
+			}
 			# Map prefix to clean output directory name
 			if ($prefix eq 'his' || $prefix eq 'hisat2') { $prefix = 'hisat2'; }
 			elsif ($prefix eq 'str' || $prefix eq 'STAR') { $prefix = 'star'; }
