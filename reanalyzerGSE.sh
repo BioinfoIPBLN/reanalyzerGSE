@@ -1254,7 +1254,7 @@ _log_step "Step_4_R_Process" "start"
 			_pre_go_outfile="$_pre_go_outdir/$(basename $_pre_go_annot).automatically_extracted_GO_terms.txt"
 			if [ ! -f "$_pre_go_outfile" ]; then
 				echo "Pre-extracting GO terms from $_pre_go_annot for merged tables..."
-				if [[ "$_pre_go_annot" == *.gaf ]] || [[ "$_pre_go_annot" == *.gaf.gz ]]; then
+				if [[ "$_pre_go_annot" == *.gaf ]] || [[ "$_pre_go_annot" == *.gaf.gz ]] || [[ "$_pre_go_annot" == *.txt ]] || [[ "$_pre_go_annot" == *.txt.gz ]] || [[ "$_pre_go_annot" == *.tsv ]] || [[ "$_pre_go_annot" == *.tsv.gz ]]; then
 					gaf_ncols_pre=$(zcat -f "$_pre_go_annot" | grep -v "^!" | head -1 | awk -F'\t' '{print NF}')
 					echo -e "source_id\tComputed_GO_Process_IDs" > "$_pre_go_outfile"
 					if [ "$gaf_ncols_pre" -le 2 ]; then
@@ -1287,7 +1287,7 @@ _log_step "Step_4_R_Process" "start"
 			# Also pre-extract KEGG terms (K00001-style KEGG Orthology IDs)
 			_pre_kegg_outfile="$_pre_go_outdir/$(basename $_pre_go_annot).automatically_extracted_KEGG_terms.txt"
 			if [ ! -f "$_pre_kegg_outfile" ]; then
-				if [[ "$_pre_go_annot" == *.gaf ]] || [[ "$_pre_go_annot" == *.gaf.gz ]]; then
+				if [[ "$_pre_go_annot" == *.gaf ]] || [[ "$_pre_go_annot" == *.gaf.gz ]] || [[ "$_pre_go_annot" == *.txt ]] || [[ "$_pre_go_annot" == *.txt.gz ]] || [[ "$_pre_go_annot" == *.tsv ]] || [[ "$_pre_go_annot" == *.tsv.gz ]]; then
 					gaf_ncols_pre=${gaf_ncols_pre:-$(zcat -f "$_pre_go_annot" | grep -v "^!" | head -1 | awk -F'\t' '{print NF}')}
 					zcat -f "$_pre_go_annot" | grep -v "^!" | awk -F'\t' '{
 						for (i=1; i<=NF; i++) {
