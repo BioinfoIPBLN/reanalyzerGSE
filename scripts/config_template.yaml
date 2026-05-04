@@ -28,7 +28,7 @@ sortmerna_databases: ""                # SortMeRNA database path (activates rRNA
 rrna_qc_databases: ""                  # Comma-separated rRNA FASTA paths for preliminary rRNA QC (e.g. '/path/SILVA_138.2_LSURef_NR99_tax_silva.fasta.gz,/path/SILVA_138.2_SSURef_NR99_tax_silva.fasta.gz'). Activates Bowtie2 rRNA mapping QC step
 rrna_qc_min_score: -20                 # Min Bowtie2 alignment score for rRNA QC (default -20)
 databases_function: "GO_Biological_Process_2025,GO_Molecular_Function_2025,GO_Cellular_Component_2025"
-non_reference_funct_enrichm: ""        # Annotation file (GAF, GMT, GFF, GTF) for functional enrichment in non-model organisms
+non_reference_funct_enrichm: ""        # Annotation file (GAF, GMT, GFF, GTF, or 2-column TSV/TXT mapping) for GO/KEGG enrichment in non-model organisms or Kallisto mode
 
 # === Metadata and sample info ===
 design_custom_local: ""                # Experimental design for local dataset (comma-separated list, '/' for multiple. If no design, please provide a dummy one, e.g. with every sample in the same group or a separate one.)

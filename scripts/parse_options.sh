@@ -253,8 +253,12 @@ if [ ! -z "$options_file" ]; then
 fi
 
 ##### Deal with defaults or with the user not providing some...
-if { [ -z "$input" ] && [ -z "$input_geo_reads" ]; } || [ -z "$output_folder" ] || [ -z "$cores" ] || [ -z "$annotation" ]; then
-	echo "Please check usage with 'reanalyzer_GSE_RNA_seq.sh -h'. At least one required argument (input, output_folder, cores, or annotation) has not been provided..."; exit 1
+if { [ -z "$input" ] && [ -z "$input_geo_reads" ]; } || [ -z "$output_folder" ] || [ -z "$cores" ]; then
+	echo "Please check usage with 'reanalyzer_GSE_RNA_seq.sh -h'. At least one required argument (input, output_folder, or cores) has not been provided..."; exit 1
+fi
+
+if [ -z "$annotation" ] && [ "$aligner" != "kallisto" ]; then
+	echo "Please check usage with 'reanalyzer_GSE_RNA_seq.sh -h'. Annotation (-a) is required unless using kallisto aligner."; exit 1
 fi
 
 if [ -z "$reference_genome" ] && [ "$aligner" != "kallisto" ]; then
