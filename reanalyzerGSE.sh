@@ -1030,6 +1030,10 @@ _log_step "Step_3a_Prepare" "start"
 		IFS=', ' read -r -a array <<< "$annotation"
 		IFS=', ' read -r -a array2 <<< "$optionsFeatureCounts_seq"
 		IFS=', ' read -r -a array3 <<< "$optionsFeatureCounts_feat"
+		# In kallisto mode annotation is optional; ensure loop runs at least once
+		if [[ "$aligner" == "kallisto" && ${#array[@]} -eq 0 ]]; then
+			array=("")
+		fi
 		for index in "${!array[@]}"; do
 			cd $output_folder/$name
 			cp $CURRENT_DIR/external_software/miARma-seq/bakk_miARma1.7.ini miarma$index.ini
@@ -1174,7 +1178,7 @@ _log_step "Step_3b_miARma" "start"
 	fi
 
 	echo -e "miARma configuration .ini:"
-        cat miarma$index.ini
+        cat miarma0.ini
 	echo -e "\nPlease double check all the parameters above for miARma, in particular the stranded or the reference genome files and annotation used. Proceeding with miARma execution in..."
 	secs=$((1 * 15))
 	dir=$output_folder/$name/miARma_out0
@@ -1219,6 +1223,10 @@ if [[ $debug_step == "all" || $debug_step == "step4" ]]; then
 	fi
 	if [ -z "${!array[@]}" ]; then
 		IFS=', ' read -r -a array <<< "$annotation"
+		# In kallisto mode annotation is optional; ensure loop runs at least once
+		if [[ "$aligner" == "kallisto" && ${#array[@]} -eq 0 ]]; then
+			array=("")
+		fi
 	fi
 	echo -e "\n\nSTEP 4: Starting...\nCurrent date/time: $(date)\n\n"
 _log_step "Step_4_R_Process" "start"
@@ -1390,6 +1398,10 @@ if [[ $debug_step == "all" || $debug_step == "step4b" ]]; then
 	fi
 	if [ -z "${!array[@]}" ]; then
 		IFS=', ' read -r -a array <<< "$annotation"
+		# In kallisto mode annotation is optional; ensure loop runs at least once
+		if [[ "$aligner" == "kallisto" && ${#array[@]} -eq 0 ]]; then
+			array=("")
+		fi
 	fi
 	if [[ "$splicing_option" == "saser" ]]; then
 		echo -e "\n\nSTEP 4b: saseR splicing analysis...\nCurrent date/time: $(date)\n\n"
@@ -1494,8 +1506,11 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 	fi
 	if [ -z "${!array[@]}" ]; then
 		IFS=', ' read -r -a array <<< "$annotation"
+		# In kallisto mode annotation is optional; ensure loop runs at least once
+		if [[ "$aligner" == "kallisto" && ${#array[@]} -eq 0 ]]; then
+			array=("")
+		fi
 	fi
-
 	for index in "${!array[@]}"; do
 		if [ ! -d "$output_folder/$name/final_results_reanalysis$index/DGE/" ]; then
 			echo -e "\nWARNING: DGE directory not found at $output_folder/$name/final_results_reanalysis$index/DGE/. Skipping enrichment for index $index."
