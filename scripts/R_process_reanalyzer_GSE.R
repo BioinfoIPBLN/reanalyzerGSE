@@ -1448,9 +1448,13 @@ tryCatch({
         gaf_raw$source_id <- toupper(trimws(gaf_raw$source_id))
         gaf_raw$GO_ID <- trimws(gaf_raw$GO_ID)
         gaf_raw <- gaf_raw[gaf_raw$GO_ID != "" & !is.na(gaf_raw$GO_ID), ]
-        # Collapse multiple GO IDs per gene
+        # Collapse multiple GO IDs per gene (flattening comma/semicolon/space separated lists)
         gaf_go_collapsed <- aggregate(GO_ID ~ source_id, data = gaf_raw,
-                                      FUN = function(x) paste(unique(x), collapse = ";"))
+                                      FUN = function(x) {
+                                        terms <- trimws(unlist(strsplit(as.character(x), "[,; ]+")))
+                                        terms <- terms[terms != ""]
+                                        paste(unique(terms), collapse = ";")
+                                      })
         colnames(gaf_go_collapsed) <- c(".merge_key_gaf", "GAF_GO_IDs")
         if (nrow(gaf_go_collapsed) == 0) {
           cat("  No valid gene-GO mappings after collapsing — skipping GAF GO merge.\n")
@@ -1497,8 +1501,13 @@ tryCatch({
         kegg_raw$source_id <- toupper(trimws(kegg_raw$source_id))
         kegg_raw$KEGG_ID <- trimws(kegg_raw$KEGG_ID)
         kegg_raw <- kegg_raw[kegg_raw$KEGG_ID != "" & !is.na(kegg_raw$KEGG_ID), ]
+        # Collapse multiple KEGG IDs per gene (flattening comma/semicolon/space separated lists)
         kegg_collapsed <- aggregate(KEGG_ID ~ source_id, data = kegg_raw,
-                                     FUN = function(x) paste(unique(x), collapse = ";"))
+                                     FUN = function(x) {
+                                       terms <- trimws(unlist(strsplit(as.character(x), "[,; ]+")))
+                                       terms <- terms[terms != ""]
+                                       paste(unique(terms), collapse = ";")
+                                     })
         colnames(kegg_collapsed) <- c(".merge_key_kegg", "KEGG_KO_IDs")
         if (nrow(kegg_collapsed) == 0) {
           cat("  No valid gene-KEGG mappings after collapsing — skipping KEGG merge.\n")
