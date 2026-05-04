@@ -1259,7 +1259,11 @@ sub check_input_data{
 			}
 
 			if($parameter_type->{$parametro} eq "file"){
-				if(-e $cfg->val($section,$parametro)){
+				my $val = $cfg->val($section,$parametro);
+				if(!defined($val) || $val eq ""){
+					# Skip validation for empty/optional parameters (e.g. gtf in kallisto mode)
+				}
+				elsif(-e $val){
 				}
 				else{
 					print date()." Checking $section-$parametro parameter ... error!\n\tERROR Please check that the parameter $parametro inside section [$section] is correct.\n";
