@@ -1197,6 +1197,11 @@ _log_step "Step_3b_miARma" "start"
 			mkdir -p $output_folder/$name/miARma_out$index/Pre_fastqc_results/_skip_
 		fi
 		$miarma_path/miARma miarma$index.ini
+		miarma_exit=$?
+		if [ $miarma_exit -ne 0 ]; then
+			echo -e "\n\033[1;31mERROR:\033[0m miARma-seq exited with code $miarma_exit for miarma$index.ini. Please check the log above for details.\n" >&2
+			exit $miarma_exit
+		fi
 	done
 
 	### Reformat the logs by parallel...

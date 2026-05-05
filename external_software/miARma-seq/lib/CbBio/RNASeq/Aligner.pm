@@ -4172,7 +4172,7 @@ sub kallisto{
                                       mkdir -p $projectdir$output_dir && cd $projectdir$output_dir && export PARALLEL_SHELL=/bin/bash
                                       name_lists=\$(cat $tmp_file | sed -E 's,_(R)?[12]\.fastq\.gz.*,,g' | sort | uniq | awk -F '/' '{ print \$NF }') && unset DISPLAY
                                       
-                                      parallel --verbose --joblog ${projectdir}/kallisto_log_parallel.txt -j $parallelnumber 'kallisto quant -i $kallistoidx_final -o $projectdir${output_dir}{} -t $threads --bootstrap-samples 10 --seed 42 $kallistoparameters \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \$(cat $tmp_file | xargs dirname | uniq)/{}_2.fastq.gz && echo Done...{}' ::: \$(echo \$name_lists)
+                                      parallel --verbose --joblog ${projectdir}/kallisto_log_parallel.txt -j $parallelnumber 'kallisto quant -i $kallistoidx_final -o $projectdir${output_dir}{} -t $threads --bootstrap-samples 10 --seed 42 $kallistoparameters \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \$(cat $tmp_file | xargs dirname | uniq)/{}_2.fastq.gz > $projectdir${output_dir}{}/kallisto_quant.log 2>&1 && echo Done...{}' ::: \$(echo \$name_lists)
                                     fi
 	 			    cd $projectdir && mkdir -p \$PWD/../multiqc_out && if [ \$(ls \$PWD/../multiqc_out | wc -l) -eq 0 ]; then
        				       echo 'Gathering all QC reports with MultiQC'
@@ -4202,7 +4202,7 @@ sub kallisto{
                                   mkdir -p $projectdir$output_dir && cd $projectdir$output_dir && export PARALLEL_SHELL=/bin/bash
                                   name_lists=\$(cat $tmp_file | awk -F '/' '{ print \$NF }') && unset DISPLAY
                                   
-                                  parallel --verbose --joblog ${projectdir}/kallisto_log_parallel.txt -j $parallelnumber 'kallisto quant -i $kallistoidx_final -o $projectdir${output_dir}{} --single -t $threads --bootstrap-samples 10 --seed 42 $kallistoparameters \$(cat $tmp_file | xargs dirname | uniq)/{} && echo Done...{}' ::: \$(echo \$name_lists)
+                                  parallel --verbose --joblog ${projectdir}/kallisto_log_parallel.txt -j $parallelnumber 'kallisto quant -i $kallistoidx_final -o $projectdir${output_dir}{} --single -t $threads --bootstrap-samples 10 --seed 42 $kallistoparameters \$(cat $tmp_file | xargs dirname | uniq)/{} > $projectdir${output_dir}{}/kallisto_quant.log 2>&1 && echo Done...{}' ::: \$(echo \$name_lists)
                                 fi
 	 			    cd $projectdir && mkdir -p \$PWD/../multiqc_out && if [ \$(ls \$PWD/../multiqc_out | wc -l) -eq 0 ]; then
        				       echo 'Gathering all QC reports with MultiQC'

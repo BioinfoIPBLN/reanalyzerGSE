@@ -353,7 +353,86 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   }
 
   } else {
-    cat("\nNo BAM files found in input_dir, skipping BAM-dependent QC plots (read counts, alignment barplots)...\n")
+    # No BAM files — check for kallisto run_info.json files instead
+    kallisto_json_files <- list.files(path = input_dir, pattern = "run_info\\.json$",
+                                      full.names = TRUE, recursive = TRUE)
+    if (length(kallisto_json_files) > 0) {
+      cat("\n[4b/12] Kallisto pseudoalignment QC barplots\n")
+      kallisto_stats <- do.call(rbind, lapply(kallisto_json_files, function(f) {
+        tryCatch({
+          info <- jsonlite::fromJSON(f)
+          sample_name <- basename(dirname(f))
+          data.frame(
+            Sample = sample_name,
+            n_processed = as.numeric(info$n_processed),
+            n_pseudoaligned = as.numeric(info$n_pseudoaligned),
+            p_pseudoaligned = as.numeric(info$p_pseudoaligned),
+            stringsAsFactors = FALSE
+          )
+        }, error = function(e) NULL)
+      }))
+
+      if (!is.null(kallisto_stats) && nrow(kallisto_stats) > 0) {
+        # Filter to only samples present in the edgeR object
+        edger_samples <- colnames(x$counts)
+        kallisto_stats <- kallisto_stats[kallisto_stats$Sample %in% edger_samples, , drop = FALSE]
+
+        if (nrow(kallisto_stats) > 0) {
+          kallisto_stats$color <- col.group[match(kallisto_stats$Sample, names(col.group))]
+          kallisto_stats$n_not_aligned <- kallisto_stats$n_processed - kallisto_stats$n_pseudoaligned
+
+          cat("\nKallisto mapping stats:\n"); print(kallisto_stats[, c("Sample", "n_processed", "n_pseudoaligned", "p_pseudoaligned")])
+
+          ## Stacked barplot: pseudoaligned vs not aligned
+          kal_long <- tidyr::pivot_longer(
+            kallisto_stats[, c("Sample", "n_pseudoaligned", "n_not_aligned")],
+            cols = c("n_pseudoaligned", "n_not_aligned"),
+            names_to = "category", values_to = "count"
+          )
+          kal_long$category <- factor(kal_long$category,
+                                      levels = c("n_not_aligned", "n_pseudoaligned"),
+                                      labels = c("Not pseudoaligned", "Pseudoaligned"))
+
+          p1 <- ggplot(kal_long, aes(x = Sample, y = count / 1e6, fill = category)) +
+            geom_bar(stat = "identity") +
+            geom_text(aes(label = ifelse(count > 0, paste0(round(count / 1e6, 1), "M"), "")),
+                      position = position_stack(vjust = 0.5), size = 2.5, color = "black") +
+            scale_fill_manual(values = c("Not pseudoaligned" = "#F46D43", "Pseudoaligned" = "#2166AC")) +
+            scale_y_continuous(labels = function(x) paste0(x, "M")) +
+            labs(title = "Kallisto pseudoalignment (total reads)", x = "Sample", y = "Reads", fill = "") +
+            theme_minimal() +
+            theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 7, color = kallisto_stats$color),
+                  legend.position = "right")
+          print(p1)
+
+          ## Barplot: pseudoalignment percentage per sample
+          p2 <- ggplot(kallisto_stats, aes(x = Sample, y = p_pseudoaligned, fill = color)) +
+            geom_bar(stat = "identity") +
+            geom_text(aes(label = paste0(round(p_pseudoaligned, 1), "%")),
+                      vjust = -0.3, size = 3, color = "black") +
+            scale_fill_identity() +
+            scale_y_continuous(limits = c(0, 105), labels = function(x) paste0(x, "%")) +
+            labs(title = "Kallisto pseudoalignment rate (%)", x = "Sample", y = "% Pseudoaligned") +
+            theme_minimal() +
+            theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 7, color = kallisto_stats$color),
+                  legend.position = "none")
+          print(p2)
+
+          ## Write reads_info equivalent for kallisto
+          reads_info <- data.frame(
+            Samples = kallisto_stats$Sample,
+            reads = kallisto_stats$n_processed,
+            library_size = x$samples$lib.size
+          )
+          write.table(reads_info, file = paste0(output_dir, "/QC_and_others/reads_numbers.txt"),
+                      col.names = TRUE, row.names = FALSE, quote = FALSE, sep = "\t")
+        }
+      } else {
+        cat("\nKallisto run_info.json files found but could not be parsed.\n")
+      }
+    } else {
+      cat("\nNo BAM files or kallisto run_info.json found in input_dir, skipping read-level QC plots...\n")
+    }
   }
   
   
