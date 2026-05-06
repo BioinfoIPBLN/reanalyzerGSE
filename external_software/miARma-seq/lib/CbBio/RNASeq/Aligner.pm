@@ -2790,8 +2790,8 @@ sub hisat2{
 
 			#Check if the file is a paired-end file
 			my $memorylimit_in_mb = int($memorylimit / 1000000);
-			my $memorylimit_div = int($memorylimit / ($parallelnumber + 1));
-			my $memorylimit_div_mb = int($memorylimit_in_mb / ($parallelnumber + 1));
+			my $memorylimit_div = int($memorylimit / ($parallelnumber + 2));
+			my $memorylimit_div_mb = int($memorylimit_in_mb / ($parallelnumber + 2));
 			my $threads_sort = int($threads / 2);
 			my $memorylimit_div_mb_sort_cores = int($memorylimit_div_mb / ($threads / 2));
 			
@@ -2812,9 +2812,9 @@ sub hisat2{
 			
 			my $samtools_pipeline_pe = "";
 			if (defined $bam_dedup && $bam_dedup eq "samtools") {
-				$samtools_pipeline_pe = $custom_filter_part . $filter_part . " | samtools sort -n -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M - " .
+				$samtools_pipeline_pe = $custom_filter_part . $filter_part . " | samtools sort -n -@ $threads_sort -T {}_nsort_tmp -m ${memorylimit_div_mb_sort_cores}M - " .
 					" | samtools fixmate -m - - " .
-					" | samtools sort -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M - " .
+					" | samtools sort -@ $threads_sort -T {}_csort_tmp -m ${memorylimit_div_mb_sort_cores}M - " .
 					" | samtools markdup -r --write-index - {}_hisat2.bam##idx##{}_hisat2.bam.csi ";
 			} elsif (defined $bam_dedup && ($bam_dedup eq "picard" || $bam_dedup eq "picard_optical")) {
 				my $p_opts = ($bam_dedup eq "picard_optical") ? "REMOVE_SEQUENCING_DUPLICATES=true" : "REMOVE_DUPLICATES=true";
@@ -2890,8 +2890,8 @@ sub hisat2{
 		}
 		else{
 			my $memorylimit_in_mb = int($memorylimit / 1000000);
-			my $memorylimit_div = int($memorylimit / ($parallelnumber + 1));
-			my $memorylimit_div_mb = int($memorylimit_in_mb / ($parallelnumber + 1));
+			my $memorylimit_div = int($memorylimit / ($parallelnumber + 2));
+			my $memorylimit_div_mb = int($memorylimit_in_mb / ($parallelnumber + 2));
 			my $threads_sort = int($threads / 2);
 			my $memorylimit_div_mb_sort_cores = int($memorylimit_div_mb / ($threads / 2));
 			if(lc($strand) eq "reverse"){
@@ -2918,9 +2918,9 @@ sub hisat2{
 
 			my $samtools_pipeline_se = "";
 			if (defined $bam_dedup && $bam_dedup eq "samtools") {
-				$samtools_pipeline_se = $custom_filter_part_se . $filter_part_se . " | samtools sort -n -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M - " .
+				$samtools_pipeline_se = $custom_filter_part_se . $filter_part_se . " | samtools sort -n -@ $threads_sort -T {}_nsort_tmp -m ${memorylimit_div_mb_sort_cores}M - " .
 					" | samtools fixmate -m - - " .
-					" | samtools sort -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M - " .
+					" | samtools sort -@ $threads_sort -T {}_csort_tmp -m ${memorylimit_div_mb_sort_cores}M - " .
 					" | samtools markdup -r --write-index - {}_hisat2.bam##idx##{}_hisat2.bam.csi ";
 			} elsif (defined $bam_dedup && ($bam_dedup eq "picard" || $bam_dedup eq "picard_optical")) {
 				my $p_opts = ($bam_dedup eq "picard_optical") ? "REMOVE_SEQUENCING_DUPLICATES=true" : "REMOVE_DUPLICATES=true";
@@ -3308,8 +3308,8 @@ sub star{
 		}
 		#Bowtie2 execution command
 		my $memorylimit_in_mb = int($memorylimit / 1000000);
-		my $memorylimit_div = int($memorylimit / ($parallelnumber + 1));
-		my $memorylimit_div_mb = int($memorylimit_in_mb / ($parallelnumber + 1));
+		my $memorylimit_div = int($memorylimit / ($parallelnumber + 2));
+		my $memorylimit_div_mb = int($memorylimit_in_mb / ($parallelnumber + 2));
 		my $threads_sort = int($threads / 2);
 		my $memorylimit_div_mb_sort_cores = int($memorylimit_div_mb / ($threads / 2));
 		
@@ -3329,9 +3329,9 @@ sub star{
 		
 		my $samtools_pipeline_pe = "";
 		if (defined $bam_dedup && $bam_dedup eq "samtools") {
-			$samtools_pipeline_pe = $filter_part . $custom_filter_part . " | samtools sort -n -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M - " .
+			$samtools_pipeline_pe = $filter_part . $custom_filter_part . " | samtools sort -n -@ $threads_sort -T {}_nsort_tmp -m ${memorylimit_div_mb_sort_cores}M - " .
 				" | samtools fixmate -m - - " .
-				" | samtools sort -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M - " .
+				" | samtools sort -@ $threads_sort -T {}_csort_tmp -m ${memorylimit_div_mb_sort_cores}M - " .
 				" | samtools markdup -r --write-index - {}_STAR.bam##idx##{}_STAR.bam.csi ";
 		} elsif (defined $bam_dedup && ($bam_dedup eq "picard" || $bam_dedup eq "picard_optical")) {
 			my $p_opts = ($bam_dedup eq "picard_optical") ? "REMOVE_SEQUENCING_DUPLICATES=true" : "REMOVE_DUPLICATES=true";
@@ -3438,8 +3438,8 @@ sub star{
 		}
 		else{
 			my $memorylimit_in_mb = int($memorylimit / 1000000);
-			my $memorylimit_div = int($memorylimit / ($parallelnumber + 1));
-			my $memorylimit_div_mb = int($memorylimit_in_mb / ($parallelnumber + 1));
+			my $memorylimit_div = int($memorylimit / ($parallelnumber + 2));
+			my $memorylimit_div_mb = int($memorylimit_in_mb / ($parallelnumber + 2));
 			my $threads_sort = int($threads / 2);
 			my $memorylimit_div_mb_sort_cores = int($memorylimit_div_mb / ($threads / 2));
 			print STDOUT "\tSTAR :: ".date()." Checking $file for star (single-end) analysis\n" if($verbose);
@@ -3469,9 +3469,9 @@ sub star{
 
 			my $samtools_pipeline_se = "";
 			if (defined $bam_dedup && $bam_dedup eq "samtools") {
-				$samtools_pipeline_se = $filter_part_se . $custom_filter_part_se . " | samtools sort -n -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M - " .
+				$samtools_pipeline_se = $filter_part_se . $custom_filter_part_se . " | samtools sort -n -@ $threads_sort -T {}_nsort_tmp -m ${memorylimit_div_mb_sort_cores}M - " .
 					" | samtools fixmate -m - - " .
-					" | samtools sort -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M - " .
+					" | samtools sort -@ $threads_sort -T {}_csort_tmp -m ${memorylimit_div_mb_sort_cores}M - " .
 					" | samtools markdup -r --write-index - {}_STAR.bam##idx##{}_STAR.bam.csi ";
 			} elsif (defined $bam_dedup && ($bam_dedup eq "picard" || $bam_dedup eq "picard_optical")) {
 				my $p_opts = ($bam_dedup eq "picard_optical") ? "REMOVE_SEQUENCING_DUPLICATES=true" : "REMOVE_DUPLICATES=true";

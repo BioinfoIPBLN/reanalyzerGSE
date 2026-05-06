@@ -326,11 +326,11 @@ if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
 		rm -rf $seqs_location # I'm now removing the seqs_location at the beginning of this section, in the context of the new system of resuming by -Dm stepx, so this should always be done
 		if [ ! -d "$seqs_location" ]; then
 			mkdir -p $seqs_location
-			if [ $(ls -d $input/* | egrep -c "_R1.fastq.gz$|_R1.fq.gz$|_R2.fastq.gz$|_R2.fq.gz$|_1.fastq.gz$|_1.fq.gz$|_2.fastq.gz$|_2.fq.gz$") -eq 0 ]; then
-				echo -e "\nPlease make sure that the input files are named _1.fastq.gz, _R1.fastq.gz, _2.fastq.gz, _R2.fastq.gz\n"
+			if [ $(ls -d $input/* | egrep -c "_R1.fastq.gz$|_R1.fq.gz$|_R2.fastq.gz$|_R2.fq.gz$|_1.fastq.gz$|_1.fq.gz$|_2.fastq.gz$|_2.fq.gz$|_R1_[0-9]+.fastq.gz$|_R1_[0-9]+.fq.gz$|_R2_[0-9]+.fastq.gz$|_R2_[0-9]+.fq.gz$") -eq 0 ]; then
+				echo -e "\nPlease make sure that the input files are named _1.fastq.gz, _R1.fastq.gz, _R1_001.fastq.gz, _2.fastq.gz, _R2.fastq.gz, _R2_001.fastq.gz\n"
 				exit 1
 			fi
-			for f in $(ls -d $input/*); do ln -sf $f $seqs_location/$(basename $f | sed 's,fq,fastq,g;s,_R1.fastq,_1.fastq,g;s,_R2.fastq,_2.fastq,g'); done
+			for f in $(ls -d $input/*); do ln -sf $f $seqs_location/$(basename $f | sed 's,fq,fastq,g;s,_R1_[0-9]*.fastq,_1.fastq,g;s,_R2_[0-9]*.fastq,_2.fastq,g;s,_R1.fastq,_1.fastq,g;s,_R2.fastq,_2.fastq,g'); done
 			if [ ! -z "$input_filter_regex" ]; then
 				echo -e "\nFiltering input files with regex: $input_filter_regex\n"
 				cd $seqs_location
