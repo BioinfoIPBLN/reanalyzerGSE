@@ -238,6 +238,44 @@ sub featureCount{
 			my $tmp_file;
 			my $parallelnumber=$args{"parallelnumber"} || 5;
 			$tmp_file=$projectdir."/Pre_fastqc_results/list_of_files.txt";
+
+			# ── JLR: Verify all expected BAMs exist before running featureCounts ──
+			my @expected_samples = do {
+				open(my $fh, "<", $tmp_file) or die "SEQCOUNT ERROR :: Cannot open '$tmp_file': $!\n";
+				my %seen;
+				while (<$fh>) {
+					chomp;
+					(my $s = $_) =~ s,.*/,,;          # basename
+					$s =~ s/_(R)?[12]\.fastq\.gz.*//;  # strip read suffix
+					$seen{$s}++;
+				}
+				close($fh);
+				sort keys %seen;
+			};
+			my @missing_bams;
+			for my $sample (@expected_samples) {
+				my $found = 0;
+				for my $dir_suffix ("hisat2_results", "star_results") {
+					for my $aligner ("hisat2", "STAR") {
+						if (-e "$projectdir/${dir_suffix}/${sample}_${aligner}.bam") {
+							$found = 1; last;
+						}
+					}
+					last if $found;
+				}
+				push @missing_bams, $sample unless $found;
+			}
+			if (@missing_bams) {
+				my $n_missing = scalar @missing_bams;
+				my $n_total   = scalar @expected_samples;
+				my $list      = join(", ", @missing_bams);
+				die "SEQCOUNT ERROR :: $n_missing of $n_total expected BAM files are missing.\n"
+				  . "  Missing samples: $list\n"
+				  . "  This means the alignment step failed for these samples.\n"
+				  . "  Please check the alignment logs (hisat2_log_parallel.txt) and re-run.\n";
+			}
+			# ── End BAM validation ──
+
 			#htseq-count execution command
 			# JLR: Refactored for robustness, modern filenames, and bash environment
 			$command=qq{if [ \$(ls $projectdir$output_dir | wc -l) -eq 0 ]; then

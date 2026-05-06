@@ -2838,9 +2838,8 @@ sub hisat2{
 					if($file ne $mate_file){						
 						$command=qq{if [ \$(ls $projectdir$output_dir | wc -l) -eq 0 ]; then
       								  mkdir -p $projectdir$output_dir && cd $projectdir$output_dir && unset DISPLAY && export PARALLEL_SHELL=/bin/bash
-	      							  cat ${hisat2idx_final}*.ht2* > /dev/null 2>&1 || true
 	      							  parallel --verbose --joblog ${projectdir}/hisat2_log_parallel.txt -j $parallelnumber \\
-	      							  'hisat2 -q -t --mm --seed 123 --very-sensitive $hisatpardef -x $hisat2idx_final \\
+	      							  'hisat2 -q -t --seed 123 --very-sensitive $hisatpardef -x $hisat2idx_final \\
 	      							    -1 \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \\
 	      							    -2 \$(cat $tmp_file | xargs dirname | uniq)/{}_2.fastq.gz \\
 	      							    --met-file {}.metrics $unaligned_cmd_pe \\
@@ -2933,9 +2932,8 @@ sub hisat2{
 			print STDOUT "\tHISAT 2 :: ".date()." Checking $file for hisat2 (single-end) analysis\n" if($verbose);
 						$command=qq{if [ \$(ls $projectdir$output_dir | wc -l) -eq 0 ]; then
       								  mkdir -p $projectdir$output_dir && cd $projectdir$output_dir && unset DISPLAY && export PARALLEL_SHELL=/bin/bash
-	      							  cat ${hisat2idx_final}*.ht2* > /dev/null 2>&1 || true
 	      							  parallel --verbose --joblog ${projectdir}/hisat2_log_parallel.txt -j $parallelnumber \\
-	      							  'hisat2 -q -t --mm --seed 123 --very-sensitive $hisatpardef -x $hisat2idx_final \\
+	      							  'hisat2 -q -t --seed 123 --very-sensitive $hisatpardef -x $hisat2idx_final \\
 	      							    -U \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \\
 	      							    -U \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \\
 	      							    --met-file {}.metrics $unaligned_cmd_se \\
