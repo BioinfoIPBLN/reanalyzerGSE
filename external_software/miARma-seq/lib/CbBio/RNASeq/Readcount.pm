@@ -226,8 +226,9 @@ sub featureCount{
 			unless (defined $prefix && $prefix ne '') {
 				die "SEQCOUNT ERROR :: Could not determine aligner prefix from BAM file '$file' (parsed name: '$name').\n"
 				  . "  The filename must contain '_hisat2' or '_STAR' before the .bam extension.\n"
-				  . "  This usually means there is a stale or unexpected BAM file in the alignment results directory.\n"
-				  . "  Please remove or rename the offending file and re-run the pipeline.\n";
+				  . "  This usually means there is a stale samtools sort temp file left behind by an interrupted/killed alignment.\n"
+				  . "  Common patterns: numeric-hash names (e.g. 17780...063.bam) or temp-prefixed files (e.g. *_nsort_tmp.*.bam, *_csort_tmp.*.bam).\n"
+				  . "  Please remove the offending file(s) and re-run the pipeline.\n";
 			}
 			# Map prefix to clean output directory name
 			if ($prefix eq 'his' || $prefix eq 'hisat2') { $prefix = 'hisat2'; }
