@@ -2848,26 +2848,28 @@ sub hisat2{
 	      							  echo Done...{}_hisat2.bam && \\
 	      							  export _JAVA_OPTIONS=\"-Xms5g -Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD\" && \\
 	      							  qualimap bamqc -bam {}_hisat2.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_hisat2.bam --java-mem-size=${memorylimit_div_mb}m >> qc1.log 2>&1 || true && \\
-	      							  case \"$gtf\" in *.gtf) qualimap rnaseq -bam {}_hisat2.bam -gtf $gtf -pe -outdir \$PWD/rnaseqqc_results/{}_hisat2.bam --java-mem-size=${memorylimit_div_mb}m >> qc2.log 2>&1 || true ;; esac && \\
+	      							  case \"$gtf\" in *.gtf) samtools sort -n -@ $threads_sort -T {}_nsort_qc_tmp -m ${memorylimit_div_mb_sort_cores}M -o {}_hisat2_name_sorted.bam {}_hisat2.bam && \\
+	      							  qualimap rnaseq -bam {}_hisat2_name_sorted.bam -gtf $gtf -pe --sorted -outdir \$PWD/rnaseqqc_results/{}_hisat2.bam --java-mem-size=${memorylimit_div_mb}m >> qc2.log 2>&1; rm -f {}_hisat2_name_sorted.bam || true ;; esac && \\
 	      							  bamCoverage -b {}_hisat2.bam -o {}_hisat2.bam.bw -of bigwig -bs 10 -p $threads $norm_cmd &>> bamCoverage.log && \\
 	      							  samtools flagstat -@ $threads {}_hisat2.bam > {}_hisat2.bam.flagstat && \\
 	      							  samtools stats -@ $threads {}_hisat2.bam > {}_hisat2.bam.stats' \\
 	      							  ::: \$(cat $tmp_file | sed -E 's,_(R)?[12]\.fastq\.gz.*,,g' | sort | uniq | awk -F '/' '{print \$NF}')
 
-		     						  cd $projectdir$output_dir && for f in \$( ls | egrep '.bam\$' ); do echo \$f"\t"\$PWD/bamqc_results/\$f >> \$PWD/bamqc_results/list_multi.txt; done
+		     						  cd $projectdir$output_dir && find . -maxdepth 1 \\( -name '*_name_sorted.bam' -o -name '*_nsort_qc_tmp*' \\) -delete 2>/dev/null || true
+		     						  for f in \$( ls | egrep '_(hisat2|STAR)\.bam\$' ); do echo \$f"\t"\$PWD/bamqc_results/\$f >> \$PWD/bamqc_results/list_multi.txt; done
 		      						  mkdir -p \$PWD/samtools_results/ && parallel --verbose -j $parallelnumber 'samtools flagstat -@ $threads {} > \$PWD/samtools_results/{}_flagstat.txt && \\
-		       						  samtools stats -@ $threads {} > \$PWD/samtools_results/{}_stats.txt' ::: \$( ls | egrep '.bam\$' )
+		       						  samtools stats -@ $threads {} > \$PWD/samtools_results/{}_stats.txt' ::: \$( ls | egrep '_(hisat2|STAR)\.bam\$' )
 
 		 						  export _JAVA_OPTIONS=\"-Xms5g -Xmx${memorylimit_in_mb}m -Djava.io.tmpdir=\$PWD\"
 								  qualimap multi-bamqc -d \$PWD/bamqc_results/list_multi.txt -outdir \$PWD/multibamqc_results/ >> qc3.log 2>&1 || true && \\
 								  
-								  CONTIG_COUNT=\$(samtools view -H \$(ls *.bam | shuf | head -1) | grep -c "^\@SQ")
+								  CONTIG_COUNT=\$(samtools view -H \$(ls *_hisat2.bam *_STAR.bam 2>/dev/null | shuf | head -1) | grep -c "^\@SQ")
                                                                   if [ \$CONTIG_COUNT -gt 1000 ]; then
                                                                     echo "Genome has \$CONTIG_COUNT contigs (>1000), using top 100 largest contigs for QC" | tee qc4.log
-                                                                    samtools idxstats \$(ls *.bam | shuf | head -1) | sort -k2,2nr | head -100 | awk '{print \$1"\\t0\\t"\$2}' > top100_regions.bed
-                                                                    multiBamSummary BED-file --BED top100_regions.bed -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz >> qc4.log 2>&1 || true
+                                                                    samtools idxstats \$(ls *_hisat2.bam *_STAR.bam 2>/dev/null | shuf | head -1) | sort -k2,2nr | head -100 | awk '{print \$1"\\t0\\t"\$2}' > top100_regions.bed
+                                                                    multiBamSummary BED-file --BED top100_regions.bed -p $indexthreads --bamfiles *_hisat2.bam *_STAR.bam -out deeptools_all_bams.npz >> qc4.log 2>&1 || true
                                                                   else
-                                                                    multiBamSummary bins -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz >> qc4.log 2>&1 || true
+                                                                    multiBamSummary bins -p $indexthreads --bamfiles *_hisat2.bam *_STAR.bam -out deeptools_all_bams.npz >> qc4.log 2>&1 || true
                                                                   fi
 
 		  						  plotCorrelation --corData deeptools_all_bams.npz --corMethod spearman --plotFile deeptools_all_bams.npz_correlation_spearman.pdf --whatToPlot heatmap --skipZeros --plotTitle \"Spearman Correlation\" --outFileCorMatrix deeptools_all_bams.npz_correlation_spearman_scores.tab --plotNumbers >> qc4.log 2>&1 || true
@@ -2948,20 +2950,20 @@ sub hisat2{
 	      							  samtools stats -@ $threads {}_hisat2.bam > {}_hisat2.bam.stats' \\
 	      							  ::: \$(cat $tmp_file | sed -E 's,_(R)?1\.fastq\.gz.*,,g' | sort | uniq | awk -F '/' '{print \$NF}')
 
-		     						  cd $projectdir$output_dir && for f in \$( ls | egrep '.bam\$' ); do echo \$f"\t"\$PWD/bamqc_results/\$f >> \$PWD/bamqc_results/list_multi.txt; done && \\
+		     						  cd $projectdir$output_dir && for f in \$( ls | egrep '_(hisat2|STAR)\.bam\$' ); do echo \$f"\t"\$PWD/bamqc_results/\$f >> \$PWD/bamqc_results/list_multi.txt; done && \\
 		      						  mkdir -p \$PWD/samtools_results/ && parallel --verbose -j $parallelnumber 'samtools flagstat -@ $threads {} > \$PWD/samtools_results/{}_flagstat.txt && \\
-		       						  samtools stats -@ $threads {} > \$PWD/samtools_results/{}_stats.txt' ::: \$( ls | egrep '.bam\$' )
+		       						  samtools stats -@ $threads {} > \$PWD/samtools_results/{}_stats.txt' ::: \$( ls | egrep '_(hisat2|STAR)\.bam\$' )
 
 		 						  export _JAVA_OPTIONS=\"-Xms5g -Xmx${memorylimit_in_mb}m -Djava.io.tmpdir=\$PWD\"
 								  qualimap multi-bamqc -d \$PWD/bamqc_results/list_multi.txt -outdir \$PWD/multibamqc_results/ >> qc3.log 2>&1 || true && \\
 
-								  CONTIG_COUNT=\$(samtools view -H \$(ls *.bam | shuf | head -1) | grep -c "^\@SQ")
+								  CONTIG_COUNT=\$(samtools view -H \$(ls *_hisat2.bam *_STAR.bam 2>/dev/null | shuf | head -1) | grep -c "^\@SQ")
                                                                   if [ \$CONTIG_COUNT -gt 1000 ]; then
                                                                     echo "Genome has \$CONTIG_COUNT contigs (>1000), using top 100 largest contigs for QC" | tee qc4.log
-                                                                    samtools idxstats \$(ls *.bam | shuf | head -1) | sort -k2,2nr | head -100 | awk '{print \$1"\\t0\\t"\$2}' > top100_regions.bed
-                                                                    multiBamSummary BED-file --BED top100_regions.bed -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz >> qc4.log 2>&1 || true
+                                                                    samtools idxstats \$(ls *_hisat2.bam *_STAR.bam 2>/dev/null | shuf | head -1) | sort -k2,2nr | head -100 | awk '{print \$1"\\t0\\t"\$2}' > top100_regions.bed
+                                                                    multiBamSummary BED-file --BED top100_regions.bed -p $indexthreads --bamfiles *_hisat2.bam *_STAR.bam -out deeptools_all_bams.npz >> qc4.log 2>&1 || true
                                                                   else
-                                                                    multiBamSummary bins -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz >> qc4.log 2>&1 || true
+                                                                    multiBamSummary bins -p $indexthreads --bamfiles *_hisat2.bam *_STAR.bam -out deeptools_all_bams.npz >> qc4.log 2>&1 || true
                                                                   fi
 
 		  						  plotCorrelation --corData deeptools_all_bams.npz --corMethod spearman --plotFile deeptools_all_bams.npz_correlation_spearman.pdf --whatToPlot heatmap --skipZeros --plotTitle \"Spearman Correlation\" --outFileCorMatrix deeptools_all_bams.npz_correlation_spearman_scores.tab --plotNumbers >> qc4.log 2>&1 || true
@@ -3403,18 +3405,20 @@ sub star{
 					                          STAR --runThreadN $indexthreads --genomeDir $staridx_final --genomeLoad LoadAndExit --outFileNamePrefix $projectdir${output_dir}genomeloading.tmp2 && rm -rf $projectdir${output_dir}genomeloading.tmp*
 					                          parallel --verbose --joblog ${projectdir}/star_log_parallel.txt -j $parallelnumber 'STAR --runMode alignReads --genomeDir $staridx_final --genomeLoad LoadAndKeep --readFilesIn \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \$(cat $tmp_file | xargs dirname | uniq)/{}_2.fastq.gz --outFileNamePrefix $projectdir${output_dir}{}_STAR_ $starpardef --outStd SAM $samtools_pipeline_pe && echo Done...{}_STAR.bam' ::: \$(echo \$name_lists)
 					                          parallel --verbose --joblog ${projectdir}/starprocess_log_parallel.txt -j $parallelnumber 'export _JAVA_OPTIONS="-Xms5g -Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD" && qualimap bamqc -bam $projectdir${output_dir}/{}_STAR.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_STAR.bam --java-mem-size="${memorylimit_div_mb}m" >> qc1.log 2>&1 || true
-					                          qualimap rnaseq -bam $projectdir${output_dir}/{}_STAR.bam -gtf $gtf -pe -outdir \$PWD/rnaseqqc_results/{}_STAR.bam --java-mem-size="${memorylimit_div_mb}m" >> qc2.log 2>&1 || true
+					                          samtools sort -n -@ $threads_sort -T {}_nsort_qc_tmp -m ${memorylimit_div_mb_sort_cores}M -o {}_STAR_name_sorted.bam $projectdir${output_dir}/{}_STAR.bam && \\
+					                          qualimap rnaseq -bam {}_STAR_name_sorted.bam -gtf $gtf -pe --sorted -outdir \$PWD/rnaseqqc_results/{}_STAR.bam --java-mem-size="${memorylimit_div_mb}m" >> qc2.log 2>&1; rm -f {}_STAR_name_sorted.bam || true
 					                          bamCoverage -b {}_STAR.bam -o {}_STAR.bam.bw -of bigwig -bs 10 -p $threads $norm_cmd' ::: \$(echo \$name_lists)
-					                          for f in \$( ls | egrep '.bam\$' ); do echo \$f"\t"\$PWD/bamqc_results/\$f >> \$PWD/bamqc_results/list_multi.txt; done && mkdir -p \$PWD/samtools_results/ && parallel --verbose -j $parallelnumber 'samtools flagstat -@ $threads {} > \$PWD/samtools_results/{}_flagstat.txt && samtools stats -@ $threads {} > \$PWD/samtools_results/{}_stats.txt' ::: \$( ls | egrep '.bam\$' )
+					                          find . -maxdepth 1 \\( -name '*_name_sorted.bam' -o -name '*_nsort_qc_tmp*' \\) -delete 2>/dev/null || true
+					                          for f in \$( ls | egrep '_(hisat2|STAR)\.bam\$' ); do echo \$f"\t"\$PWD/bamqc_results/\$f >> \$PWD/bamqc_results/list_multi.txt; done && mkdir -p \$PWD/samtools_results/ && parallel --verbose -j $parallelnumber 'samtools flagstat -@ $threads {} > \$PWD/samtools_results/{}_flagstat.txt && samtools stats -@ $threads {} > \$PWD/samtools_results/{}_stats.txt' ::: \$( ls | egrep '_(hisat2|STAR)\.bam\$' )
 					                          export _JAVA_OPTIONS="-Xms5g -Xmx${memorylimit_in_mb}m -Djava.io.tmpdir=\$PWD" && qualimap multi-bamqc -d \$PWD/bamqc_results/list_multi.txt -outdir \$PWD/multibamqc_results/ >> qc3.log 2>&1 || true && \\
 					                          
-								  CONTIG_COUNT=\$(samtools view -H \$(ls *.bam | shuf | head -1) | grep -c "^\@SQ")
+								  CONTIG_COUNT=\$(samtools view -H \$(ls *_hisat2.bam *_STAR.bam 2>/dev/null | shuf | head -1) | grep -c "^\@SQ")
                                                                   if [ \$CONTIG_COUNT -gt 1000 ]; then
                                                                     echo "Genome has \$CONTIG_COUNT contigs (>1000), using top 100 largest contigs for QC" | tee qc4.log
-                                                                    samtools idxstats \$(ls *.bam | shuf | head -1) | sort -k2,2nr | head -100 | awk '{print \$1"\\t0\\t"\$2}' > top100_regions.bed
-                                                                    multiBamSummary BED-file --BED top100_regions.bed -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz >> qc4.log 2>&1 || true
+                                                                    samtools idxstats \$(ls *_hisat2.bam *_STAR.bam 2>/dev/null | shuf | head -1) | sort -k2,2nr | head -100 | awk '{print \$1"\\t0\\t"\$2}' > top100_regions.bed
+                                                                    multiBamSummary BED-file --BED top100_regions.bed -p $indexthreads --bamfiles *_hisat2.bam *_STAR.bam -out deeptools_all_bams.npz >> qc4.log 2>&1 || true
                                                                   else
-                                                                    multiBamSummary bins -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz >> qc4.log 2>&1 || true
+                                                                    multiBamSummary bins -p $indexthreads --bamfiles *_hisat2.bam *_STAR.bam -out deeptools_all_bams.npz >> qc4.log 2>&1 || true
                                                                   fi
 
 					                          plotCorrelation --corData deeptools_all_bams.npz --corMethod spearman --plotFile deeptools_all_bams.npz_correlation_spearman.pdf --whatToPlot heatmap --skipZeros --plotTitle "Spearman Correlation" --outFileCorMatrix deeptools_all_bams.npz_correlation_spearman_scores.tab --plotNumbers >> qc4.log 2>&1 || true
@@ -3488,16 +3492,16 @@ sub star{
 					  parallel --verbose --joblog ${projectdir}/starprocess_log_parallel.txt -j $parallelnumber 'export _JAVA_OPTIONS="-Xms5g -Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD" && qualimap bamqc -bam $projectdir${output_dir}/{}_STAR.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_STAR.bam --java-mem-size="${memorylimit_div_mb}m" >> qc1.log 2>&1 || true
 		                          qualimap rnaseq -bam $projectdir${output_dir}/{}_STAR.bam -gtf $gtf -outdir \$PWD/rnaseqqc_results/{}_STAR.bam --java-mem-size="${memorylimit_div_mb}m" >> qc2.log 2>&1 || true
 		                          bamCoverage -b {}_STAR.bam -o {}_STAR.bam.bw -of bigwig -bs 10 -p $threads $norm_cmd' ::: \$(echo \$name_lists)
-		                          for f in \$( ls | egrep '.bam\$' ); do echo \$f"\t"\$PWD/bamqc_results/\$f >> \$PWD/bamqc_results/list_multi.txt; done && mkdir -p \$PWD/samtools_results/ && parallel --verbose -j $parallelnumber 'samtools flagstat -@ $threads {} > \$PWD/samtools_results/{}_flagstat.txt && samtools stats -@ $threads {} > \$PWD/samtools_results/{}_stats.txt' ::: \$( ls | egrep '.bam\$' )
+		                          for f in \$( ls | egrep '_(hisat2|STAR)\.bam\$' ); do echo \$f"\t"\$PWD/bamqc_results/\$f >> \$PWD/bamqc_results/list_multi.txt; done && mkdir -p \$PWD/samtools_results/ && parallel --verbose -j $parallelnumber 'samtools flagstat -@ $threads {} > \$PWD/samtools_results/{}_flagstat.txt && samtools stats -@ $threads {} > \$PWD/samtools_results/{}_stats.txt' ::: \$( ls | egrep '_(hisat2|STAR)\.bam\$' )
 		                          export _JAVA_OPTIONS="-Xms5g -Xmx${memorylimit_in_mb}m -Djava.io.tmpdir=\$PWD" && qualimap multi-bamqc -d \$PWD/bamqc_results/list_multi.txt -outdir \$PWD/multibamqc_results/ >> qc3.log 2>&1 || true && \\
 		                          
-					  CONTIG_COUNT=\$(samtools view -H \$(ls *.bam | shuf | head -1) | grep -c "^\@SQ")
+					  CONTIG_COUNT=\$(samtools view -H \$(ls *_hisat2.bam *_STAR.bam 2>/dev/null | shuf | head -1) | grep -c "^\@SQ")
                                           if [ \$CONTIG_COUNT -gt 1000 ]; then
                                              echo "Genome has \$CONTIG_COUNT contigs (>1000), using top 100 largest contigs for QC" | tee qc4.log
-                                             samtools idxstats \$(ls *.bam | shuf | head -1) | sort -k2,2nr | head -100 | awk '{print \$1"\\t0\\t"\$2}' > top100_regions.bed
-                                             multiBamSummary BED-file --BED top100_regions.bed -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz >> qc4.log 2>&1 || true
+                                             samtools idxstats \$(ls *_hisat2.bam *_STAR.bam 2>/dev/null | shuf | head -1) | sort -k2,2nr | head -100 | awk '{print \$1"\\t0\\t"\$2}' > top100_regions.bed
+                                             multiBamSummary BED-file --BED top100_regions.bed -p $indexthreads --bamfiles *_hisat2.bam *_STAR.bam -out deeptools_all_bams.npz >> qc4.log 2>&1 || true
                                           else
-                                             multiBamSummary bins -p $indexthreads --bamfiles *.bam -out deeptools_all_bams.npz >> qc4.log 2>&1 || true
+                                             multiBamSummary bins -p $indexthreads --bamfiles *_hisat2.bam *_STAR.bam -out deeptools_all_bams.npz >> qc4.log 2>&1 || true
                                           fi
 
 		                          plotCorrelation --corData deeptools_all_bams.npz --corMethod spearman --plotFile deeptools_all_bams.npz_correlation_spearman.pdf --whatToPlot heatmap --skipZeros --plotTitle "Spearman Correlation" --outFileCorMatrix deeptools_all_bams.npz_correlation_spearman_scores.tab --plotNumbers >> qc4.log 2>&1 || true
