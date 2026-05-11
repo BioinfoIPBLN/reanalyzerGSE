@@ -14,7 +14,7 @@ apptainer build reanalyzerGSE.sif reanalyzerGSE/external_software/installation/r
 ```
 1.2) Download the ready-to-use .sif image:
 ```
-wget -q https://bit.ly/reanalyzer_appt_image -O reanalyzerGSE.sif
+wget -q https://bit.ly/reanalyzer_apptainer -O reanalyzerGSE.sif
 ```
 
 
