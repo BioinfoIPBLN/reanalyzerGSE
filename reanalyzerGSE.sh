@@ -191,7 +191,7 @@ if [[ $debug_step == "all" || $debug_step == "step1a" ]]; then
 				export cores_parallel=$((cores / number_parallel))
 			fi
 			cd $seqs_location; rm -rf *
-			echo $input | tr ',' '\n' | parallel --joblog $output_folder/$name/fastq_dl_log_parallel.txt -j $number_parallel --max-args 1 'if [ $(echo {} | egrep -c "PRJEB|PRJNA|PRJDB|ERX|DRX|SRX|ERP|DRP|SRP") -eq 1 ]; then fastq-dl --cpus $cores_parallel --accession {}; fi && 
+			echo $input | tr ',' '\n' | parallel --halt-on-error 2 --joblog $output_folder/$name/fastq_dl_log_parallel.txt -j $number_parallel --max-args 1 'if [ $(echo {} | egrep -c "PRJEB|PRJNA|PRJDB|ERX|DRX|SRX|ERP|DRP|SRP") -eq 1 ]; then fastq-dl --cpus $cores_parallel --accession {}; fi && 
 																																		   if [ $(echo {} | egrep -c "ERS|DRS|SRS|SAMD|SAME|SAMN|ERR|DRR|SRR") -eq 1 ]; then fastq-dl --provider sra --cpus $cores_parallel --accession {}; fi'
 		 	if [ "$num_gz_files" -eq "$(($num_samples * 2))" ] || [ "$num_gz_files" -eq "$num_samples" ]; then
 		 		echo "It seems the download has been sucessful, but please double check"
@@ -247,7 +247,7 @@ if [[ $debug_step == "all" || $debug_step == "step1a" ]]; then
 				for file in $files; do seqtk sample -s 123 "$file" "$number" > "${file}_subsamp"; done
 			}
 			export -f subsample_reads
-			parallel --verbose -j $cores_reads_to_subsample subsample_reads {} ::: "${arr2[@]}" :::+ "${arr3[@]}" # 10 only because of RAM
+			parallel --halt-on-error 2 --verbose -j $cores_reads_to_subsample subsample_reads {} ::: "${arr2[@]}" :::+ "${arr3[@]}" # 10 only because of RAM
 			rm $(ls | grep -v subsamp); for file in $(ls); do mv $file $(echo $file | sed 's,_subsamp,,g;s,.gz,,g'); done
 			pigz --best -p $cores * # gz was lost with seqtk sample
 			echo -e "\nSubsampling (+-10%) completed...\n"
@@ -410,7 +410,7 @@ if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
 				for file in $files; do seqtk sample -s 123 "$file" "$number" > "${file}_subsamp"; done
 			}
 			export -f subsample_reads
-			parallel --verbose -j $cores_reads_to_subsample subsample_reads {} ::: "${arr2[@]}" :::+ "${arr3[@]}" # 10 only because of RAM
+			parallel --halt-on-error 2 --verbose -j $cores_reads_to_subsample subsample_reads {} ::: "${arr2[@]}" :::+ "${arr3[@]}" # 10 only because of RAM
 			rm $(ls | grep -v subsamp); for file in $(ls); do mv $file $(echo $file | sed 's,_subsamp,,g;s,.gz,,g'); done
 			pigz --best -p $cores * # gz was lost with seqtk sample
 			echo -e "\nSubsampling (+-10%) completed...\n"
@@ -468,7 +468,7 @@ if [[ $debug_step == "all" || $debug_step == "step1c" ]]; then
 		if [ ! -d "$seqs_location" ]; then
 			mkdir -p $seqs_location; cd $seqs_location
 			echo -e "\nDownloading from the input accessions that you manually provided...\n"
-			echo $input | tr ',' '\n' | parallel -j $number_parallel --max-args 1 'if [ $(echo {} | egrep -c "PRJEB|PRJNA|PRJDB|ERX|DRX|SRX|ERP|DRP|SRP") -eq 1 ]; then fastq-dl --cpus $cores_parallel --accession {}; fi && 
+			echo $input | tr ',' '\n' | parallel --halt-on-error 2 -j $number_parallel --max-args 1 'if [ $(echo {} | egrep -c "PRJEB|PRJNA|PRJDB|ERX|DRX|SRX|ERP|DRP|SRP") -eq 1 ]; then fastq-dl --cpus $cores_parallel --accession {}; fi && 
 		 																		   if [ $(echo {} | egrep -c "ERS|DRS|SRS|SAMD|SAME|SAMN|ERR|DRR|SRR") -eq 1 ]; then fastq-dl --provider sra --cpus $cores_parallel --accession {}; fi'
 		fi
 _log_step "Step_1_Download" "end"
@@ -548,7 +548,7 @@ if [[ "$transcripts" == *.gz ]]; then
 fi
 
 if [ ${#files_to_decompress[@]} -gt 0 ]; then
-	parallel --tmpdir $TMPDIR -j $number_parallel 'echo "Using {1} -> {2}"; gunzip -c "{1}" > "{2}"' ::: "${files_to_decompress[@]}" :::+ "${decompressed_outputs[@]}"
+	parallel --halt-on-error 2 --tmpdir $TMPDIR -j $number_parallel 'echo "Using {1} -> {2}"; gunzip -c "{1}" > "{2}"' ::: "${files_to_decompress[@]}" :::+ "${decompressed_outputs[@]}"
 fi
 
 ### STEP 1. Deal with fastp if required:
@@ -595,11 +595,11 @@ if [ ! -z "$fastp_label" ]; then
 
 	if [[ "$layout_fastp" == "SINGLE" ]]; then
 		ls -d $seqs_location/*.fastq.gz | \
-			parallel --tmpdir $TMPDIR --verbose --joblog $output_folder/$name/fastp_out/fastp_log_parallel.txt -j $number_parallel \
+			parallel --halt-on-error 2 --tmpdir $TMPDIR --verbose --joblog $output_folder/$name/fastp_out/fastp_log_parallel.txt -j $number_parallel \
 			'fastp --in1 {} --out1 {}_fastp.fastq.gz --dont_overwrite --dont_eval_duplication '$fastp_extra_opts' --thread '$cores_fastp' -z '$compression_level' -h '$output_folder/$name'/fastp_out/{/}_report.html -j '$output_folder/$name'/fastp_out/{/}_report.json &>> '$output_folder/$name'/fastp_out/{/}_fastp_out.log'
 	elif [[ "$layout_fastp" == "PAIRED" ]]; then
 		ls -d $seqs_location/*.fastq.gz | sed 's,_[12].fastq.gz,,g' | sort | uniq | \
-			parallel --tmpdir $TMPDIR --verbose --joblog $output_folder/$name/fastp_out/fastp_log_parallel.txt -j $number_parallel \
+			parallel --halt-on-error 2 --tmpdir $TMPDIR --verbose --joblog $output_folder/$name/fastp_out/fastp_log_parallel.txt -j $number_parallel \
 			'fastp --in1 {}_1.fastq.gz --in2 {}_2.fastq.gz --out1 {}_1.fastq.gz_fastp.fastq.gz --out2 {}_2.fastq.gz_fastp.fastq.gz --dont_overwrite --dont_eval_duplication '$fastp_extra_opts' --thread '$cores_fastp' -z '$compression_level' -h '$output_folder/$name'/fastp_out/{/}_report.html -j '$output_folder/$name'/fastp_out/{/}_report.json &>> '$output_folder/$name'/fastp_out/{/}_fastp_out.log'
 	fi
 fi
@@ -614,11 +614,11 @@ if [ "$fastp_trimming" != "none" ]; then
 
 	if [[ "$layout_fastp" == "SINGLE" ]]; then
 		ls -d $seqs_location/*.fastq.gz | \
-			parallel --tmpdir $TMPDIR --verbose --joblog $output_folder/$name/fastp_out/fastp_trim_log_parallel.txt -j $number_parallel \
+			parallel --halt-on-error 2 --tmpdir $TMPDIR --verbose --joblog $output_folder/$name/fastp_out/fastp_trim_log_parallel.txt -j $number_parallel \
 			'fastp --in1 {} --out1 {}_fastp.fastq.gz --dont_overwrite --dont_eval_duplication --trim_front1 '"${arrfastp[0]}"' --trim_tail1 '"${arrfastp[1]}"' --thread '$cores_fastp' -z '$compression_level' -h '$output_folder/$name'/fastp_out/{/}_trim_report.html -j '$output_folder/$name'/fastp_out/{/}_trim_report.json &>> '$output_folder/$name'/fastp_out/{/}_fastp_trim_out.log'
 	elif [[ "$layout_fastp" == "PAIRED" ]]; then
 		ls -d $seqs_location/*.fastq.gz | sed 's,_[12].fastq.gz,,g' | sort | uniq | \
-			parallel --tmpdir $TMPDIR --verbose --joblog $output_folder/$name/fastp_out/fastp_trim_log_parallel.txt -j $number_parallel \
+			parallel --halt-on-error 2 --tmpdir $TMPDIR --verbose --joblog $output_folder/$name/fastp_out/fastp_trim_log_parallel.txt -j $number_parallel \
 			'fastp --in1 {}_1.fastq.gz --in2 {}_2.fastq.gz --out1 {}_1.fastq.gz_fastp.fastq.gz --out2 {}_2.fastq.gz_fastp.fastq.gz --dont_overwrite --dont_eval_duplication --trim_front1 '"${arrfastp[0]}"' --trim_tail1 '"${arrfastp[1]}"' --thread '$cores_fastp' -z '$compression_level' -h '$output_folder/$name'/fastp_out/{/}_trim_report.html -j '$output_folder/$name'/fastp_out/{/}_trim_report.json &>> '$output_folder/$name'/fastp_out/{/}_fastp_trim_out.log'
 	fi
 fi
@@ -765,7 +765,7 @@ _log_step "Step_2_Decontamination" "start"
 		if [[ "$layout_sortmerna" == "PAIRED" ]]; then
 			ls $seqs_location | egrep ".fastq$|.fq$|.fastq.gz$|.fq.gz$" \
 				| sed 's,_[12].fastq.gz,,g' | sort | uniq \
-				| parallel --tmpdir $TMPDIR --verbose \
+				| parallel --halt-on-error 2 --tmpdir $TMPDIR --verbose \
 						   --joblog $sortmerna_out/sortmerna_log_parallel.txt \
 						   -j $number_parallel --max-args 1 \
 				"sortmerna \
@@ -781,7 +781,7 @@ _log_step "Step_2_Decontamination" "start"
 
 		elif [[ "$layout_sortmerna" == "SINGLE" ]]; then
 			ls $seqs_location | egrep ".fastq$|.fq$|.fastq.gz$|.fq.gz$" \
-				| parallel --tmpdir $TMPDIR --verbose \
+				| parallel --halt-on-error 2 --tmpdir $TMPDIR --verbose \
 						   --joblog $sortmerna_out/sortmerna_log_parallel.txt \
 						   -j $number_parallel --max-args 1 \
 				"sortmerna \
@@ -1564,13 +1564,13 @@ _log_step "Step_6_Enrichment" "start"
     				echo -e "\nPerforming functional enrichment analyses for DEGs. The results up to this point are ready to use (including DEGs and expression table including gene_ids). This step of funtional enrichment analyses may take long if many significant DEGs, comparisons, or analyses...\n"
 				export ANNOTATION_FILE="${array[index]}"
 				cd $output_folder/$name/final_results_reanalysis$index/DGE/
-				ls | egrep "^DGE_analysis_comp[0-9]+.txt$" | parallel --joblog R_clusterProfiler_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_clusterProfiler_analyses_parallel.R $PWD $organism "1" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution '^{}$' $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_{}_funct_enrichment.log"
+				ls | egrep "^DGE_analysis_comp[0-9]+.txt$" | parallel --halt-on-error 2 --joblog R_clusterProfiler_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_clusterProfiler_analyses_parallel.R $PWD $organism "1" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution '^{}$' $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_{}_funct_enrichment.log"
 				echo -e "\nPerforming autoGO and Panther execution... this may take long if many genes or comparisons...\n"
-				ls | egrep "^DGE_analysis_comp[0-9]+.txt$" | parallel --joblog R_autoGO_panther_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism "1" $databases_function {} $panther_method $auto_panther_log &> autoGO_panther_{}_funct_enrichment.log"
+				ls | egrep "^DGE_analysis_comp[0-9]+.txt$" | parallel --halt-on-error 2 --joblog R_autoGO_panther_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism "1" $databases_function {} $panther_method $auto_panther_log &> autoGO_panther_{}_funct_enrichment.log"
 				if [[ "$time_course" == "yes" ]]; then
 					cd $output_folder/$name/final_results_reanalysis$index/time_course_analyses
-					ls | egrep "^DGE_limma_timecourse.*.txt$" | parallel --joblog R_clusterProfiler_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_clusterProfiler_analyses_parallel.R $PWD $organism "1" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution '^{}$' $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_{}_funct_enrichment.log"
-					ls | egrep "^DGE_limma_timecourse.*.txt$" | parallel --joblog R_autoGO_panther_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism "1" $databases_function {} $panther_method $auto_panther_log &> autoGO_panther_{}_funct_enrichment.log"
+					ls | egrep "^DGE_limma_timecourse.*.txt$" | parallel --halt-on-error 2 --joblog R_clusterProfiler_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_clusterProfiler_analyses_parallel.R $PWD $organism "1" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution '^{}$' $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_{}_funct_enrichment.log"
+					ls | egrep "^DGE_limma_timecourse.*.txt$" | parallel --halt-on-error 2 --joblog R_autoGO_panther_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism "1" $databases_function {} $panther_method $auto_panther_log &> autoGO_panther_{}_funct_enrichment.log"
 				fi
 			else
 				echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
@@ -1676,7 +1676,7 @@ _log_step "Step_6_Enrichment" "start"
 				enrichment_results_found="yes"
 				cd $output_folder/$name/final_results_reanalysis$index/DGE/
 				echo "Formatting $(echo $files_to_process | wc -w) functional enrichment result file(s)..."
-				echo $files_to_process | parallel --joblog R_enrich_format_analyses_parallel_log_parallel.txt -j $cores "file={}; R_enrich_format.R \"\$file\" \$(echo \"\$file\" | sed 's,DGE/.*,DGE/,g')\$(echo \"\$file\" | sed 's,.*DGE_analysis_comp,DGE_analysis_comp,g;s,_pval.*,,g;s,_fdr.*,,g;s,_funct.*,,g;s,_cluster.*,,g' | sed 's,.txt,,g').txt $organism $rev_thr" &> $PWD/enrichment_format.log
+				echo $files_to_process | parallel --halt-on-error 2 --joblog R_enrich_format_analyses_parallel_log_parallel.txt -j $cores "file={}; R_enrich_format.R \"\$file\" \$(echo \"\$file\" | sed 's,DGE/.*,DGE/,g')\$(echo \"\$file\" | sed 's,.*DGE_analysis_comp,DGE_analysis_comp,g;s,_pval.*,,g;s,_fdr.*,,g;s,_funct.*,,g;s,_cluster.*,,g' | sed 's,.txt,,g').txt $organism $rev_thr" &> $PWD/enrichment_format.log
 			else
 				echo "No functional enrichment results found. Report will not be rendered."
 			fi
@@ -1717,7 +1717,7 @@ _log_step "Step_7_Annotation" "start"
 			# All the tables of DEGs, provide bed files for direct upload in genome browser
 			cd $output_folder/$name/final_results_reanalysis$index/
 			for file in $(find . -name "DGE_analysis_comp*" | egrep "_fdr_05.txt$|_pval_05.txt$"); do
-				cut -f1 "$file" | parallel -j $((cores*3)) "gene={}; foldchange=\$(grep -i \"\$gene\" \"$file\" | cut -f3 | sed -n 's/\(.*[.,][0-9]\{2\}\).*/\1/p'); \
+				cut -f1 "$file" | parallel --halt-on-error 2 -j $((cores*3)) "gene={}; foldchange=\$(grep -i \"\$gene\" \"$file\" | cut -f3 | sed -n 's/\(.*[.,][0-9]\{2\}\).*/\1/p'); \
 															grep -i \"=\$gene\" \"$annotation_file\" | head -1 | awk -v id=\"\$gene\" -v fc=\"\$foldchange\" '{ print \$1\"\\t\"\$4\"\\t\"\$5\"\\t\"id\"_\"fc\"\\t.\t\"\$7 }' >> \"$file.bed\""
 			done
 		fi
@@ -1794,7 +1794,7 @@ _log_step "Step_9_Cleanup" "start"
 
 				cd $output_folder/$name/miARma_out$index/$aligner\_results
 				echo "For the sake of efficiente storage: samtools view -@ cores -T ref_genome -C -o xxx.bam.cram xxx.bam && rm xx.bam" >> conversion_bam_to_cram.txt
-				find . -type f -name "*.bam" | parallel --verbose -j $number_parallel --max-args 1 samtools view -T $reference_genome -C -@ $((cores / number_parallel)) -o {}.cram {}
+				find . -type f -name "*.bam" | parallel --halt-on-error 2 --verbose -j $number_parallel --max-args 1 samtools view -T $reference_genome -C -@ $((cores / number_parallel)) -o {}.cram {}
 				rm -rf $(ls | egrep ".bam$") $TMPDIR
 			fi
 		done

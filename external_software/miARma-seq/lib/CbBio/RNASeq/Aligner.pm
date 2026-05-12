@@ -2838,7 +2838,7 @@ sub hisat2{
 					if($file ne $mate_file){						
 						$command=qq{if [ \$(ls $projectdir$output_dir | wc -l) -eq 0 ]; then
       								  mkdir -p $projectdir$output_dir && cd $projectdir$output_dir && unset DISPLAY && export PARALLEL_SHELL=/bin/bash
-	      							  parallel --verbose --joblog ${projectdir}/hisat2_log_parallel.txt -j $parallelnumber \\
+	      							  parallel --halt-on-error 2 --verbose --joblog ${projectdir}/hisat2_log_parallel.txt -j $parallelnumber \\
 	      							  'hisat2 -q -t --seed 123 --very-sensitive $hisatpardef -x $hisat2idx_final \\
 	      							    -1 \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \\
 	      							    -2 \$(cat $tmp_file | xargs dirname | uniq)/{}_2.fastq.gz \\
@@ -2857,7 +2857,7 @@ sub hisat2{
 
 		     						  cd $projectdir$output_dir && find . -maxdepth 1 \\( -name '*_name_sorted.bam' -o -name '*_nsort_qc_tmp*' \\) -delete 2>/dev/null || true
 		     						  for f in \$( ls | egrep '_(hisat2|STAR)\.bam\$' ); do echo \$f"\t"\$PWD/bamqc_results/\$f >> \$PWD/bamqc_results/list_multi.txt; done
-		      						  mkdir -p \$PWD/samtools_results/ && parallel --verbose -j $parallelnumber 'samtools flagstat -@ $threads {} > \$PWD/samtools_results/{}_flagstat.txt && \\
+		      						  mkdir -p \$PWD/samtools_results/ && parallel --halt-on-error 2 --verbose -j $parallelnumber 'samtools flagstat -@ $threads {} > \$PWD/samtools_results/{}_flagstat.txt && \\
 		       						  samtools stats -@ $threads {} > \$PWD/samtools_results/{}_stats.txt' ::: \$( ls | egrep '_(hisat2|STAR)\.bam\$' )
 
 		 						  export _JAVA_OPTIONS=\"-Xms5g -Xmx${memorylimit_in_mb}m -Djava.io.tmpdir=\$PWD\"
@@ -2934,7 +2934,7 @@ sub hisat2{
 			print STDOUT "\tHISAT 2 :: ".date()." Checking $file for hisat2 (single-end) analysis\n" if($verbose);
 						$command=qq{if [ \$(ls $projectdir$output_dir | wc -l) -eq 0 ]; then
       								  mkdir -p $projectdir$output_dir && cd $projectdir$output_dir && unset DISPLAY && export PARALLEL_SHELL=/bin/bash
-	      							  parallel --verbose --joblog ${projectdir}/hisat2_log_parallel.txt -j $parallelnumber \\
+	      							  parallel --halt-on-error 2 --verbose --joblog ${projectdir}/hisat2_log_parallel.txt -j $parallelnumber \\
 	      							  'hisat2 -q -t --seed 123 --very-sensitive $hisatpardef -x $hisat2idx_final \\
 	      							    -U \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \\
 	      							    -U \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \\
@@ -2951,7 +2951,7 @@ sub hisat2{
 	      							  ::: \$(cat $tmp_file | sed -E 's,_(R)?1\.fastq\.gz.*,,g' | sort | uniq | awk -F '/' '{print \$NF}')
 
 		     						  cd $projectdir$output_dir && for f in \$( ls | egrep '_(hisat2|STAR)\.bam\$' ); do echo \$f"\t"\$PWD/bamqc_results/\$f >> \$PWD/bamqc_results/list_multi.txt; done && \\
-		      						  mkdir -p \$PWD/samtools_results/ && parallel --verbose -j $parallelnumber 'samtools flagstat -@ $threads {} > \$PWD/samtools_results/{}_flagstat.txt && \\
+		      						  mkdir -p \$PWD/samtools_results/ && parallel --halt-on-error 2 --verbose -j $parallelnumber 'samtools flagstat -@ $threads {} > \$PWD/samtools_results/{}_flagstat.txt && \\
 		       						  samtools stats -@ $threads {} > \$PWD/samtools_results/{}_stats.txt' ::: \$( ls | egrep '_(hisat2|STAR)\.bam\$' )
 
 		 						  export _JAVA_OPTIONS=\"-Xms5g -Xmx${memorylimit_in_mb}m -Djava.io.tmpdir=\$PWD\"
@@ -3403,13 +3403,13 @@ sub star{
 					                          mkdir -p $projectdir$output_dir && cd $projectdir$output_dir && export PARALLEL_SHELL=/bin/bash
 					                          name_lists=\$(cat $tmp_file | sed -E 's,_(R)?[12]\.fastq\.gz.*,,g' | sort | uniq | awk -F '/' '{ print \$NF }') && unset DISPLAY
 					                          STAR --runThreadN $indexthreads --genomeDir $staridx_final --genomeLoad LoadAndExit --outFileNamePrefix $projectdir${output_dir}genomeloading.tmp2 && rm -rf $projectdir${output_dir}genomeloading.tmp*
-					                          parallel --verbose --joblog ${projectdir}/star_log_parallel.txt -j $parallelnumber 'STAR --runMode alignReads --genomeDir $staridx_final --genomeLoad LoadAndKeep --readFilesIn \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \$(cat $tmp_file | xargs dirname | uniq)/{}_2.fastq.gz --outFileNamePrefix $projectdir${output_dir}{}_STAR_ $starpardef --outStd SAM $samtools_pipeline_pe && echo Done...{}_STAR.bam' ::: \$(echo \$name_lists)
-					                          parallel --verbose --joblog ${projectdir}/starprocess_log_parallel.txt -j $parallelnumber 'export _JAVA_OPTIONS="-Xms5g -Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD" && qualimap bamqc -bam $projectdir${output_dir}/{}_STAR.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_STAR.bam --java-mem-size="${memorylimit_div_mb}m" >> qc1.log 2>&1 || true
+					                          parallel --halt-on-error 2 --verbose --joblog ${projectdir}/star_log_parallel.txt -j $parallelnumber 'STAR --runMode alignReads --genomeDir $staridx_final --genomeLoad LoadAndKeep --readFilesIn \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \$(cat $tmp_file | xargs dirname | uniq)/{}_2.fastq.gz --outFileNamePrefix $projectdir${output_dir}{}_STAR_ $starpardef --outStd SAM $samtools_pipeline_pe && echo Done...{}_STAR.bam' ::: \$(echo \$name_lists)
+					                          parallel --halt-on-error 2 --verbose --joblog ${projectdir}/starprocess_log_parallel.txt -j $parallelnumber 'export _JAVA_OPTIONS="-Xms5g -Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD" && qualimap bamqc -bam $projectdir${output_dir}/{}_STAR.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_STAR.bam --java-mem-size="${memorylimit_div_mb}m" >> qc1.log 2>&1 || true
 					                          samtools sort -n -@ $threads_sort -T {}_nsort_qc_tmp -m ${memorylimit_div_mb_sort_cores}M -o {}_STAR_name_sorted.bam $projectdir${output_dir}/{}_STAR.bam && \\
 					                          qualimap rnaseq -bam {}_STAR_name_sorted.bam -gtf $gtf -pe --sorted -outdir \$PWD/rnaseqqc_results/{}_STAR.bam --java-mem-size="${memorylimit_div_mb}m" >> qc2.log 2>&1; rm -f {}_STAR_name_sorted.bam || true
 					                          bamCoverage -b {}_STAR.bam -o {}_STAR.bam.bw -of bigwig -bs 10 -p $threads $norm_cmd' ::: \$(echo \$name_lists)
 					                          find . -maxdepth 1 \\( -name '*_name_sorted.bam' -o -name '*_nsort_qc_tmp*' \\) -delete 2>/dev/null || true
-					                          for f in \$( ls | egrep '_(hisat2|STAR)\.bam\$' ); do echo \$f"\t"\$PWD/bamqc_results/\$f >> \$PWD/bamqc_results/list_multi.txt; done && mkdir -p \$PWD/samtools_results/ && parallel --verbose -j $parallelnumber 'samtools flagstat -@ $threads {} > \$PWD/samtools_results/{}_flagstat.txt && samtools stats -@ $threads {} > \$PWD/samtools_results/{}_stats.txt' ::: \$( ls | egrep '_(hisat2|STAR)\.bam\$' )
+					                          for f in \$( ls | egrep '_(hisat2|STAR)\.bam\$' ); do echo \$f"\t"\$PWD/bamqc_results/\$f >> \$PWD/bamqc_results/list_multi.txt; done && mkdir -p \$PWD/samtools_results/ && parallel --halt-on-error 2 --verbose -j $parallelnumber 'samtools flagstat -@ $threads {} > \$PWD/samtools_results/{}_flagstat.txt && samtools stats -@ $threads {} > \$PWD/samtools_results/{}_stats.txt' ::: \$( ls | egrep '_(hisat2|STAR)\.bam\$' )
 					                          export _JAVA_OPTIONS="-Xms5g -Xmx${memorylimit_in_mb}m -Djava.io.tmpdir=\$PWD" && qualimap multi-bamqc -d \$PWD/bamqc_results/list_multi.txt -outdir \$PWD/multibamqc_results/ >> qc3.log 2>&1 || true && \\
 					                          
 								  CONTIG_COUNT=\$(samtools view -H \$(ls *_hisat2.bam *_STAR.bam 2>/dev/null | shuf | head -1) | grep -c "^\@SQ")
@@ -3488,11 +3488,11 @@ sub star{
 		                          mkdir -p $projectdir$output_dir && cd $projectdir$output_dir
 		                          name_lists=\$(cat $tmp_file | awk -F '/' '{ print \$NF }') && unset DISPLAY && export PARALLEL_SHELL=/bin/bash
 		                          STAR --runThreadN $indexthreads --genomeDir $staridx_final --genomeLoad LoadAndExit --outFileNamePrefix $projectdir${output_dir}genomeloading.tmp2 && rm -rf $projectdir${output_dir}genomeloading.tmp*
-					  parallel --verbose --joblog ${projectdir}/star_log_parallel.txt -j $parallelnumber 'STAR --runMode alignReads --genomeDir $staridx_final --genomeLoad LoadAndKeep --readFilesIn \$(cat $tmp_file | xargs dirname | uniq)/{} --outFileNamePrefix $projectdir${output_dir}{}_STAR_ $starpardef --outStd SAM $samtools_pipeline_se && echo Done...{}_STAR.bam' ::: \$(echo \$name_lists)
-					  parallel --verbose --joblog ${projectdir}/starprocess_log_parallel.txt -j $parallelnumber 'export _JAVA_OPTIONS="-Xms5g -Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD" && qualimap bamqc -bam $projectdir${output_dir}/{}_STAR.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_STAR.bam --java-mem-size="${memorylimit_div_mb}m" >> qc1.log 2>&1 || true
+					  parallel --halt-on-error 2 --verbose --joblog ${projectdir}/star_log_parallel.txt -j $parallelnumber 'STAR --runMode alignReads --genomeDir $staridx_final --genomeLoad LoadAndKeep --readFilesIn \$(cat $tmp_file | xargs dirname | uniq)/{} --outFileNamePrefix $projectdir${output_dir}{}_STAR_ $starpardef --outStd SAM $samtools_pipeline_se && echo Done...{}_STAR.bam' ::: \$(echo \$name_lists)
+					  parallel --halt-on-error 2 --verbose --joblog ${projectdir}/starprocess_log_parallel.txt -j $parallelnumber 'export _JAVA_OPTIONS="-Xms5g -Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD" && qualimap bamqc -bam $projectdir${output_dir}/{}_STAR.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_STAR.bam --java-mem-size="${memorylimit_div_mb}m" >> qc1.log 2>&1 || true
 		                          qualimap rnaseq -bam $projectdir${output_dir}/{}_STAR.bam -gtf $gtf -outdir \$PWD/rnaseqqc_results/{}_STAR.bam --java-mem-size="${memorylimit_div_mb}m" >> qc2.log 2>&1 || true
 		                          bamCoverage -b {}_STAR.bam -o {}_STAR.bam.bw -of bigwig -bs 10 -p $threads $norm_cmd' ::: \$(echo \$name_lists)
-		                          for f in \$( ls | egrep '_(hisat2|STAR)\.bam\$' ); do echo \$f"\t"\$PWD/bamqc_results/\$f >> \$PWD/bamqc_results/list_multi.txt; done && mkdir -p \$PWD/samtools_results/ && parallel --verbose -j $parallelnumber 'samtools flagstat -@ $threads {} > \$PWD/samtools_results/{}_flagstat.txt && samtools stats -@ $threads {} > \$PWD/samtools_results/{}_stats.txt' ::: \$( ls | egrep '_(hisat2|STAR)\.bam\$' )
+		                          for f in \$( ls | egrep '_(hisat2|STAR)\.bam\$' ); do echo \$f"\t"\$PWD/bamqc_results/\$f >> \$PWD/bamqc_results/list_multi.txt; done && mkdir -p \$PWD/samtools_results/ && parallel --halt-on-error 2 --verbose -j $parallelnumber 'samtools flagstat -@ $threads {} > \$PWD/samtools_results/{}_flagstat.txt && samtools stats -@ $threads {} > \$PWD/samtools_results/{}_stats.txt' ::: \$( ls | egrep '_(hisat2|STAR)\.bam\$' )
 		                          export _JAVA_OPTIONS="-Xms5g -Xmx${memorylimit_in_mb}m -Djava.io.tmpdir=\$PWD" && qualimap multi-bamqc -d \$PWD/bamqc_results/list_multi.txt -outdir \$PWD/multibamqc_results/ >> qc3.log 2>&1 || true && \\
 		                          
 					  CONTIG_COUNT=\$(samtools view -H \$(ls *_hisat2.bam *_STAR.bam 2>/dev/null | shuf | head -1) | grep -c "^\@SQ")
@@ -4174,7 +4174,7 @@ sub kallisto{
                                       mkdir -p $projectdir$output_dir && cd $projectdir$output_dir && export PARALLEL_SHELL=/bin/bash
                                       name_lists=\$(cat $tmp_file | sed -E 's,_(R)?[12]\.fastq\.gz.*,,g' | sort | uniq | awk -F '/' '{ print \$NF }') && unset DISPLAY
                                       
-                                      parallel --verbose --joblog ${projectdir}/kallisto_log_parallel.txt -j $parallelnumber 'mkdir -p $projectdir${output_dir}{} && kallisto quant -i $kallistoidx_final -o $projectdir${output_dir}{} -t $threads --bootstrap-samples 10 --seed 42 $kallistoparameters \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \$(cat $tmp_file | xargs dirname | uniq)/{}_2.fastq.gz > $projectdir${output_dir}{}/kallisto_quant.log 2>&1 && echo Done...{}' ::: \$(echo \$name_lists)
+                                      parallel --halt-on-error 2 --verbose --joblog ${projectdir}/kallisto_log_parallel.txt -j $parallelnumber 'mkdir -p $projectdir${output_dir}{} && kallisto quant -i $kallistoidx_final -o $projectdir${output_dir}{} -t $threads --bootstrap-samples 10 --seed 42 $kallistoparameters \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \$(cat $tmp_file | xargs dirname | uniq)/{}_2.fastq.gz > $projectdir${output_dir}{}/kallisto_quant.log 2>&1 && echo Done...{}' ::: \$(echo \$name_lists)
                                     fi
 	 			    cd $projectdir && mkdir -p \$PWD/../multiqc_out && if [ \$(ls \$PWD/../multiqc_out | wc -l) -eq 0 ]; then
        				       echo 'Gathering all QC reports with MultiQC'
@@ -4204,7 +4204,7 @@ sub kallisto{
                                   mkdir -p $projectdir$output_dir && cd $projectdir$output_dir && export PARALLEL_SHELL=/bin/bash
                                   name_lists=\$(cat $tmp_file | awk -F '/' '{ print \$NF }') && unset DISPLAY
                                   
-                                  parallel --verbose --joblog ${projectdir}/kallisto_log_parallel.txt -j $parallelnumber 'mkdir -p $projectdir${output_dir}{} && kallisto quant -i $kallistoidx_final -o $projectdir${output_dir}{} --single -t $threads --bootstrap-samples 10 --seed 42 $kallistoparameters \$(cat $tmp_file | xargs dirname | uniq)/{} > $projectdir${output_dir}{}/kallisto_quant.log 2>&1 && echo Done...{}' ::: \$(echo \$name_lists)
+                                  parallel --halt-on-error 2 --verbose --joblog ${projectdir}/kallisto_log_parallel.txt -j $parallelnumber 'mkdir -p $projectdir${output_dir}{} && kallisto quant -i $kallistoidx_final -o $projectdir${output_dir}{} --single -t $threads --bootstrap-samples 10 --seed 42 $kallistoparameters \$(cat $tmp_file | xargs dirname | uniq)/{} > $projectdir${output_dir}{}/kallisto_quant.log 2>&1 && echo Done...{}' ::: \$(echo \$name_lists)
                                 fi
 	 			    cd $projectdir && mkdir -p \$PWD/../multiqc_out && if [ \$(ls \$PWD/../multiqc_out | wc -l) -eq 0 ]; then
        				       echo 'Gathering all QC reports with MultiQC'

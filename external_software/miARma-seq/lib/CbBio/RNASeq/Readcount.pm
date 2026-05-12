@@ -280,7 +280,7 @@ sub featureCount{
 			# JLR: Refactored for robustness, modern filenames, and bash environment
 			$command=qq{if [ \$(ls $projectdir$output_dir | wc -l) -eq 0 ]; then
    				       unset DISPLAY && export PARALLEL_SHELL=/bin/bash
-   				       parallel --verbose --joblog ${projectdir}/featureCounts_log_parallel.txt -j $parallelnumber \\
+   				       parallel --halt-on-error 2 --verbose --joblog ${projectdir}/featureCounts_log_parallel.txt -j $parallelnumber \\
    				       'featureCounts $htseqpardef -a $database -o ${projectdir}/${output_dir}/{}_${prefix}_readcount.tab \\
    				       \$(find -L $projectdir -type f \\( -name "{}_hisat2.bam" -o -name "{}_STAR.bam" -o -name "{}*.bam" \\) | head -n 1) >> $logfile 2>&1' \\
    				       ::: \$(cat $tmp_file | sed -E 's,_(R)?[12].fastq.gz.*,,g' | sort | uniq | awk -F '/' '{print \$NF}')

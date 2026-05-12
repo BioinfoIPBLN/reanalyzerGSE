@@ -143,7 +143,7 @@ sub FastQC{
 		#Fastqc execution command with a defined number of threads and the output directory
 		$command=qq{if [ \$(ls $projectdir$output_dir | wc -l) -eq 1 ]; then 
 				mkdir -p $tmp_dir && 
-				parallel --tmpdir $tmp_dir --verbose --joblog ${projectdir}/fastqc_log_parallel.txt -j $multiplied_parallel \\
+				parallel --halt-on-error 2 --tmpdir $tmp_dir --verbose --joblog ${projectdir}/fastqc_log_parallel.txt -j $multiplied_parallel \\
 				'fastqc -q --noextract --dir $tmp_dir -o ${projectdir}${output_dir} {}' ::: \$(cat $tmp_file); 
 			fi};
 
