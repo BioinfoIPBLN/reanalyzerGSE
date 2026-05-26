@@ -28,7 +28,8 @@ cd $dest
 
 parallel --halt-on-error 2 --verbose --joblog $dest/../download_sra_fq_log_parallel.txt -j $number_parallel fastq-dl --accession {} --cpus $cores_parallel ::: $(cat $file)
 
-cut -f106 fastq-run-info.tsv | sed '1d' > $(dirname $file)/library_layout_info.txt
+# Extract library_layout by column name
+awk -F'\t' 'NR==1 { for(i=1;i<=NF;i++) if($i=="library_layout") col=i } NR>1 && col { print $col }' fastq-run-info.tsv | head -1 > $(dirname $file)/library_layout_info.txt
 
 rm fastq-run*
 

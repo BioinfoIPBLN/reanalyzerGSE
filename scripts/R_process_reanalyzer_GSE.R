@@ -1546,7 +1546,13 @@ tryCatch({
         comp_conditions <- unlist(strsplit(comp_str, "__VS__"))
         # Get sample names belonging to these two conditions (handling '___' prefix for numeric conditions)
         comp_samples <- pheno$sample[pheno$condition %in% comp_conditions | sub("^__", "", pheno$condition) %in% comp_conditions]
-        comp_samples <- sub("_[^_]+$", "",comp_samples)
+        # Strip the trailing condition suffix from sample names to get the base name
+        # (e.g., "60uM_LE_Rep1_fastp_repaired_60uM_LE" -> "60uM_LE_Rep1_fastp_repaired")
+        # Note: conditions can contain underscores (e.g., "60uM_LE"), so we can't just strip the last "_token"
+        matched_conditions <- pheno$condition[pheno$condition %in% comp_conditions | sub("^__", "", pheno$condition) %in% comp_conditions]
+        comp_samples <- mapply(function(s, cond) {
+          sub(paste0("_", gsub("([.|()\\^{}+$*?]|\\\\[|\\\\])", "\\\\\\1", cond), "$"), "", s)
+        }, comp_samples, matched_conditions, USE.NAMES = FALSE)
         
         rpkm_cols <- colnames(rpkm_categ)
         tpm_cols <- colnames(tpm_categ)

@@ -161,6 +161,16 @@ if [[ $debug_step == "all" || $debug_step == "step1a" ]]; then
 				elif [[ "$(cat $output_folder/$name/GEO_info/library_layout_info.txt)" == "PAIRED" ]]; then
 					for i in $(cat $output_folder/$name/GEO_info/srr_ids.txt); do echo "mv $(ls | egrep ^$i | head -1) $(cat $output_folder/$name/GEO_info/samples_info.txt | grep $i | cut -f 2 | sed -e 's,%,,g;s,(,,g;s,),,g;s/[_]1/1/g;s/[_]2/2/g;s/replicate_/replicate/g' | awk -F '_GSM' '{ gsub(/-/,"",$1); print substr($1, 1, 140) "_GSM" $2 }')""_1.fastq.gz" && echo "mv $(ls | egrep ^$i | tail -1) $(cat $output_folder/$name/GEO_info/samples_info.txt | grep $i | cut -f 2 | sed -e 's,%,,g;s,(,,g;s,),,g;s/[_]1/1/g;s/[_]2/2/g;s/replicate_/replicate/g' | awk -F '_GSM' '{ gsub(/-/,"",$1); print substr($1, 1, 140) "_GSM" $2 }')""_2.fastq.gz" && mv $(ls | egrep ^$i | head -1) $(cat $output_folder/$name/GEO_info/samples_info.txt | grep $i | cut -f 2 | sed -e 's,%,,g;s,(,,g;s,),,g;s/[_]1/1/g;s/[_]2/2/g;s/replicate_/replicate/g' | awk -F '_GSM' '{ gsub(/-/,"",$1); print substr($1, 1, 140) "_GSM" $2 }')"_1.fastq.gz" && mv $(ls | egrep ^$i | tail -1) $(cat $output_folder/$name/GEO_info/samples_info.txt | grep $i | cut -f 2 | sed -e 's,%,,g;s,(,,g;s,),,g;s/[_]1/1/g;s/[_]2/2/g;s/replicate_/replicate/g' | awk -F '_GSM' '{ gsub(/-/,"",$1); print substr($1, 1, 140) "_GSM" $2 }')"_2.fastq.gz"; done
 				fi
+				# If layout is SINGLE and files still lack _1.fastq.gz or _2.fastq.gz suffix, add it
+				if [[ "$(cat $output_folder/$name/GEO_info/library_layout_info.txt)" == "SINGLE" ]]; then
+					cd $seqs_location
+					if [ $(ls *.fastq.gz 2>/dev/null | egrep -c "_[12]\.fastq\.gz$") -eq 0 ] && [ $(ls *.fastq.gz 2>/dev/null | wc -l) -gt 0 ]; then
+						echo -e "\nSingle-end reads detected without _1.fastq.gz suffix, adding it...\n"
+						for f in *.fastq.gz; do
+							mv "$f" "${f%.fastq.gz}_1.fastq.gz"
+						done
+					fi
+				fi
 			else
 				echo -e "\nSoft linking the already downloaded raw reads from the provided directory: $input_geo_reads\n"
 				ln -sf $input_geo_reads/* $seqs_location
@@ -1550,7 +1560,7 @@ if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
 			echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
 _log_step "Step_6_Enrichment" "start"
     			echo -e "\nPerforming network analyses (WGCNA mode: $wgcna_mode)...\n"
-			R_network_analyses.R $output_folder/$name/final_results_reanalysis$index/DGE/ $output_folder/$name/final_results_reanalysis$index/RM_counts_genes.txt "^DGE_analysis_comp[0-9]+.txt$" $taxonid $wgcna_mode &> network_analyses_funct_enrichment.log
+			R_functional_network_analyses.R $output_folder/$name/final_results_reanalysis$index/DGE/ $output_folder/$name/final_results_reanalysis$index/RM_counts_genes.txt "^DGE_analysis_comp[0-9]+.txt$" $taxonid $wgcna_mode $organism &> network_analyses_funct_enrichment.log
 		fi
 
 		# Functional Enrichment Analyses
