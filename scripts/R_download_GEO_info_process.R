@@ -290,19 +290,22 @@ if (file.exists(paste0(path,"/",GEO_ID_path,"/sample_info.txt"))){
 	info <- cbind(info,df)
 	# Remove some columns that can be typically ignored:
 	cols_to_ignore <- unique(c("column_label",
-                    grep("AWS",colnames(info),val=T),
+                    grep("aws",colnames(info),val=T,ignore.case=T),
+                    grep("gcp",colnames(info),val=T,ignore.case=T),
+                    grep("ncbi",colnames(info),val=T,ignore.case=T),
+                    grep("public_",colnames(info),val=T,ignore.case=T),
 		    grep("processed",colnames(info),val=T),
 		    grep("experiment_title_2|experiment_title_3|experiment_title_4",colnames(info),val=T),
                     grep("run_accession",grep("access",colnames(info),val=T),invert=T,val=T),
                     grep("run",grep("access",colnames(info),val=T),invert=T,val=T),
-                    grep("url",colnames(info),val=T),
+                    grep("url",colnames(info),val=T,ignore.case=T),
                     grep("instrument",colnames(info),val=T),
                     grep("library",colnames(info),val=T),
                     grep("organism",colnames(info),val=T),
-                    grep("NCBI",colnames(info),val=T),
                     grep("run_total",colnames(info),val=T),
                     gsub(":.*| ","",gsub("$","",grep(": int|: num",capture.output(str(info)),val=T),fixed=T)), # columns that contains only numbers		    
-                    "experiment_desc","experiment_title","study_title","total_size","total_spots","run_alias"
+                    "experiment_desc","experiment_title","study_title","study_accession",
+                    "total_size","total_spots","run_alias","bioproject","biosample"
                     ))
 	info_filt <- info[,!(colnames(info) %in% cols_to_ignore)]
 	info_filt_2 <- info_filt[,apply(info_filt,2,function(x){length(table(x))!=1})]
