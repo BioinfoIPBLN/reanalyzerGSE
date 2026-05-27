@@ -26,11 +26,14 @@ suppressPackageStartupMessages({
 st <- read.delim(step_times_file, header = FALSE, stringsAsFactors = FALSE)
 colnames(st) <- c("step", "epoch", "event")
 
-# Pivot start/end into wide format
+# Pivot start/end into wide format, deduplicating by taking earliest start
+# and latest end per step (handles multi-branch logging in the pipeline)
 st_start <- st[st$event == "start", c("step", "epoch"), drop = FALSE]
 st_end   <- st[st$event == "end",   c("step", "epoch"), drop = FALSE]
 colnames(st_start) <- c("step", "start_epoch")
 colnames(st_end)   <- c("step", "end_epoch")
+st_start <- aggregate(start_epoch ~ step, data = st_start, FUN = min)
+st_end   <- aggregate(end_epoch   ~ step, data = st_end,   FUN = max)
 st_wide <- merge(st_start, st_end, by = "step", all = TRUE)
 
 # Remove steps with missing start or end
