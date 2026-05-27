@@ -437,7 +437,24 @@ The ExpressionVisualization app could be also used for interactive exploration:
 
    <a href=\"https://bioinfoipbln.shinyapps.io/expressionvisualizationapp/\" target=\"_blank\">Open ExpressionVisualization Shiny app</a>
 
-.. index:: exploreDE" > index.rst
+.. index:: exploreDE
+
+
+$(if [ -f "$path/$final_dir_name/QC_and_others/pipeline_gantt_chart.pdf" ]; then echo "
+Pipeline timing
+------------------------------------------------------------------------------------
+The following Gantt chart summarizes the wall-clock time for each pipeline step:
+
+.. raw:: html
+
+   <a href=\"sphinx_report/html/pipeline_gantt_chart.pdf\" target=\"_blank\">Click to open Pipeline Gantt Chart (PDF)</a><br>
+
+Step timing data:
+
+.. literalinclude:: ../step_times.tsv
+
+.. index:: Pipeline timing
+"; fi)" > index.rst
 
 ######### Build
 sphinx-build -M html . . &>> sphinx.log

@@ -18,18 +18,18 @@ mkdir -p $TMPDIR
 
 # Initialize step timing log for Gantt chart (only on full runs, preserve on resume)
 STEP_TIMES_FILE="$output_folder/$name/step_times.tsv"
-if [[ $debug_step == "all" ]]; then
-	mkdir -p "$output_folder/$name"
-	echo -e "step\tepoch\tevent" > "$STEP_TIMES_FILE"
-fi
 _log_step() { mkdir -p "$(dirname "$STEP_TIMES_FILE")" 2>/dev/null; echo -e "$1\t$(date +%s)\t$2" >> "$STEP_TIMES_FILE" 2>/dev/null; }
 
 ###### STEP 1. Download info from GEO and organize metadata and so:
 if [[ $debug_step == "all" || $debug_step == "step1" ]]; then
 	rm -rf $output_folder/*
+	# Re-create step_times.tsv after rm -rf (which deletes it)
+	if [[ $debug_step == "all" ]]; then
+		mkdir -p "$output_folder/$name"
+	fi
+	_log_step "Step_1_Download" "start"
 	if [[ $input == G* ]]; then
 		echo -e "\n\nSTEP 1: Starting...\nCurrent date/time: $(date)\n\n"
-_log_step "Step_1_Download" "start"
  	### Download info:
 		echo -e "\nDownloading info from GEO for $input...\n"
 		R_download_GEO_info.R $input $output_folder
@@ -1457,7 +1457,6 @@ if [[ $debug_step == "all" || $debug_step == "step4b" ]]; then
 				"$differential_expr_comparisons" \
 				2>&1 | tee -a $saser_out/saseR_splicing.log
 		done
-_log_step "Step_4b_Splicing" "end"
 		echo -e "\n\nSTEP 4b (saseR): DONE\nCurrent date/time: $(date)\n\n"
 	elif [[ "$splicing_option" == "isoformswitchr" ]]; then
 		if [[ "$aligner" != "kallisto" ]]; then
@@ -1499,9 +1498,9 @@ _log_step "Step_4b_Splicing" "end"
 				"$aligner" \
 				2>&1 | tee -a $isoswitch_out/isoformswitch.log
 		done
-_log_step "Step_4b_Splicing" "end"
 		echo -e "\n\nSTEP 4b (IsoformSwitchAnalyzeR): DONE\nCurrent date/time: $(date)\n\n"
 	fi
+	_log_step "Step_4b_Splicing" "end"
 	export debug_step="all"
 fi
 
@@ -1742,6 +1741,17 @@ fi
 ###### STEP 8. Sum up results in a sphinx report
 if [[ $debug_step == "all" || $debug_step == "step8" ]]; then
 	_log_step "Step_8_Report" "start"
+
+	# Render a preliminary Gantt chart with completed steps (1-7) so it exists when sphinx_report.sh builds
+	if [ -f "$STEP_TIMES_FILE" ]; then
+		for qc_dir in $(find "$output_folder/$name" -maxdepth 2 -type d -name "QC_and_others" 2>/dev/null); do
+			gantt_out="$qc_dir/pipeline_gantt_chart.pdf"
+			echo -e "\nRendering preliminary pipeline Gantt chart for the Sphinx report..."
+			Rscript $CURRENT_DIR/scripts/R_gantt_chart.R "$STEP_TIMES_FILE" "$gantt_out" 2>&1 || \
+				echo "WARNING: Gantt chart rendering failed."
+		done
+	fi
+
 	# Convert tables to xlsx before sphinx so download links work in the report
 	if [ "$convert_tables_excel" == "yes" ]; then
 		echo -e "Converting tables to xlsx..."
@@ -1751,6 +1761,7 @@ if [[ $debug_step == "all" || $debug_step == "step8" ]]; then
 _log_step "Step_8_Report" "end"
  	echo -e "\n\nSTEP 8: Final report DONE\nCurrent date/time: $(date)\n\n"
 fi
+
 
 
 ###### STEP 9. Tidy up, prepare for storage if final results have been created and the number of aligned files is equal to the numbers of samples, rename folders, convert tables to xlsx if required... etc
@@ -1849,6 +1860,12 @@ if [ -f "$STEP_TIMES_FILE" ]; then
 		Rscript $CURRENT_DIR/scripts/R_gantt_chart.R "$STEP_TIMES_FILE" "$gantt_out" 2>&1 || \
 			echo "WARNING: Gantt chart rendering failed."
 	done
+	# Also update the final Gantt chart in the built Sphinx HTML report directory if it exists
+	if [ -d "$output_folder/$name/sphinx_report/html" ]; then
+		echo "Updating final pipeline Gantt chart in the Sphinx report..."
+		Rscript $CURRENT_DIR/scripts/R_gantt_chart.R "$STEP_TIMES_FILE" "$output_folder/$name/sphinx_report/html/pipeline_gantt_chart.pdf" 2>&1 || \
+			echo "WARNING: Sphinx report Gantt chart update failed."
+	fi
 fi
 
 echo -e "\n\n\nALL STEPS DONE! Best wishes\n\n\n"
