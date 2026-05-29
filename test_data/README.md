@@ -51,6 +51,7 @@ wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M36/ge
 gzip -d *.gz # To uncompress the references
 wget -q https://github.com/BioinfoIPBLN/reanalyzerGSE/raw/refs/heads/main/test_data/options_test_GEO.yaml # To get updated yaml file
 
+# Make sure to double check all directories and options in the template yaml file are ok
 apptainer exec reanalyzerGSE.sif reanalyzerGSE.sh -options options_test_GEO.yaml 2>&1 | tee -a out_test_GEO.log
 ```
 
@@ -65,6 +66,7 @@ wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M36/ge
 gzip -d *.gz # To uncompress the references
 wget -q https://github.com/BioinfoIPBLN/reanalyzerGSE/raw/refs/heads/main/test_data/options_test_GEO.yaml # To get updated yaml file
 
+# Make sure to double check all directories and options in the template yaml file are ok
 reanalyzerGSE.sh -options options_test_GEO.yaml 2>&1 | tee -a out_test_GEO.log
 ```
 
