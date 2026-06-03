@@ -3,8 +3,8 @@
 # ============================================================================
 
 # === Input/Output ===
-input: "/data/seqs"
-input_geo_reads: "GSE118451"
+input: "GSE118451"
+input_geo_reads: ""
 name: "out_test"
 output_folder: "/data/out_test"
 genes: "Krt14,Rpl4"
