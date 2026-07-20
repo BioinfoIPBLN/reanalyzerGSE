@@ -178,8 +178,8 @@ pkgs <- c(
   "forcats", "foreach", "forecast", "formatR", "Formula", "fracdiff", "fs", "futile.logger", "futile.options", "future", 
   "future.apply", "gargle", "gdtools", "genefilter", "geneplotter", "generics", "GenomeInfoDb", "GenomeInfoDbData", "GenomicAlignments", "GenomicFeatures", 
   "GenomicRanges", "GEOquery", "gert", "GetoptLong", "ggdendro", "ggforce", "ggfortify", "ggfun", "ggiraph", "ggnewscale", 
-  "ggplot2", "ggplotify", "ggpmisc", "ggpp", "ggpubr", "ggraph", "ggrepel", "ggridges", "ggsci", "ggsignif", 
-  "ggtangle", "ggtree", "gh", "gitcreds", "GlobalOptions", "globals", "glue", "GO.db", "goftest", "googledrive", 
+  "ggplot2", "ggplotify", "ggarchery", "ggpmisc", "ggpp", "ggpubr", "ggraph", "ggrepel", "ggridges", "ggsci", "ggsignif", 
+  "ggtangle", "ggtree", "ggupset", "gh", "gitcreds", "GlobalOptions", "globals", "glue", "GO.db", "goftest", "googledrive", 
   "googlesheets4", "GOSemSim", "gplots", "graph", "graphite", "graphlayouts", "gridExtra", "gridGraphics", "GSEABase", "gson", 
   "GSVA", "gtable", "gtools", "gsubfn", "Gviz", "h5mread", "harmony", "hash", "haven", "HDF5Array", 
   "here", "hexbin", "highr", "Hmisc", "hms", "htmlTable", "htmltools", "htmlwidgets", "httpuv", "httr", 
@@ -460,7 +460,8 @@ pkg_install(c("url::https://cran.r-project.org/src/contrib/Archive/bayesbio/baye
 
 pkg_install(c("url::https://cran.r-project.org/src/contrib/Archive/aPEAR/aPEAR_1.0.0.tar.gz",
               "url::https://cran.r-project.org/src/contrib/Archive/BisqueRNA/BisqueRNA_1.0.5.tar.gz",
-              "url::https://cran.r-project.org/src/contrib/Archive/nVennR/nVennR_0.2.3.tar.gz"), dependencies = F, ask = FALSE)
+              "url::https://cran.r-project.org/src/contrib/Archive/nVennR/nVennR_0.2.3.tar.gz",
+	      "url::https://cran.r-project.org/src/contrib/Archive/GOxploreR/GOxploreR_1.2.8.tar.gz"), dependencies = F, ask = FALSE)
 
 cat("\n\n\n\n\nBLOCK 2 R packages installed!\n\n\n\n\n")
 

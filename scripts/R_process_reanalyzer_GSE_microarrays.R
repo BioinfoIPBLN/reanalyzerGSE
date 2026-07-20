@@ -184,7 +184,7 @@ for (i in unlist(strsplit(genes,","))){
 			labs(x="",color="Condition", title=paste0(paste(a$V2[grep("Series_geo_accession",a$V1)],a$V2[grep("Series_title",a$V1)],sep=": "),". GENE SHOWN: ", i))
 		  ggsave(p, filename = paste0(path,"/final_results_reanalysis/",i,"_barplot_",gsub(".txt","",basename(z)),".pdf"),width=30, height=30)
 
-		  df2 <- reshape::melt(df)
+		  df2 <- reshape2::melt(df)
 		  df2 <- unique(df2[df2$variable=="Expr_marray (log2 + .1)",c("condition","value","sample")])
 		  suppressMessages(library(dplyr,quiet = T,warn.conflicts = F))
 		  df2 <- df2 %>%

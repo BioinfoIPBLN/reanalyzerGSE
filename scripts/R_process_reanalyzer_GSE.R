@@ -666,7 +666,7 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
         ggsave(p, filename = paste0(output_dir,"/violin/",i,"_barplot_",gsub(".txt","",basename(z)),".pdf"),width=30, height=30)
         suppressWarnings(htmlwidgets::saveWidget(widget = ggplotly(p),file = paste0(output_dir,"/violin/",i,"_barplot_",gsub(".txt","",basename(z)),".html"),selfcontained = TRUE))
 
-        df2 <- reshape::melt(df)
+        df2 <- reshape2::melt(df)
         df2 <- unique(df2[df2$variable=="Expr_RPKM_log2_01",c("condition","value","sample")])        
         df2 <- df2 %>%
           add_count(condition, name = "condition_n")

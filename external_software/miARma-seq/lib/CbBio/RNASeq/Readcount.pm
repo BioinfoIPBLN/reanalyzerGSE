@@ -257,7 +257,10 @@ sub featureCount{
 				my $found = 0;
 				for my $dir_suffix ("hisat2_results", "star_results") {
 					for my $aligner ("hisat2", "STAR") {
-						if (-e "$projectdir/${dir_suffix}/${sample}_${aligner}.bam") {
+						# BAMs keep the read-file infix (e.g. GSM..._1.fastq.gz_STAR.bam),
+						# so match with a glob rather than an exact name.
+						my @hits = glob("$projectdir/${dir_suffix}/${sample}*_${aligner}.bam");
+						if (@hits) {
 							$found = 1; last;
 						}
 					}
@@ -272,7 +275,7 @@ sub featureCount{
 				die "SEQCOUNT ERROR :: $n_missing of $n_total expected BAM files are missing.\n"
 				  . "  Missing samples: $list\n"
 				  . "  This means the alignment step failed for these samples.\n"
-				  . "  Please check the alignment logs (hisat2_log_parallel.txt) and re-run.\n";
+				  . "  Please check the alignment logs (hisat2_log_parallel.txt / star_log_parallel.txt) and re-run.\n";
 			}
 			# ── End BAM validation ──
 

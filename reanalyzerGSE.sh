@@ -1269,7 +1269,7 @@ _log_step "Step_4_R_Process" "start"
 		_pre_go_annot=""
 		if [ ! -z "$non_reference_funct_enrichm" ]; then
 			_pre_go_annot="$non_reference_funct_enrichm"
-		elif [ ! -z "$annotation_file" ] && [ -f "$annotation_file" ] && [ $(zcat -f "$annotation_file" 2>/dev/null | head -500 | egrep -c "GO:|Ontology|tology_term") -gt 0 ]; then
+		elif [ ! -z "$annotation_file" ] && [ -f "$annotation_file" ] && [ $(zcat -f "$annotation_file" 2>/dev/null | head -500 | egrep -c '(^|[^[:alnum:]])GO:[0-9]{7}|[Oo]ntology_term') -gt 0 ]; then
 			_pre_go_annot="$annotation_file"
 		fi
 		if [ ! -z "$_pre_go_annot" ]; then

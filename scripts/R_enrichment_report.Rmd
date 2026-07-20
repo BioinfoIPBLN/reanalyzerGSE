@@ -47,9 +47,46 @@ filter_sig <- function(df, threshold = 0.05) {
   sig
 }
 
+# Parse a "k/n" ratio string (e.g. "5/203") to a numeric fraction. Vectorised.
+parse_ratio <- function(x) {
+  vapply(strsplit(as.character(x), "/", fixed = TRUE), function(p) {
+    p <- suppressWarnings(as.numeric(p))
+    if (length(p) == 2 && !any(is.na(p)) && p[2] != 0) p[1] / p[2] else NA_real_
+  }, numeric(1))
+}
+
+# Ensure a FoldEnrichment column exists. clusterProfiler tables already carry one;
+# for tables that only have GeneRatio + BgRatio (e.g. enrichr), compute it as
+# FoldEnrichment = (GeneRatio) / (BgRatio) = (k/n) / (M/N).
+add_fold_enrichment <- function(df) {
+  if (is.null(df) || nrow(df) == 0) return(df)
+  fe_existing <- intersect(c("FoldEnrichment","fold_enrichment","Fold.Enrichment","foldEnrichment"),
+                           names(df))
+  if (length(fe_existing) > 0) return(df)
+  if (all(c("GeneRatio","BgRatio") %in% names(df))) {
+    fe <- parse_ratio(df[["GeneRatio"]]) / parse_ratio(df[["BgRatio"]])
+    df[["FoldEnrichment"]] <- round(fe, 3)
+  }
+  df
+}
+
+# Count DEGs for a comparison from the FDR gene-ID lists in the DGE directory.
+# Returns a list(total, up, down); entries are NA if the file is missing.
+deg_counts <- function(comp) {
+  count1 <- function(mid) {
+    hits <- list.files(dge_dir,
+              pattern = sprintf("^%s_fdr_[0-9]+_%sGene_IDs\\.txt$", comp, mid),
+              full.names = TRUE)
+    if (length(hits) == 0) return(NA_integer_)
+    sum(nzchar(trimws(readLines(hits[1], warn = FALSE))))
+  }
+  list(total = count1(""), up = count1("logpos_"), down = count1("logneg_"))
+}
+
 select_cols <- function(df) {
   prio <- c("ONTOLOGY","Description","term.label","Term",
-            "ID","GeneRatio","BgRatio","Count","number_in_list",
+            "ID","GeneRatio","BgRatio","FoldEnrichment","RichFactor","zScore",
+            "Count","number_in_list",
             "pvalue","p.adjust","FDR","fdr","Adjusted.P.value",
             "fold_enrichment","plus_minus",
             "Gene_ID_up_num","Gene_ID_down_num","Gene_ID_num",
@@ -64,7 +101,11 @@ make_table <- function(df, filename = NULL, max_rows = 20) {
     cat("<p><em>No results found</em></p>\n\n")
     return(invisible(NULL))
   }
-  display <- select_cols(df)
+  df <- add_fold_enrichment(df)
+  display <- as.data.frame(select_cols(df))
+  # Round enrichment/score columns for on-screen readability (CSV keeps full precision)
+  for (nm in intersect(c("FoldEnrichment","RichFactor","zScore"), names(display)))
+    display[[nm]] <- round(suppressWarnings(as.numeric(display[[nm]])), 2)
   shown   <- head(display, max_rows)
   tbl <- knitr::kable(shown, format = "html", escape = FALSE,
                        table.attr = 'class="table table-sm table-striped table-hover" style="font-size:11px;"')
@@ -213,7 +254,34 @@ cat(sprintf("- **Report generated**: %s\n\n", format(Sys.time(), "%Y-%m-%d %H:%M
 
 if (file.exists(list_comp_file)) {
   cat("\n**Comparison labels:**\n\n")
-  for (line in readLines(list_comp_file)) cat(sprintf("- %s\n", line))
+  # Group the condition tokens by comparison number so we can report one line
+  # per comparison together with the number of DEGs (FDR < 0.05) found.
+  lc <- readLines(list_comp_file)
+  lc <- lc[nzchar(trimws(lc))]
+  comp_conditions <- list(); comp_order <- character(0)
+  for (line in lc) {
+    parts <- trimws(unlist(strsplit(line, ":")))
+    if (length(parts) >= 2) {
+      cn   <- gsub("\\D", "", parts[1])
+      cond <- trimws(paste(parts[-1], collapse = ":"))
+      comp_conditions[[cn]] <- c(comp_conditions[[cn]], cond)
+      if (!(cn %in% comp_order)) comp_order <- c(comp_order, cn)
+    } else {
+      cat(sprintf("- %s\n", line))
+    }
+  }
+  for (cn in comp_order) {
+    dc       <- deg_counts(paste0("DGE_analysis_comp", cn))
+    cond_str <- paste(sub("^__", "", comp_conditions[[cn]]), collapse = " vs ")
+    if (is.na(dc$total)) {
+      deg_str <- "DEG count not found"
+    } else {
+      ud <- if (!is.na(dc$up) && !is.na(dc$down))
+              sprintf(" (%d up / %d down)", dc$up, dc$down) else ""
+      deg_str <- sprintf("**%d** DEGs%s", dc$total, ud)
+    }
+    cat(sprintf("- **Comparison %s**: %s — %s\n", cn, cond_str, deg_str))
+  }
   cat("\n")
 }
 
@@ -322,16 +390,12 @@ for (idx in seq_along(comp_names)) {
 
     # GO ALL (combined)
     cat("\n#### GO ALL (combined)\n\n")
+    # The combined table is the one WITHOUT a single-ontology (BP/MF/CC) token,
+    # e.g. GO_overrepresentation_test_fdr_fdr_01.txt (it carries an ONTOLOGY column).
     go_all <- list.files(cp_dir,
                 pattern = "^GO_overrepresentation_test_.*\\.txt$",
                 full.names = TRUE)
-    go_all <- go_all[grepl("^GO_overrepresentation_test_[A-Z]+_(?!BP|MF|CC).*\\.txt$", basename(go_all), perl = TRUE)]
-    # Fallback: the ones without BP/MF/CC suffix
-    if (length(go_all) == 0)
-      go_all <- list.files(cp_dir,
-                  pattern = "^GO_overrepresentation_test_[^B][^P].*\\.txt$",
-                  full.names = TRUE)
-    go_all <- go_all[!grepl("_err\\.txt$|_BP_|_MF_|_CC_|_aPEAR|_clusters", go_all)]
+    go_all <- go_all[!grepl("_err\\.txt$|_BP_|_MF_|_CC_|_aPEAR|_clusters", basename(go_all))]
     if (length(go_all) > 0) {
       df  <- safe_read(go_all[1])
       sig <- filter_sig(df)

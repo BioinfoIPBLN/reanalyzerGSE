@@ -6,7 +6,7 @@ library(dplyr)
 library(gtools)
 library(ggpubr)
 library(ggrepel)
-library(reshape)
+library(reshape2)
 
 ui <- fluidPage(
   titlePanel("Expression Visualization App"),
@@ -63,7 +63,7 @@ server <- function(input, output) {
                      condition=mixedsort(unlist(strsplit(input$groups_names,","))))
     df$"Expr_RPKM_log2_01" <- round(log2(df$expr_RPKM + 0.1),2)
     
-    df2 <- reshape::melt(df)
+    df2 <- reshape2::melt(df)
     df2 <- unique(df2[df2$variable=="Expr_RPKM_log2_01",c("condition","value","sample")])        
     df2 <- df2 %>%
       add_count(condition, name = "condition_n")
@@ -98,7 +98,7 @@ server <- function(input, output) {
                      condition=mixedsort(unlist(strsplit(input$groups_names,","))))
     df$"Expr_RPKM_log2_01" <- round(log2(df$expr_RPKM + 0.1),2)
     
-    df2 <- reshape::melt(df)
+    df2 <- reshape2::melt(df)
     df2 <- unique(df2[df2$variable=="Expr_RPKM_log2_01",c("condition","value","sample")])        
     df2 <- df2 %>%
       add_count(condition, name = "condition_n")
@@ -134,7 +134,7 @@ server <- function(input, output) {
                      condition=mixedsort(unlist(strsplit(input$groups_names,","))))
     df$"Expr_RPKM_log2_01" <- round(log2(df$expr_RPKM + 0.1),2)
     
-    df2 <- reshape::melt(df)
+    df2 <- reshape2::melt(df)
     df2 <- unique(df2[df2$variable=="Expr_RPKM_log2_01",c("condition","value","sample")])        
     df2 <- df2 %>%
       add_count(condition, name = "condition_n")
@@ -170,7 +170,7 @@ server <- function(input, output) {
                      condition=mixedsort(unlist(strsplit(input$groups_names,","))))
     df$"Expr_RPKM_log2_01" <- round(log2(df$expr_RPKM + 0.1),2)
     
-    df2 <- reshape::melt(df)
+    df2 <- reshape2::melt(df)
     df2 <- unique(df2[df2$variable=="Expr_RPKM_log2_01",c("condition","value","sample")])        
     df2 <- df2 %>%
       add_count(condition, name = "condition_n")
@@ -206,7 +206,7 @@ server <- function(input, output) {
                      condition=mixedsort(unlist(strsplit(input$groups_names,","))))
     df$"Expr_RPKM_log2_01" <- round(log2(df$expr_RPKM + 0.1),2)
     
-    df2 <- reshape::melt(df)
+    df2 <- reshape2::melt(df)
     df2 <- unique(df2[df2$variable=="Expr_RPKM_log2_01",c("condition","value","sample")])        
     df2 <- df2 %>%
       add_count(condition, name = "condition_n")
@@ -243,7 +243,7 @@ server <- function(input, output) {
                        condition=mixedsort(unlist(strsplit(input$groups_names,","))))
       df$"Expr_RPKM_log2_01" <- round(log2(df$expr_RPKM + 0.1),2)
 
-      df2 <- reshape::melt(df)
+      df2 <- reshape2::melt(df)
       df2 <- unique(df2[df2$variable=="Expr_RPKM_log2_01",c("condition","value","sample")])
       df2 <- df2 %>%
         add_count(condition, name = "condition_n")
