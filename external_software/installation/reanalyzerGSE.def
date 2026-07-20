@@ -460,8 +460,24 @@ pkg_install(c("url::https://cran.r-project.org/src/contrib/Archive/bayesbio/baye
 
 pkg_install(c("url::https://cran.r-project.org/src/contrib/Archive/aPEAR/aPEAR_1.0.0.tar.gz",
               "url::https://cran.r-project.org/src/contrib/Archive/BisqueRNA/BisqueRNA_1.0.5.tar.gz",
-              "url::https://cran.r-project.org/src/contrib/Archive/nVennR/nVennR_0.2.3.tar.gz",
-	      "url::https://cran.r-project.org/src/contrib/Archive/GOxploreR/GOxploreR_1.2.8.tar.gz"), dependencies = F, ask = FALSE)
+              "url::https://cran.r-project.org/src/contrib/Archive/nVennR/nVennR_0.2.3.tar.gz"), dependencies = F, ask = FALSE)
+
+# GOxploreR 1.2.8 declares importFrom(dplyr, id), but dplyr removed id() (deprecated
+# 0.8.0, since defunct), so lazy-loading fails with "object 'id' is not exported by
+# 'namespace:dplyr'". id() is never actually called in GOxploreR's code, so we drop the
+# dead NAMESPACE import and install from the patched source.
+local({
+  url <- "https://cran.r-project.org/src/contrib/Archive/GOxploreR/GOxploreR_1.2.8.tar.gz"
+  tgz <- tempfile(fileext = ".tar.gz")
+  download.file(url, tgz, method = "libcurl", quiet = TRUE)
+  exdir <- tempfile(); dir.create(exdir)
+  untar(tgz, exdir = exdir)
+  ns <- file.path(exdir, "GOxploreR", "NAMESPACE")
+  L <- readLines(ns)
+  drop <- gsub(" ", "", L) %in% c("importFrom(dplyr,id)", 'importFrom(dplyr,"id")')
+  writeLines(L[!drop], ns)
+  install.packages(file.path(exdir, "GOxploreR"), repos = NULL, type = "source")
+})
 
 cat("\n\n\n\n\nBLOCK 2 R packages installed!\n\n\n\n\n")
 
