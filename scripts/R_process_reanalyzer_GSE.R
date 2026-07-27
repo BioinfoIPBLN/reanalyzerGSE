@@ -254,7 +254,7 @@ normalize_sample_id <- function(x) {
     gene_counts <- gene_counts[,c(order(colnames(gene_counts)[grep("Gene_ID|Length",colnames(gene_counts),invert=T)]),grep("Gene_ID|Length",colnames(gene_counts)))]
   }
 
-  layout <- read.table(list.files(pattern = "library_layout_info.txt", recursive = TRUE, full.names=T, path=path))$V1
+  layout <- read.table(list.files(pattern = "library_layout_info.txt", recursive = TRUE, full.names=T, path=path)[1])$V1
   # Make sure that in the case of paired studies I'm taking the correct groups:
   if (file.exists(paste0(path,"/reads_study_info/library_layout_info.txt")) & (dim(pheno)[1] > dim(gene_counts)[2]-2) & layout=="PAIRED"){
     pheno$sample <- gsub("_SRR.*","",pheno$sample)
@@ -663,7 +663,7 @@ normalize_sample_id <- function(x) {
                   tmp_lab_title <- data.table::fread(list.files(pattern = "series_matrix.txt.gz$", recursive = TRUE, full.names=T, path=path)[1],fill=T)
                   lab_title <- paste(tmp_lab_title$V2[grep("Series_geo_accession",tmp_lab_title$V1)],tmp_lab_title$V2[grep("Series_title",tmp_lab_title$V1)],sep=": ")
                  }, error=function(e){
-                  lab_title <- read.table(list.files(pattern = "study_title.txt$", recursive = TRUE, full.names=T, path=path))$V1
+                  lab_title <- read.table(list.files(pattern = "study_title.txt$", recursive = TRUE, full.names=T, path=path)[1])$V1
                  })
         print(paste0("Title of the project is ", lab_title))
         df$sample <- gsub("_t|m_Rep|_seq|_KO|_WT","",df$sample)
