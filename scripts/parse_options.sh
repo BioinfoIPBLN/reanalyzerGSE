@@ -34,7 +34,7 @@ for argument in $options; do
 	        -Ds | -sortmerna_databases # The database (absolute pathway) that should be used by SortMeRNA (any input here, e.g. '/path/to/rRNA_databases/smr_v4.3_sensitive_db.fasta', would activate the sortmerna-based rRNA removal step)
 	        -rRq | -rrna_qc_databases # Comma-separated list of rRNA reference FASTA paths for preliminary rRNA QC mapping (e.g. '/path/SILVA_138.2_LSURef_NR99_tax_silva.fasta.gz,/path/SILVA_138.2_SSURef_NR99_tax_silva.fasta.gz'). Any input here activates the Bowtie2-based rRNA mapping QC step. Output goes to preliminar_rrna_qc/
 	        -rRs | -rrna_qc_min_score # Min Bowtie2 alignment score for rRNA QC filtering (default -20)
-	        -Df | -databases_function # Manually provide a comma separated list of databases to be used in automatic functional enrichment analyses of DEGs (check out the R package autoGO::choose_database(), but the most popular GO terms are used by default)
+	        -Df | -databases_function # Comma-separated list of the EXACT databases to use for automatic functional enrichment of DEGs (autoGO/enrichR; see autoGO::choose_database()). This is the COMPLETE set — nothing is auto-added, so include pathway sets (e.g. Reactome_2022, KEGG_2021_Mouse, WikiPathways_2019_Mouse) yourself if you want them. Default: GO_Biological_Process_2025,GO_Molecular_Function_2025,GO_Cellular_Component_2025
 	        -nrf | -non_reference_funct_enrichm # Pathway to a file containing functional annotation (GAF, GMT, GFF, GTF, or a 2-column TSV/TXT mapping) to be used for functional enrichment. Required for Kallisto mode or when the organism is not Human or Mouse. If provided, this file is parsed for GO and KEGG terms, overriding the default behavior of searching the main reference annotation file.
 
 	        #### Metadata and sample info:
@@ -52,6 +52,7 @@ for argument in $options; do
 
 	        #### Activate alternative modes:
 	        -Dm | -debug_module # For debugging, step to remove the content of the corresponding folders and to resume a failed or incomplete run without repeating (one of 'step1', 'step1a', 'step1b', 'step1c', 'step1d', 'step2', 'step2b', 'step3a', 'step3b', 'step4', 'step4b', 'step5', 'step6', 'step7', 'step8', step9', or 'all' to execute everything, by default)
+	        -Es | -end_step # Mirror of -Dm, but for the end: the step after which to force-stop the pipeline. All steps up to and including this one are run, and any later steps are skipped (one of 'step1', 'step1a', 'step1b', 'step1c', 'step1d', 'step2', 'step2b', 'step3a', 'step3b', 'step4', 'step4b', 'step5', 'step6', 'step7', 'step8', 'step9', or 'none' to run to completion, by default). Must not be earlier than -Dm
 	        -q | -qc_raw_reads # Whether to perform quality control on the raw reads ('yes' by default, or 'no')
 	        -fd | -full_differential_analyses # Whether to perform full differential enrichment analyses (for example including computation of DEGs or Venn diagrams, 'no' or 'yes', by default)
 	        -fe | -functional_enrichment_analyses # Whether to perform functional enrichment analyses ('no' or 'yes', by default)
@@ -126,6 +127,14 @@ for argument in $options; do
 	        -P | -number_parallel # Number of files to be processed in parallel (10 by default)
 	        -cG | -compression_level # Specify the compression level to gzip the downloaded fastq files from GEO (numeric '0' to '9', default '9')
 	        -Ac | -aligner_index_cache # Whether to try and keep the genome index on the cache/loaded RAM so concurrent jobs do not have to reload it and can use it more easily ('no', which will empty cache at the end, or 'yes', by default)
+
+	        #### MultiQC AI annotation (optional; skipped unless -llm_endpoint is provided):
+	        -Lep | -llm_endpoint # OpenAI-compatible chat/completions URL. Providing it ACTIVATES AI annotation of the MultiQC report via the wrapper (multiqc_ai.py); miARma exports the LLM_* env vars and calls the wrapper instead of standard MultiQC (with automatic fallback to standard MultiQC on failure). Empty by default
+	        -Lm | -llm_model # LLM model name served at the endpoint (e.g. Qwen3.6-27B-FP8)
+	        -Lk | -llm_api_key # API key for the endpoint (defaults to 'dummy' when AI is active and left empty)
+	        -Lcw | -llm_context_window # Model context window in tokens (e.g. 128000)
+	        -Mqa | -multiqc_ai_args # Args passed verbatim to scripts/multiqc_ai.py; selects AI mode/tuning (default '--per-section --builtin'). Options: '--per-section' (custom inline summaries), '--builtin' (MultiQC's own global summary + per-section buttons), both (default), '--ai-summary short|full', '--ai-provider custom|openai|anthropic|seqera', '--llm-timeout N', '--sys-prompt-file PATH'
+	        -aii | -ai_insights # Which AI annotations to generate, as a comma-separated list of: 'multiqc' (AI annotation of the MultiQC report), 'qualimap' (AI annotation of Qualimap reports), 'design' (study-design insight), 'counts' (per-sample expression-landscape insight from the log2(TPM+0.1) table), 'dge' (per-comparison DEG summary), 'enrichment' (per-comparison enrichment narrative); or 'all' (default, == all six); or 'no' to disable every AI annotation. 'yes' is accepted as an alias of 'all'. All reuse -llm_endpoint/-llm_model and have no effect unless -llm_endpoint is provided. Each AI option has a 5-minute per-response cap: on timeout its boxes show 'ai_insights timeout. Please try again', and implausibly long (degraded) answers are dropped
 	        -K | -Kraken2_fast # DEPRECATED: daemon mode now replaces /dev/shm approach. This option is kept for backward compatibility but has no effect" && exit 1;;
 		-options) options_file=${arguments[index]} ;;
 		-i) input=${arguments[index]} ;;
@@ -171,6 +180,7 @@ for argument in $options; do
 		-rRs | -rrna_qc_min_score) rrna_qc_min_score=${arguments[index]} ;;
 		-Des) differential_expr_soft=${arguments[index]} ;;
 		-Dm) debug_module=${arguments[index]} ;;
+		-Es | -end_step) end_step=${arguments[index]} ;;
 		-Dec) differential_expr_comparisons=${arguments[index]} ;;
 		-Dc) deconvolution=${arguments[index]} ;;
 		-scM | -sc_count_matrix) sc_count_matrix=${arguments[index]} ;;
@@ -229,6 +239,12 @@ for argument in $options; do
 		-nrf) non_reference_funct_enrichm=${arguments[index]} ;;
 		-eDe) exploreDE_se=${arguments[index]} ;;
 		-sO | -splicing_option) splicing_option=${arguments[index]} ;;
+		-Lep | -llm_endpoint) llm_endpoint=${arguments[index]} ;;
+		-Lm | -llm_model) llm_model=${arguments[index]} ;;
+		-Lk | -llm_api_key) llm_api_key=${arguments[index]} ;;
+		-Lcw | -llm_context_window) llm_context_window=${arguments[index]} ;;
+		-Mqa | -multiqc_ai_args) multiqc_ai_args=${arguments[index]} ;;
+		-aii | -ai_insights) ai_insights=${arguments[index]} ;;
 	esac
 done
 
@@ -250,6 +266,10 @@ if [ ! -z "$options_file" ]; then
 			export "$key=$val"
 		fi
 	done < <(yq -r 'to_entries[] | select(.value != null) | "\(.key)=\(.value)"' "$options_file")
+	if [ -n "$output_folder" ] && [ -n "$name" ]; then
+		mkdir -p "$output_folder/$name" 2>/dev/null
+		cp -f "$options_file" "$output_folder/$name/" 2>/dev/null || true
+	fi
 fi
 
 ##### Deal with defaults or with the user not providing some...
@@ -377,7 +397,7 @@ if [ -d "$output_folder/$name" ]; then
 	done
 fi
 if [ -z "$databases_function" ]; then
-	databases_function="GO_Biological_Process_2023,GO_Molecular_Function_2023,GO_Cellular_Component_2023"
+	databases_function="GO_Biological_Process_2025,GO_Molecular_Function_2025,GO_Cellular_Component_2025"
 fi
 if [ -z "$aligner" ]; then
 	aligner="star"
@@ -457,6 +477,9 @@ fi
 if [ -z "$debug_module" ]; then
 	debug_module="all"
 fi
+if [ -z "$end_step" ]; then
+	end_step="none"
+fi
 ### Info on the kraken2 decontamination step and databases:
 if [ -z "$kraken2_confidence" ]; then
 	kraken2_confidence="0"
@@ -527,6 +550,57 @@ fi
 if [ -z "$aligner_extra_args" ]; then
 	aligner_extra_args=""
 fi
+
+# MultiQC AI annotation: activated only when an LLM endpoint is provided (no
+# defaults => standard MultiQC). When active, export the env vars the wrapper
+# (scripts/multiqc_ai.py, on PATH) reads; these propagate to the miARma perl
+# child and its system() MultiQC call, which branches on $LLM_ENDPOINT. api_key
+# and args get sensible fallbacks so the minimal opt-in (just -llm_endpoint) works.
+# AI selection: $ai_insights chooses WHICH AI annotations to generate, as a
+# comma-separated list of multiqc/design/counts/dge/enrichment, or 'all' (default
+# = all five), or 'no' to disable everything ('yes' == 'all' for back-compat).
+# Parse it into per-type flags BEFORE the endpoint block, since MultiQC AI gates
+# on them.
+if [ -z "$ai_insights" ]; then
+	ai_insights="all"
+fi
+ai_sel=$(echo "$ai_insights" | tr 'A-Z' 'a-z' | tr -d ' ')
+ai_do_multiqc=0; ai_do_qualimap=0; ai_do_qc_pdf=0; ai_do_design=0; ai_do_counts=0; ai_do_dge=0; ai_do_enrichment=0
+case ",$ai_sel," in
+	*,no,*|*,none,*) : ;;
+	*)
+		if [[ ",$ai_sel," == *,all,* || ",$ai_sel," == *,yes,* ]]; then
+			ai_do_multiqc=1; ai_do_qualimap=1; ai_do_qc_pdf=1; ai_do_design=1; ai_do_counts=1; ai_do_dge=1; ai_do_enrichment=1
+		else
+			[[ ",$ai_sel," == *,multiqc,* || ",$ai_sel," == *,qc,* ]] && ai_do_multiqc=1
+			[[ ",$ai_sel," == *,qualimap,* ]] && ai_do_qualimap=1
+			[[ ",$ai_sel," == *,qc_pdf,* || ",$ai_sel," == *,pdf,* ]] && ai_do_qc_pdf=1
+			[[ ",$ai_sel," == *,design,* ]] && ai_do_design=1
+			[[ ",$ai_sel," == *,counts,* || ",$ai_sel," == *,count,* ]] && ai_do_counts=1
+			[[ ",$ai_sel," == *,dge,* || ",$ai_sel," == *,deg,* ]] && ai_do_dge=1
+			[[ ",$ai_sel," == *,enrichment,* || ",$ai_sel," == *,enrich,* ]] && ai_do_enrichment=1
+		fi ;;
+esac
+
+if [ -n "$llm_endpoint" ]; then
+	export LLM_ENDPOINT="$llm_endpoint"
+	[ -n "$llm_model" ]          && export LLM_MODEL="$llm_model"
+	export LLM_API_KEY="${llm_api_key:-dummy}"
+	[ -n "$llm_context_window" ] && export LLM_CONTEXT_WINDOW="$llm_context_window"
+	export ai_do_qualimap ai_do_qc_pdf ai_do_design ai_do_counts ai_do_dge ai_do_enrichment ai_do_multiqc
+	export RGSE_DO_QUALIMAP=$ai_do_qualimap
+	export RGSE_DO_QC_PDF=$ai_do_qc_pdf
+	if [ "$ai_do_multiqc" = 1 ]; then
+		export RGSE_DO_MULTIQC=1
+		export MULTIQC_AI_ARGS="${multiqc_ai_args:---per-section --builtin}"
+		# Do NOT echo the endpoint (deployment-sensitive; the wrapper also scrubs
+		# it from the report). The model name is fine to show.
+		echo -e "\nMultiQC AI annotation ENABLED (model=${llm_model:-<unset>}; endpoint kept out of logs and scrubbed from the report; args=$MULTIQC_AI_ARGS)\n"
+	else
+		echo -e "\nMultiQC AI annotation not selected (ai_insights='$ai_insights'); MultiQC runs without AI\n"
+	fi
+fi
+
 if [ -z "$input_filter_regex" ]; then
 	input_filter_regex=""
 fi

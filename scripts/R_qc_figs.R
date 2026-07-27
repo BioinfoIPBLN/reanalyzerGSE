@@ -33,6 +33,18 @@ suppressMessages(library("ggpmisc",quiet = T,warn.conflicts = F))
 suppressMessages(library("dplyr",quiet = T,warn.conflicts = F))
 suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
 
+### Normalize sample IDs across tools (BAM, flagstat, fastqc, edgeR colnames):
+normalize_sample_id <- function(x) {
+  x <- basename(x)
+  x <- gsub("_hisat2.*|_STAR.*", "", x)   # strip aligner suffixes
+  x <- gsub("_flagstat.*|_stats.*", "", x) # strip samtools suffixes
+  x <- gsub("_fastqc.*", "", x)            # strip fastqc suffixes
+  x <- gsub("\\.bam$", "", x)              # strip .bam
+  x <- gsub("\\.(fastq|fq)(\\.gz)?$", "", x) # strip .fastq.gz / .fq.gz
+  x <- gsub("_[12]$", "", x)               # strip read-pair suffix
+  x
+}
+
 ### Prepare counts:
   lcpm_prefilter <- cpm(edgeR_object_prefilter, log=TRUE)  # This is log2 and normalized due to the argument normalized.lib.sizes=TRUE by default in cpm...
   if (pattern_to_remove!="none"){
@@ -116,11 +128,17 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   contrast <- sapply(color,colorspace::contrast_ratio); contrast <- contrast[contrast>4] # Ensure a high contrast here and below (>4 on W3C standard)
   contrast2 <- unique(t(combn(unique(names(contrast)),2))[apply(t(combn(unique(names(contrast)),2)),1,function(x){colorspace::contrast_ratio(x[1],col2=x[2])}) > 4])
   levels(col.group) <- sample(contrast2, nlevels(col.group)); col.group <- as.character(col.group)
-  # Name the color vector by sample name for correct mapping after reordering (e.g. corrplot AOE)
-  sample_names_for_col <- gsub("_hisat.*|_STAR.*", "", colnames(x$counts))
+  # Name the color vector by normalized sample name for correct mapping after reordering (e.g. corrplot AOE)
+  sample_names_for_col <- normalize_sample_id(colnames(x$counts))
   names(col.group) <- sample_names_for_col
 
 ### QC figures:
+  tables_dir <- file.path(output_dir, "QC_and_others", "tables")
+  dir.create(tables_dir, recursive = TRUE, showWarnings = FALSE)
+  tryCatch({
+    write.table(as.data.frame(targets), file = file.path(tables_dir, "00_sample_targets.tsv"), sep = "\t", quote = FALSE, row.names = FALSE)
+  }, error = function(e) NULL)
+
   cat("\nFinal QC PDF:"); print(paste0(output_dir,"/QC_and_others/",label,"_",label2,"_QC.pdf"))
   pdf(paste0(output_dir,"/QC_and_others/",label,"_",label2,"_QC.pdf"),paper="A4")
   
@@ -183,27 +201,34 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   ### 2.1. Boxplots normalised:
   boxplot(lcpm2, las=2, col=col.group, main="", names=targets$Name, cex.axis=0.4)
   title(main="Normalized data (lcpm2)",ylab="Log-cpm")
+
+  tryCatch({
+    bq_unnorm <- as.data.frame(t(apply(lcpm, 2, quantile, probs = c(0, 0.25, 0.5, 0.75, 1))))
+    bq_norm   <- as.data.frame(t(apply(lcpm2, 2, quantile, probs = c(0, 0.25, 0.5, 0.75, 1))))
+    write.table(bq_unnorm, file = file.path(tables_dir, "02_boxplots_unnorm.tsv"), sep = "\t", quote = FALSE)
+    write.table(bq_norm,   file = file.path(tables_dir, "02_boxplots_norm.tsv"),   sep = "\t", quote = FALSE)
+
+    lib_df <- data.frame(Sample = targets$Name, LibrarySize = x$samples$lib.size, Group = x$samples$group)
+    write.table(lib_df, file = file.path(tables_dir, "03_library_sizes.tsv"), sep = "\t", quote = FALSE, row.names = FALSE)
+  }, error = function(e) NULL)
   
   ### 3. Library size and read counts figures:
   cat("\n[4/12] Library size barplots\n")
+  sample_labels <- normalize_sample_id(if (!is.null(targets$Name)) targets$Name else targets$Filename)
+
   par(mfrow=c(1,1))
-  par(mar = c(7, 5, 4, 2))
-  bar_mids <- barplot(x$samples$lib.size,names.arg = gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name),
-                       las=2, main="Library Size",col=col.group, ylim=c(0, max(x$samples$lib.size) * 1.25))
+  par(mar = c(10, 5, 4, 2))
+  bar_mids <- barplot(x$samples$lib.size, names.arg = sample_labels,
+                       las=2, main="Library Size", col=col.group, ylim=c(0, max(x$samples$lib.size) * 1.3))
   # Values on top of each bar
   for (i in 1:length(bar_mids)) {
     y_pos <- x$samples$lib.size[i] + 0.02 * max(x$samples$lib.size)
     text(bar_mids[i], y_pos, labels = format(x$samples$lib.size[i], big.mark = ","), cex = 0.8, pos = 3, srt = 45, adj = c(0, 0), xpd = TRUE)
   }
   
-  # Labeled
+  # Labeled (Rotated 45 deg)
   par(mfrow = c(1, 1))
-  par(mar = c(7, 5, 4, 2))  # reduced top margin
-  
-  sample_labels <- sapply(
-    gsub("_t|m_Rep|_seq|_KO|_WT", "", targets$Filename),
-    function(f) stringr::str_c(stringr::str_split(f, "_")[[1]][1:2], collapse = "_")
-  )
+  par(mar = c(10.5, 5, 4, 2))
   
   bar_mids <- barplot(
     x$samples$lib.size,
@@ -211,23 +236,23 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
     las = 1,
     main = "Library Size",
     col = col.group,
-    ylim=c(0, max(x$samples$lib.size) * 1.25)
+    ylim = c(0, max(x$samples$lib.size) * 1.3)
   )
   
   # Rotated x-axis labels
   text(
     x = bar_mids,
-    y = par("usr")[3] - 0.02 * diff(par("usr")[3:4]),
+    y = par("usr")[3] - 0.03 * diff(par("usr")[3:4]),
     labels = sample_labels,
     srt = 45,
     adj = 1,
     xpd = TRUE,
-    cex = 0.9
+    cex = 0.85
   )
   
   # Values on top of each bar
   for (i in 1:length(bar_mids)) {
-    y_pos <- x$samples$lib.size[i] + 0.01 * max(x$samples$lib.size)
+    y_pos <- x$samples$lib.size[i] + 0.02 * max(x$samples$lib.size)
     text(bar_mids[i], y_pos, labels = format(x$samples$lib.size[i], big.mark = ","), cex = 0.8, pos = 3, srt = 45, adj = c(0, 0), xpd = TRUE)
   }
   
@@ -240,13 +265,30 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
     ### Figures with the number of reads
     cat("\n[4b/12] BAM/FASTQ read count barplots\n")
     reads <- c()
-    files <- grep("_flagstat.txt",list.files(path=input_dir,full.names=T,recursive=T),val=T)
-    for (f in files){reads <- c(reads,sub(" .*","",read.delim(f)[9,]))}
-    bam_reads_2 <- data.frame(Samples=sub("_hisat2.*|_STAR.*","",basename(files)),reads=as.numeric(reads))
+    files <- grep("_flagstat.txt", list.files(path = input_dir, full.names = TRUE, recursive = TRUE), value = TRUE)
+    for (f in files) {
+      flines <- readLines(f, warn = FALSE)
+      tot_line <- flines[grep("in total|total \\(QC-passed", flines)[1]]
+      if (is.na(tot_line) || length(tot_line) == 0) tot_line <- flines[1]
+      tot_val <- as.numeric(sub("^[ \t]*([0-9]+).*", "\\1", tot_line))
+      
+      # For paired-end data, flagstat reports individual read records (R1 + R2),
+      # so divide by 2 to get pair/fragment count to match R1 FASTQ counts.
+      paired_line <- flines[grep("paired in sequencing", flines)[1]]
+      paired_val <- if (!is.na(paired_line)) as.numeric(sub("^[ \t]*([0-9]+).*", "\\1", paired_line)) else 0
+      
+      if (!is.na(paired_val) && paired_val > 0) {
+        val <- tot_val / 2
+      } else {
+        val <- tot_val
+      }
+      reads <- c(reads, val)
+    }
+    bam_reads_2 <- data.frame(Samples=normalize_sample_id(basename(files)),reads=as.numeric(reads))
     # Filter to only samples present in the edgeR object (avoids stale/extra flagstat files)
-    edger_samples <- gsub("_hisat2.*|_STAR.*", "", colnames(x$counts))
+    edger_samples <- normalize_sample_id(colnames(x$counts))
     bam_reads_2 <- bam_reads_2[bam_reads_2$Samples %in% edger_samples, , drop = FALSE]
-    # Match colors by sample name
+    # Match colors by normalized sample name
     bam_reads_2$color <- col.group[match(bam_reads_2$Samples, names(col.group))]
   
     cat("\nOrdering and number of bam reads...\n"); print(bam_reads_2)  
@@ -270,7 +312,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
     
     ## Barplot 2 no. of reads
     if(length(files)!=0){ # Control that sometimes if these are repeated runs, fastqc is not going to be executed    
-      fastq_reads_2 <- data.frame(Samples=as.character(gsub("_1_fastqc.*","",basename(files))),reads=as.numeric(reads))
+      fastq_reads_2 <- data.frame(Samples=normalize_sample_id(basename(files)),reads=as.numeric(reads))
       # Filter to only samples present in the edgeR object
       fastq_reads_2 <- fastq_reads_2[fastq_reads_2$Samples %in% edger_samples, , drop = FALSE]
       fastq_reads_2$color <- col.group[match(fastq_reads_2$Samples, names(col.group))]
@@ -286,7 +328,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
         stat = "identity"
       ) + theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
       perc <- c()
-      for (i in 1:length(reads)){perc<-c(perc,round(bam_reads_2$reads[i]*100/fastq_reads_2$reads[i],2))}
+      for (i in 1:nrow(fastq_reads_2)){perc<-c(perc,round(bam_reads_2$reads[i]*100/fastq_reads_2$reads[i],2))}
       print(bar_plot + 
         geom_text(aes(label = paste0(format(reads, big.mark=","), "\n(bam/fastq: ", perc, " %)")), 
                   angle = 45, hjust = 0, nudge_y = max(bam_reads_2$reads) * 0.02, color = "black", size = 3) +
@@ -304,8 +346,16 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
 
   ## Barplot 3 no. of alignments
   cat("\n[4c/12] Alignment category barplots\n")
-  multiqc_dir <- file.path(input_dir,"../multiqc_out/multiqc_report_data/")
-  aln_files <- grep("pe_plot.txt|star_alignment",list.files(multiqc_dir,full=T),val=T)
+  multiqc_dirs <- c(
+    file.path(input_dir, "../multiqc_out/multiqc_data"),
+    file.path(input_dir, "../multiqc_out/multiqc_report_data"),
+    file.path(output_dir, "multiqc_out/multiqc_data"),
+    file.path(input_dir, "multiqc_data")
+  )
+  multiqc_dir <- multiqc_dirs[dir.exists(multiqc_dirs)][1]
+  if (is.na(multiqc_dir)) multiqc_dir <- file.path(input_dir, "../multiqc_out/multiqc_data")
+
+  aln_files <- grep("pe_plot\\.txt|star_alignment|hisat2_alignment|multiqc_star|multiqc_hisat2", list.files(multiqc_dir, full.names = TRUE), value = TRUE)
   if(length(aln_files) > 0) {
   aln <- read.table(aln_files[1], 
                     header = TRUE, sep = "\t", check.names = FALSE)
@@ -494,6 +544,19 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   
   rownames(data_pca) <- data_pca$Filename
   print(suppressWarnings(autoplot(data_pca.PC,label=T,data=data_pca,colour=col.group,xlim = c(-0.8,0.8),label.size=3,label.repel=T) + theme_minimal() + ggtitle("PCA")))
+
+  tryCatch({
+    write.table(cor_sp, file = file.path(tables_dir, "04_spearman_correlation.tsv"), sep = "\t", quote = FALSE)
+    write.table(cor_pe, file = file.path(tables_dir, "05_pearson_correlation.tsv"),  sep = "\t", quote = FALSE)
+    
+    mds_df <- data.frame(Sample = targets$Name, Group = targets$Type, Dim1 = z$x, Dim2 = z$y)
+    write.table(mds_df, file = file.path(tables_dir, "06_mds_coordinates.tsv"), sep = "\t", quote = FALSE, row.names = FALSE)
+    
+    pca_coords <- data.frame(Sample = targets$Name, Group = targets$Type, PC1 = data_pca.PC$x[,1], PC2 = data_pca.PC$x[,2])
+    pca_var <- (data_pca.PC$sdev^2) / sum(data_pca.PC$sdev^2)
+    write.table(pca_coords, file = file.path(tables_dir, "07_pca_coordinates.tsv"), sep = "\t", quote = FALSE, row.names = FALSE)
+    write.table(data.frame(PC = paste0("PC", 1:length(pca_var)), VarExplained = pca_var), file = file.path(tables_dir, "07_pca_variance.tsv"), sep = "\t", quote = FALSE, row.names = FALSE)
+  }, error = function(e) NULL)
   
   ### 7. Heatmap 250 most differential entities
   cat("\n[8/12] Heatmap (top 250 most variable)\n")
@@ -501,6 +564,11 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   sel <- order(rsd, decreasing=TRUE)[1:250]
   
   heatmap(na.omit(as.matrix(x[sel,])),margins=c(10,8),main="Heatmap 250 most diff entities raw counts",cexRow=0.01,cexCol=0.5,labCol=sub("_hisat2.*|_STAR.*","",rownames(x$samples)))
+
+  tryCatch({
+    top250_df <- data.frame(Gene = rownames(x)[sel], StandardDev = rsd[sel])
+    write.table(top250_df, file = file.path(tables_dir, "08_top250_variable_genes.tsv"), sep = "\t", quote = FALSE, row.names = FALSE)
+  }, error = function(e) NULL)
   
   ### 8.1. Dendogram cluster raw norm
   cat("\n[9/12] Dendrograms (all genes)\n")
@@ -601,6 +669,10 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
     print(plot_topN(df_long, 10))
     cat("\nTop 10 genes per sample plot done.\n")
 
+    tryCatch({
+      write.table(df_long, file = file.path(tables_dir, "09_top_overrepresented_genes.tsv"), sep = "\t", quote = FALSE, row.names = FALSE)
+    }, error = function(e) NULL)
+
   }, error = function(e) {
     cat(paste("\nSkipping top N genes plot:", e$message, "\n"))
   })
@@ -624,6 +696,10 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
     # Fix: reorder colors to match AOE ordering for top-gene corrplots
     cor_sp_top <- cor(top_clean, method = "spearman", use = "complete.obs")
     cor_pe_top <- cor(top_clean, method = "pearson", use = "complete.obs")
+
+    tryCatch({
+      write.table(cor_sp_top, file = file.path(tables_dir, "10_top100_spearman_corr.tsv"), sep = "\t", quote = FALSE)
+    }, error = function(e) NULL)
     aoe_sp_top <- corrMatOrder(cor_sp_top, order = "AOE")
     aoe_pe_top <- corrMatOrder(cor_pe_top, order = "AOE")
     col_sp_aoe_top <- col.group[colnames(cor_sp_top)[aoe_sp_top]]
@@ -698,6 +774,10 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
         rowMeans(lcpm2[, conds == g, drop = FALSE])
       })
       colnames(signalCond_mat) <- unique_conds
+
+      tryCatch({
+        write.table(as.data.frame(signalCond_mat), file = file.path(tables_dir, "11_condition_pairwise_means.tsv"), sep = "\t", quote = FALSE)
+      }, error = function(e) NULL)
 
       # Pairwise scatter plots
       cond_pairs <- combn(unique_conds, 2)
@@ -865,6 +945,18 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
           suppressMessages(library(BiocParallel, quiet = T, warn.conflicts = F))
           suppressMessages(library(GenomeInfoDb, quiet = T, warn.conflicts = F))
           
+          find_bam_index <- function(bfile) {
+            candidates <- c(
+              paste0(bfile, ".csi"),
+              sub("\\.bam$", ".csi", bfile),
+              paste0(bfile, ".bai"),
+              sub("\\.bam$", ".bai", bfile)
+            )
+            exist <- candidates[file.exists(candidates)]
+            if (length(exist) > 0) return(exist[1])
+            return(NULL)
+          }
+
           # Setup parallel environment
           num_workers <- length(bam_files)
           bpparam <- MulticoreParam(workers = num_workers)
@@ -872,12 +964,14 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
           bin_mat_list <- bplapply(bam_files, function(bfile) {
             bname <- gsub("\\.bam$", "", basename(bfile))
             
-            # Ensure BAM index exists
-            if (!file.exists(paste0(bfile, ".bai")) && !file.exists(sub("\\.bam$", ".bai", bfile))) {
-               return(NULL)
+            idx_file <- find_bam_index(bfile)
+            if (is.null(idx_file)) {
+              tryCatch({ Rsamtools::indexBam(bfile) }, error = function(e) NULL)
+              idx_file <- find_bam_index(bfile)
             }
+            if (is.null(idx_file)) return(NULL)
             
-            bf <- BamFile(bfile)
+            bf <- BamFile(bfile, index = idx_file)
             bam_seqs <- seqlevels(bf)
             
             # Prune query ranges that sit on contigs missing from this BAM's header
@@ -932,6 +1026,9 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
           
           if (length(bin_mat_list) > 0) {
              plot_df <- do.call(rbind, bin_mat_list)
+             tryCatch({
+               write.table(plot_df, file = file.path(tables_dir, "12_gene_body_coverage.tsv"), sep = "\t", quote = FALSE, row.names = FALSE)
+             }, error = function(e) NULL)
              p <- ggplot(plot_df, aes(x=Percentage, y=Coverage, color=Sample)) +
                 geom_line(linewidth=1) +
                 theme_bw() +

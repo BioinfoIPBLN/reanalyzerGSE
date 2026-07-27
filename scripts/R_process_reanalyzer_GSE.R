@@ -23,6 +23,18 @@ sc_count_matrix <- args[20] # sc/snRNA count matrix path, or "none"
 sc_phenotype <- args[21] # sc phenotype file path, or "none"
 bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
 
+normalize_sample_id <- function(x) {
+  x <- basename(as.character(x))
+  x <- gsub("_categ(_2)?$", "", x)
+  x <- gsub("_hisat2.*|_STAR.*", "", x)
+  x <- gsub("_flagstat.*|_stats.*", "", x)
+  x <- gsub("_fastqc.*", "", x)
+  x <- gsub("\\.bam$", "", x)
+  x <- gsub("\\.(fastq|fq)(\\.gz)?$", "", x)
+  x <- gsub("_[12]$", "", x)
+  x
+}
+
 ###### Load read counts, format, filter, start differential expression analyses, get normalized counts, save...:
   cat("\nProcessing counts and getting figures...\n")
   cat(paste0(input_dir,". Current date: ",date()))
@@ -216,9 +228,9 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
 
   # Deal with phenotypic data/samples info:
   tryCatch({
-    pheno <- read.table(paste0(path,"/GEO_info/samples_info.txt"),head=F)
+    pheno <- read.table(paste0(path,"/reads_study_info/samples_info.txt"),head=F)
   }, error = function(e) {
-    print("The sample information at /GEO_info/samples_info.txt could not be read. Did you input corresponding groups for all samples? Did you use any uncommon naming of the samples? Please double check, exiting...")
+    print("The sample information at /reads_study_info/samples_info.txt could not be read. Did you input corresponding groups for all samples? Did you use any uncommon naming of the samples? Please double check, exiting...")
     stop(e)
   })
            
@@ -244,14 +256,14 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
 
   layout <- read.table(list.files(pattern = "library_layout_info.txt", recursive = TRUE, full.names=T, path=path))$V1
   # Make sure that in the case of paired studies I'm taking the correct groups:
-  if (file.exists(paste0(path,"/GEO_info/library_layout_info.txt")) & (dim(pheno)[1] > dim(gene_counts)[2]-2) & layout=="PAIRED"){
+  if (file.exists(paste0(path,"/reads_study_info/library_layout_info.txt")) & (dim(pheno)[1] > dim(gene_counts)[2]-2) & layout=="PAIRED"){
     pheno$sample <- gsub("_SRR.*","",pheno$sample)
     pheno <- unique(pheno)
     print("Readjusting pheno in this paired study...")
   }
   # Also fix the designs if required:
-  for (z in list.files(pattern = "design_possible_full", recursive = TRUE, full.names=T, path=paste0(path,"/GEO_info"))){
-    if (file.exists(paste0(path,"/GEO_info/library_layout_info.txt")) & (as.numeric(system(paste0("cat ",z," | wc -l"),intern=T)) > dim(gene_counts)[2]-2) & layout=="PAIRED"){
+  for (z in list.files(pattern = "design_possible_full", recursive = TRUE, full.names=T, path=paste0(path,"/reads_study_info"))){
+    if (file.exists(paste0(path,"/reads_study_info/library_layout_info.txt")) & (as.numeric(system(paste0("cat ",z," | wc -l"),intern=T)) > dim(gene_counts)[2]-2) & layout=="PAIRED"){
         tmp_condition <- read.table(z,head=F,blank.lines.skip=FALSE)$V1
         x=1:length(tmp_condition)
         tmp_condition <- tmp_condition[x%%2==1]
@@ -275,21 +287,21 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
     cat("\nProcessing counts (log scale + pseudocount of 0.1) with limma::removeBatchEffect...\nApplied the covariates and group:\n"); print(data.frame(group=pheno$condition,covar=cov))
     adjusted_counts <- limma::removeBatchEffect(x=log(count_matrix+0.1),covariates=cov, group=pheno$condition)
   }
-  if (file.exists(paste0(path,"/GEO_info/batch_vector.txt")) && !file.exists(paste0(path,"/GEO_info/batch_biological_variables.txt"))){
+  if (file.exists(paste0(path,"/reads_study_info/batch_vector.txt")) && !file.exists(paste0(path,"/reads_study_info/batch_biological_variables.txt"))){
     count_matrix <- as.matrix(gene_counts[,grep("Gene_ID|Length",colnames(gene_counts),invert=T)])
-    batch <- data.table::fread(paste0(path,"/GEO_info/batch_vector.txt"),head=F,sep="*")$V1
+    batch <- data.table::fread(paste0(path,"/reads_study_info/batch_vector.txt"),head=F,sep="*")$V1
     batch <- unlist(strsplit(batch,","))
     if(covariab_format == "fact"){
       adjusted_counts <- sva::ComBat_seq(count_matrix, batch=as.factor(batch), group=NULL)
     } else {
       adjusted_counts <- sva::ComBat_seq(count_matrix, batch=as.numeric(batch), group=NULL)
     }
-    write.table(batch,file=paste0(path,"/GEO_info/batch_vector.txt"),quote = F,row.names = F, col.names = F,sep = "\n"); print("BATCH DONE_1")    
-  } else if (file.exists(paste0(path,"/GEO_info/batch_vector.txt")) && file.exists(paste0(path,"/GEO_info/batch_biological_variables.txt"))){
+    write.table(batch,file=paste0(path,"/reads_study_info/batch_vector.txt"),quote = F,row.names = F, col.names = F,sep = "\n"); print("BATCH DONE_1")    
+  } else if (file.exists(paste0(path,"/reads_study_info/batch_vector.txt")) && file.exists(paste0(path,"/reads_study_info/batch_biological_variables.txt"))){
     count_matrix <- as.matrix(gene_counts[,grep("Gene_ID|Length",colnames(gene_counts),invert=T)])
-    batch <- data.table::fread(paste0(path,"/GEO_info/batch_vector.txt"),head=F,sep="*")$V1
+    batch <- data.table::fread(paste0(path,"/reads_study_info/batch_vector.txt"),head=F,sep="*")$V1
     batch <- unlist(strsplit(batch,","))
-    biological_cov <- data.table::fread(paste0(path,"/GEO_info/batch_biological_variables.txt"),head=F,sep="*")$V1
+    biological_cov <- data.table::fread(paste0(path,"/reads_study_info/batch_biological_variables.txt"),head=F,sep="*")$V1
     if (stringr::str_count(biological_cov," ") == 0){
       group <- unlist(strsplit(biological_cov,","))
       if(covariab_format == "fact"){
@@ -297,8 +309,8 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
       } else {
         adjusted_counts <- sva::ComBat_seq(count_matrix, batch=as.numeric(batch), group=as.numeric(group))
       }
-      write.table(batch,file=paste0(path,"/GEO_info/batch_vector.txt"),quote = F,row.names = F, col.names = F,sep = "\n")
-      write.table(group,file=paste0(path,"/GEO_info/batch_biological_variables.txt"),quote = F,row.names = F, col.names = F,sep = "\n"); print("BATCH DONE_2")      
+      write.table(batch,file=paste0(path,"/reads_study_info/batch_vector.txt"),quote = F,row.names = F, col.names = F,sep = "\n")
+      write.table(group,file=paste0(path,"/reads_study_info/batch_biological_variables.txt"),quote = F,row.names = F, col.names = F,sep = "\n"); print("BATCH DONE_2")      
     } else {
       covar_mat <- matrix(rep(1,stringr::str_count(gsub(" .*","",biological_cov),",")+1))
       for (i in 1:(stringr::str_count(biological_cov," ") + 1)){
@@ -310,8 +322,8 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
       } else {
         adjusted_counts <- sva::ComBat_seq(count_matrix, batch=as.numeric(batch), group=NULL, covar_mod=covar_mat)
       }
-      write.table(batch,file=paste0(path,"/GEO_info/batch_vector.txt"),quote = F,row.names = F, col.names = F,sep = "\n")
-      write.table(covar_mat,file=paste0(path,"/GEO_info/batch_biological_variables.txt"),quote = F,row.names = F, col.names = F,sep = "\t"); print("BATCH DONE_3")      
+      write.table(batch,file=paste0(path,"/reads_study_info/batch_vector.txt"),quote = F,row.names = F, col.names = F,sep = "\n")
+      write.table(covar_mat,file=paste0(path,"/reads_study_info/batch_biological_variables.txt"),quote = F,row.names = F, col.names = F,sep = "\t"); print("BATCH DONE_3")      
     }
   }
   quantile.normalize <- function(x, target){
@@ -617,7 +629,7 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
   }
 
   for (i in unlist(strsplit(genes,","))){
-    for (z in list.files(pattern = "design_possible_full", recursive = TRUE, full.names=T, path=paste0(path,"/GEO_info"))){
+    for (z in list.files(pattern = "design_possible_full", recursive = TRUE, full.names=T, path=paste0(path,"/reads_study_info"))){
       if (length(unique(read.table(z,head=F,blank.lines.skip=T)$V1)) == 1){
         next
       }
@@ -630,8 +642,8 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
                          expr_RPKM=as.numeric(unname(a)),
                          condition=gtools::mixedsort(read.table(z,head=F,blank.lines.skip=FALSE)$V1))
       ### If the user has requested to analyze only some of the samples/column based on the GSMXXXXX, filter and restrict here.
-      if (file.exists(paste0(path,"/GEO_info/gsm_manual_filter.txt"))){
-          gsm_manual_filter <- data.table::fread(paste0(path,"/GEO_info/gsm_manual_filter.txt"),head=F,sep="*")$V1
+      if (file.exists(paste0(path,"/reads_study_info/gsm_manual_filter.txt"))){
+          gsm_manual_filter <- data.table::fread(paste0(path,"/reads_study_info/gsm_manual_filter.txt"),head=F,sep="*")$V1
           idxs_gsm_manual <- which(unlist(lapply(strsplit(gtools:mixedsort(colnames(gene_counts_rpkm)),"_"),function(x){any(x %in% unlist(strsplit(gsm_manual_filter,",")))})))
           gene_counts_rpkm_to_plot <- gene_counts_rpkm[,gtools:mixedsort(colnames(gene_counts_rpkm))]
           gene_counts_rpkm_to_plot <- gene_counts_rpkm_to_plot[,
@@ -837,8 +849,8 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
         print(paste0("Reading targets in ",targets_file))
         targets <- read.table(file = targets_file,header = F,stringsAsFactors=F)      
     } else {
-        print("Reading targets in /GEO_info/samples_info.txt")
-        targets <- read.table(file = paste0(path,"/GEO_info/samples_info.txt"),header = F,stringsAsFactors=F)        
+        print("Reading targets in /reads_study_info/samples_info.txt")
+        targets <- read.table(file = paste0(path,"/reads_study_info/samples_info.txt"),header = F,stringsAsFactors=F)        
     }
     colnames(targets) <- c("Filename","Name","Type")
     targets$Filename <- gsub("_t|m_Rep|_seq|_KO|_WT","",paste(unique(targets$Filename,targets$Name),sep="_"))    
@@ -873,7 +885,7 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
   ## Proceed with DGE analyses:
     print("Attempting differential gene expression analyses between the conditions:")
     dir.create(paste0(output_dir,"/DGE"),showWarnings=F)
-    files_designs <- list.files(pattern = "design_possible_full", recursive = TRUE, full.names=T, path=paste0(path,"/GEO_info"))
+    files_designs <- list.files(pattern = "design_possible_full", recursive = TRUE, full.names=T, path=paste0(path,"/reads_study_info"))
     for (n in 1:length(files_designs)){
       z <- files_designs[n]
       
@@ -888,6 +900,9 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
         }
       } else {
         condition <- read.table(z,head=F,blank.lines.skip=FALSE)$V1
+      }
+      if (exists("keep_samples")) {
+        condition <- condition[keep_samples]
       }
 
       # Create edgeR_objects for each grouping/design if required:
@@ -1544,39 +1559,39 @@ tryCatch({
       if (length(logfc_col) > 0) {
         comp_str <- sub("^logFC", "", logfc_col[1])
         comp_conditions <- unlist(strsplit(comp_str, "__VS__"))
-        # Get sample names belonging to these two conditions (handling '___' prefix for numeric conditions)
-        comp_samples <- pheno$sample[pheno$condition %in% comp_conditions | sub("^__", "", pheno$condition) %in% comp_conditions]
-        # Strip the trailing condition suffix from sample names to get the base name
-        # (e.g., "60uM_LE_Rep1_fastp_repaired_60uM_LE" -> "60uM_LE_Rep1_fastp_repaired")
-        # Note: conditions can contain underscores (e.g., "60uM_LE"), so we can't just strip the last "_token"
-        matched_conditions <- pheno$condition[pheno$condition %in% comp_conditions | sub("^__", "", pheno$condition) %in% comp_conditions]
-        comp_samples <- mapply(function(s, cond) {
+
+        # Clean condition names (strip cond_ or leading/trailing underscores)
+        clean_comp_conds <- gsub("^cond_?|^__?|_+$", "", comp_conditions)
+        clean_pheno_conds <- gsub("^cond_?|^__?|_+$", "", pheno$condition)
+
+        # Get sample names belonging to these two conditions
+        comp_samples <- pheno$sample[clean_pheno_conds %in% clean_comp_conds]
+        matched_conds <- pheno$condition[clean_pheno_conds %in% clean_comp_conds]
+
+        # Strip trailing condition from sample name if formatted as Sample_Condition
+        comp_samples_stripped <- mapply(function(s, cond) {
           sub(paste0("_", gsub("([.|()\\^{}+$*?]|\\\\[|\\\\])", "\\\\\\1", cond), "$"), "", s)
-        }, comp_samples, matched_conditions, USE.NAMES = FALSE)
-        
-        rpkm_cols <- colnames(rpkm_categ)
-        tpm_cols <- colnames(tpm_categ)
-        cpm_cols <- colnames(cpm_categ)
-        
-        if (length(comp_samples) == 0) {
-            # Fallback if conditions could not be matched
+        }, comp_samples, matched_conds, USE.NAMES = FALSE)
+
+        comp_roots <- unique(c(normalize_sample_id(comp_samples), normalize_sample_id(comp_samples_stripped)))
+        comp_roots <- comp_roots[comp_roots != ""]
+
+        if (length(comp_roots) == 0) {
             cat(paste0("  Warning: Conditions extracted from logFC (", paste(comp_conditions, collapse=", "), ") did not match any pheno conditions. Keeping all expression columns.\n"))
-            rpkm_keep <- rep(TRUE, length(rpkm_cols))
-            tpm_keep <- rep(TRUE, length(tpm_cols))
-            cpm_keep <- rep(TRUE, length(cpm_cols))
+            rpkm_keep <- rep(TRUE, ncol(rpkm_categ))
+            tpm_keep <- rep(TRUE, ncol(tpm_categ))
+            cpm_keep <- rep(TRUE, ncol(cpm_categ))
         } else {
-            # Subset RPKM categ: keep Gene_ID + columns starting with comp_samples
-            rpkm_sample_pattern <- paste0("^(", paste(gsub("([.|()\\^{}+$*?]|\\\\[|\\\\])", "\\\\\\1", comp_samples), collapse="|"), ")", "(_.*|)$")
-            rpkm_keep <- rpkm_cols == "Gene_ID" | grepl(rpkm_sample_pattern, rpkm_cols)
-            
-            # Subset TPM/CPM categ: same logic
-            tpm_sample_pattern <- rpkm_sample_pattern
-            tpm_keep <- tpm_cols == "Gene_ID" | grepl(tpm_sample_pattern, tpm_cols)
-            
-            cpm_sample_pattern <- rpkm_sample_pattern
-            cpm_keep <- cpm_cols == "Gene_ID" | grepl(cpm_sample_pattern, cpm_cols)
+            rpkm_cols <- colnames(rpkm_categ)
+            rpkm_keep <- rpkm_cols == "Gene_ID" | normalize_sample_id(rpkm_cols) %in% comp_roots
+
+            tpm_cols <- colnames(tpm_categ)
+            tpm_keep <- tpm_cols == "Gene_ID" | normalize_sample_id(tpm_cols) %in% comp_roots
+
+            cpm_cols <- colnames(cpm_categ)
+            cpm_keep <- cpm_cols == "Gene_ID" | normalize_sample_id(cpm_cols) %in% comp_roots
         }
-        
+
         rpkm_categ_sub <- rpkm_categ[, rpkm_keep, drop = FALSE]
         tpm_categ_sub <- tpm_categ[, tpm_keep, drop = FALSE]
         cpm_categ_sub <- cpm_categ[, cpm_keep, drop = FALSE]

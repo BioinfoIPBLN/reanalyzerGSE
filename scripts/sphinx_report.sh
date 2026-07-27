@@ -21,24 +21,18 @@ sphinx-quickstart -a $(echo $(whoami)_reanalyzerGSE) -l en -p $project_name -r "
 sed -i "s,html_theme =.*,html_theme = 'sphinxdoc',g" conf.py
 
 rnaseqqc_links=""
-if [ -d "$path/miARma_out0/hisat2_results/rnaseqqc_results" ]; then
-    qc_base="$path/miARma_out0/hisat2_results/rnaseqqc_results"
-elif [ -d "$path/miARma_out0/star_results/rnaseqqc_results" ]; then
-    qc_base="$path/miARma_out0/star_results/rnaseqqc_results"
-else
-    qc_base=""
-fi
-
-if [ ! -z "$qc_base" ]; then
-    for qrep in "$qc_base"/*/qualimapReport.html; do
-        if [ -f "$qrep" ]; then
-            sample_name=$(basename $(dirname "$qrep"))
-            display_name=$(echo "$sample_name" | sed -E 's/_(hisat2|STAR)\.bam//')
-            rnaseqqc_links="${rnaseqqc_links}   <a href=\"sphinx_report/html/${sample_name}/qualimapReport.html\" target=\"_blank\">Click to open RNASeq QC for ${display_name}</a><br>
+for aligner_dir in "$path/miARma_out0"/*_results; do
+    if [ -d "$aligner_dir/rnaseqqc_results" ]; then
+        for qrep in "$aligner_dir/rnaseqqc_results"/*/qualimapReport.html; do
+            if [ -f "$qrep" ]; then
+                sample_name=$(basename $(dirname "$qrep"))
+                display_name=$(echo "$sample_name" | sed -E 's/_(hisat2|STAR)\.bam//')
+                rnaseqqc_links="${rnaseqqc_links}   <a href=\"sphinx_report/html/${sample_name}/qualimapReport.html\" target=\"_blank\">Click to open RNASeq QC for ${display_name}</a><br>
 "
-        fi
-    done
-fi
+            fi
+        done
+    fi
+done
 
 echo -e "\n
 import glob
@@ -147,9 +141,13 @@ class IncludeMatchingFiles(SphinxDirective):
             degs_down = degs_filtered[degs_filtered.iloc[:, 2] < 0]
             num_degs_down = len(degs_down)
 
-            # Sort by 3rd column, take top 10 and bottom 10 rows
-            sorted_degs = degs_filtered.sort_values(by=data.columns[2])
-            head_tail_degs = pd.concat([sorted_degs.head(10), sorted_degs.tail(10)])
+            # Top 10 in EACH sense, taken from the separated up/down sets so an
+            # empty sense stays empty. (Previously head(10)+tail(10) of the
+            # combined set overlapped when there were < 20 DEGs, duplicating the
+            # same rows for both senses, e.g. 2 up / 0 down shown as 2+2.)
+            top_down = degs_down.sort_values(by=data.columns[2]).head(10)
+            top_up   = degs_up.sort_values(by=data.columns[2]).tail(10)
+            head_tail_degs = pd.concat([top_down, top_up])
 
             # Add information to nodes
             caption_node = nodes.paragraph()
@@ -201,8 +199,11 @@ class IncludeMatchingFiles(SphinxDirective):
                     merged_data = merged_data.dropna(subset=[merged_data.columns[logfc_col_idx], merged_data.columns[padj_col_idx]])
                     
                     merged_degs_filtered = merged_data[merged_data.iloc[:, padj_col_idx] < 0.05]
-                    merged_sorted_degs = merged_degs_filtered.sort_values(by=merged_data.columns[logfc_col_idx])
-                    merged_head_tail = pd.concat([merged_sorted_degs.head(10), merged_sorted_degs.tail(10)])
+                    merged_lfc = merged_data.columns[logfc_col_idx]
+                    # Top 10 per sense from the separated up/down sets (see note above).
+                    merged_down = merged_degs_filtered[merged_degs_filtered.iloc[:, logfc_col_idx] < 0].sort_values(by=merged_lfc).head(10)
+                    merged_up   = merged_degs_filtered[merged_degs_filtered.iloc[:, logfc_col_idx] > 0].sort_values(by=merged_lfc).tail(10)
+                    merged_head_tail = pd.concat([merged_down, merged_up])
 
                     # Determine which expression type is being previewed
                     preview_basename = os.path.basename(preview_file_path)
@@ -236,6 +237,22 @@ class IncludeMatchingFiles(SphinxDirective):
             error_node = nodes.paragraph(text=f\"Error processing DEGs in {file_name}: {e}\")
             deg_nodes.append(error_node)
 
+        # Per-comparison AI insight box, shown at the END of THIS comparison's
+        # subsection so each 'Contents of ...' block gets its own box (rather than
+        # all boxes collected together at the end of the DEGs section). The box was
+        # pre-rendered to <comp>.ai_insight.html by sphinx_report.sh (reusing the
+        # same ai_box() styling as the design/counts boxes).
+        try:
+            ai_html = os.path.join(os.path.dirname(file_path),
+                                   os.path.splitext(file_name)[0] + \".ai_insight.html\")
+            if os.path.isfile(ai_html):
+                with open(ai_html, encoding=\"utf-8\", errors=\"replace\") as _fh:
+                    _box = _fh.read().strip()
+                if _box:
+                    deg_nodes.append(nodes.raw(\"\", _box, format=\"html\"))
+        except Exception:
+            pass
+
         return deg_nodes
 
     def process_text(self, file_path, file_name):
@@ -260,8 +277,111 @@ def setup(app):
 " >> conf.py
 
 
+######### Optional AI insight boxes (scripts/llm_insight.py wrote *.ai_insight.md
+######### into the DGE dir when -llm_endpoint + ai_insights were enabled). Convert
+######### each to a single-line HTML <div> and wrap it in a `.. raw:: html` block;
+######### the variables stay empty (nothing shown) when no insight files exist.
+ai_box() {   # $1 = *.ai_insight.md -> single-line HTML div on stdout (nothing if absent/empty)
+	[ -f "$1" ] || return 0
+	python3 - "$1" <<'PYEOF'
+import sys, html, re
+try:
+    lines=[l.rstrip("\n") for l in open(sys.argv[1],encoding="utf-8",errors="replace")]
+except Exception:
+    sys.exit(0)
+lines=[l for l in lines if l.strip()]
+if not lines: sys.exit(0)
+def conv(s):
+    s=html.escape(s)                       # escapes & < > " ' -> no quote survives into the RST
+    s=re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", s)
+    s=re.sub(r"`(.+?)`", r"<code>\1</code>", s)
+    return s
+stamp=conv(lines[0]); body="".join("<p style='margin:4px 0;'>%s</p>"%conv(l) for l in lines[1:])
+print("<div style='background:#eef6ff;border-left:5px solid #4a90d9;padding:10px 14px;margin:12px 0;"
+      "border-radius:4px;font-size:13px;'><div style='color:#5a6b7b;font-size:11px;margin-bottom:6px;'>"
+      "\U0001f916 %s</div>%s</div>" % (stamp, body))
+PYEOF
+}
+ai_rst() { local box; box=$(ai_box "$1"); [ -n "$box" ] || return 0; printf '\n.. raw:: html\n\n   %s\n' "$box"; }
+ai_design_rst=$(ai_rst "$path/$final_dir_name/DGE/study_design.ai_insight.md")
+ai_counts_rst=$(ai_rst "$path/$final_dir_name/DGE/counts.ai_insight.md")
+# Per-comparison DEG insight boxes are injected per-subsection inside process_degs()
+# (conf.py, below), so each appears at the end of its own "Contents of ..." block
+# rather than all together at the end of the DEGs section. Pre-render each one to a
+# ready HTML file that conf.py embeds verbatim (same styling as the boxes above).
+for aif in "$path/$final_dir_name/DGE/"DGE_analysis_comp*.ai_insight.md; do
+	[ -e "$aif" ] || continue
+	case "$aif" in *".enrichment_ai_insight.md") continue ;; esac   # those go in the enrichment report
+	aibox=$(ai_box "$aif")
+	[ -n "$aibox" ] && printf '%s\n' "$aibox" > "${aif%.md}.html"
+done
+
+
+######### Pipeline timing: turn the raw start/end epoch rows in step_times.tsv into a
+######### per-step DURATION table (hh:mm:ss) + a total, indented 3 spaces for an RST
+######### code-block. Empty if the file is absent; a step with a start but no end yet
+######### (e.g. the report step itself) shows "(in progress)".
+timing_block=""
+if [ -f "$path/step_times.tsv" ]; then
+	timing_block=$(awk -F'\t' -v now="$(date +%s)" '
+		$3=="start"{ s[$1]=$2; if(!($1 in seen)){ order[++n]=$1; seen[$1]=1 } }
+		$3=="end"  { e[$1]=$2 }
+		function hms(d,  h,m,sec){ if(d<0) d=0; h=int(d/3600); m=int((d%3600)/60); sec=d%60; return sprintf("%02d:%02d:%02d",h,m,sec) }
+		END{
+			w=8; for(i=1;i<=n;i++) if(length(order[i])>w) w=length(order[i])
+			printf "   %-*s  %s\n", w, "Step", "Duration (hh:mm:ss)"
+			printf "   %-*s  %s\n", w, "----", "-------------------"
+			first=""; last=0
+			for(i=1;i<=n;i++){
+				k=order[i]
+				if(first=="" && (k in s)) first=s[k]
+				if((k in e) && (k in s)){ d=e[k]-s[k]; if(e[k]>last) last=e[k]; dur=hms(d) }
+				else if(k in s){ d=now-s[k]; if(now>last) last=now; dur=hms(d) }
+				else dur="N/A"
+				printf "   %-*s  %s\n", w, k, dur
+			}
+			if(first!="" && last>0) printf "   %-*s  %s\n", w, "TOTAL", hms(last-first)
+		}' "$path/step_times.tsv")
+fi
+
+
+# Ensure layout and strand info exist at root level
+if [ ! -f "$path/library_layout_info.txt" ] && [ -f "$path/reads_study_info/library_layout_info.txt" ]; then
+    cp "$path/reads_study_info/library_layout_info.txt" "$path/library_layout_info.txt" 2>/dev/null || true
+fi
+if [ ! -f "$path/strand_info.txt" ] && [ -f "$path/reads_study_info/strand_info.txt" ]; then
+    cp "$path/reads_study_info/strand_info.txt" "$path/strand_info.txt" 2>/dev/null || true
+fi
+
+layout_inc=""
+if [ -f "$path/library_layout_info.txt" ]; then
+    layout_inc=".. literalinclude:: ../library_layout_info.txt"
+elif [ -f "$path/reads_study_info/library_layout_info.txt" ]; then
+    layout_inc=".. literalinclude:: ../reads_study_info/library_layout_info.txt"
+fi
+
+strand_inc=""
+if [ -f "$path/strand_info.txt" ]; then
+    strand_inc=".. literalinclude:: ../strand_info.txt"
+elif [ -f "$path/reads_study_info/strand_info.txt" ]; then
+    strand_inc=".. literalinclude:: ../reads_study_info/strand_info.txt"
+fi
+
+batch_vec_inc=""
+[ -f "$path/reads_study_info/batch_vector.txt" ] && batch_vec_inc=".. literalinclude:: ../reads_study_info/batch_vector.txt"
+
+batch_bio_inc=""
+if [ -f "$path/reads_study_info/batch_biological_variables.txt" ]; then
+    batch_bio_inc=".. literalinclude:: ../reads_study_info/batch_biological_variables.txt"
+elif [ -f "$path/reads_study_info/batch_biological_variable.txt" ]; then
+    batch_bio_inc=".. literalinclude:: ../reads_study_info/batch_biological_variable.txt"
+fi
+
+covar_inc=""
+[ -f "$path/reads_study_info/covariables.txt" ] && covar_inc=".. literalinclude:: ../reads_study_info/covariables.txt"
+
 ######### Modify index.rst
-echo " 
+echo "
 Welcome to $project_name report!
 ####################################################################################
 
@@ -277,32 +397,32 @@ Sections
 
 Summary of samples and experimental conditions
 ------------------------------------------------------------------------------------
-.. literalinclude:: ../GEO_info/samples_info.txt
-.. literalinclude:: ../GEO_info/organism.txt
+.. literalinclude:: ../reads_study_info/samples_info.txt
+.. literalinclude:: ../reads_study_info/organism.txt
 .. literalinclude:: ../$final_dir_name/QC_and_others/reads_numbers.txt
 .. literalinclude:: ../miARma_out0/Pre_fastqc_results/list_of_files.txt
-
 .. index:: Samples
 
 
 
 Summary of comparisons and covariables
 ------------------------------------------------------------------------------------
-.. include_matching_files:: design_possible_*.txt ../GEO_info/
+.. include_matching_files:: design_possible_*.txt ../reads_study_info/
 
 Covariables or potential batch effect:
 
-.. literalinclude:: ../GEO_info/batch_vector.txt
-.. literalinclude:: ../GEO_info/batch_biological_variable.txt
-.. literalinclude:: ../GEO_info/covariables.txt
+$batch_vec_inc
+$batch_bio_inc
+$covar_inc
 .. index:: Comparisons
 
 
 
 Layout and strandedness
 ------------------------------------------------------------------------------------
-.. literalinclude:: ../library_layout_info.txt
-.. literalinclude:: ../strand_info.txt
+$layout_inc
+$strand_inc
+$ai_design_rst
 .. index:: Layout
 
 
@@ -318,7 +438,7 @@ Please use the following links:
    <a href=\"sphinx_report/html/CPM_counts_genes_log2_0.1_categ.txt\" target=\"_blank\">Click to get CPM counts (log2 + 0.1)</a>$(if [ -f "$path/$final_dir_name/CPM_counts_genes_log2_0.1_categ.xlsx" ]; then echo ' (<a href="sphinx_report/html/CPM_counts_genes_log2_0.1_categ.xlsx" target="_blank">xlsx version</a>)'; fi)
 
 If requested, please go to \"$project_name/$final_dir_name/violin\" to check out the figures showing the transcriptional profiles of genes of interest. You may also find the tables \"_annotation.txt\" including the gene annotation available. The ExpressionVisualization or exploreDE apps may be also used (see below).
-
+$ai_counts_rst
 .. index:: Counts
 
 
@@ -334,7 +454,6 @@ DEGs:
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. include_matching_files:: DGE_analysis_comp*.txt ../$final_dir_name/DGE/ degs
-
 .. index:: DEGs
 
 
@@ -401,6 +520,25 @@ rRNA contamination was assessed by mapping R1 reads against rRNA reference datab
 .. index:: rRNA QC
 "; fi)
 
+$(if [ -f "$path/step_times.tsv" ]; then echo "
+Pipeline timing
+------------------------------------------------------------------------------------
+Wall-clock time per pipeline step:
+
+.. code-block:: text
+
+$timing_block
+$(if [ -f "$path/$final_dir_name/QC_and_others/pipeline_gantt_chart.pdf" ]; then echo "
+A Gantt chart of the same timeline is also available:
+
+.. raw:: html
+
+   <a href=\"sphinx_report/html/pipeline_gantt_chart.pdf\" target=\"_blank\">Click to open Pipeline Gantt Chart (PDF)</a><br>
+"; fi)
+
+.. index:: Pipeline timing
+"; fi)
+
 
 Genome browser visualization (IGV)
 ------------------------------------------------------------------------------------
@@ -438,23 +576,7 @@ The ExpressionVisualization app could be also used for interactive exploration:
    <a href=\"https://bioinfoipbln.shinyapps.io/expressionvisualizationapp/\" target=\"_blank\">Open ExpressionVisualization Shiny app</a>
 
 .. index:: exploreDE
-
-
-$(if [ -f "$path/$final_dir_name/QC_and_others/pipeline_gantt_chart.pdf" ]; then echo "
-Pipeline timing
-------------------------------------------------------------------------------------
-The following Gantt chart summarizes the wall-clock time for each pipeline step:
-
-.. raw:: html
-
-   <a href=\"sphinx_report/html/pipeline_gantt_chart.pdf\" target=\"_blank\">Click to open Pipeline Gantt Chart (PDF)</a><br>
-
-Step timing data:
-
-.. literalinclude:: ../step_times.tsv
-
-.. index:: Pipeline timing
-"; fi)" > index.rst
+" > index.rst
 
 ######### Build
 sphinx-build -M html . . &>> sphinx.log

@@ -153,10 +153,12 @@ EOF
     # --------------------------------------------------------------------------
     # 4. R Packages (Ubuntu 24.04 / Noble)
     # --------------------------------------------------------------------------
-    # Installing R 4.x
+    # Installing R, pinned to 4.6.1 (the cran40 repo retains old versions, so this
+    # exact-version pin is reproducible and won't drift when R 4.6.2/4.7 are released)
     wget -qO- https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc | tee -a /etc/apt/trusted.gpg.d/cran_ubuntu_key.asc
     add-apt-repository -y "deb https://cloud.r-project.org/bin/linux/ubuntu $(lsb_release -cs)-cran40/"
-    apt-get update -qq && apt-get install -qy --no-install-recommends r-base r-base-dev pandoc
+    apt-get update -qq && apt-get install -qy --no-install-recommends \
+      r-base-core=4.6.1-1.2404.1 r-base-dev=4.6.1-1.2404.1 r-base=4.6.1-1.2404.1 pandoc
     
     cat <<EOF > $APPTAINER_TMPDIR/install_r.R
 install.packages("pak", quiet = T)
@@ -171,15 +173,15 @@ pkgs <- c(
   "clue", "clusterProfiler", "colorspace", "commonmark", "ComplexHeatmap", "confintr", "conflicted", "corpcor", "corrplot", "cowplot", 
   "cpp11", "crayon", "credentials", "crosstalk", "curl", "data.table", "DBI", "dbplyr", "DelayedArray", "deldir", 
   "dendextend", "DEoptimR", "Deriv", "desc", "DESeq2", "devtools", "DEXSeq", "dichromat", "diffobj", "digest", 
-  "dir.expiry", "doBy", "doParallel", "doSNOW", "DOSE", "dotCall64", "downlit", "dplyr", "dqrng", "DT", 
-  "dtplyr", "dynamicTreeCut", "DynDoc", "e1071", "edgeR", "ellipse", "ellipsis", "emmeans", "EnhancedVolcano", "enrichplot", 
+  "dir.expiry", "dirmult", "doBy", "doParallel", "doSNOW", "DOSE", "dotCall64", "downlit", "dplyr", "dqrng", "DT", 
+  "dtplyr", "dynamicTreeCut", "DynDoc", "e1071", "edgeR", "ellipse", "ellipsis", "emmeans", "EnhancedVolcano", "enrichplot", "enrichR",
   "ensembldb", "estimability", "evaluate", "expm", "FactoMineR", "fansi", "farver", "fastcluster", "fastDummies", "fastmap", 
   "fastmatch", "fgsea", "filelock", "fitdistrplus", "flashClust", "FNN", "fontawesome", "fontBitstreamVera", "fontLiberation", "fontquiver", 
   "forcats", "foreach", "forecast", "formatR", "Formula", "fracdiff", "fs", "futile.logger", "futile.options", "future", 
   "future.apply", "gargle", "gdtools", "genefilter", "geneplotter", "generics", "GenomeInfoDb", "GenomeInfoDbData", "GenomicAlignments", "GenomicFeatures", 
   "GenomicRanges", "GEOquery", "gert", "GetoptLong", "ggdendro", "ggforce", "ggfortify", "ggfun", "ggiraph", "ggnewscale", 
   "ggplot2", "ggplotify", "ggarchery", "ggpmisc", "ggpp", "ggpubr", "ggraph", "ggrepel", "ggridges", "ggsci", "ggsignif", 
-  "ggtangle", "ggtree", "ggupset", "gh", "gitcreds", "GlobalOptions", "globals", "glue", "GO.db", "gontr", "goftest", "googledrive", 
+  "ggtangle", "ggtree", "ggupset", "gh", "gitcreds", "GlobalOptions", "globals", "glue", "GO.db", "gontr", "goftest", "googledrive",
   "googlesheets4", "GOSemSim", "gplots", "graph", "graphite", "graphlayouts", "gridExtra", "gridGraphics", "GSEABase", "gson", 
   "GSVA", "gtable", "gtools", "gsubfn", "Gviz", "h5mread", "harmony", "hash", "haven", "HDF5Array", 
   "here", "hexbin", "highr", "Hmisc", "hms", "htmlTable", "htmltools", "htmlwidgets", "httpuv", "httr", 
@@ -204,7 +206,7 @@ pkgs <- c(
   "Seurat", "SeuratObject", "shape", "shiny", "shinyjs", "SingleCellExperiment", "sitmo", "snow", "SnowballC", "sourcetools", 
   "sp", "spam", "SparseArray", "sparseMatrixStats", "SparseM", "SpatialExperiment", "spatstat.data", "spatstat.explore", "spatstat.geom", "spatstat.random", 
   "spatstat.sparse", "spatstat.univar", "spatstat.utils", "splus2R", "sqldf", "statmod", "STRINGdb", "stringfish", "stringi", "stringr", 
-  "SummarizedExperiment", "sva", "sys", "systemfonts", "tensor", "testthat", "textshaping", "TH.data", "tibble", "tidydr", 
+  "SummarizedExperiment", "sva", "sys", "systemfonts", "tensor", "testthat", "textshape", "textshaping", "TH.data", "tibble", "tidydr", 
   "tidygraph", "tidyr", "tidyselect", "tidytree", "tidyverse", "timechange", "timeDate", "tinytex", "tkWidgets", "treeio", 
   "tweenr", "txdbmaker", "tximeta", "tximport", "tzdb", "UCSC.utils", "umap", "UpSetR", "urca", "urlchecker", 
   "usethis", "utf8", "uuid", "uwot", "V8", "VariantAnnotation", "vctrs", "VennDiagram", "viridis", "viridisLite", 
@@ -479,19 +481,97 @@ local({
   install.packages(file.path(exdir, "GOxploreR"), repos = NULL, type = "source")
 })
 
+# GOfuncR's src/unlock_environment.cc calls ENVFLAGS()/SET_ENVFLAGS(). R 4.6.1 stopped
+# declaring them by default (moved behind the ENABLE_LEGACY_NONAPI switch), so the C++
+# build fails with "'ENVFLAGS' was not declared in this scope" even though the symbols
+# still exist in libR. Kept OUT of the batched install (a build failure there rolls back
+# the entire pak transaction). We fetch the current Bioc source, re-enable the legacy API
+# with a single #define, and install the patched package (pak resolves its deps).
+local({
+  repo <- BiocManager::repositories()[["BioCsoft"]]
+  ver  <- available.packages(repos = repo)["GOfuncR", "Version"]
+  url  <- sprintf("%s/GOfuncR_%s.tar.gz", contrib.url(repo, type = "source"), ver)
+  tgz  <- tempfile(fileext = ".tar.gz")
+  download.file(url, tgz, method = "libcurl", quiet = TRUE)
+  exdir <- tempfile(); dir.create(exdir)
+  untar(tgz, exdir = exdir)
+  src <- file.path(exdir, "GOfuncR", "src", "unlock_environment.cc")
+  writeLines(c("#define ENABLE_LEGACY_NONAPI", readLines(src)), src)
+  pak::pkg_install(paste0("local::", file.path(exdir, "GOfuncR")), ask = FALSE)
+})
+
 cat("\n\n\n\n\nBLOCK 2 R packages installed!\n\n\n\n\n")
 
 remotes::install_github("bnprks/BPCells/r", ref = "v0.3.1")
 
 cat("\n\n\n\n\nBLOCK 3 R packages installed!\n\n\n\n\n")
 
-unlink(list.files(path = .libPaths(), pattern = "^src$", 
+# Extra packages: build deps + imguR + Bioc/CRAN packages used by
+# microarray, deconvolution and enrichment paths
+install_pkgs_batched(c("sparsesvd", "docopt","RcppThread","qlcMatrix"))
+
+pkg_install("url::https://cran.r-project.org/src/contrib/Archive/imguR/imguR_1.0.3.tar.gz",dependencies=F, ask = F)
+
+BiocManager::install(c(
+  "affy",
+  "funr",
+  "scRecover",
+  "msigdbr",
+  "rrvgo",
+  "openxlsx",
+  "rbioapi",
+  "org.Rn.eg.db"
+), update = FALSE, ask = FALSE)
+
+pak::pkg_install(c(
+       "url::https://cran.r-project.org/src/contrib/Archive/preseqR/preseqR_4.0.0.tar.gz",
+       "url::https://cran.r-project.org/src/contrib/Archive/CDSeq/CDSeq_1.0.8.tar.gz",
+       "url::https://cran.r-project.org/src/contrib/Archive/autoGO/autoGO_1.0.1.tar.gz"), dependencies = FALSE, ask = FALSE)
+
+cat("\n\n\n\n\nBLOCK 4 R packages installed!\n\n\n\n\n")
+
+unlink(list.files(path = .libPaths(), pattern = "^src$",
                   recursive = TRUE, full.names = TRUE, include.dirs = TRUE), 
        recursive = TRUE)
 pak_cleanup(force = TRUE)
 EOF
 
     Rscript $APPTAINER_TMPDIR/install_r.R
+
+    # --------------------------------------------------------------------------
+    # 4b. R packages needing source patching (maptools, archived on CRAN)
+    # --------------------------------------------------------------------------
+    mkdir -p ~/.R
+    MAKEVARS_FILE=~/.R/Makevars
+
+    # Ensure the format-security flag is ignored to prevent compilation errors
+    if [ ! -f "$MAKEVARS_FILE" ]; then
+        touch "$MAKEVARS_FILE"
+    fi
+
+    if ! grep -q "Wno-error=format-security" "$MAKEVARS_FILE"; then
+        echo "CFLAGS += -Wno-error=format-security" >> "$MAKEVARS_FILE"
+    fi
+
+    cd $TMPDIR
+    wget -qO maptools_1.1-8.tar.gz https://cran.r-project.org/src/contrib/Archive/maptools/maptools_1.1-8.tar.gz
+
+    tar -xzf maptools_1.1-8.tar.gz
+
+    # Replace R-specific Calloc/Free with standard C calloc/free
+    sed -i 's/Calloc(pol.lines, PLOT_POINT)/calloc(pol.lines, sizeof(PLOT_POINT))/g' maptools/src/pip.c
+    sed -i 's/Free(pol.p)/free(pol.p)/g' maptools/src/pip.c
+
+    # Inject stdlib.h for standard C memory functions at the top of the file
+    sed -i '1i #include <stdlib.h>' maptools/src/pip.c
+
+    rm -f maptools/MD5
+
+    tar -czf maptools_1.1-8_patched.tar.gz maptools
+
+    R CMD INSTALL maptools_1.1-8_patched.tar.gz
+
+    rm -rf maptools maptools_1.1-8.tar.gz maptools_1.1-8_patched.tar.gz
 
     # --------------------------------------------------------------------------
     # 5. Perl

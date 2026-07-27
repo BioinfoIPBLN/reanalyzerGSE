@@ -6,7 +6,7 @@ suppressMessages(library(dplyr,quiet = T,warn.conflicts = F))
 
 
 # Check if there are same headers if there are multiple pysradb files and rbind if yes:
-setwd(paste0(path,"/",GEO_ID,"/GEO_info"))
+setwd(paste0(path,"/",GEO_ID,"/reads_study_info"))
 
 a <- lapply(as.list(list.files(pattern="pysradb")),
             function(x){as.data.frame(data.table::fread(x))})

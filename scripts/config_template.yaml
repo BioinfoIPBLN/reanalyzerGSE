@@ -27,7 +27,7 @@ kraken2_confidence: "0"                # Comma-separated confidence scores (e.g.
 sortmerna_databases: ""                # SortMeRNA database path (activates rRNA removal step)
 rrna_qc_databases: ""                  # Comma-separated rRNA FASTA paths for preliminary rRNA QC (e.g. '/path/SILVA_138.2_LSURef_NR99_tax_silva.fasta.gz,/path/SILVA_138.2_SSURef_NR99_tax_silva.fasta.gz'). Activates Bowtie2 rRNA mapping QC step
 rrna_qc_min_score: -20                 # Min Bowtie2 alignment score for rRNA QC (default -20)
-databases_function: "GO_Biological_Process_2025,GO_Molecular_Function_2025,GO_Cellular_Component_2025"
+databases_function: "GO_Biological_Process_2025,GO_Molecular_Function_2025,GO_Cellular_Component_2025"  # EXACT db list for autoGO/enrichR (nothing auto-added; add Reactome_2022/KEGG_2021_*/WikiPathways_* here if wanted). autoGO::choose_database() lists all
 non_reference_funct_enrichm: ""        # Annotation file (GAF, GMT, GFF, GTF, or 2-column TSV/TXT mapping) for GO/KEGG enrichment in non-model organisms or Kallisto mode
 
 # === Metadata and sample info ===
@@ -45,6 +45,7 @@ target: "no"                           # Target file for DGE analyses
 
 # === Activate alternative modes ===
 debug_step: "all"                      # Step to resume from ('step1'..'step9', or 'all')
+end_step: "none"                       # Step to force-end after ('step1'..'step9', or 'none'); later steps skipped. Must not precede debug_step
 qc_raw_reads: "yes"                    # QC on raw reads ('yes' or 'no')
 full_differential_analyses: "yes"      # Full differential analyses ('yes' or 'no')
 functional_enrichment_analyses: "yes"  # Functional enrichment ('yes' or 'no')
@@ -63,7 +64,7 @@ time_course: "no"                      # Time-course analyses ('yes' or 'no')
 network_analyses: "no"                 # Network analyses: WGCNA + STRINGdb + BONOBO ('yes' or 'no')
 wgcna_mode: "all"                      # WGCNA mode: 'all' (canonical, all expressed genes) or 'degs' (DEGs only, per comparison)
 auto_panther_log: "no"                 # Additional autoGO/Panther by log2Fc ('yes' or 'no')
-exploreDE_se: "no"                     # Generate SummarizedExperiment for exploreDE app ('yes' or 'no', Human only)
+exploreDE_se: "no"                     # Generate SummarizedExperiment for exploreDE app ('yes' or 'no')
 splicing_option: "no"                  # Splicing analysis: 'no' (default), 'saser' (differential splicing), or 'isoformswitchr' (isoform switch analysis, requires Kallisto/Salmon)
 
 # === Processing parameters ===
@@ -123,3 +124,18 @@ memory_max: 257698037760               # Max RAM in bytes (~240GB)
 number_parallel: 10                    # Files processed in parallel
 compression_level: 9                   # Gzip compression level (0-9)
 aligner_index_cache: "yes"             # Keep genome index in cache ('yes' or 'no')
+
+# === MultiQC AI annotation ===
+llm_endpoint: ""                       # OpenAI-compatible chat/completions URL (e.g. http://host:8081/v1/chat/completions). Non-empty = enable AI annotation
+llm_model: ""                          # Model name served at llm_endpoint
+llm_api_key: ""                        # API key for the endpoint (defaults to 'dummy' when AI is active and left empty)
+llm_context_window: ""                 # Model context window in tokens (default 128000)
+multiqc_ai_args: "--per-section --builtin"  # Args passed to multiqc_ai.py; selects AI mode/tuning. Options:
+                                            #   --per-section            inject a custom AI summary under each report section (default)
+                                            #   --builtin                use MultiQC's own AI feature (one global summary + per-section buttons)
+                                            #   --per-section --builtin  do both
+                                            #   --ai-summary short|full  length of the built-in summary (with --builtin; default full)
+                                            #   --ai-provider NAME       custom|openai|anthropic|seqera (default custom)
+                                            #   --llm-timeout N          per-request timeout in seconds (default 600)
+                                            #   --sys-prompt-file PATH   use a custom system prompt for the per-section calls
+ai_insights: "all"                     # Which AI annotations to generate (reusing llm_endpoint/llm_model): comma list of 'multiqc','qualimap','qc_pdf','design','counts','dge','enrichment'; or 'all' (default = all seven); or 'no' (disable all AI). 'yes' == 'all'. No effect unless llm_endpoint is set.

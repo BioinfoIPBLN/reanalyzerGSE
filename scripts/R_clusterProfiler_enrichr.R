@@ -10,6 +10,43 @@ suppressMessages(library(clusterProfiler,quiet = T,warn.conflicts = F))
 suppressMessages(library(aPEAR,quiet = T,warn.conflicts = F))
 suppressMessages(library(ggplot2,quiet = T,warn.conflicts = F))
 
+# GOfuncR is used *only* to turn GO IDs into human-readable names (go_name) and to
+# classify them by ontology (root_node: biological_process / molecular_function /
+# cellular_component); it is not needed for the enrichment itself. Depending on it
+# hard-crashed the whole script for non-model organisms when the package was not
+# installed. Resolve names via GOfuncR when present, otherwise via GO.db (which is
+# organism-agnostic and already a clusterProfiler dependency), and only as a last
+# resort fall back to the raw IDs so enrichment still runs. Returns a data.frame
+# with go_id / go_name / root_node columns, one row per input id and in input order.
+get_go_names <- function(ids) {
+  ids <- as.character(ids)
+  if (requireNamespace("GOfuncR", quietly = TRUE)) {
+    return(GOfuncR::get_names(ids))
+  }
+  onto <- c(BP = "biological_process", MF = "molecular_function", CC = "cellular_component")
+  if (requireNamespace("GO.db", quietly = TRUE) && requireNamespace("AnnotationDbi", quietly = TRUE)) {
+    message("NOTE: GOfuncR not installed; resolving GO term names and ontology via GO.db.")
+    uid <- unique(ids[!is.na(ids) & grepl("^GO:", ids)])
+    nm <- setNames(rep(NA_character_, length(uid)), uid)
+    rt <- setNames(rep(NA_character_, length(uid)), uid)
+    if (length(uid)) {
+      res <- tryCatch(suppressWarnings(suppressMessages(
+        AnnotationDbi::select(GO.db::GO.db, keys = uid,
+                              columns = c("TERM", "ONTOLOGY"), keytype = "GOID"))),
+        error = function(e) NULL)
+      if (!is.null(res)) {
+        res <- res[!duplicated(res$GOID), ]
+        nm[res$GOID] <- res$TERM
+        rt[res$GOID] <- onto[res$ONTOLOGY]
+      }
+    }
+    return(data.frame(go_id = ids, go_name = unname(nm[ids]),
+                      root_node = unname(rt[ids]), stringsAsFactors = FALSE))
+  }
+  message("WARNING: neither GOfuncR nor GO.db is installed; GO term names/ontology are unavailable, so GO enrichment will be empty. Install either package to enable it.")
+  data.frame(go_id = ids, go_name = ids, root_node = NA_character_, stringsAsFactors = FALSE)
+}
+
 print(paste0("Current date: ",date()))
 print(paste0("Performing clusterProfiler's functional enrichment analyses from data in the provided annotation file...",annotation))
 
@@ -66,7 +103,7 @@ for (file in list.files(path = path, pattern = "_Gene_IDs\\.txt$")){
   a <- as.data.frame(data.table::fread(paste0(annotation),head=T,fill=T)[,1:2])
   a$source_id <- gsub(":.*","",a$source_id)
   colnames(a)[2] <- "Computed_GO_Process_IDs"
-  b <- GOfuncR::get_names(a$Computed_GO_Process_IDs)
+  b <- get_go_names(a$Computed_GO_Process_IDs)
   a$"Computed GO Processes" <- b$go_name
   a$Type <- b$root_node
   
@@ -100,7 +137,7 @@ for (file in list.files(path = path, pattern = "_Gene_IDs\\.txt$")){
     bp_2 <- clusterProfiler::enricher(elements_interest, pvalueCutoff = 0.05,TERM2GENE=background_1)
     write_1 <- as.data.frame(bp@result)
     write_2 <- as.data.frame(bp_2@result)
-    write_1$Description <- GOfuncR::get_names(write_1$ID)$go_name; write_2$Description <- GOfuncR::get_names(write_2$ID)$go_name
+    write_1$Description <- get_go_names(write_1$ID)$go_name; write_2$Description <- get_go_names(write_2$ID)$go_name
     write.table(write_1,file=paste0(gsub(".txt","",file),"_functional_clusterProfiler_enrichr_BP_1.txt"),col.names = T,row.names = F,quote = F,sep="\t")
     write.table(write_2,file=paste0(gsub(".txt","",file),"_functional_clusterProfiler_enrichr_BP_2.txt"),col.names = T,row.names = F,quote = F,sep="\t")
     p <- enrichmentNetwork(write_1, repelLabels = TRUE, drawEllipses = TRUE)
@@ -133,7 +170,7 @@ for (file in list.files(path = path, pattern = "_Gene_IDs\\.txt$")){
     bp_2 <- clusterProfiler::enricher(elements_interest, pvalueCutoff = 0.05,TERM2GENE=background_1)
     write_1 <- as.data.frame(bp@result)
     write_2 <- as.data.frame(bp_2@result)
-    write_1$Description <- GOfuncR::get_names(write_1$ID)$go_name; write_2$Description <- GOfuncR::get_names(write_2$ID)$go_name
+    write_1$Description <- get_go_names(write_1$ID)$go_name; write_2$Description <- get_go_names(write_2$ID)$go_name
     write.table(write_1,file=paste0(gsub(".txt","",file),"_functional_clusterProfiler_enrichr_BP_expr_1.txt"),col.names = T,row.names = F,quote = F,sep="\t")
     write.table(write_2,file=paste0(gsub(".txt","",file),"_functional_clusterProfiler_enrichr_BP_expr_2.txt"),col.names = T,row.names = F,quote = F,sep="\t")
     p <- enrichmentNetwork(write_1, repelLabels = TRUE, drawEllipses = TRUE)
@@ -168,7 +205,7 @@ for (file in list.files(path = path, pattern = "_Gene_IDs\\.txt$")){
     MF_2 <- clusterProfiler::enricher(elements_interest, pvalueCutoff = 0.05,TERM2GENE=background_1)
     write_1 <- as.data.frame(MF@result)
     write_2 <- as.data.frame(MF_2@result)
-    write_1$Description <- GOfuncR::get_names(write_1$ID)$go_name; write_2$Description <- GOfuncR::get_names(write_2$ID)$go_name
+    write_1$Description <- get_go_names(write_1$ID)$go_name; write_2$Description <- get_go_names(write_2$ID)$go_name
     write.table(write_1,file=paste0(gsub(".txt","",file),"_functional_clusterProfiler_enrichr_MF_1.txt"),col.names = T,row.names = F,quote = F,sep="\t")
     write.table(write_2,file=paste0(gsub(".txt","",file),"_functional_clusterProfiler_enrichr_MF_2.txt"),col.names = T,row.names = F,quote = F,sep="\t")
     p <- enrichmentNetwork(write_1, repelLabels = TRUE, drawEllipses = TRUE)
@@ -202,7 +239,7 @@ for (file in list.files(path = path, pattern = "_Gene_IDs\\.txt$")){
     MF_2 <- clusterProfiler::enricher(elements_interest, pvalueCutoff = 0.05,TERM2GENE=background_1)
     write_1 <- as.data.frame(MF@result)
     write_2 <- as.data.frame(MF_2@result)
-    write_1$Description <- GOfuncR::get_names(write_1$ID)$go_name; write_2$Description <- GOfuncR::get_names(write_2$ID)$go_name
+    write_1$Description <- get_go_names(write_1$ID)$go_name; write_2$Description <- get_go_names(write_2$ID)$go_name
     write.table(write_1,file=paste0(gsub(".txt","",file),"_functional_clusterProfiler_enrichr_MF_expr_1.txt"),col.names = T,row.names = F,quote = F,sep="\t")
     write.table(write_2,file=paste0(gsub(".txt","",file),"_functional_clusterProfiler_enrichr_MF_expr_2.txt"),col.names = T,row.names = F,quote = F,sep="\t")
     p <- enrichmentNetwork(write_1, repelLabels = TRUE, drawEllipses = TRUE)
@@ -237,7 +274,7 @@ for (file in list.files(path = path, pattern = "_Gene_IDs\\.txt$")){
     CC_2 <- clusterProfiler::enricher(elements_interest, pvalueCutoff = 0.05,TERM2GENE=background_1)
     write_1 <- as.data.frame(CC@result)
     write_2 <- as.data.frame(CC_2@result)
-    write_1$Description <- GOfuncR::get_names(write_1$ID)$go_name; write_2$Description <- GOfuncR::get_names(write_2$ID)$go_name
+    write_1$Description <- get_go_names(write_1$ID)$go_name; write_2$Description <- get_go_names(write_2$ID)$go_name
     write.table(write_1,file=paste0(gsub(".txt","",file),"_functional_clusterProfiler_enrichr_CC_1.txt"),col.names = T,row.names = F,quote = F,sep="\t")
     write.table(write_2,file=paste0(gsub(".txt","",file),"_functional_clusterProfiler_enrichr_CC_2.txt"),col.names = T,row.names = F,quote = F,sep="\t")
     p <- enrichmentNetwork(write_1, repelLabels = TRUE, drawEllipses = TRUE)
@@ -271,7 +308,7 @@ for (file in list.files(path = path, pattern = "_Gene_IDs\\.txt$")){
     CC_2 <- clusterProfiler::enricher(elements_interest, pvalueCutoff = 0.05,TERM2GENE=background_1)
     write_1 <- as.data.frame(CC@result)
     write_2 <- as.data.frame(CC_2@result)
-    write_1$Description <- GOfuncR::get_names(write_1$ID)$go_name; write_2$Description <- GOfuncR::get_names(write_2$ID)$go_name
+    write_1$Description <- get_go_names(write_1$ID)$go_name; write_2$Description <- get_go_names(write_2$ID)$go_name
     write.table(write_1,file=paste0(gsub(".txt","",file),"_functional_clusterProfiler_enrichr_CC_expr_1.txt"),col.names = T,row.names = F,quote = F,sep="\t")
     write.table(write_2,file=paste0(gsub(".txt","",file),"_functional_clusterProfiler_enrichr_CC_expr_2.txt"),col.names = T,row.names = F,quote = F,sep="\t")
     p <- enrichmentNetwork(write_1, repelLabels = TRUE, drawEllipses = TRUE)

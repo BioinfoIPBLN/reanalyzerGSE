@@ -23,7 +23,6 @@ library(data.table)
 library(knitr)
 
 has_pdftools  <- requireNamespace("pdftools",  quietly = TRUE)
-has_kableExtra <- requireNamespace("kableExtra", quietly = TRUE)
 
 dge_dir      <- params$dge_dir
 organism     <- params$organism
@@ -70,17 +69,34 @@ add_fold_enrichment <- function(df) {
   df
 }
 
-# Count DEGs for a comparison from the FDR gene-ID lists in the DGE directory.
-# Returns a list(total, up, down); entries are NA if the file is missing.
-deg_counts <- function(comp) {
-  count1 <- function(mid) {
-    hits <- list.files(dge_dir,
-              pattern = sprintf("^%s_fdr_[0-9]+_%sGene_IDs\\.txt$", comp, mid),
-              full.names = TRUE)
-    if (length(hits) == 0) return(NA_integer_)
-    sum(nzchar(trimws(readLines(hits[1], warn = FALSE))))
-  }
-  list(total = count1(""), up = count1("logpos_"), down = count1("logneg_"))
+# Count DEGs for a comparison directly from the DGE_analysis_<comp>.txt table in
+# the DGE directory (always present, unlike the transient *_Gene_IDs.txt lists,
+# which live inside the funct_enrichment tarball and are absent at render time).
+# clusterProfiler builds its input gene sets at FDR < 0.05 and FDR < 0.01 (see
+# R_clusterProfiler_analyses_parallel.R), so the recap reports both. A gene is a
+# DEG when FDR < threshold; up/down split on the sign of its logFC. Returns a
+# list keyed by threshold string, each a list(total, up, down); entries are NA
+# if the table can't be read.
+deg_counts <- function(comp, thresholds = c(0.05, 0.01)) {
+  na1   <- list(total = NA_integer_, up = NA_integer_, down = NA_integer_)
+  empty <- setNames(rep(list(na1), length(thresholds)), as.character(thresholds))
+  df    <- safe_read(file.path(dge_dir, paste0(comp, ".txt")))
+  if (is.null(df) || nrow(df) == 0) return(empty)
+  fdr_col <- intersect(c("FDR","fdr","p.adjust","padj","adj.P.Val"), names(df))
+  if (length(fdr_col) == 0) return(empty)
+  fdr     <- suppressWarnings(as.numeric(df[[fdr_col[1]]]))
+  lfc_col <- names(df)[grepl("^logFC", names(df))]
+  lfc     <- if (length(lfc_col) > 0) suppressWarnings(as.numeric(df[[lfc_col[1]]])) else NULL
+  out <- lapply(thresholds, function(th) {
+    sig <- !is.na(fdr) & fdr < th
+    up <- down <- NA_integer_
+    if (!is.null(lfc)) {
+      up   <- sum(sig & !is.na(lfc) & lfc > 0)
+      down <- sum(sig & !is.na(lfc) & lfc < 0)
+    }
+    list(total = sum(sig), up = up, down = down)
+  })
+  setNames(out, as.character(thresholds))
 }
 
 select_cols <- function(df) {
@@ -96,7 +112,9 @@ select_cols <- function(df) {
   df[, avail, with = FALSE]
 }
 
-make_table <- function(df, filename = NULL, max_rows = 20) {
+make_table <- function(df, filename = NULL, max_rows = NULL) {
+  # max_rows is accepted for back-compat with older callers but ignored: the DT
+  # table paginates the full result set, so nothing is truncated.
   if (is.null(df) || nrow(df) == 0) {
     cat("<p><em>No results found</em></p>\n\n")
     return(invisible(NULL))
@@ -106,24 +124,262 @@ make_table <- function(df, filename = NULL, max_rows = 20) {
   # Round enrichment/score columns for on-screen readability (CSV keeps full precision)
   for (nm in intersect(c("FoldEnrichment","RichFactor","zScore"), names(display)))
     display[[nm]] <- round(suppressWarnings(as.numeric(display[[nm]])), 2)
-  shown   <- head(display, max_rows)
-  tbl <- knitr::kable(shown, format = "html", escape = FALSE,
-                       table.attr = 'class="table table-sm table-striped table-hover" style="font-size:11px;"')
-  if (has_kableExtra) {
-    tbl <- kableExtra::kable_styling(tbl,
-             bootstrap_options = c("striped","hover","condensed","responsive"),
-             full_width = FALSE, font_size = 11)
-    tbl <- kableExtra::scroll_box(tbl, width = "100%", height = "400px")
-  }
-  cat(as.character(tbl), "\n\n")
-  if (nrow(df) > max_rows)
-    cat(sprintf("<p><em>Showing top %d of %d results</em></p>\n\n", max_rows, nrow(df)))
+
+  # Full interactive table: all rows (paginated), per-column search boxes,
+  # click-to-sort headers, page-length dropdown (10 default / 20 / 50 / 100 / All).
+  # NO scrollX: DataTables' internal horizontal scroll miscomputes / throws when a
+  # table initialises inside a hidden (display:none) Bootstrap tab, and a throw
+  # there aborts HTMLWidgets.staticRender() for every widget after it — which is
+  # why only the first tab used to show a table. Wide tables scroll via CSS on the
+  # wrapper instead (.dataTables_wrapper{overflow-x:auto}); deferRender keeps init
+  # cheap when there are many tables on the page.
+  widget <- DT::datatable(
+    display,
+    rownames  = FALSE,
+    filter    = "top",
+    escape    = TRUE,
+    width     = "100%",
+    class     = "compact stripe hover row-border order-column",
+    options   = list(
+      pageLength  = 10,
+      lengthMenu  = list(c(10, 20, 50, 100, -1),
+                         c("10", "20", "50", "100", "All")),
+      autoWidth   = FALSE,
+      deferRender = TRUE,
+      dom         = "lfrtip"
+    )
+  )
+  cat(knitr::knit_print(widget), "\n\n")
+
   if (!is.null(filename)) {
     csv_text <- paste(capture.output(write.csv(df, stdout(), row.names = FALSE)), collapse = "\n")
     b64 <- xfun::base64_encode(charToRaw(csv_text))
     cat(sprintf('<p><a href="data:text/csv;base64,%s" download="%s" class="btn btn-sm btn-outline-primary">\u2b07 Download CSV (%d rows)</a></p>\n\n',
                 b64, filename, nrow(df)))
   }
+}
+
+# Render an optional AI insight (a *.ai_insight.md written by scripts/llm_insight.py)
+# as a styled callout above the results. No-op when the file is absent, so this is
+# invisible unless AI insights were enabled (-llm_endpoint + ai_insights). The first
+# line is the "AI summary - model/date" stamp; remaining lines are the body. Minimal
+# markdown (**bold**, `code`) is converted; everything else is HTML-escaped.
+render_ai_insight <- function(path) {
+  if (!file.exists(path)) return(invisible())
+  txt <- tryCatch(readLines(path, warn = FALSE, encoding = "UTF-8"), error = function(e) character(0))
+  txt <- txt[nzchar(trimws(txt))]
+  if (!length(txt)) return(invisible())
+  esc <- function(s) {
+    s <- gsub("&", "&amp;", s, fixed = TRUE)
+    s <- gsub("<", "&lt;", s, fixed = TRUE); s <- gsub(">", "&gt;", s, fixed = TRUE)
+    s <- gsub("\\*\\*(.+?)\\*\\*", "<strong>\\1</strong>", s)
+    gsub("`(.+?)`", "<code>\\1</code>", s)
+  }
+  stamp <- esc(txt[1])
+  body  <- if (length(txt) > 1) paste(sprintf('<p style="margin:4px 0;">%s</p>',
+                                               vapply(txt[-1], esc, character(1))), collapse = "\n") else ""
+  cat(sprintf('
+<div style="background:#eef6ff;border-left:5px solid #4a90d9;padding:10px 14px;margin:12px 0;border-radius:4px;font-size:13px;">
+<div style="color:#5a6b7b;font-size:11px;margin-bottom:6px;">\U0001f916 %s</div>
+%s
+</div>\n\n', stamp, body))
+}
+
+# Render the PER-TABLE AI notes (the MAP step summaries llm_insight.py wrote to
+# <comp>.enrichment_ai_pertable.tsv: one short summary per enrichment table that
+# was sent). Shown as a collapsible list under the per-comparison narrative, so the
+# individual per-table interpretations are available in addition to the synthesis.
+# No-op when the sidecar is absent (AI off, or a timeout skipped the option).
+render_pertable_ai <- function(path) {
+  if (!file.exists(path)) return(invisible())
+  df <- tryCatch(utils::read.delim(path, sep = "\t", quote = "", comment.char = "",
+                                   stringsAsFactors = FALSE, check.names = FALSE),
+                 error = function(e) NULL)
+  if (is.null(df) || !nrow(df) || !all(c("table", "summary") %in% names(df))) return(invisible())
+  esc <- function(s) {
+    s <- gsub("&", "&amp;", s, fixed = TRUE)
+    s <- gsub("<", "&lt;", s, fixed = TRUE); gsub(">", "&gt;", s, fixed = TRUE)
+  }
+  rows <- vapply(seq_len(nrow(df)), function(i) {
+    meta <- ""
+    if (all(c("tps", "seconds") %in% names(df)))
+      meta <- sprintf(" <span style=\"color:#8595a3;\">(%s TPS, %ss)</span>",
+                      esc(df$tps[i]), esc(df$seconds[i]))
+    sprintf('<li style="margin:4px 0;"><code>%s</code>%s<br>%s</li>',
+            esc(df$table[i]), meta, esc(df$summary[i]))
+  }, character(1))
+  cat(sprintf('
+<details style="margin:8px 0 14px;">
+<summary style="cursor:pointer;color:#4a90d9;font-size:13px;">\U0001f916 Per-table AI notes (%d tables) — individual summaries behind the narrative above</summary>
+<ul style="font-size:13px;margin:8px 0 0;padding-left:20px;">
+%s
+</ul>
+</details>\n\n', nrow(df), paste(rows, collapse = "\n")))
+}
+
+# clusterProfiler runs ORA separately on the DEGs called at FDR < 0.05 and at
+# FDR < 0.01, writing distinct ..._fdr_fdr_05.txt / ..._fdr_fdr_01.txt files (and
+# matching *_fdr_05_*/*_fdr_01_* figures). The report used to read only files[1],
+# which \u2014 because list.files() sorts alphabetically \u2014 always showed the fdr_01
+# set while labelling it "p < 0.05". These helpers render one block per input
+# threshold instead, so the two are never conflated.
+threshold_token <- function(path) {
+  m <- regmatches(basename(path), regexpr("fdr_0[15]", basename(path)))
+  if (length(m) == 0) NA_character_ else m
+}
+threshold_label <- function(tok) {
+  switch(tok, fdr_05 = "DEGs at FDR < 0.05", fdr_01 = "DEGs at FDR < 0.01", tok)
+}
+
+# Render the clusterProfiler ORA + GSEA sections for ONE DEG-input threshold
+# ("fdr_05" or "fdr_01"). Headings start at level 3 (### ORA) so they nest under a
+# level-2 threshold tab. `primary` (the FDR<0.05 tab) is where shared, non
+# threshold-specific pathway images (KEGG / Reactome snapshots) are embedded, so
+# they are not duplicated across both threshold tabs.
+render_cp_threshold <- function(cp_dir, comp, tok, full_mode_ran, primary) {
+  full_mode_note <- function(what) {
+    if (full_mode_ran) { cat("*Not available*\n\n"); return(invisible()) }
+    cat(sprintf(paste0('<div class="alert alert-secondary" ',
+      'style="border-left:4px solid #999;padding:10px;margin:8px 0;">',
+      '<em>Not run.</em> %s runs only in full clusterProfiler mode. Set ',
+      '<code>clusterProfiler_full: yes</code> to enable GSEA, KEGG modules, ',
+      'WikiPathways and Disease Ontology.</div>\n\n'), what))
+  }
+  # Pick the single result file for this threshold and render count + full table.
+  section <- function(files, noun, csv_stub, figs_fn = NULL) {
+    files <- files[!grepl("_err\\.txt$|_aPEAR|_clusters|_similarity", files)]
+    toks  <- vapply(files, threshold_token, character(1))
+    f <- if (any(toks == tok, na.rm = TRUE)) files[which(toks == tok)][1] else NA_character_
+    if (is.na(f)) { cat("*No results file for this threshold.*\n\n"); return(invisible()) }
+    df <- safe_read(f)
+    n_total <- if (is.null(df)) 0 else nrow(df)
+    sig <- filter_sig(df); n_sig <- if (!is.null(sig)) nrow(sig) else 0
+    cat(sprintf("**%d** %s (**%d** significant, adjusted p < 0.05)\n\n", n_total, noun, n_sig))
+    make_table(df, paste0(csv_stub, "_", tok, ".csv"))
+    if (!is.null(figs_fn)) figs_fn()
+  }
+
+  cat("\n### ORA (clusterProfiler) {.tabset}\n\n")
+
+  # -- Gene Ontology --
+  cat("\n#### Gene Ontology {.tabset}\n\n")
+  go_figs <- file.path(cp_dir, "go_figs")
+  for (ont in c("BP", "MF", "CC")) {
+    ont_label <- c(BP = "Biological Process", MF = "Molecular Function",
+                   CC = "Cellular Component")[[ont]]
+    cat(sprintf("\n##### GO %s\n\n", ont_label))
+    tbl <- list.files(cp_dir,
+             pattern = sprintf("GO_overrepresentation_test_%s_.*\\.txt$", ont),
+             full.names = TRUE)
+    section(tbl, sprintf("GO %s terms", ont), sprintf("%s_GO_%s_ORA", comp, ont),
+      figs_fn = function() {
+        if (!dir.exists(go_figs)) return(invisible())
+        d <- list.files(go_figs,
+               pattern = sprintf("overrepresentation_test_%s_.*%s_dotplot\\.pdf$", ont, tok),
+               full.names = TRUE)
+        if (length(d)) embed_pdf(d[1], sprintf("GO %s - Dotplot", ont))
+        b <- list.files(go_figs,
+               pattern = sprintf("overrepresentation_test_%s_.*%s_barplot\\.pdf$", ont, tok),
+               full.names = TRUE)
+        if (length(b)) embed_pdf(b[1], sprintf("GO %s - Barplot", ont))
+      })
+  }
+  cat("\n##### GO ALL (combined)\n\n")
+  go_all <- list.files(cp_dir, pattern = "^GO_overrepresentation_test_.*\\.txt$", full.names = TRUE)
+  go_all <- go_all[!grepl("_BP_|_MF_|_CC_", basename(go_all))]
+  section(go_all, "GO terms (combined)", sprintf("%s_GO_ALL_ORA", comp))
+
+  # -- KEGG --
+  cat("\n#### KEGG {.tabset}\n\n")
+  cat("\n##### KEGG Enrichment\n\n")
+  section(list.files(cp_dir, pattern = "^KEGG_enrich_.*\\.txt$", full.names = TRUE),
+          "KEGG pathways", sprintf("%s_KEGG_ORA", comp),
+    figs_fn = if (!primary) NULL else function() {
+      snap <- file.path(cp_dir, "kegg_paths_snapshots")
+      if (dir.exists(snap)) {
+        for (p in head(list.files(snap, pattern = "\\.png$", full.names = TRUE), 5)) embed_png(p, basename(p))
+        for (p in head(list.files(snap, pattern = "KEGG.*barplot", full.names = TRUE), 1)) embed_pdf(p, "KEGG - Barplot")
+        for (p in head(list.files(snap, pattern = "KEGG.*dotplot", full.names = TRUE), 1)) embed_pdf(p, "KEGG - Dotplot")
+      }
+    })
+  cat("\n##### KEGG Modules\n\n")
+  mk <- list.files(cp_dir, pattern = "^MKEGG_.*\\.txt$", full.names = TRUE)
+  mk <- mk[!grepl("GSEA", mk)]
+  if (length(mk)) section(mk, "KEGG modules", sprintf("%s_MKEGG_ORA", comp))
+  else full_mode_note("KEGG module over-representation")
+
+  # -- Reactome --
+  cat("\n#### Reactome\n\n")
+  section(list.files(cp_dir, pattern = "^REACT_[^G].*\\.txt$", full.names = TRUE),
+          "Reactome pathways", sprintf("%s_Reactome_ORA", comp),
+    figs_fn = if (!primary) NULL else function() {
+      snap <- file.path(cp_dir, "reactome_paths_snapshots")
+      if (dir.exists(snap))
+        for (p in head(list.files(snap, pattern = "\\.pdf$", full.names = TRUE), 3))
+          if (!grepl("_err", p)) embed_pdf(p, basename(p))
+    })
+
+  # -- WikiPathways --
+  cat("\n#### WikiPathways\n\n")
+  wp <- list.files(cp_dir, pattern = "^WP_[^G].*\\.txt$", full.names = TRUE)
+  wp <- wp[!grepl("GSEA", wp)]
+  if (length(wp)) section(wp, "WikiPathways", sprintf("%s_WikiPathways_ORA", comp))
+  else full_mode_note("WikiPathways over-representation")
+
+  # -- Disease Ontology --
+  do_files <- list.files(cp_dir, pattern = "^DO_|^NCG_|^NGC_|^DGN_", full.names = TRUE)
+  do_files <- do_files[!grepl("_err\\.txt$|GSEA|_aPEAR", do_files)]
+  if (length(do_files)) {
+    cat("\n#### Disease Ontology {.tabset}\n\n")
+    dsel <- do_files[which(vapply(do_files, threshold_token, character(1)) == tok)]
+    if (!length(dsel)) cat("*No results for this threshold.*\n\n")
+    for (f in dsel) {
+      bname <- tools::file_path_sans_ext(basename(f))
+      cat(sprintf("\n##### %s\n\n", bname))
+      df <- safe_read(f); n_total <- if (is.null(df)) 0 else nrow(df)
+      sig <- filter_sig(df); n_sig <- if (!is.null(sig)) nrow(sig) else 0
+      cat(sprintf("**%d** terms (**%d** significant, adjusted p < 0.05)\n\n", n_total, n_sig))
+      make_table(df, paste0(bname, ".csv"))
+    }
+  } else {
+    cat("\n#### Disease Ontology\n\n")
+    full_mode_note("Disease Ontology (DO / NCG / DGN) over-representation")
+  }
+
+  # -- GSEA --
+  gsea <- list.files(cp_dir, pattern = "GSEA_.*\\.txt$", full.names = TRUE)
+  gsea <- gsea[!grepl("_err\\.txt$|_aPEAR|_clusters|_similarity", gsea)]
+  gsea <- gsea[which(vapply(gsea, threshold_token, character(1)) == tok)]
+  if (!length(gsea)) {
+    cat("\n### GSEA\n\n"); full_mode_note("Gene Set Enrichment Analysis (GSEA)")
+  } else {
+    cat("\n### GSEA {.tabset}\n\n")
+    gsea_one <- function(f) {
+      df <- safe_read(f); n_total <- if (is.null(df)) 0 else nrow(df)
+      sig <- filter_sig(df); n_sig <- if (!is.null(sig)) nrow(sig) else 0
+      cat(sprintf("**%s** (%d rows, %d significant)\n\n", basename(f), n_total, n_sig))
+      make_table(df, gsub("\\.txt$", ".csv", basename(f)))
+    }
+    go_gsea <- gsea[grepl("^GO_GSEA_", basename(gsea))]
+    if (length(go_gsea)) {
+      cat("\n#### GO GSEA {.tabset}\n\n")
+      for (g in list(list(f = go_gsea[grepl("_BP\\.", basename(go_gsea))],  l = "GO BP GSEA"),
+                     list(f = go_gsea[grepl("_MF\\.", basename(go_gsea))],  l = "GO MF GSEA"),
+                     list(f = go_gsea[grepl("_CC\\.", basename(go_gsea))],  l = "GO CC GSEA"),
+                     list(f = go_gsea[!grepl("_BP\\.|_MF\\.|_CC\\.", basename(go_gsea))], l = "GO ALL GSEA"))) {
+        if (length(g$f)) { cat(sprintf("\n##### %s\n\n", g$l)); for (f in head(g$f, 2)) gsea_one(f) }
+      }
+    }
+    blk <- function(sel, title, n = 2) {
+      if (length(sel)) { cat(sprintf("\n#### %s\n\n", title)); for (f in head(sel, n)) gsea_one(f) }
+    }
+    blk(gsea[grepl("^KEGG_GSEA_|^KEGG_DOSE_", basename(gsea))], "KEGG GSEA")
+    blk(gsea[grepl("^MKEGG_GSEA_", basename(gsea))], "KEGG Module GSEA")
+    blk(gsea[grepl("^WP_GSEA_", basename(gsea))], "WikiPathways GSEA")
+    blk(gsea[grepl("^REACT_GSEA_", basename(gsea))], "Reactome GSEA")
+    blk(gsea[grepl("^DO_GSEA_|^NCG_GSEA_|^DGN_GSEA_", basename(gsea))], "Disease Ontology GSEA", 4)
+  }
+  invisible()
 }
 
 embed_png <- function(path, caption = "", max_width = "700px") {
@@ -231,6 +487,21 @@ network_dir <- file.path(dge_dir, "network_analyses")
 has_network  <- dir.exists(network_dir) && length(list.files(network_dir)) > 0
 ```
 
+```{r dt-init, echo=FALSE}
+# Prime the DataTables/jQuery/htmlwidgets assets once. Every table below is
+# emitted inside a results='asis' loop via cat(knit_print(widget)), which drops
+# the per-widget dependency metadata; rendering one real (hidden) datatable here
+# forces those assets into the self-contained HTML so the cat()-ed widgets can
+# initialise on load. It lives in a display:none div, so nothing is visible.
+htmltools::tagList(
+  htmltools::tags$div(
+    style = "display:none;",
+    DT::datatable(data.frame(` ` = character(0), check.names = FALSE),
+                  options = list(dom = "t"))
+  )
+)
+```
+
 ```{r custom-css, results='asis'}
 cat('<style>
 .table { margin-bottom: 5px; }
@@ -241,7 +512,75 @@ h2 { margin-top: 40px; border-bottom: 2px solid #2c3e50; padding-bottom: 8px; }
 h3 { margin-top: 25px; color: #34495e; }
 h4 { margin-top: 15px; }
 .level4 > .tab-content { padding: 10px 0; }
+/* Compact DataTables that sit inside the enrichment tabs */
+.dataTables_wrapper { margin: 8px 0 18px; font-size: 12px; overflow-x: auto; }
+table.dataTable { font-size: 12px; }
+table.dataTable thead th { white-space: nowrap; }
+.dataTables_wrapper .dataTables_filter input,
+.dataTables_wrapper .dataTables_length select { margin: 0 4px; }
 </style>\n')
+
+# Why only the first table used to render: HTMLWidgets.staticRender() loops over
+# every widget with NO per-widget try/catch, so the instant one DataTable throws
+# during init, every later table is silently skipped. Verified on this report:
+# staticRender aborted after ~4 of 73 widgets (only 4 got .html-widget-static-bound
+# and 1 <table> was built). It is NOT a visibility problem - the previous
+# force-visible attempt made the panes visible yet staticRender still aborted.
+# Fix, resilient and independent of the buildTabsets/staticRender ordering:
+#  (1) harden(): wrap each binding renderValue in try/catch so one failure is
+#      contained and the loop finishes -> the remaining tables render.
+#  (2) lazy + on-show: defer widgets that are hidden at load (only the visible tab
+#      renders up front, keeping load light on a 70+ table report) and render any
+#      still-unrendered widget the moment its tab/pill is shown, then fix widths.
+cat('<script>
+(function () {
+  function isHidden(el){ return el.offsetParent === null; }
+  function hasTable(el){ return !!el.querySelector("table.dataTable"); }
+  function harden(){
+    (window.HTMLWidgets && HTMLWidgets.widgets || []).forEach(function (b) {
+      if (b.__rgseHardened || typeof b.renderValue !== "function") return;
+      var orig = b.renderValue;
+      b.renderValue = function (el, x, init) {
+        try { return orig.call(this, el, x, init); }
+        catch (e) { if (window.console && console.warn) console.warn("[rgse] widget render skipped:", e); }
+      };
+      b.__rgseHardened = true;
+    });
+  }
+  harden();
+  // Wrap staticRender: harden first (so it can never abort), then defer widgets
+  // that are not currently visible so they are not initialised while hidden.
+  if (window.HTMLWidgets && typeof HTMLWidgets.staticRender === "function") {
+    var orig = HTMLWidgets.staticRender;
+    HTMLWidgets.staticRender = function () {
+      harden();
+      document.querySelectorAll(".html-widget").forEach(function (el) {
+        if (isHidden(el) && !hasTable(el)) {
+          el.className += " html-widget-static-bound";   // makes the original loop skip it
+          el.setAttribute("data-rgse-deferred", "1");
+        }
+      });
+      return orig.apply(this, arguments);
+    };
+  }
+  // Render any deferred widget once its tab/pill becomes visible, then fix widths.
+  function onShown() {
+    var any = false;
+    document.querySelectorAll(".html-widget[data-rgse-deferred]").forEach(function (el) {
+      if (!isHidden(el)) {
+        el.className = el.className.replace(/\\bhtml-widget-static-bound\\b/g, "").trim();
+        el.removeAttribute("data-rgse-deferred");
+        any = true;
+      }
+    });
+    if (any && window.HTMLWidgets) { harden(); try { HTMLWidgets.staticRender(); } catch (e) {} }
+    if (window.jQuery && jQuery.fn && jQuery.fn.dataTable) {
+      try { jQuery.fn.dataTable.tables({ visible: true, api: true }).columns.adjust(); } catch (e) {}
+    }
+  }
+  if (window.jQuery) jQuery(function ($) { $(document).on("shown.bs.tab shown.bs.collapse", onShown); });
+})();
+</script>\n')
 ```
 
 # Overview
@@ -273,14 +612,17 @@ if (file.exists(list_comp_file)) {
   for (cn in comp_order) {
     dc       <- deg_counts(paste0("DGE_analysis_comp", cn))
     cond_str <- paste(sub("^__", "", comp_conditions[[cn]]), collapse = " vs ")
-    if (is.na(dc$total)) {
-      deg_str <- "DEG count not found"
-    } else {
-      ud <- if (!is.na(dc$up) && !is.na(dc$down))
-              sprintf(" (%d up / %d down)", dc$up, dc$down) else ""
-      deg_str <- sprintf("**%d** DEGs%s", dc$total, ud)
-    }
-    cat(sprintf("- **Comparison %s**: %s — %s\n", cn, cond_str, deg_str))
+    parts_deg <- vapply(names(dc), function(thr) {
+      d <- dc[[thr]]
+      if (is.na(d$total)) return(NA_character_)
+      ud <- if (!is.na(d$up) && !is.na(d$down))
+              sprintf(" (%d up / %d down)", d$up, d$down) else ""
+      sprintf("**%d** at FDR<%s%s", d$total, thr, ud)
+    }, character(1))
+    parts_deg <- parts_deg[!is.na(parts_deg)]
+    deg_str <- if (length(parts_deg) == 0) "DEG count not found"
+               else paste(parts_deg, collapse = "; ")
+    cat(sprintf("- **Comparison %s**: %s — DEGs: %s\n", cn, cond_str, deg_str))
   }
   cat("\n")
 }
@@ -345,268 +687,25 @@ for (idx in seq_along(comp_names)) {
   comp_num <- gsub("\\D", "", comp)
   cat(sprintf("\n\n# Comparison %s {.tabset .tabset-pills}\n\n", comp_num))
 
+  # Optional AI narrative for this comparison (above the tabs; absent unless enabled),
+  # followed by the collapsible per-table notes (the MAP-step summaries).
+  render_ai_insight(file.path(dge_dir, paste0(comp, ".enrichment_ai_insight.md")))
+  render_pertable_ai(file.path(dge_dir, paste0(comp, ".enrichment_ai_pertable.tsv")))
+
   # ── clusterProfiler ORA ────────────────────────────────────────────────────
   if (!is.na(cp_dir) && dir.exists(cp_dir)) {
 
-    cat("\n## ORA (clusterProfiler) {.tabset}\n\n")
+    full_mode_ran <- length(list.files(cp_dir,
+        pattern = "GSEA_|^MKEGG_|^WP_|^DO_|^NCG_|^DGN_")) > 0
 
-    # ── GO ──
-    cat("\n### Gene Ontology {.tabset}\n\n")
-
-    for (ont in c("BP", "MF", "CC")) {
-      ont_label <- c(BP = "Biological Process", MF = "Molecular Function",
-                     CC = "Cellular Component")[[ont]]
-      cat(sprintf("\n#### GO %s\n\n", ont_label))
-
-      # Table
-      tbl_files <- list.files(cp_dir,
-                              pattern = sprintf("GO_overrepresentation_test_%s_.*\\.txt$", ont),
-                              full.names = TRUE)
-      tbl_files <- tbl_files[!grepl("_err\\.txt$|_aPEAR|_clusters", tbl_files)]
-      if (length(tbl_files) > 0) {
-        df  <- safe_read(tbl_files[1])
-        sig <- filter_sig(df)
-        n_sig <- if (!is.null(sig)) nrow(sig) else 0
-        cat(sprintf("**%d** significant GO %s terms (adjusted p < 0.05)\n\n", n_sig, ont))
-          make_table(df, sprintf("%s_GO_%s_ORA.csv", comp, ont))
-      } else {
-        cat("*Not available*\n\n")
-      }
-
-      # Dotplot
-      go_figs <- file.path(cp_dir, "go_figs")
-      if (dir.exists(go_figs)) {
-        dplot <- list.files(go_figs,
-                   pattern = sprintf("overrepresentation_test_%s_.*_dotplot\\.pdf$", ont),
-                   full.names = TRUE)
-        if (length(dplot) > 0) embed_pdf(dplot[1], sprintf("GO %s — Dotplot", ont))
-
-        bplot <- list.files(go_figs,
-                   pattern = sprintf("overrepresentation_test_%s_.*_barplot\\.pdf$", ont),
-                   full.names = TRUE)
-        if (length(bplot) > 0) embed_pdf(bplot[1], sprintf("GO %s — Barplot", ont))
-      }
+    # DEG-input threshold as the top-level tab: FDR < 0.05 and FDR < 0.01 each get
+    # their own ORA + GSEA sub-tabs, so the two thresholds are never mixed.
+    for (tok in c("fdr_05", "fdr_01")) {
+      cat(sprintf("\n## %s {.tabset}\n\n", threshold_label(tok)))
+      render_cp_threshold(cp_dir, comp, tok, full_mode_ran, primary = identical(tok, "fdr_05"))
     }
 
-    # GO ALL (combined)
-    cat("\n#### GO ALL (combined)\n\n")
-    # The combined table is the one WITHOUT a single-ontology (BP/MF/CC) token,
-    # e.g. GO_overrepresentation_test_fdr_fdr_01.txt (it carries an ONTOLOGY column).
-    go_all <- list.files(cp_dir,
-                pattern = "^GO_overrepresentation_test_.*\\.txt$",
-                full.names = TRUE)
-    go_all <- go_all[!grepl("_err\\.txt$|_BP_|_MF_|_CC_|_aPEAR|_clusters", basename(go_all))]
-    if (length(go_all) > 0) {
-      df  <- safe_read(go_all[1])
-      sig <- filter_sig(df)
-      n_sig <- if (!is.null(sig)) nrow(sig) else 0
-      cat(sprintf("**%d** significant GO terms (combined, adjusted p < 0.05)\n\n", n_sig))
-        make_table(df, sprintf("%s_GO_ALL_ORA.csv", comp))
-    } else {
-      cat("*Not available*\n\n")
-    }
-
-    # ── KEGG ──
-    cat("\n### KEGG {.tabset}\n\n")
-
-    cat("\n#### KEGG Enrichment\n\n")
-    kegg_files <- list.files(cp_dir, pattern = "^KEGG_enrich_.*\\.txt$", full.names = TRUE)
-    kegg_files <- kegg_files[!grepl("_err\\.txt$|_aPEAR|_clusters", kegg_files)]
-    if (length(kegg_files) > 0) {
-      df  <- safe_read(kegg_files[1])
-      sig <- filter_sig(df)
-      n_sig <- if (!is.null(sig)) nrow(sig) else 0
-      cat(sprintf("**%d** significant KEGG pathways\n\n", n_sig))
-        make_table(df, sprintf("%s_KEGG_ORA.csv", comp))
-    } else {
-      cat("*Not available*\n\n")
-    }
-    # KEGG pathway snapshots
-    kegg_snap <- file.path(cp_dir, "kegg_paths_snapshots")
-    if (dir.exists(kegg_snap)) {
-      kpngs <- list.files(kegg_snap, pattern = "\\.png$", full.names = TRUE)
-      kpdfs <- list.files(kegg_snap, pattern = "\\.(pdf|PDF)$", full.names = TRUE)
-      for (p in head(kpngs, 5)) embed_png(p, basename(p))
-      for (p in head(kpdfs, 3)) embed_pdf(p, basename(p))
-      if (length(kpngs) + length(kpdfs) > 8)
-        cat(sprintf("*...and %d more pathway images (available in archive)*\n\n",
-                    length(kpngs) + length(kpdfs) - 8))
-    }
-
-    # KEGG barplot/dotplot
-    kegg_figs <- file.path(cp_dir, "kegg_paths_snapshots")
-    if (dir.exists(kegg_figs)) {
-      kbar <- list.files(kegg_figs, pattern = "KEGG.*barplot", full.names = TRUE)
-      kdot <- list.files(kegg_figs, pattern = "KEGG.*dotplot", full.names = TRUE)
-      for (p in head(kbar, 1)) embed_pdf(p, "KEGG — Barplot")
-      for (p in head(kdot, 1)) embed_pdf(p, "KEGG — Dotplot")
-    }
-
-    cat("\n#### KEGG Modules\n\n")
-    mkegg <- list.files(cp_dir, pattern = "^MKEGG_.*\\.txt$", full.names = TRUE)
-    mkegg <- mkegg[!grepl("_err\\.txt$|_aPEAR|_clusters|GSEA", mkegg)]
-    if (length(mkegg) > 0) {
-      df <- safe_read(mkegg[1]); sig <- filter_sig(df)
-      n_sig <- if (!is.null(sig)) nrow(sig) else 0
-      cat(sprintf("**%d** significant KEGG modules\n\n", n_sig))
-      make_table(df, sprintf("%s_MKEGG_ORA.csv", comp))
-    } else cat("*Not available*\n\n")
-
-    # ── Reactome ──
-    cat("\n### Reactome\n\n")
-    react_files <- list.files(cp_dir, pattern = "^REACT_[^G].*\\.txt$", full.names = TRUE)
-    react_files <- react_files[!grepl("_err\\.txt$|_aPEAR|_clusters|GSEA", react_files)]
-    if (length(react_files) > 0) {
-      df  <- safe_read(react_files[1])
-      sig <- filter_sig(df)
-      n_sig <- if (!is.null(sig)) nrow(sig) else 0
-      cat(sprintf("**%d** significant Reactome pathways\n\n", n_sig))
-        make_table(df, sprintf("%s_Reactome_ORA.csv", comp))
-    } else {
-      cat("*Not available*\n\n")
-    }
-    react_snap <- file.path(cp_dir, "reactome_paths_snapshots")
-    if (dir.exists(react_snap)) {
-      rpdfs <- list.files(react_snap, pattern = "\\.pdf$", full.names = TRUE)
-      rpdfs <- rpdfs[!grepl("_err", rpdfs)]
-      for (p in head(rpdfs, 3)) embed_pdf(p, basename(p))
-      if (length(rpdfs) > 3)
-        cat(sprintf("*...and %d more Reactome pathway figures in archive*\n\n",
-                    length(rpdfs) - 3))
-    }
-
-    # ── WikiPathways ──
-    cat("\n### WikiPathways\n\n")
-    wp <- list.files(cp_dir, pattern = "^WP_[^G].*\\.txt$", full.names = TRUE)
-    wp <- wp[!grepl("_err\\.txt$|_aPEAR|_clusters|GSEA", wp)]
-    if (length(wp) > 0) {
-      df <- safe_read(wp[1]); sig <- filter_sig(df)
-      n_sig <- if (!is.null(sig)) nrow(sig) else 0
-      cat(sprintf("**%d** significant WikiPathways\n\n", n_sig))
-      make_table(df, sprintf("%s_WikiPathways_ORA.csv", comp))
-    } else cat("*Not available*\n\n")
-
-    # ── Disease Ontology (human) ──
-    do_files <- list.files(cp_dir, pattern = "^DO_|^NGC_|^DGN_", full.names = TRUE)
-    do_files <- do_files[!grepl("_err\\.txt$|GSEA|_aPEAR", do_files)]
-    if (length(do_files) > 0) {
-      cat("\n### Disease Ontology {.tabset}\n\n")
-      for (f in do_files) {
-        bname <- tools::file_path_sans_ext(basename(f))
-        cat(sprintf("\n#### %s\n\n", bname))
-        df <- safe_read(f); sig <- filter_sig(df)
-        n_sig <- if (!is.null(sig)) nrow(sig) else 0
-        cat(sprintf("**%d** significant terms\n\n", n_sig))
-        make_table(df, paste0(bname, ".csv"))
-      }
-    }
-
-    # ── GSEA ──
-    gsea_files <- list.files(cp_dir, pattern = "GSEA_.*\\.txt$", full.names = TRUE)
-    gsea_files <- gsea_files[!grepl("_err\\.txt$|_aPEAR|_clusters|_similarity", gsea_files)]
-    if (length(gsea_files) > 0) {
-      cat("\n## GSEA {.tabset}\n\n")
-
-      # GO GSEA
-      go_gsea <- gsea_files[grepl("^GO_GSEA_", basename(gsea_files))]
-      if (length(go_gsea) > 0) {
-        cat("\n### GO GSEA {.tabset}\n\n")
-        # Try to show one per ont+method combination
-        go_gsea_bp <- go_gsea[grepl("_BP\\.", basename(go_gsea))]
-        go_gsea_mf <- go_gsea[grepl("_MF\\.", basename(go_gsea))]
-        go_gsea_cc <- go_gsea[grepl("_CC\\.", basename(go_gsea))]
-        go_gsea_all <- go_gsea[!grepl("_BP\\.|_MF\\.|_CC\\.", basename(go_gsea))]
-
-        for (g_set in list(
-            list(files = go_gsea_bp,  label = "GO BP GSEA"),
-            list(files = go_gsea_mf,  label = "GO MF GSEA"),
-            list(files = go_gsea_cc,  label = "GO CC GSEA"),
-            list(files = go_gsea_all, label = "GO ALL GSEA")
-        )) {
-          if (length(g_set$files) > 0) {
-            cat(sprintf("\n#### %s\n\n", g_set$label))
-            for (f in head(g_set$files, 2)) {
-              df <- safe_read(f); sig <- filter_sig(df)
-              n_sig <- if (!is.null(sig)) nrow(sig) else 0
-              cat(sprintf("**%s** — %d significant\n\n", basename(f), n_sig))
-              make_table(df, gsub("\\.txt$", ".csv", basename(f)))
-            }
-            # Ridgeplot / dotplot if available
-            go_figs <- file.path(cp_dir, "go_figs")
-            if (dir.exists(go_figs)) {
-              ridge <- list.files(go_figs, pattern = sprintf("GSEA.*%s.*ridgeplot", gsub(" .*","",g_set$label)),
-                                  full.names = TRUE)
-              if (length(ridge) > 0) embed_pdf(ridge[1], sprintf("%s — Ridgeplot", g_set$label))
-              dot <- list.files(go_figs, pattern = sprintf("GSEA.*%s.*dotplot", gsub(" .*","",g_set$label)),
-                                full.names = TRUE)
-              if (length(dot) > 0) embed_pdf(dot[1], sprintf("%s — Dotplot", g_set$label))
-            }
-          }
-        }
-      }
-
-      # KEGG GSEA
-      kegg_gsea <- gsea_files[grepl("^KEGG_GSEA_|^KEGG_DOSE_", basename(gsea_files))]
-      if (length(kegg_gsea) > 0) {
-        cat("\n### KEGG GSEA\n\n")
-        for (f in head(kegg_gsea, 2)) {
-          df <- safe_read(f); sig <- filter_sig(df)
-          n_sig <- if (!is.null(sig)) nrow(sig) else 0
-          cat(sprintf("**%s** — %d significant\n\n", basename(f), n_sig))
-          make_table(df, gsub("\\.txt$", ".csv", basename(f)))
-        }
-      }
-
-      # MKEGG GSEA
-      mkegg_gsea <- gsea_files[grepl("^MKEGG_GSEA_", basename(gsea_files))]
-      if (length(mkegg_gsea) > 0) {
-        cat("\n### KEGG Module GSEA\n\n")
-        for (f in head(mkegg_gsea, 2)) {
-          df <- safe_read(f); sig <- filter_sig(df)
-          n_sig <- if (!is.null(sig)) nrow(sig) else 0
-          cat(sprintf("**%s** — %d significant\n\n", basename(f), n_sig))
-          make_table(df, gsub("\\.txt$", ".csv", basename(f)))
-        }
-      }
-
-      # WikiPathways GSEA
-      wp_gsea <- gsea_files[grepl("^WP_GSEA_", basename(gsea_files))]
-      if (length(wp_gsea) > 0) {
-        cat("\n### WikiPathways GSEA\n\n")
-        for (f in head(wp_gsea, 2)) {
-          df <- safe_read(f); sig <- filter_sig(df)
-          n_sig <- if (!is.null(sig)) nrow(sig) else 0
-          cat(sprintf("**%s** — %d significant\n\n", basename(f), n_sig))
-          make_table(df, gsub("\\.txt$", ".csv", basename(f)))
-        }
-      }
-
-      # Reactome GSEA
-      react_gsea <- gsea_files[grepl("^REACT_GSEA_", basename(gsea_files))]
-      if (length(react_gsea) > 0) {
-        cat("\n### Reactome GSEA\n\n")
-        for (f in head(react_gsea, 2)) {
-          df <- safe_read(f); sig <- filter_sig(df)
-          n_sig <- if (!is.null(sig)) nrow(sig) else 0
-          cat(sprintf("**%s** — %d significant\n\n", basename(f), n_sig))
-          make_table(df, gsub("\\.txt$", ".csv", basename(f)))
-        }
-      }
-
-      # DO / NCG / DGN GSEA
-      dis_gsea <- gsea_files[grepl("^DO_GSEA_|^NCG_GSEA_|^DGN_GSEA_", basename(gsea_files))]
-      if (length(dis_gsea) > 0) {
-        cat("\n### Disease Ontology GSEA\n\n")
-        for (f in head(dis_gsea, 4)) {
-          df <- safe_read(f); sig <- filter_sig(df)
-          n_sig <- if (!is.null(sig)) nrow(sig) else 0
-          cat(sprintf("**%s** — %d significant\n\n", basename(f), n_sig))
-          make_table(df, gsub("\\.txt$", ".csv", basename(f)))
-        }
-      }
-    }
-
-    # ── aPEAR ──
+    # aPEAR pathway clusters (shared across thresholds; kept at comparison level)
     apear_files <- list.files(cp_dir, pattern = "_aPEAR_clusters\\.txt$", full.names = TRUE)
     if (length(apear_files) > 0) {
       cat("\n## aPEAR Pathway Clusters\n\n")
@@ -741,25 +840,32 @@ for (idx in seq_along(comp_names)) {
       cat(sprintf("\n### %s {.tabset}\n\n", pd_label_nice))
 
       # autoGO results
-      autogo_dirs <- list.dirs(pd, recursive = FALSE, full.names = TRUE)
+      autogo_dirs <- list.dirs(pd, recursive = TRUE, full.names = TRUE)
       autogo_dirs <- autogo_dirs[grepl("_autoGO$", autogo_dirs)]
       if (length(autogo_dirs) > 0) {
         cat("\n#### autoGO / Enrichr\n\n")
         for (agd in autogo_dirs) {
-          # Show barplots (PNGs)
-          bplots <- list.files(agd, pattern = "_barplot\\.png$", full.names = TRUE)
-          for (p in head(bplots, 4)) embed_png(p, basename(p), max_width = "600px")
-
-          # Show top enrichment table
+          # Tables first — one per Enrichr database that returned results (ALL of
+          # them). Databases that were queried but had no enriched terms simply
+          # have no file here (e.g. Cellular Component when nothing was enriched).
           tsvs <- list.files(agd, pattern = "\\.tsv$", full.names = TRUE)
-          for (f in head(tsvs, 3)) {
+          for (f in tsvs) {
             df <- safe_read(f); sig <- filter_sig(df)
             n_sig <- if (!is.null(sig)) nrow(sig) else 0
-            cat(sprintf("\n**%s** — %d significant terms\n\n", basename(f), n_sig))
+            n_tot <- if (!is.null(df)) nrow(df) else 0
+            # Significance is by ADJUSTED p-value (< 0.05); the table itself is
+            # sorted by raw p-value, so rows with raw p < 0.05 may still show as
+            # "0 ... at adjusted p < 0.05".
+            cat(sprintf("\n**%s** — %d of %d terms at adjusted p < 0.05\n\n",
+                        basename(f), n_sig, n_tot))
             make_table(df, gsub("\\.tsv$", ".csv", basename(f)), max_rows = 15)
           }
-          if (length(bplots) > 4)
-            cat(sprintf("*...and %d more autoGO plots in the archive*\n\n", length(bplots) - 4))
+          # Then the plots — ALL databases, not just the first few: bar plots
+          # first, then the matching lolliplots.
+          bplots <- list.files(agd, pattern = "_barplot\\.png$", full.names = TRUE)
+          for (p in bplots) embed_png(p, basename(p), max_width = "600px")
+          lplots <- list.files(agd, pattern = "_lolliplot\\.png$", full.names = TRUE)
+          for (p in lplots) embed_png(p, basename(p), max_width = "600px")
         }
       }
 
@@ -956,7 +1062,7 @@ if (has_network) {
 # File Inventory
 
 ```{r inventory, results='asis'}
-cat("Complete listing of functional enrichment files found in this analysis:\n\n")
+cat("Complete listing of functional enrichment files found in this analysis (they may have been compressed into `funct_enrichment_analyses.tar.gz`):\n\n")
 cat('<div style="max-height:400px;overflow-y:auto;background:#f8f9fa;padding:10px;border-radius:4px;font-size:11px;font-family:monospace;">\n')
 
 # clusterProfiler

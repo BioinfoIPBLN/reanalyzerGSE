@@ -3,7 +3,7 @@ args = commandArgs(trailingOnly=TRUE)
 GEO_ID <- args[1]
 path <- args[2]
 
-setwd(paste(path,GEO_ID,"GEO_info",sep="/"))
+setwd(paste(path,GEO_ID,"reads_study_info",sep="/"))
 GEO_ID_path <- GEO_ID
 
 # functions required for filtering columns later...
@@ -102,7 +102,7 @@ for (z in unlist(strsplit(GEO_ID_path,"_"))){
 			srx_ids <- noquote(as.character(srx_ids))
 		}		
 		write.table(rev(srx_ids),
-		            file=paste(path,GEO_ID_path,"GEO_info","srx_ids.txt",sep="/"),quote = F,row.names = F, col.names = F,sep = "\n", append=TRUE)
+		            file=paste(path,GEO_ID_path,"reads_study_info","srx_ids.txt",sep="/"),quote = F,row.names = F, col.names = F,sep = "\n", append=TRUE)
 
 		phenodata <- phenodata[,apply(phenodata,2,function(x){length(unique(x)) != dim(phenodata)[1]})]
 
@@ -126,7 +126,7 @@ for (z in unlist(strsplit(GEO_ID_path,"_"))){
 		design <- gsub("[[:punct:]]| ","_",gsub("^_","",gsub("_+","_",design)))
 
 		write.table(design,
-			file=paste(path,GEO_ID_path,"GEO_info","design.txt",sep="/"),quote = F,row.names = F, col.names = F,sep = "\n", append=TRUE)
+			file=paste(path,GEO_ID_path,"reads_study_info","design.txt",sep="/"),quote = F,row.names = F, col.names = F,sep = "\n", append=TRUE)
 
 	# Alternative code to iteratively deal with pysradb info... I comment here and write new code below to do outside the loop, because I already merged the info in previous scripts:
 		#if (file.exists("sample_info_pysradb.txt")){
@@ -134,21 +134,21 @@ for (z in unlist(strsplit(GEO_ID_path,"_"))){
 	#		a <- as.data.frame(data.table::fread(grep(GEO_ID,list.files(pattern="pysradb"),val=T)))
 	#		a <- a[order(a[,names(which.min(nchar(grep("^GSM",a[1,],val=T))))[1]]),] # Ensure the order of the metadata is following the GSMXXXX ids and the SRR ids, because this is the order in the series_matrix tables from which I get more info
 	#		write.table(a$run_accession,
-	#		            file=paste(path,GEO_ID_path,"GEO_info","srr_ids.txt",sep="/"),quote = F,row.names = F, col.names = F,sep = "\n", append=TRUE)
+	#		            file=paste(path,GEO_ID_path,"reads_study_info","srr_ids.txt",sep="/"),quote = F,row.names = F, col.names = F,sep = "\n", append=TRUE)
 	#		if ("disease state" %in% colnames(a)){
 	#			design <- gsub("____|___|__","_",gsub("[[:punct:]]| |treatment", "_",a$"disease state"))
 	#		} else if ("treatment" %in% colnames(a)){
 	#			design <- gsub("____|___|__","_",gsub("[[:punct:]]| |treatment", "_",a$treatment))
 	#		}
 	#		write.table(design,
-	#		            file=paste(path,GEO_ID_path,"GEO_info","design.txt",sep="/"),quote = F,row.names = F, col.names = F,sep = "\n", append=TRUE)
+	#		            file=paste(path,GEO_ID_path,"reads_study_info","design.txt",sep="/"),quote = F,row.names = F, col.names = F,sep = "\n", append=TRUE)
 	#		sample_names <- paste(design,
 	#		                  a[,names(which.min(nchar(grep("^GSM",a[1,],val=T))))[1]],
 	#		                  sep="_")
 	#		sample_names <- gsub("[[:punct:]]| ","_",sample_names) # Make sure no commas in the name and no instances of _1 or _2, important for miARma-seq later on
 	#		sample_names <- gsub("_2","2",gsub("_1","1",sample_names))
 	#		write.table(sample_names,
-	#		            file=paste(path,GEO_ID_path,"GEO_info","sample_names.txt",sep="/"),quote = F,row.names = F, col.names = F,sep = "\n", append=TRUE)
+	#		            file=paste(path,GEO_ID_path,"reads_study_info","sample_names.txt",sep="/"),quote = F,row.names = F, col.names = F,sep = "\n", append=TRUE)
 	#		cat("\nExtracting info from pysradb output...\n")
 	#	} else {
 
@@ -169,7 +169,7 @@ for (z in unlist(strsplit(GEO_ID_path,"_"))){
 		sample_names <- gsub("^_","",gsub("_+","_",sample_names))
 		sample_names <- unlist(lapply(strsplit(sample_names,"_"),function(x){paste(unique(x),collapse="_")}))
 		write.table(sample_names,
-		            file=paste(path,GEO_ID_path,"GEO_info","sample_names.txt",sep="/"),quote = F,row.names = F, col.names = F,sep = "\n", append=TRUE)
+		            file=paste(path,GEO_ID_path,"reads_study_info","sample_names.txt",sep="/"),quote = F,row.names = F, col.names = F,sep = "\n", append=TRUE)
 	  	cat("\nAttempting to manually extract info from the series_matrix...\n")
 
 		# Should be, but make sure phenodata is ordered when it's a data.frame by the GSM, because this is the order in the series_matrix tables from which I get more info
@@ -185,7 +185,7 @@ for (z in unlist(strsplit(GEO_ID_path,"_"))){
 
 		# Write phenodata:
 		write.table(phenodata,
-			    file=paste(path,GEO_ID_path,"GEO_info","phenodata_extracted.txt",sep="/"),quote = F,row.names = F, col.names = F,sep = "\t", append=TRUE)
+			    file=paste(path,GEO_ID_path,"reads_study_info","phenodata_extracted.txt",sep="/"),quote = F,row.names = F, col.names = F,sep = "\t", append=TRUE)
 		# Write possible designs:
 		if (!is.null(dim(phenodata))){
 			#phenodata_possible_designs <- phenodata[,names(which(sort(unlist(lapply(apply(phenodata,2,table),function(x){length(x)}))) <= 10))]
@@ -232,9 +232,9 @@ for (z in unlist(strsplit(GEO_ID_path,"_"))){
 				}
 				design_possible <- gsub("[[:punct:]]| ","_",phenodata_possible_designs[,idx])
 				write.table(unique(design_possible),
-						file=paste0(path,"/",GEO_ID_path,"/GEO_info/design_possible",i,"_",GEO_ID,".txt"),quote = F,row.names = F, col.names = F,sep = "\n")
+						file=paste0(path,"/",GEO_ID_path,"/reads_study_info/design_possible",i,"_",GEO_ID,".txt"),quote = F,row.names = F, col.names = F,sep = "\n")
 				write.table(design_possible,
-						file=paste0(path,"/",GEO_ID_path,"/GEO_info/design_possible_full",i,"_",GEO_ID,".txt"),quote = F,row.names = F, col.names = F,sep = "\n")
+						file=paste0(path,"/",GEO_ID_path,"/reads_study_info/design_possible_full",i,"_",GEO_ID,".txt"),quote = F,row.names = F, col.names = F,sep = "\n")
 				cat(paste0("\nDetected ",i,": "))
 				print(table(design_possible)); cat("\n")
 			}
@@ -245,15 +245,15 @@ for (z in unlist(strsplit(GEO_ID_path,"_"))){
 			}
 			design_possible <- gsub("[[:punct:]]| ","_",names(table(phenodata)))
 			write.table(design_possible,
-						file=paste0(path,"/",GEO_ID_path,"/GEO_info/design_possible_",i,"_",GEO_ID,".txt"),quote = F,row.names = F, col.names = F,sep = "\n")
+						file=paste0(path,"/",GEO_ID_path,"/reads_study_info/design_possible_",i,"_",GEO_ID,".txt"),quote = F,row.names = F, col.names = F,sep = "\n")
 			write.table(paste0("__",gsub("[[:punct:]]| ","_",phenodata)),
-		  				file=paste0(path,"/",GEO_ID_path,"/GEO_info/design_possible_full_",i,"_",GEO_ID,".txt"),quote = F,row.names = F, col.names = F,sep = "\n")
+		  				file=paste0(path,"/",GEO_ID_path,"/reads_study_info/design_possible_full_",i,"_",GEO_ID,".txt"),quote = F,row.names = F, col.names = F,sep = "\n")
 			cat(paste0("\nDetected ",i,": "))
 			print(table(phenodata)); cat("\n")
 		}
 	# Copy info to final folder:
-	system(paste0("for i in $(ls -d ",path,"/",GEO_ID_path,"/GEO_info/* | grep 'design_possible_full'); do echo -e '\n'$(basename $i) >> ",path,"/",GEO_ID_path,"/possible_designs_all.txt && cat $i | sort | uniq >> ",path,"/",GEO_ID_path,"/possible_designs_all.txt; done && sed -i '1{/^$/d}' ",path,"/",GEO_ID_path,"/possible_designs_all.txt"))
-	system(paste0("paste ",path,"/",GEO_ID_path,"/GEO_info/sample_names.txt ",path,"/",GEO_ID_path,"/GEO_info/phenodata_extracted.txt | sed 's/ /_/g' > ",path,"/",GEO_ID_path,"/phenotypic_data_samples.txt"))
+	system(paste0("for i in $(ls -d ",path,"/",GEO_ID_path,"/reads_study_info/* | grep 'design_possible_full'); do echo -e '\n'$(basename $i) >> ",path,"/",GEO_ID_path,"/possible_designs_all.txt && cat $i | sort | uniq >> ",path,"/",GEO_ID_path,"/possible_designs_all.txt; done && sed -i '1{/^$/d}' ",path,"/",GEO_ID_path,"/possible_designs_all.txt"))
+	system(paste0("paste ",path,"/",GEO_ID_path,"/reads_study_info/sample_names.txt ",path,"/",GEO_ID_path,"/reads_study_info/phenodata_extracted.txt | sed 's/ /_/g' > ",path,"/",GEO_ID_path,"/phenotypic_data_samples.txt"))
 	}
 }
 
@@ -264,7 +264,7 @@ if (file.exists(paste0(path,"/",GEO_ID_path,"/sample_info.txt"))){
 	# Get SRR ids
 	info <- as.data.frame(data.table::fread(paste0(path,"/",GEO_ID_path,"/sample_info.txt")))
 	write.table(unique(info$run_accession),
-		    file=paste(path,GEO_ID_path,"GEO_info","srr_ids.txt",sep="/"),quote = F,row.names = F, col.names = F,sep = "\n")
+		    file=paste(path,GEO_ID_path,"reads_study_info","srr_ids.txt",sep="/"),quote = F,row.names = F, col.names = F,sep = "\n")
 	# Get sample_names:
 	# Separate some columns that contain info separated by commas or similar:
 	separate_columns <- function(column, colname) {
@@ -328,7 +328,7 @@ if (file.exists(paste0(path,"/",GEO_ID_path,"/sample_info.txt"))){
 	sample_names <- gsub("__","-_",sample_names)
 	
 	write.table(sample_names,
-		    file=paste(path,GEO_ID_path,"GEO_info","sample_names.txt",sep="/"),quote = F,row.names = F, col.names = F,sep = "\n")
+		    file=paste(path,GEO_ID_path,"reads_study_info","sample_names.txt",sep="/"),quote = F,row.names = F, col.names = F,sep = "\n")
 	# Get possible_designs... columns in the sample info that were all the same were removed before, and now I remove the ones that are all different plus the GSM and the SRR because I don't want them in the designs
 	# I also remove the ones that are just two, and one of them empty
 	# And I replace the empty cells with "-"
@@ -366,9 +366,9 @@ if (file.exists(paste0(path,"/",GEO_ID_path,"/sample_info.txt"))){
 			design_possible <- paste0("cond-",info_filt_design_final[,i])
 			if (length(table(design_possible))!=dim(info_filt_design_final)[1]){
 				write.table(unique(design_possible),
-						file=paste0(path,"/",GEO_ID_path,"/GEO_info/design_possible_",i,"_",GEO_ID,".txt"),quote = F,row.names = F, col.names = F,sep = "\n")
+						file=paste0(path,"/",GEO_ID_path,"/reads_study_info/design_possible_",i,"_",GEO_ID,".txt"),quote = F,row.names = F, col.names = F,sep = "\n")
 				write.table(design_possible,
-							file=paste0(path,"/",GEO_ID_path,"/GEO_info/design_possible_full_",i,"_",GEO_ID,".txt"),quote = F,row.names = F, col.names = F,sep = "\n")
+							file=paste0(path,"/",GEO_ID_path,"/reads_study_info/design_possible_full_",i,"_",GEO_ID,".txt"),quote = F,row.names = F, col.names = F,sep = "\n")
 
 				cat(paste0("\nDetected: ",i," "))
 				print(table(design_possible)); cat("\n")
@@ -387,9 +387,9 @@ if (file.exists(paste0(path,"/",GEO_ID_path,"/sample_info.txt"))){
 			design_possible <- paste0("cond-",info_filt_design_final[,i])
 			if (length(table(design_possible))!=dim(info_filt_design_final)[1]){
 				write.table(unique(design_possible),
-						file=paste0(path,"/",GEO_ID_path,"/GEO_info/design_possible_",i,"_",GEO_ID,".txt"),quote = F,row.names = F, col.names = F,sep = "\n")
+						file=paste0(path,"/",GEO_ID_path,"/reads_study_info/design_possible_",i,"_",GEO_ID,".txt"),quote = F,row.names = F, col.names = F,sep = "\n")
 				write.table(design_possible,
-							file=paste0(path,"/",GEO_ID_path,"/GEO_info/design_possible_full_",i,"_",GEO_ID,".txt"),quote = F,row.names = F, col.names = F,sep = "\n")
+							file=paste0(path,"/",GEO_ID_path,"/reads_study_info/design_possible_full_",i,"_",GEO_ID,".txt"),quote = F,row.names = F, col.names = F,sep = "\n")
 
 				cat(paste0("\nDetected: ",i," "))
 				print(table(design_possible)); cat("\n")
@@ -397,6 +397,6 @@ if (file.exists(paste0(path,"/",GEO_ID_path,"/sample_info.txt"))){
 		}
 	}
 	# Copy info to final folder:
-	system(paste0("for i in $(ls -d ",path,"/",GEO_ID_path,"/GEO_info/* | grep 'design_possible_full'); do echo -e '\n'$(basename $i) >> ",path,"/",GEO_ID_path,"/possible_designs_all.txt && cat $i | sort | uniq >> ",path,"/",GEO_ID_path,"/possible_designs_all.txt; done && sed -i '1{/^$/d}' ",path,"/",GEO_ID_path,"/possible_designs_all.txt"))
+	system(paste0("for i in $(ls -d ",path,"/",GEO_ID_path,"/reads_study_info/* | grep 'design_possible_full'); do echo -e '\n'$(basename $i) >> ",path,"/",GEO_ID_path,"/possible_designs_all.txt && cat $i | sort | uniq >> ",path,"/",GEO_ID_path,"/possible_designs_all.txt; done && sed -i '1{/^$/d}' ",path,"/",GEO_ID_path,"/possible_designs_all.txt"))
 }
 cat("\nExtracting info from GEO download done\n")

@@ -20,12 +20,45 @@ mkdir -p $TMPDIR
 STEP_TIMES_FILE="$output_folder/$name/step_times.tsv"
 _log_step() { mkdir -p "$(dirname "$STEP_TIMES_FILE")" 2>/dev/null; echo -e "$1\t$(date +%s)\t$2" >> "$STEP_TIMES_FILE" 2>/dev/null; }
 
+###### Step gating (resume with -Dm/debug_step, force-end with -Es/end_step):
+# Ordered list of pipeline steps. MUST stay in sync with the block order below,
+# including the optional/internal 'step1a_bis', so the after-comparison is correct.
+STEP_ORDER=(step1 step1a step1a_bis step1b step1c step1d step2 step2b step3a step3b step4 step4b step5 step6 step7 step8 step9)
+# Echo the 0-based position of a step in STEP_ORDER, or -1 if unknown.
+_step_pos() { local t=$1 i=0; for s in "${STEP_ORDER[@]}"; do [ "$s" = "$t" ] && { echo "$i"; return; }; i=$((i+1)); done; echo -1; }
+# Whether the block for step $1 should run: the resume gate (debug_step, which
+# flips to "all" once the resume point is reached) AND the force-end gate (skip
+# any step strictly after end_step, so the script falls through to the summary).
+run_step() {
+	local s=$1
+	[[ "$debug_step" == "all" || "$debug_step" == "$s" ]] || return 1
+	if [[ -n "$end_step" && "$end_step" != "none" && "$end_step" != "all" ]]; then
+		[ "$(_step_pos "$s")" -gt "$(_step_pos "$end_step")" ] && return 1
+	fi
+	return 0
+}
+# Validate -Es/end_step and its ordering against -Dm/debug_step (resume point).
+if [[ -n "$end_step" && "$end_step" != "none" && "$end_step" != "all" ]]; then
+	if [ "$(_step_pos "$end_step")" -lt 0 ]; then
+		echo "Error: -Es/-end_step '$end_step' is not a valid step. Choose one of: ${STEP_ORDER[*]} (or 'none')."; exit 1
+	fi
+	if [[ "$debug_step" != "all" && "$debug_step" != "none" && "$(_step_pos "$debug_step")" -ge 0 \
+	      && "$(_step_pos "$end_step")" -lt "$(_step_pos "$debug_step")" ]]; then
+		echo "Error: -Es/-end_step '$end_step' comes before -Dm/-debug_module '$debug_step'. The end step must be at or after the resume step."; exit 1
+	fi
+	echo -e "\nThe pipeline will force-end after '$end_step' (-Es/-end_step); later steps will be skipped.\n"
+fi
+
 ###### STEP 1. Download info from GEO and organize metadata and so:
-if [[ $debug_step == "all" || $debug_step == "step1" ]]; then
+if run_step step1; then
 	rm -rf $output_folder/*
 	# Re-create step_times.tsv after rm -rf (which deletes it)
 	if [[ $debug_step == "all" ]]; then
 		mkdir -p "$output_folder/$name"
+	fi
+	if [ -n "$options_file" ] && [ -f "$options_file" ]; then
+		mkdir -p "$output_folder/$name"
+		cp -f "$options_file" "$output_folder/$name/" 2>/dev/null || true
 	fi
 	_log_step "Step_1_Download" "start"
 	if [[ $input == G* ]]; then
@@ -38,7 +71,7 @@ if [[ $debug_step == "all" || $debug_step == "step1" ]]; then
 
 	### Get metadata and process the info:
 		echo -e "\nProcessing and downloading more data...\n"
-		cd $output_folder/$name/GEO_info
+		cd $output_folder/$name/reads_study_info
 		if [ ! -z "$GSM_filter" ]; then
 			echo $GSM_filter > gsm_manual_filter.txt
 		fi
@@ -65,30 +98,30 @@ if [[ $debug_step == "all" || $debug_step == "step1" ]]; then
 		if [ ! -s srr_ids.txt ]; then
 			echo -e "\nI haven't been able to find SRR accession ids to download the sequences and I'm exiting, please double check manually..."; exit 1
 		fi
-		echo -e "\nAll available info downloaded from GEO, please check it out in $output_folder/$name/GEO_info\n"
+		echo -e "\nAll available info downloaded from GEO, please check it out in $output_folder/$name/reads_study_info\n"
 		if [ "$design_custom" == "yes" ]; then
 			echo "You have requested to manually provide the experimental design instead of the ones shown above. This is the list of samples:"
 			cat sample_names.txt
 			echo "Please provide a comma-separated list with the conditions for each sample, and if more than one separate the comma-separated lists with '/', no spaces:"
 			read -r design_input
-			rm $(ls -d $output_folder/$name/GEO_info/* | grep 'design_possible_')
+			rm $(ls -d $output_folder/$name/reads_study_info/* | grep 'design_possible_')
 			IFS='/' read -ra ADDR <<< "$design_input"
 			for i in "${!ADDR[@]}"; do
 				# For each comma-separated list, split by ',' and echo to file
 				IFS=',' read -ra ITEMS <<< "${ADDR[$i]}"
 				for item in "${ITEMS[@]}"; do
 					echo "$item"
-				done > "$output_folder/$name/GEO_info/design_possible_full_$(($i + 1)).txt"
-				cat "$output_folder/$name/GEO_info/design_possible_full_$(($i + 1)).txt" | sort | uniq > "$output_folder/$name/GEO_info/design_possible_$(($i + 1)).txt"
+				done > "$output_folder/$name/reads_study_info/design_possible_full_$(($i + 1)).txt"
+				cat "$output_folder/$name/reads_study_info/design_possible_full_$(($i + 1)).txt" | sort | uniq > "$output_folder/$name/reads_study_info/design_possible_$(($i + 1)).txt"
 			done
 		fi
 
 	### Stop and continue with other script if it's a single-cell:
-		if [ $(zcat $output_folder/$name/GEO_info/*_series_matrix.txt.gz | egrep -e 'single nuclei|single cell|single-cell|snRNA|scRNA' | wc -l) -gt 0 ] || [ $(zcat $(find . -name "*_series_matrix.txt.gz") | egrep -i -e 'single nuclei|single cell|single-cell|snRNA|scRNA' | wc -l) -gt 0 ]; then
+		if [ $(zcat $output_folder/$name/reads_study_info/*_series_matrix.txt.gz | egrep -e 'single nuclei|single cell|single-cell|snRNA|scRNA' | wc -l) -gt 0 ] || [ $(zcat $(find . -name "*_series_matrix.txt.gz") | egrep -i -e 'single nuclei|single cell|single-cell|snRNA|scRNA' | wc -l) -gt 0 ]; then
 			echo -e "\n\nDetected this could be a single-cell RNA-seq study... I can try to do stuff automatically (i.e. try and normalize the raw counts or give an estimated bulk expression taking the average), but errors are expected. \nThe script 'R_process_reanalyzer_GSE_single_cell.R' is a template built from the case example GSE118257, and valid to other GEO entries where pheno data and matrix counts are supplementary files clearly named.\nHowever, manual changes are most likely required to work with other studies... These changes should be possible, so please open an issue or go for it if you have the expertise and this one fails!. For example, it's likely that it's just required to point to the directory of the matrix counts, or to manually specify the columns/names of the conditions/cells\n\n"
 			# Print the results to review:
 			echo -e "This text in the metadata is what made the pipeline to suggest this could be single-cell:"
-			zcat $output_folder/$name/GEO_info/*_series_matrix.txt.gz | egrep -e 'single nuclei|single cell|single-cell|snRNA|scRNA'
+			zcat $output_folder/$name/reads_study_info/*_series_matrix.txt.gz | egrep -e 'single nuclei|single cell|single-cell|snRNA|scRNA'
 			zcat $(find . -name "*_series_matrix.txt.gz") | egrep -i -e 'single nuclei|single cell|single-cell|snRNA|scRNA'
 			# Choice:
 			echo -e "\nWrite 'yes' to continue with single-cell analyses, or 'no' to continue with normal analyses after reviewing the entry and the statements in the metadata pointing to single-cell..."
@@ -101,7 +134,7 @@ if [[ $debug_step == "all" || $debug_step == "step1" ]]; then
 		fi
 
 	### Stop and continue with other script if it's a microarrays:
-		if [ $(zcat $output_folder/$name/GEO_info/*_series_matrix.txt.gz | egrep -i -e 'Expression profiling by array|microarray' | wc -l) -gt 0 ] || [ $(zcat $(find . -name "*_series_matrix.txt.gz") | egrep -i -e 'Expression profiling by array|microarray' | wc -l) -gt 0 ]; then
+		if [ $(zcat $output_folder/$name/reads_study_info/*_series_matrix.txt.gz | egrep -i -e 'Expression profiling by array|microarray' | wc -l) -gt 0 ] || [ $(zcat $(find . -name "*_series_matrix.txt.gz") | egrep -i -e 'Expression profiling by array|microarray' | wc -l) -gt 0 ]; then
 			echo -e "\n\nDetected this could be a microarrays study... trying to do analyze automatically, but errors in this log are expected. The script 'R_process_reanalyzer_GSE_microarrays.R' is already supporting the most frequent arrays and platforms, but it could require to be extended in order to work with other studies... These changes should be possible though, so please open an issue or go for it if you have the expertise and this one fails!\n\n"
 			# Choice:
 			echo -e "\nWrite 'yes' to continue with microarrays analyses, or 'no' to continue with normal analyses after reviewing the entry pointing to microarrays..."
@@ -119,13 +152,13 @@ if [[ $debug_step == "all" || $debug_step == "step1" ]]; then
 		fi
 
 	### Get organism:
-		organism=$(zcat $output_folder/$name/GEO_info/*_series_matrix.txt.gz | grep "organism" | awk '{$1=""}1' |tr '"' '\n' | sort -u | sed -r '/^\s*$/d')
-		echo $organism > $output_folder/$name/GEO_info/organism.txt
-		if [ $(zcat $output_folder/$name/GEO_info/*_series_matrix.txt.gz | grep "organism" | awk '{$1=""}1' |tr '"' '\n' | sort -u | sed -r '/^\s*$/d' | wc -l) -gt 1 ]; then
+		organism=$(zcat $output_folder/$name/reads_study_info/*_series_matrix.txt.gz | grep "organism" | awk '{$1=""}1' |tr '"' '\n' | sort -u | sed -r '/^\s*$/d')
+		echo $organism > $output_folder/$name/reads_study_info/organism.txt
+		if [ $(zcat $output_folder/$name/reads_study_info/*_series_matrix.txt.gz | grep "organism" | awk '{$1=""}1' |tr '"' '\n' | sort -u | sed -r '/^\s*$/d' | wc -l) -gt 1 ]; then
 			echo -e "\n Please keep in mind that two different organisms are detected. You are likely requesting an analysis combining multiple GSEXXXXX, please make sure they are from the same organism. Another possibility is there are multiple series_matrix within the same GSEXXXX id, and you may have requested to stop and manually clarify. Continuing with organism: "
 			organism=$(zcat *_series_matrix.txt.gz | grep "organism" | awk '{$1=""}1' |tr '"' '\n' | sort -u | sed -r '/^\s*$/d' | head -1)
-			echo $organism > $output_folder/$name/GEO_info/organism.txt
-			echo -e "$organism\nPlease request on the next run a stop with parameter '-S' and modify manually the file GEO_info/organism.txt if not required...\n"
+			echo $organism > $output_folder/$name/reads_study_info/organism.txt
+			echo -e "$organism\nPlease request on the next run a stop with parameter '-S' and modify manually the file reads_study_info/organism.txt if not required...\n"
 		fi
 _log_step "Step_1_Download" "end"
 		echo -e "\nSTEP 1 DONE. Current time: $(date)\n"
@@ -137,32 +170,35 @@ fi
 
 
 ###### STEP 1. Download and process fastq files from the GEO ID provided:
-if [[ $debug_step == "all" || $debug_step == "step1a" ]]; then
+if run_step step1a; then
 	rm -rf $seqs_location
 	mkdir -p $TMPDIR
 	if [[ $input == G* ]]; then
  		echo -e "\n\nSTEP 1: Downloading from the $input id provided...\nCurrent date/time: $(date)\n\n"
 		if [ "$stop" == "yes" ]; then
-			echo "You have requested a stop to manually provide the SRR ids, or potentially modify other files that may have not been detected properly from GEO, and were not correct, or you just want to adapt some of them. Please double check or manually modify the files GEO_info/srr_ids.txt, samples_info.txt, sample_names.txt, phenodata_extracted.txt, library_layout_info.txt, organism.txt, design_files, etc. The pipeline is stopped. Please press space to continue or Ctrl + C to exit..."
+			echo "You have requested a stop to manually provide the SRR ids, or potentially modify other files that may have not been detected properly from GEO, and were not correct, or you just want to adapt some of them. Please double check or manually modify the files reads_study_info/srr_ids.txt, samples_info.txt, sample_names.txt, phenodata_extracted.txt, library_layout_info.txt, organism.txt, design_files, etc. The pipeline is stopped. Please press space to continue or Ctrl + C to exit..."
 			read -n1 -s -r -p $'Press space to continue...\n' key
 			rm $output_folder/$name/possible_designs_all.txt
-			for i in $(ls $output_folder/$name/GEO_info | grep "full"); do echo $i >> $output_folder/$name/possible_designs_all.txt && cat $output_folder/$name/GEO_info/$i >> $output_folder/$name/possible_designs_all.txt && echo -e "\n" >> $output_folder/$name/possible_designs_all.txt; done
-			cat $output_folder/$name/GEO_info/phenodata_extracted.txt > $output_folder/$name/phenotypic_data_samples.txt
+			for i in $(ls $output_folder/$name/reads_study_info | grep "full"); do echo $i >> $output_folder/$name/possible_designs_all.txt && cat $output_folder/$name/reads_study_info/$i >> $output_folder/$name/possible_designs_all.txt && echo -e "\n" >> $output_folder/$name/possible_designs_all.txt; done
+			cat $output_folder/$name/reads_study_info/phenodata_extracted.txt > $output_folder/$name/phenotypic_data_samples.txt
 		fi
 		if [ ! -d "$seqs_location" ]; then # I'm now removing the seqs_location at the beginning of this section, in the context of the new system of resuming by -Dm stepx, so this should always be done
 			mkdir -p $seqs_location
 			echo "Downloading the fastq files from SRR..."
 			if [ -z "$input_geo_reads" ]; then
-				download_sra_fq.sh $output_folder/$name/GEO_info/srr_ids.txt $seqs_location $(( number_parallel*2 )) $cores
+				download_sra_fq.sh $output_folder/$name/reads_study_info/srr_ids.txt $seqs_location $(( number_parallel*2 )) $cores
+				if [ -f "$output_folder/$name/reads_study_info/library_layout_info.txt" ]; then
+					cp -f "$output_folder/$name/reads_study_info/library_layout_info.txt" "$output_folder/$name/library_layout_info.txt" 2>/dev/null || true
+				fi
 	### Rename the fastq files (max length name 140 characters) or handle already downloaded datasets if provided:
 				cd $seqs_location
-				if [[ "$(cat $output_folder/$name/GEO_info/library_layout_info.txt)" == "SINGLE" ]]; then
-					for i in $(cat $output_folder/$name/GEO_info/srr_ids.txt); do echo "mv $(ls | egrep ^$i | head -1) $(cat $output_folder/$name/GEO_info/samples_info.txt | grep $i | cut -f 2 | sed -e 's,%,,g;s,(,,g;s,),,g;s/[_]1/1/g;s/[_]2/2/g;s/replicate_/replicate/g' | awk -F '_GSM' '{ gsub(/-/,"",$1); print substr($1, 1, 140) "_GSM" $2 }')""_1.fastq.gz" && mv $(ls | egrep ^$i | head -1) $(cat $output_folder/$name/GEO_info/samples_info.txt | grep $i | cut -f 2 | sed -e 's,%,,g;s,(,,g;s,),,g;s/[_]1/1/g;s/[_]2/2/g;s/replicate_/replicate/g' | awk -F '_GSM' '{ gsub(/-/,"",$1); print substr($1, 1, 140) "_GSM" $2 }')"_1.fastq.gz"; done
-				elif [[ "$(cat $output_folder/$name/GEO_info/library_layout_info.txt)" == "PAIRED" ]]; then
-					for i in $(cat $output_folder/$name/GEO_info/srr_ids.txt); do echo "mv $(ls | egrep ^$i | head -1) $(cat $output_folder/$name/GEO_info/samples_info.txt | grep $i | cut -f 2 | sed -e 's,%,,g;s,(,,g;s,),,g;s/[_]1/1/g;s/[_]2/2/g;s/replicate_/replicate/g' | awk -F '_GSM' '{ gsub(/-/,"",$1); print substr($1, 1, 140) "_GSM" $2 }')""_1.fastq.gz" && echo "mv $(ls | egrep ^$i | tail -1) $(cat $output_folder/$name/GEO_info/samples_info.txt | grep $i | cut -f 2 | sed -e 's,%,,g;s,(,,g;s,),,g;s/[_]1/1/g;s/[_]2/2/g;s/replicate_/replicate/g' | awk -F '_GSM' '{ gsub(/-/,"",$1); print substr($1, 1, 140) "_GSM" $2 }')""_2.fastq.gz" && mv $(ls | egrep ^$i | head -1) $(cat $output_folder/$name/GEO_info/samples_info.txt | grep $i | cut -f 2 | sed -e 's,%,,g;s,(,,g;s,),,g;s/[_]1/1/g;s/[_]2/2/g;s/replicate_/replicate/g' | awk -F '_GSM' '{ gsub(/-/,"",$1); print substr($1, 1, 140) "_GSM" $2 }')"_1.fastq.gz" && mv $(ls | egrep ^$i | tail -1) $(cat $output_folder/$name/GEO_info/samples_info.txt | grep $i | cut -f 2 | sed -e 's,%,,g;s,(,,g;s,),,g;s/[_]1/1/g;s/[_]2/2/g;s/replicate_/replicate/g' | awk -F '_GSM' '{ gsub(/-/,"",$1); print substr($1, 1, 140) "_GSM" $2 }')"_2.fastq.gz"; done
+				if [[ "$(cat $output_folder/$name/reads_study_info/library_layout_info.txt)" == "SINGLE" ]]; then
+					for i in $(cat $output_folder/$name/reads_study_info/srr_ids.txt); do echo "mv $(ls | egrep ^$i | head -1) $(cat $output_folder/$name/reads_study_info/samples_info.txt | grep $i | cut -f 2 | sed -e 's,%,,g;s,(,,g;s,),,g;s/[_]1/1/g;s/[_]2/2/g;s/replicate_/replicate/g' | awk -F '_GSM' '{ gsub(/-/,"",$1); print substr($1, 1, 140) "_GSM" $2 }')""_1.fastq.gz" && mv $(ls | egrep ^$i | head -1) $(cat $output_folder/$name/reads_study_info/samples_info.txt | grep $i | cut -f 2 | sed -e 's,%,,g;s,(,,g;s,),,g;s/[_]1/1/g;s/[_]2/2/g;s/replicate_/replicate/g' | awk -F '_GSM' '{ gsub(/-/,"",$1); print substr($1, 1, 140) "_GSM" $2 }')"_1.fastq.gz"; done
+				elif [[ "$(cat $output_folder/$name/reads_study_info/library_layout_info.txt)" == "PAIRED" ]]; then
+					for i in $(cat $output_folder/$name/reads_study_info/srr_ids.txt); do echo "mv $(ls | egrep ^$i | head -1) $(cat $output_folder/$name/reads_study_info/samples_info.txt | grep $i | cut -f 2 | sed -e 's,%,,g;s,(,,g;s,),,g;s/[_]1/1/g;s/[_]2/2/g;s/replicate_/replicate/g' | awk -F '_GSM' '{ gsub(/-/,"",$1); print substr($1, 1, 140) "_GSM" $2 }')""_1.fastq.gz" && echo "mv $(ls | egrep ^$i | tail -1) $(cat $output_folder/$name/reads_study_info/samples_info.txt | grep $i | cut -f 2 | sed -e 's,%,,g;s,(,,g;s,),,g;s/[_]1/1/g;s/[_]2/2/g;s/replicate_/replicate/g' | awk -F '_GSM' '{ gsub(/-/,"",$1); print substr($1, 1, 140) "_GSM" $2 }')""_2.fastq.gz" && mv $(ls | egrep ^$i | head -1) $(cat $output_folder/$name/reads_study_info/samples_info.txt | grep $i | cut -f 2 | sed -e 's,%,,g;s,(,,g;s,),,g;s/[_]1/1/g;s/[_]2/2/g;s/replicate_/replicate/g' | awk -F '_GSM' '{ gsub(/-/,"",$1); print substr($1, 1, 140) "_GSM" $2 }')"_1.fastq.gz" && mv $(ls | egrep ^$i | tail -1) $(cat $output_folder/$name/reads_study_info/samples_info.txt | grep $i | cut -f 2 | sed -e 's,%,,g;s,(,,g;s,),,g;s/[_]1/1/g;s/[_]2/2/g;s/replicate_/replicate/g' | awk -F '_GSM' '{ gsub(/-/,"",$1); print substr($1, 1, 140) "_GSM" $2 }')"_2.fastq.gz"; done
 				fi
 				# If layout is SINGLE and files still lack _1.fastq.gz or _2.fastq.gz suffix, add it
-				if [[ "$(cat $output_folder/$name/GEO_info/library_layout_info.txt)" == "SINGLE" ]]; then
+				if [[ "$(cat $output_folder/$name/reads_study_info/library_layout_info.txt)" == "SINGLE" ]]; then
 					cd $seqs_location
 					if [ $(ls *.fastq.gz 2>/dev/null | egrep -c "_[12]\.fastq\.gz$") -eq 0 ] && [ $(ls *.fastq.gz 2>/dev/null | wc -l) -gt 0 ]; then
 						echo -e "\nSingle-end reads detected without _1.fastq.gz suffix, adding it...\n"
@@ -175,7 +211,7 @@ if [[ $debug_step == "all" || $debug_step == "step1a" ]]; then
 				echo -e "\nSoft linking the already downloaded raw reads from the provided directory: $input_geo_reads\n"
 				ln -sf $input_geo_reads/* $seqs_location
 			fi
-			num_files=$(ls | wc -l); num_samples=$(cat $output_folder/$name/GEO_info/srr_ids.txt | wc -l)
+			num_files=$(ls | wc -l); num_samples=$(cat $output_folder/$name/reads_study_info/srr_ids.txt | wc -l)
 			if [ "$num_files" -lt "$num_samples" ]; then
 				echo -e "\nPlease double check manually, is there some issue with the downloaded raw data? Exiting the script...\n"
 				exit 1
@@ -186,10 +222,10 @@ if [[ $debug_step == "all" || $debug_step == "step1a" ]]; then
 	### Process if any download was not successful or subsampling was required:
 		cd $seqs_location
 		num_gz_files=$(find . -name "*.gz" | wc -l)
-		num_samples=$(cat $output_folder/$name/GEO_info/sample_names.txt | wc -l)
+		num_samples=$(cat $output_folder/$name/reads_study_info/sample_names.txt | wc -l)
 		if [ "$num_gz_files" -eq "$(($num_samples * 2))" ] || [ "$num_gz_files" -eq "$num_samples" ]; then
 			echo -e "\nPlease double check this order is the same than the rest of lists printed in the log, and that the info, e.g., the correspondence between GSM and SRR, is correct:"
-			cat $output_folder/$name/GEO_info/samples_info.txt
+			cat $output_folder/$name/reads_study_info/samples_info.txt
 		else
 			echo -e "\nRaw reads not downloaded fully? Please double check manually the log files and the folder $seqs_location to assess whether there have been errors with downloading. Retrying all downloads... with another approach\n"
 			echo -e "\nIn the future this will automatically detect and only resume the downloads that fail...\n"
@@ -272,7 +308,7 @@ fi
 ### STEP 1. Process if not required to download from NCBI/GEO the metadata and raw reads provided locally:
 
 ### STEP 1a_bis. Alignment Removal (Host Filtering)
-if [[ $debug_step == "all" || $debug_step == "step1a_bis" ]]; then
+if run_step step1a_bis; then
     if [ ! -z "$alignment_removal" ]; then
         echo -e "\n\nSTEP 1a_bis: Alignment Removal (Host Filtering)...\nCurrent date/time: $(date)\n\n"
         
@@ -327,7 +363,7 @@ if [[ $debug_step == "all" || $debug_step == "step1a_bis" ]]; then
     fi
 fi
 
-if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
+if run_step step1b; then
 	mkdir -p $TMPDIR
 	if [[ $input == /* ]]; then
 		echo -e "\n\nSTEP 1b: Preparing the raw reads and metadata provided locally...\nCurrent date/time: $(date)\n\n"
@@ -436,18 +472,18 @@ if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
 			  <(ls -l "$seqs_location" | awk '{ print $9 }' | tail -n +2 | sed 's,_[12].fastq.gz,,g' | uniq) \
 			  <(echo "$design_input" | sed 's_,_\n_g;s,/,\n\n,g')
 		fi
-		mkdir -p $output_folder/$name/GEO_info/
-		paste <(ls $seqs_location | egrep '.fq|.fastq' | sed 's,_[12].fastq.gz,,g' | uniq) <(paste -d'_' <(ls $seqs_location | egrep '.fq|.fastq' | sed 's,_[12].fastq.gz,,g' | uniq) <(echo $design_input | sed 's*/*\t*g'| cut -f1 | sed 's*,*\n*g')) <(echo $design_input | sed 's*/*\t*g'| cut -f1 | sed 's*,*\n*g') > $output_folder/$name/GEO_info/samples_info.txt
+		mkdir -p $output_folder/$name/reads_study_info/
+		paste <(ls $seqs_location | egrep '.fq|.fastq' | sed 's,_[12].fastq.gz,,g' | uniq) <(paste -d'_' <(ls $seqs_location | egrep '.fq|.fastq' | sed 's,_[12].fastq.gz,,g' | uniq) <(echo $design_input | sed 's*/*\t*g'| cut -f1 | sed 's*,*\n*g')) <(echo $design_input | sed 's*/*\t*g'| cut -f1 | sed 's*,*\n*g') > $output_folder/$name/reads_study_info/samples_info.txt
 		IFS='/' read -ra ADDR <<< "$design_input"
 		for i in "${!ADDR[@]}"; do
 			# For each comma-separated list, split by ',' and echo to file
 			IFS=',' read -ra ITEMS <<< "${ADDR[$i]}"
 			for item in "${ITEMS[@]}"; do
 				echo "$item"
-			done > "$output_folder/$name/GEO_info/design_possible_full_$(($i + 1)).txt"
-			cat "$output_folder/$name/GEO_info/design_possible_full_$(($i + 1)).txt" | sort | uniq > "$output_folder/$name/GEO_info/design_possible_$(($i + 1)).txt"
+			done > "$output_folder/$name/reads_study_info/design_possible_full_$(($i + 1)).txt"
+			cat "$output_folder/$name/reads_study_info/design_possible_full_$(($i + 1)).txt" | sort | uniq > "$output_folder/$name/reads_study_info/design_possible_$(($i + 1)).txt"
 		done
-		echo $name > $output_folder/$name/GEO_info/study_title.txt
+		echo $name > $output_folder/$name/reads_study_info/study_title.txt
 		if [ -z "$organism_argument" ]; then
 			echo -n "Please input the scientific name of the organism: "
 			read -r organism
@@ -455,7 +491,7 @@ if [[ $debug_step == "all" || $debug_step == "step1b" ]]; then
 			organism=$(echo $organism_argument | sed 's,_, ,g')
 			echo "Organism used is $organism"
 		fi
-		echo $organism > $output_folder/$name/GEO_info/organism.txt
+		echo $organism > $output_folder/$name/reads_study_info/organism.txt
 _log_step "Step_1b_Fastp" "end"
 		echo -e "\n\nSTEP 1b: DONE\nCurrent date/time: $(date)\n\n"
  	fi
@@ -464,7 +500,7 @@ fi
 
 
 ### STEP 1. Process if required to download from manually provided ids from databases
-if [[ $debug_step == "all" || $debug_step == "step1c" ]]; then
+if run_step step1c; then
 	if [[ $input == P* || $input == E* || $input == D* || $input == S* ]]; then
 		echo -e "\n\nSTEP 1: Downloading from the $input id provided...\nCurrent date/time: $(date)\n\n"
   		seqs_location=$output_folder/$name/raw_reads
@@ -489,7 +525,7 @@ fi
 
 
 ### STEP 1. Deal with batch correction... The user has to use certain arguments to manually provide a list or do it interactively:
-if [[ $debug_step == "all" || $debug_step == "step1d" ]]; then
+if run_step step1d; then
 	if [ "$batch" == "yes" ]; then
 		echo -e "\n\nSTEP 1: Preparing batch effect correction...\nCurrent date/time: $(date)\n\n"
   		if [ -z "$batch_vector" ]; then
@@ -497,23 +533,23 @@ if [[ $debug_step == "all" || $debug_step == "step1d" ]]; then
 			echo -n "Based on the list above, please input a comma-separated list for the vector for batch separation (use only numbers, and if these are paired-end, only once per pair of reads):"
 			read -r batch_vector
 		fi
-		echo $batch_vector > $output_folder/$name/GEO_info/batch_vector.txt
+		echo $batch_vector > $output_folder/$name/reads_study_info/batch_vector.txt
 		echo -e "\nThe comma-separated list for the vector for batch separation is $batch_vector\n"
 		if [ -z "$batch_biological_covariates" ]; then
 			echo -n "Please input a comma-separated list for the biological covariate, and separate by space if multiple biological variables are to be included (use only numbers): "
 			read -r batch_biological_covariates
 		fi
-		echo $batch_biological_covariates > $output_folder/$name/GEO_info/batch_biological_variables.txt
+		echo $batch_biological_covariates > $output_folder/$name/reads_study_info/batch_biological_variables.txt
 		echo -e "\nThe comma-separated list for the vector of biological covariable for batch separation is $batch_biological_covariates\n"
 	fi
 	if [ ! -z "$covariables" ]; then
- 		echo $covariables > $output_folder/$name/GEO_info/covariables.txt
+ 		echo $covariables > $output_folder/$name/reads_study_info/covariables.txt
   	fi
 fi
 
 ### STEP 1. Give info of NCBI's current genome:
 Rscript -e "organism <- '${organism}'; tryCatch({ ids <- rentrez::entrez_search(db='assembly', term=paste0(organism, '[orgn]'))\$ids; if(length(ids)==0) stop('No ids'); assemblies <- rentrez::entrez_summary(db='assembly', id=ids[1]); cat(paste(paste0('\n\nNCBI current assembly info: ', date()), assemblies\$assemblyname, assemblies\$assemblyaccession, assemblies\$submissiondate, '\n', sep='\n')) }, error=function(e) cat(paste0('\n\nNo genome information found in NCBI for: ', organism, '\n\n')))"
-organism=$(cat $output_folder/$name/GEO_info/organism.txt | sed 's/ \+/_/g;s/__*/_/g') # Get again the organism in case it has been manually modified... and without spaces...
+organism=$(cat $output_folder/$name/reads_study_info/organism.txt | sed 's/ \+/_/g;s/__*/_/g') # Get again the organism in case it has been manually modified... and without spaces...
 echo -e "\nYou are using $reference_genome\n"
 
 ### STEP 1. Auto-decompress gzipped reference inputs into the indexes subfolder:
@@ -641,7 +677,7 @@ fi
 
 
 ### STEP 2. Decontamination if required:
-if [[ $debug_step == "all" || $debug_step == "step2" ]]; then
+if run_step step2; then
 	if [ ! -z "$kraken2_databases" ]; then
   		echo -e "\n\nSTEP 2: Decontamination starting with Kraken2 (k2 daemon mode)...\nCurrent date/time: $(date)\n\n"
 _log_step "Step_2_Decontamination" "start"
@@ -822,7 +858,7 @@ fi
 
 
 ### STEP 2b. Preliminary rRNA QC (Bowtie2 mapping against rRNA references):
-if [[ $debug_step == "all" || $debug_step == "step2b" ]]; then
+if run_step step2b; then
 	if [ ! -z "$rrna_qc_databases" ]; then
 		echo -e "\n\nSTEP 2b: rRNA QC ...\nCurrent date/time: $(date)\n\n"
 _log_step "Step_2b_rRNA_QC" "start"
@@ -958,7 +994,7 @@ fi
 
 
 ### STEP3a. Prepare the data and info for running miARma-seq:
-if [[ $debug_step == "all" || $debug_step == "step3a" ]]; then
+if run_step step3a; then
 	echo -e "\n\nSTEP 3a: Starting...\nCurrent date/time: $(date)\n\n"
 _log_step "Step_3a_Prepare" "start"
 	cd $output_folder/$name/
@@ -966,7 +1002,7 @@ _log_step "Step_3a_Prepare" "start"
 	mkdir -p $TMPDIR
 	# If the running is resumed in this step, the above has to be done
 	if [ -z "$organism" ]; then
-		organism=$(cat $output_folder/$name/GEO_info/organism.txt | sed 's, ,_,g;s,_+,_,g')
+		organism=$(cat $output_folder/$name/reads_study_info/organism.txt | sed 's, ,_,g;s,_+,_,g')
 	fi
 
 	### Prepare the salmon index from the trancripts sequences if required and strandness prediction... (if the miarma0.ini does not exist yet, pointing to a previous miarma run)
@@ -1178,14 +1214,14 @@ fi
 ### STEP3b. Running miARma-seq:
 # miARma RNA-seq mode was modified to leverage GNU's parallel and increase speed, introduce limit RAM in aligners and multithreading index, replace the shebang with #!/usr/bin/env perl so it uses the PATH's/environment's one, etc...
 # Eventually, WIP nicludes to also improve and integrate the rest of modules of miARma, such as adapter cutting, stats, miRNAs...
-if [[ $debug_step == "all" || $debug_step == "step3b" ]]; then
+if run_step step3b; then
 	echo -e "\n\nSTEP 3b: Starting...\nCurrent date/time: $(date)\n\n"
 _log_step "Step_3b_miARma" "start"
 	rm -rf $output_folder/$name/miARma_out*
 	mkdir -p $TMPDIR
 	# If the running is resumed in this step, the above has to be done
 	if [ -z "$organism" ]; then
-		organism=$(cat $output_folder/$name/GEO_info/organism.txt | sed 's, ,_,g;s,_+,_,g')
+		organism=$(cat $output_folder/$name/reads_study_info/organism.txt | sed 's, ,_,g;s,_+,_,g')
 	fi
 
 	echo -e "miARma configuration .ini:"
@@ -1231,11 +1267,11 @@ fi
 
 
 ### STEP 4. Process output of miARma. Get figures, final counts, standard DGE, violin plots...
-if [[ $debug_step == "all" || $debug_step == "step4" ]]; then
+if run_step step4; then
 	# If the running is resumed in this step, this variables has to be created because they would not exist
 	rm -rf $output_folder/$name/final_results_* # So it's redone when resuming
 	if [ -z "$organism" ]; then
-		organism=$(cat $output_folder/$name/GEO_info/organism.txt | sed 's, ,_,g;s,_+,_,g')
+		organism=$(cat $output_folder/$name/reads_study_info/organism.txt | sed 's, ,_,g;s,_+,_,g')
 	fi
 	if [ -z "${!array[@]}" ]; then
 		IFS=', ' read -r -a array <<< "$annotation"
@@ -1401,12 +1437,13 @@ _log_step "Step_4_R_Process" "start"
 				Rscript $CURRENT_DIR/scripts/prepare_SE.R \
 					"$final_dir/Raw_counts_genes.txt" \
 					"$final_dir/TPM_counts_genes.txt" \
-					"$output_folder/$name/GEO_info/samples_info.txt" \
+					"$output_folder/$name/reads_study_info/samples_info.txt" \
 					"$final_dir/DGE/list_comp.txt" \
 					"$final_dir/DGE" \
 					"^DGE_analysis_comp[0-9].txt$" \
 					"$name" \
-					"$organism" 2>&1 | tee -a "$final_dir/prepare_SE.log"
+					"$organism" \
+					"$non_reference_funct_enrichm" 2>&1 | tee -a "$final_dir/DGE/deResults_prepare_SE.log"
 			else
 				echo "Skipping exploreDE SE generation for index $index: required files not found"
 			fi
@@ -1423,10 +1460,10 @@ fi
 
 
 ### STEP 4b. Splicing analysis if requested (saseR or IsoformSwitchAnalyzeR)
-if [[ $debug_step == "all" || $debug_step == "step4b" ]]; then
+if run_step step4b; then
 	_log_step "Step_4b_Splicing" "start"
 	if [ -z "$organism" ]; then
-		organism=$(cat $output_folder/$name/GEO_info/organism.txt | sed 's, ,_,g;s,_+,_,g')
+		organism=$(cat $output_folder/$name/reads_study_info/organism.txt | sed 's, ,_,g;s,_+,_,g')
 	fi
 	if [ -z "${!array[@]}" ]; then
 		IFS=', ' read -r -a array <<< "$annotation"
@@ -1442,8 +1479,8 @@ if [[ $debug_step == "all" || $debug_step == "step4b" ]]; then
 			saser_out=$output_folder/$name/final_results_reanalysis$index/saseR_splicing
 			mkdir -p $saser_out
 			library_layout=$(find $output_folder/$name -name library_layout_info.txt | xargs cat)
-			samples_info=$output_folder/$name/GEO_info/samples_info.txt
-			design_file=$(ls $output_folder/$name/GEO_info/design_possible_full_1.txt 2>/dev/null || echo "none")
+			samples_info=$output_folder/$name/reads_study_info/samples_info.txt
+			design_file=$(ls $output_folder/$name/reads_study_info/design_possible_full_1.txt 2>/dev/null || echo "none")
 			R_saseR_splicing.R \
 				"$bam_dir" \
 				"${array[index]}" \
@@ -1483,8 +1520,8 @@ if [[ $debug_step == "all" || $debug_step == "step4b" ]]; then
 			fi
 			isoswitch_out=$output_folder/$name/final_results_reanalysis$index/IsoformSwitchAnalyzeR
 			mkdir -p $isoswitch_out
-			samples_info=$output_folder/$name/GEO_info/samples_info.txt
-			design_file=$(ls $output_folder/$name/GEO_info/design_possible_full_1.txt 2>/dev/null || echo "none")
+			samples_info=$output_folder/$name/reads_study_info/samples_info.txt
+			design_file=$(ls $output_folder/$name/reads_study_info/design_possible_full_1.txt 2>/dev/null || echo "none")
 			R_isoformswitch.R \
 				"$quant_dir" \
 				"${array[index]}" \
@@ -1506,7 +1543,7 @@ fi
 
 
 ### STEP 5. Time course analyses if required
-if [[ $debug_step == "all" || $debug_step == "step5" ]]; then
+if run_step step5; then
 	for index in "${!array[@]}"; do
 		if [[ "$time_course" == "yes" ]]; then
 			echo -e "\n\nSTEP 5: Starting...\nCurrent date/time: $(date)\n\n"
@@ -1522,11 +1559,11 @@ fi
 
 
 ### STEP 6. Functional enrichment analyses: clusterProfiler, autoGO, Panther, network analyses...
-if [[ $debug_step == "all" || $debug_step == "step6" ]]; then
+if run_step step6; then
 	# If the running is resumed in this step, this variables has to be created because they would not exist
  	# The same may happen in other steps, this is WIP
 	if [ -z "$organism" ]; then
-		organism=$(cat $output_folder/$name/GEO_info/organism.txt | sed 's, ,_,g;s,_+,_,g')
+		organism=$(cat $output_folder/$name/reads_study_info/organism.txt | sed 's, ,_,g;s,_+,_,g')
 	fi
 	if [[ $network_analyses == "yes" ]]; then
 		if [ -z "$taxonid" ]; then
@@ -1585,7 +1622,7 @@ _log_step "Step_6_Enrichment" "start"
 			else
 				echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
 _log_step "Step_6_Enrichment" "start"
-   				echo "Organism is $organism... Functional analyses apart from human/mouse is not fully supported yet"
+   				echo "Organism '$organism' is not human/mouse, so functional enrichment support is limited: reanalyzerGSE will attempt GO/KEGG over-representation using terms extracted from the provided annotation (dedicated OrgDb-based analyses are human/mouse only)."
 				# Determine which annotation file to use for functional enrichment
 				annot_enrichm=""
 				if [ ! -z "$non_reference_funct_enrichm" ]; then
@@ -1631,7 +1668,7 @@ _log_step "Step_6_Enrichment" "start"
 							annotation_go=""
 						fi
 						R_clusterProfiler_enrichr.R "$annotation_go" $output_folder/$name/final_results_reanalysis$index/RPKM_counts_genes.txt $output_folder/$name/final_results_reanalysis$index/DGE "^DGE_analysis_comp[0-9]+.txt$" "$annotation_kegg" &> clusterProfiler_enrichr_funct_enrichment.log
-						echo "enrichr execution completed. Please double check the results and the log: clusterProfiler_enrichr_funct_enrichment.log"
+						echo "enrichr finished (log: clusterProfiler_enrichr_funct_enrichment.log); status is summarised below."
 					fi
 				else
 					echo "For $organism and the annotation $annotation_file, no GO or functional information found. Consider providing a GAF, GMT, or GO-annotated GFF/GTF via 'non_reference_funct_enrichm'"
@@ -1639,17 +1676,23 @@ _log_step "Step_6_Enrichment" "start"
 			fi
 
 			cd $output_folder/$name/final_results_reanalysis$index/DGE/
-			error_files=$(grep -l "Err" *_funct_enrichment.log 2>/dev/null | sed 's/.txt_funct_enrichment.log//g' | sort | uniq)
-			if [ -n "$error_files" ]; then
-			    echo -e "\nFunctional enrichment analyses done!\nYou may want to check out the following logs, which seem to contain some errors:\n"
-			    echo "$error_files"
+			# A log counts as failed only on a real R fatal-error marker (the old
+			# broad "Err" match flagged benign lines). Show the actual error lines so
+			# the cause (e.g. a missing package) is visible instead of buried.
+			enrich_err_re="Execution halted|Error in |Error: |no package called"
+			error_logs=$(grep -lE "$enrich_err_re" *_funct_enrichment.log 2>/dev/null | sort -u)
+			if [ -n "$error_logs" ]; then
+			    echo -e "\nSome enrichment scripts reported errors:"
+			    for lg in $error_logs; do
+			        echo "  * $lg"
+			        grep -hE "$enrich_err_re" "$lg" 2>/dev/null | sed 's/^/      /' | head -4
+			    done
 
-			    # Automatic retry: re-run failed enrichment scripts once
-			    echo -e "\nRetrying failed enrichment scripts once..."
-			    cd $output_folder/$name/final_results_reanalysis$index/DGE/
-
-			    # Retry clusterProfiler failures
-			    failed_cp=$(grep -l "Err" clusterProfiler_*_funct_enrichment.log 2>/dev/null | sed 's/clusterProfiler_//g;s/_funct_enrichment.log//g' | sort | uniq)
+			    # Automatic retry, once. Only the per-comparison parallel scripts
+			    # (clusterProfiler_<comp>.txt..., autoGO_panther_<comp>.txt...) can be
+			    # re-run this way; single-shot scripts (e.g. the enrichr path) cannot.
+			    echo -e "\nRetrying failed per-comparison enrichment scripts once..."
+			    failed_cp=$(grep -lE "$enrich_err_re" clusterProfiler_*_funct_enrichment.log 2>/dev/null | sed 's/clusterProfiler_//g;s/_funct_enrichment.log//g' | sort | uniq)
 			    for ff in $failed_cp; do
 			        if [ -f "$ff" ]; then
 			            echo "  Retrying clusterProfiler for $ff ..."
@@ -1657,9 +1700,7 @@ _log_step "Step_6_Enrichment" "start"
 			            R_clusterProfiler_analyses_parallel.R $PWD $organism "1" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution "^${ff}$" $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_${ff}_funct_enrichment_retry.log
 			        fi
 			    done
-
-			    # Retry autoGO+Panther failures
-			    failed_ago=$(grep -l "Err" autoGO_panther_*_funct_enrichment.log 2>/dev/null | sed 's/autoGO_panther_//g;s/_funct_enrichment.log//g' | sort | uniq)
+			    failed_ago=$(grep -lE "$enrich_err_re" autoGO_panther_*_funct_enrichment.log 2>/dev/null | sed 's/autoGO_panther_//g;s/_funct_enrichment.log//g' | sort | uniq)
 			    for ff in $failed_ago; do
 			        if [ -f "$ff" ]; then
 			            echo "  Retrying autoGO+Panther for $ff ..."
@@ -1667,28 +1708,198 @@ _log_step "Step_6_Enrichment" "start"
 			        fi
 			    done
 
-			    # Check again after retry
-			    retry_errors=$(grep -l "Err" *_funct_enrichment_retry.log 2>/dev/null | sed 's/_funct_enrichment_retry.log//g' | sort | uniq)
-			    if [ -n "$retry_errors" ]; then
-			        echo -e "\nAfter retry, the following still have errors:"
-			        echo "$retry_errors"
+			    if ls *_funct_enrichment_retry.log >/dev/null 2>&1; then
+			        retry_errors=$(grep -lE "$enrich_err_re" *_funct_enrichment_retry.log 2>/dev/null | sort -u)
+			        if [ -n "$retry_errors" ]; then
+			            echo "  Still failing after retry: $(echo $retry_errors | tr '\n' ' ')"
+			        else
+			            echo "  Retry succeeded — no errors on re-run."
+			        fi
 			    else
-			        echo -e "\nRetry completed successfully — no more errors detected."
+			        echo "  Nothing could be retried automatically (the failing step is not a per-comparison script); see the errors above."
 			    fi
-			else
-			    echo -e "\nFunctional enrichment analyses done! No errors detected in logs."
 			fi
 
-			# Add to the tables of functional enrichment the number of genes up/down:
+			# Success is decided solely by whether result files were produced, not by
+			# the presence/absence of log errors. Add the up/down gene counts to them.
 			cd $output_folder/$name/final_results_reanalysis$index/
 			files_to_process=$(find . \( -name "*.txt" -o -name "*.tsv" -o -name "*.csv" \) | grep funct | grep -v '_err.txt\|_aPEAR\|_similarity')
 			if [ -n "$files_to_process" ]; then
 				enrichment_results_found="yes"
 				cd $output_folder/$name/final_results_reanalysis$index/DGE/
-				echo "Formatting $(echo $files_to_process | wc -w) functional enrichment result file(s)..."
+				echo -e "\nFunctional enrichment completed: $(echo $files_to_process | wc -w) result file(s) produced. Formatting..."
 				echo $files_to_process | parallel --halt-on-error 2 --joblog R_enrich_format_analyses_parallel_log_parallel.txt -j $cores "file={}; R_enrich_format.R \"\$file\" \$(echo \"\$file\" | sed 's,DGE/.*,DGE/,g')\$(echo \"\$file\" | sed 's,.*DGE_analysis_comp,DGE_analysis_comp,g;s,_pval.*,,g;s,_fdr.*,,g;s,_funct.*,,g;s,_cluster.*,,g' | sed 's,.txt,,g').txt $organism $rev_thr" &> $PWD/enrichment_format.log
 			else
-				echo "No functional enrichment results found. Report will not be rendered."
+				enrichment_results_found="no"
+				echo -e "\nFunctional enrichment produced no result files, so the HTML report will not be rendered."
+				if [ -n "$error_logs" ]; then
+				    echo "Reason: the enrichment step(s) above failed — see the error lines. Fix the cause and re-run this step with '-Dm step6'."
+				fi
+			fi
+		fi
+
+		# --- Optional AI insight boxes for the reports (opt-in: needs -llm_endpoint) ---
+		# Reuses the LLM_* env vars exported for MultiQC AI. llm_insight.py no-ops
+		# without an endpoint anyway; we also gate here to skip the work when off.
+		# Insight files (*.ai_insight.md) are picked up by the enrichment .Rmd and by
+		# the Sphinx report; generation failures are non-fatal (logged, boxes omitted).
+		# Each ai_insights OPTION (design / counts / dge / enrichment) is handled as
+		# its own pass. llm_insight.py exits 42 on a >5-min LLM timeout; on that we
+		# stop the pass and fill EVERY box for that option with a 'timeout' placeholder
+		# (item: on timeout the whole option is skipped and its boxes say so).
+		: "${ai_do_design:=0}" "${ai_do_counts:=0}" "${ai_do_dge:=0}" "${ai_do_enrichment:=0}" "${ai_do_qualimap:=0}" "${ai_do_qc_pdf:=0}"
+		if [ -n "$LLM_ENDPOINT" ] && [ $((ai_do_design + ai_do_counts + ai_do_dge + ai_do_enrichment + ai_do_qualimap + ai_do_qc_pdf)) -gt 0 ]; then
+			ai_fdir="$output_folder/$name/final_results_reanalysis$index"
+			ai_rsi="$output_folder/$name/reads_study_info"
+			ai_dge_dir="$ai_fdir/DGE"
+			if [ -d "$ai_dge_dir" ]; then
+				ai_log="$ai_dge_dir/ai_insights.log"; : > "$ai_log"
+				echo -e "\nGenerating AI report insights (ai_insights=$ai_insights, model=${llm_model:-<unset>})..."
+				# Write the 'timeout, please try again' placeholder box for one output.
+				ai_write_timeout() {   # $1 = output .md path
+					printf '%s\n\n%s\n' "**AI summary** — the LLM did not respond in time." \
+						"ai_insights timeout. Please try again" > "$1"
+				}
+				# Base DE comparison tables (comp1, comp2, ...) present in the DGE dir.
+				ai_comps=()
+				for ai_dgef in "$ai_dge_dir"/DGE_analysis_comp*.txt; do
+					[ -e "$ai_dgef" ] || continue
+					ai_b=$(basename "$ai_dgef" .txt)
+					[[ "$ai_b" =~ ^DGE_analysis_comp[0-9]+$ ]] && ai_comps+=("$ai_b")
+				done
+
+				# --- design: organism + comparisons + covariables + layout/strand +
+				#     sample metadata (the info shown in report sections 1-3). ---
+				ai_sinfo="$ai_rsi/samples_info.txt"
+				if [ "$ai_do_design" = 1 ] && [ -f "$ai_sinfo" ]; then
+					ai_tmp=$(mktemp)
+					{ echo "# organism";     cat "$ai_rsi/organism.txt" 2>/dev/null
+					  echo; echo "# comparisons"; cat "$ai_dge_dir/list_comp.txt" 2>/dev/null
+					  echo; echo "# covariables / potential batch effects"
+					  cat "$ai_rsi/covariables.txt" "$ai_rsi/batch_vector.txt" "$ai_rsi/batch_biological_variable.txt" 2>/dev/null
+					  echo; echo "# library layout";  cat "$output_folder/$name/library_layout_info.txt" 2>/dev/null
+					  echo; echo "# strandedness";    cat "$output_folder/$name/strand_info.txt" 2>/dev/null
+					  echo; echo "# samples (name, condition, batch)"; cat "$ai_sinfo"; } > "$ai_tmp"
+					llm_insight.py --input "$ai_tmp" --task design --title "$name" \
+						--out "$ai_dge_dir/study_design.ai_insight.md" >> "$ai_log" 2>&1
+					[ $? -eq 42 ] && ai_write_timeout "$ai_dge_dir/study_design.ai_insight.md"
+					rm -f "$ai_tmp"
+				fi
+
+				# --- counts: per-sample expression landscape. The full log2(TPM+0.1)
+				#     table is NEVER sent; we send a compact per-sample summary (value
+				#     ranges/quartiles + Low/Medium/High category counts) plus the
+				#     sample->condition metadata, so the LLM can comment on it. ---
+				ai_counts_tbl="$ai_fdir/TPM_counts_genes_log2_0.1_categ.txt"
+				if [ "$ai_do_counts" = 1 ] && [ -f "$ai_counts_tbl" ]; then
+					ai_tmp=$(mktemp)
+					python3 - "$ai_counts_tbl" "$ai_sinfo" > "$ai_tmp" 2>/dev/null <<'PYEOF'
+import sys
+tbl = sys.argv[1]; sinfo = sys.argv[2] if len(sys.argv) > 2 else None
+with open(tbl, encoding="utf-8", errors="replace") as fh:
+    header = fh.readline().rstrip("\n").split("\t"); ncol = len(header)
+    num_cols = [i for i, h in enumerate(header)
+                if i > 0 and h and not h.endswith("_categ") and not h.endswith("_categ_2")]
+    cat_of = {header[i]: i for i, h in enumerate(header) if h.endswith("_categ") and not h.endswith("_categ_2")}
+    vals = {i: [] for i in num_cols}
+    cats = {i: {} for i in cat_of.values()}
+    ngenes = 0
+    for line in fh:
+        p = line.rstrip("\n").split("\t")
+        if len(p) < ncol:
+            continue
+        ngenes += 1
+        for i in num_cols:
+            try: vals[i].append(float(p[i]))
+            except ValueError: pass
+        for i in cats:
+            v = p[i]; cats[i][v] = cats[i].get(v, 0) + 1
+def q(s, pr):
+    if not s: return float("nan")
+    k = (len(s) - 1) * pr; f = int(k); c = min(f + 1, len(s) - 1)
+    return s[f] + (s[c] - s[f]) * (k - f)
+print("Per-sample expression summary (values are log2(TPM+0.1)); genes: %d" % ngenes)
+for i in num_cols:
+    s = sorted(vals[i]); name = header[i]
+    ci = cat_of.get(name + "_categ")
+    cc = cats.get(ci, {}) if ci is not None else {}
+    cs = ", ".join("%s=%d" % (k, cc[k]) for k in ("Low", "Medium", "High") if k in cc)
+    if s:
+        print("- %s: min=%.2f q25=%.2f median=%.2f q75=%.2f max=%.2f%s"
+              % (name, s[0], q(s, .25), q(s, .5), q(s, .75), s[-1],
+                 ("; categories: " + cs) if cs else ""))
+if sinfo:
+    try:
+        with open(sinfo, encoding="utf-8", errors="replace") as sh:
+            print("\n# Sample metadata (name, condition, ...):\n" + sh.read().strip())
+    except Exception:
+        pass
+PYEOF
+					if [ -s "$ai_tmp" ]; then
+						llm_insight.py --input "$ai_tmp" --task counts --title "$name" \
+							--out "$ai_dge_dir/counts.ai_insight.md" >> "$ai_log" 2>&1
+						[ $? -eq 42 ] && ai_write_timeout "$ai_dge_dir/counts.ai_insight.md"
+					fi
+					rm -f "$ai_tmp"
+				fi
+
+				# --- dge: one DEG summary per comparison (from the base DE table). ---
+				if [ "$ai_do_dge" = 1 ]; then
+					ai_to=0
+					for ai_c in "${ai_comps[@]}"; do
+						ai_out="$ai_dge_dir/${ai_c}.ai_insight.md"
+						if [ "$ai_to" = 1 ]; then ai_write_timeout "$ai_out"; continue; fi
+						llm_insight.py --input "$ai_dge_dir/${ai_c}.txt" --task dge --title "$ai_c" \
+							--out "$ai_out" >> "$ai_log" 2>&1
+						if [ $? -eq 42 ]; then ai_to=1; ai_write_timeout "$ai_out"; fi
+					done
+				fi
+
+				# --- enrichment: one narrative per comparison, map-reduced (one
+				#     sequential LLM call per table, then a synthesis call) over the
+				#     PRIMARY over-representation result tables for that comparison.
+				#     The tables live in the per-comparison SUBDIRS (clusterProfiler /
+				#     panther / autoGO), not at the DGE top level, so recurse into them
+				#     (the old top-level glob found nothing -> no insight was made).
+				#     We deliberately send only the headline results and skip the noisy
+				#     extras: groupGO/level breakdowns (no p-values), fdr_01 duplicates,
+				#     panther expr-background / binom / GO_SLIM variants. Kept:
+				#       - autoGO GO_*.tsv (what the enrichment report shows)
+				#       - clusterProfiler GO/KEGG/REACT over-representation at fdr_05
+				#       - panther whole-background Fisher tables (GO BP/MF/CC, PC, PATHWAY, REACTOME) ---
+				if [ "$ai_do_enrichment" = 1 ]; then
+					ai_to=0
+					for ai_c in "${ai_comps[@]}"; do
+						ai_out="$ai_dge_dir/${ai_c}.enrichment_ai_insight.md"
+						if [ "$ai_to" = 1 ]; then ai_write_timeout "$ai_out"; continue; fi
+						ai_rfs=()
+						while IFS= read -r ai_rf; do
+							[ -n "$ai_rf" ] && ai_rfs+=("$ai_rf")
+						done < <(find "$ai_dge_dir" -type f \( -name '*.tsv' -o -name '*.txt' \) \
+							\( -path "*${ai_c}_funct_enrich_clusterProfiler/*" -o -path "*${ai_c}_*funct_enrichment_panther/*" \) 2>/dev/null \
+							| grep -E '/_autoGO/GO_.*\.tsv$|/GO_overrepresentation_test.*_fdr_fdr_05\.txt$|/KEGG_enrich_fdr_fdr_05\.txt$|/REACT_fdr_fdr_05\.txt$|/enriched_fisher_whole_back_.*_panther\.txt$' \
+							| grep -vE 'GO_SLIM|_err\.txt$' | sort)
+						if [ ${#ai_rfs[@]} -gt 0 ]; then
+							llm_insight.py --input "${ai_rfs[@]}" --task enrichment --title "$ai_c" --max-rows 0 \
+								--out "$ai_out" \
+								--rel-dir "$ai_dge_dir" \
+								--pertable-out "$ai_dge_dir/${ai_c}.enrichment_ai_pertable.tsv" >> "$ai_log" 2>&1
+							if [ $? -eq 42 ]; then ai_to=1; ai_write_timeout "$ai_out"; fi
+						fi
+					done
+				fi
+				if [ "$ai_do_qualimap" = 1 ]; then
+					echo "Annotating Qualimap HTML reports with AI insights..."
+					qualimap_ai.py --analysis-dir "$output_folder/$name" >> "$ai_log" 2>&1 || true
+				fi
+				if [ "$ai_do_qc_pdf" = 1 ]; then
+					echo "Annotating QC figures PDF with AI insights..."
+					for qc_pdf_file in "$ai_fdir/QC_and_others"/*_QC.pdf; do
+						[ -f "$qc_pdf_file" ] || continue
+						qc_pdf_ai.py --tables-dir "$ai_fdir/QC_and_others/tables" --pdf "$qc_pdf_file" >> "$ai_log" 2>&1 || true
+					done
+				fi
+				echo "AI insights written under $ai_dge_dir (*.ai_insight.md); log: $ai_log"
 			fi
 		fi
 
@@ -1713,7 +1924,7 @@ fi
 
 
 ### STEP 7. Annotation: Tables of DEGs, lists of genes, etc
-if [[ $debug_step == "all" || $debug_step == "step7" ]]; then
+if run_step step7; then
 	echo -e "\n\nSTEP 7: Starting...\nCurrent date/time: $(date)\n\n"
 _log_step "Step_7_Annotation" "start"
 	echo -e "\n\nAnnotating list of genes...\n\n"
@@ -1739,7 +1950,7 @@ fi
 
 
 ###### STEP 8. Sum up results in a sphinx report
-if [[ $debug_step == "all" || $debug_step == "step8" ]]; then
+if run_step step8; then
 	_log_step "Step_8_Report" "start"
 
 	# Render a preliminary Gantt chart with completed steps (1-7) so it exists when sphinx_report.sh builds
@@ -1766,7 +1977,7 @@ fi
 
 ###### STEP 9. Tidy up, prepare for storage if final results have been created and the number of aligned files is equal to the numbers of samples, rename folders, convert tables to xlsx if required... etc
 # Compress the folders
-if [[ $debug_step == "all" || $debug_step == "step9" ]]; then
+if run_step step9; then
 	echo -e "\n\nSTEP 9: Starting...\nCurrent date/time: $(date)\n\n"
 _log_step "Step_9_Cleanup" "start"
 	echo -e "\n\nTidying up, removing empty folders, temp files, compressing...\n\n"
@@ -1779,7 +1990,12 @@ _log_step "Step_9_Cleanup" "start"
 	fi
 
 
-	cd $output_folder/$name/ && find . -type f \( -name "*_fdr_05.txt" -o -name "*_logneg.txt" -o -name "*_logpos.txt" \) -exec rm -f {} +
+	# Remove intermediate DEG-list text files (DGE_analysis_comp*_fdr_05.txt, logpos/logneg),
+	# but spare the clusterProfiler enrichment result tables, which carry a double token
+	# (e.g. GO_overrepresentation_test_BP_fdr_fdr_05.txt). Without the exclusion the broad
+	# "*_fdr_05.txt" glob deleted the fdr_05 enrichment tables while keeping fdr_01, so the
+	# archived report could no longer be re-rendered with both thresholds.
+	cd $output_folder/$name/ && find . -type f \( -name "*_fdr_05.txt" -o -name "*_logneg.txt" -o -name "*_logpos.txt" \) ! -name "*_fdr_fdr_05.txt" -exec rm -f {} +
 	# Note: xlsx conversion now happens in STEP 8 (before sphinx report), not here
 
 	for index in "${!array[@]}"; do
@@ -1868,4 +2084,8 @@ if [ -f "$STEP_TIMES_FILE" ]; then
 	fi
 fi
 
-echo -e "\n\n\nALL STEPS DONE! Best wishes\n\n\n"
+if [[ -n "$end_step" && "$end_step" != "none" && "$end_step" != "all" ]]; then
+	echo -e "\n\n\nPIPELINE FORCE-ENDED after '$end_step' as requested (-Es/-end_step); any later steps were skipped. Best wishes\n\n\n"
+else
+	echo -e "\n\n\nALL STEPS DONE! Best wishes\n\n\n"
+fi

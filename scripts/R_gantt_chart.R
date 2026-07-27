@@ -36,11 +36,12 @@ st_start <- aggregate(start_epoch ~ step, data = st_start, FUN = min)
 st_end   <- aggregate(end_epoch   ~ step, data = st_end,   FUN = max)
 st_wide <- merge(st_start, st_end, by = "step", all = TRUE)
 
-# Remove steps with missing start or end
-st_wide <- st_wide[!is.na(st_wide$start_epoch) & !is.na(st_wide$end_epoch), ]
+# For steps with a start epoch but missing end epoch (e.g. current report step), use current time
+st_wide <- st_wide[!is.na(st_wide$start_epoch), ]
+st_wide$end_epoch[is.na(st_wide$end_epoch)] <- as.numeric(Sys.time())
 
 if (nrow(st_wide) == 0) {
-  cat("No complete start/end pairs found. Skipping Gantt chart.\n")
+  cat("No valid step timing entries found. Skipping Gantt chart.\n")
   quit(status = 0)
 }
 

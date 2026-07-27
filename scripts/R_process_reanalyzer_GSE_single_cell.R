@@ -6,7 +6,7 @@ genes <- args[3]
 
 ### I think normally the matrix of counts are not normalized, and I try to load the non-normalized counts. Then, I normalize:
 ### I also load the annotations:
-setwd(paste(path,GEO_ID,"GEO_info",GEO_ID,sep="/"))
+setwd(paste(path,GEO_ID,"reads_study_info",GEO_ID,sep="/"))
 potential_counts <- grep("rpkm|norm",grep("expr|matr",list.files(),val=T,ignore.case=T),val=T,ignore.case=T,invert=T)
 potential_annotation <- list.files()[!(list.files() %in% potential_counts)]
 

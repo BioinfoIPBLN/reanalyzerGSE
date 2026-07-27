@@ -1,11 +1,25 @@
 #!/usr/bin/env Rscript
 args = commandArgs(trailingOnly=TRUE)
 path <- args[1]
-cores <- args[2]
+cores <- as.integer(args[2])
+if (is.na(cores) || cores < 1L) cores <- 1L
 pattern_to_avoid <- as.character(args[3])
 
+MAX_CHARS <- 32767L   # Excel's hard per-cell character limit
 
-split_large_cells <- function(df, max_chars = 32767) {
+# Cheap, vectorised check: does any cell exceed Excel's limit and therefore need
+# the (expensive) row-splitting below? Only text columns can, so skip the rest.
+needs_split <- function(df) {
+  for (j in seq_along(df)) {
+    x <- df[[j]]
+    if (is.character(x) || is.factor(x)) {
+      if (any(nchar(as.character(x)) > MAX_CHARS, na.rm = TRUE)) return(TRUE)
+    }
+  }
+  FALSE
+}
+
+split_large_cells <- function(df, max_chars = MAX_CHARS) {
   # Create an empty dataframe with the same structure as the original
   new_df <- data.frame(matrix(ncol = ncol(df), nrow = 0))
   colnames(new_df) <- colnames(df)
@@ -48,7 +62,9 @@ process_file <- function(file){
   if (ncol(data) > 1) {
     data <- as.data.frame(data)
     data[is.na(data) | data == ""] <- "-"
-    data_final <- split_large_cells(data)
+    # Only pay for the O(n^2) row-splitting when a cell actually overflows Excel's
+    # limit; count/annotation matrices never do, so they skip it entirely.
+    data_final <- if (needs_split(data)) split_large_cells(data) else data
     writexl::write_xlsx(as.data.frame(data_final), paste0(sub("\\.txt$", "", file), ".xlsx"))
     #unlink(file)
   }

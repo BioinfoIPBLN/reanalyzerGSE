@@ -141,15 +141,15 @@ if (id!="agilent" & id!="HT12V4"){
 	path_script <- funr::get_script_path()
 	print("Sourcing analyzeBead.R from..."); print(path_script)
 	source(paste0(path_script,"/analyzeBead.R"))
-	phenodata <- as.data.frame(data.table::fread(paste0(path,"/GEO_info/phenodata_extracted.txt"),sep="\t",head=F,fill=T))
+	phenodata <- as.data.frame(data.table::fread(paste0(path,"/reads_study_info/phenodata_extracted.txt"),sep="\t",head=F,fill=T))
 	phenodata_possible_designs <- phenodata[,names(which(sort(unlist(lapply(apply(phenodata,2,table),function(x){length(x)}))) <= 10))]
 	names <- gsub("__","_",gsub("__","_",gsub("[[:punct:]]| ","_",paste(phenodata$V1,apply(phenodata_possible_designs,1,function(x){paste(x,collapse="_")}),sep="_"))))
 	names <- make.unique(names, sep = '_')
 
 	bead.results <- beadAnalyze(idats = grep(".idat",list.files(path=path2,full.names=T),val=T),
 		                    names = names,
-		                    condition = read.table(paste0(path,"/GEO_info/design_possible_full_1.txt"))$V1,
-		                    ref.condition = unique(read.table(paste0(path,"/GEO_info/design_possible_full_1.txt"))$V1)[1])
+		                    condition = read.table(paste0(path,"/reads_study_info/design_possible_full_1.txt"))$V1,
+		                    ref.condition = unique(read.table(paste0(path,"/reads_study_info/design_possible_full_1.txt"))$V1)[1])
 	GSEXXXXX <- bead.results$expr_df[!is.na(bead.results$expr_df$SYMBOL),-c((length(colnames(bead.results$expr_df))-3):length(colnames(bead.results$expr_df)))]
 	GSEXXXXX_agg <- aggregate(. ~ SYMBOL, data = GSEXXXXX, mean,na.rm=T)
 	rownames(GSEXXXXX_agg) <- stringr::str_to_title(GSEXXXXX_agg$SYMBOL)
@@ -166,7 +166,7 @@ cat("\n"); print("Normalized expression written")
 ### Figure of the expr of certain genes of interest:
 ## Introduce in the violin plot statistics, loop through the different designs to get different coloring and grouping... etc
 for (i in unlist(strsplit(genes,","))){
-  for (z in list.files(pattern = "design_possible_full", recursive = TRUE, full.names=T, path=paste0(path,"/GEO_info"))){
+  for (z in list.files(pattern = "design_possible_full", recursive = TRUE, full.names=T, path=paste0(path,"/reads_study_info"))){
 	  system(paste0("sed 's/^$/-/g' -i ",z)); print(i); print(z)
 	  if (i %in% rownames(GSEXXXXX_agg)){
 		  a <- GSEXXXXX_agg[rownames(GSEXXXXX_agg)==i,]

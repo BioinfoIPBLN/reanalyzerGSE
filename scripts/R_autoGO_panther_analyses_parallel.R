@@ -296,27 +296,26 @@ convert_ids <- function(ids,mode) {
   return(ids2)
 }
 
-# Decide autoGO/enrichr databases:
-if (!is.na(enrichment_databases)){
-    if (length(enrichment_databases) > 0){
-      enrichment_databases <- c(enrichment_databases,"GO_Biological_Process_2023","GO_Molecular_Function_2023","GO_Cellular_Component_2023")
-    } else {
-    enrichment_databases <- c("GO_Biological_Process_2023","GO_Molecular_Function_2023","GO_Cellular_Component_2023")
-    }
-} else {
-    enrichment_databases <- c("GO_Biological_Process_2023","GO_Molecular_Function_2023","GO_Cellular_Component_2023")
+# Decide autoGO/enrichr databases: honour EXACTLY what the user asked for via
+# -databases_function; only fall back to a current default GO set when nothing
+# was provided. (Previously the 2023 GO databases were force-APPENDED on top of
+# the user's choice, so requesting e.g. the 2025 GO sets still ran 2023 too, and
+# duplicated/mismatched entries showed up in the report.)
+default_go <- c("GO_Biological_Process_2025","GO_Molecular_Function_2025","GO_Cellular_Component_2025")
+if (is.na(enrichment_databases) || !nzchar(enrichment_databases) || enrichment_databases == "NA"){
+    enrichment_databases <- default_go
 }
 
 enrichment_databases <- unique(unlist(strsplit(enrichment_databases,",")))
 
 if (grepl("sapiens", organism, fixed=TRUE)){
-  databases_autoGO <- unique(c(enrichment_databases,"WikiPathway_2023_Human","RNAseq_Automatic_GEO_Signatures_Human_Down","RNAseq_Automatic_GEO_Signatures_Human_Up","Reactome_2022","KEGG_2021_Human","HDSigDB_Human_2021"))
+  databases_autoGO <- unique(enrichment_databases)   # strict: exactly -databases_function, no auto-added extras
   databases_autoGO_print <- paste(databases_autoGO,collapse=",")
   print(paste0("The databases selected for autoGO are ",databases_autoGO_print,". Please double check autoGO::choose_database(), which has > 200 databases, in case you want to add any extra by using the pipeline argument..."))
   suppressMessages(library("org.Hs.eg.db",quiet = T,warn.conflicts = F))
   mode <- check_naming(keys(org.Hs.eg.db, keytype = "SYMBOL"))
 } else if (grepl("musculus", organism, fixed=TRUE)){
-  databases_autoGO <- unique(c(enrichment_databases,"WikiPathways_2019_Mouse","RNAseq_Automatic_GEO_Signatures_Mouse_Down","RNAseq_Automatic_GEO_Signatures_Mouse_Up","Reactome_2022","Mouse_Gene_Atlas","KEGG_2021_Mouse","HDSigDB_Mouse_2021"))
+  databases_autoGO <- unique(enrichment_databases)   # strict: exactly -databases_function, no auto-added extras
   databases_autoGO_print <- paste(databases_autoGO,collapse=",")
   print(paste0("The databases selected for autoGO are ",databases_autoGO_print,". Please double check autoGO::choose_database(), which has > 200 databases, in case you want to add any extra by using the pipeline argument..."))
   suppressMessages(library("org.Mm.eg.db",quiet = T,warn.conflicts = F))
@@ -407,6 +406,7 @@ process_file <- function(file){
   print(paste0("Processing autoGO for ",file2," and ",length(read.table(file,head=F)$V1)," genes..."))
   
   # autoGO:
+  Sys.sleep(runif(1, 0.5, 3.5))
   tryCatch({
     autoGO(read_gene_lists(gene_lists_path=path2,which_list="everything",from_autoGO=F,files_format=basename(file)),
            databases_autoGO)

@@ -9,28 +9,62 @@ input_path_deg_results <- args[5]
 pattern_deg_results <- args[6]
 bakk_name <- args[7]
 organism_arg <- if (length(args) >= 8 && nchar(trimws(args[8])) > 0) args[8] else "Homo_sapiens"
+# arg 9 (optional): functional annotation file (2-column gene -> GO/category mapping;
+# GAF/GMT/GFF/GTF/TSV) used for ORA on NON-model organisms. This is reanalyzerGSE's
+# -nrf / -non_reference_funct_enrichm file. Ignored for model organisms (Human/Mouse/Rat).
+nrf_file <- if (length(args) >= 9 && nchar(trimws(args[9])) > 0) trimws(args[9]) else ""
 
 suppressPackageStartupMessages(library(SummarizedExperiment))
 suppressPackageStartupMessages(library(annotables))
 suppressPackageStartupMessages(library(tidyverse))
 suppressPackageStartupMessages(library(clusterProfiler))
 
-# Organism-aware setup: select OrgDb and annotables table
-organism_clean <- gsub("[_ ]+", "_", organism_arg)
-if (grepl("Mus", organism_clean, ignore.case = TRUE)) {
+# Organism-aware setup. Model organisms (Human, Mouse, Rat) use a Bioconductor OrgDb
+# + annotables table for gene annotation and enrichGO/gseGO. Any other organism is
+# treated as "non-model": no OrgDb/annotables, and functional enrichment (a basic
+# GO ORA) is derived from the provided annotation file (nrf_file) via enricher().
+# The organism label is stored truthfully in metadata(se)$param$organism so the
+# exploreLocalDE app can route on the name (model -> full suite; else -> basic ORA).
+organism_clean <- gsub("[ ]+", "_", trimws(organism_arg))
+organism_clean <- gsub("_+", "_", organism_clean)
+if (grepl("Mus_?musculus|^Mus$|Mouse", organism_clean, ignore.case = TRUE)) {
   suppressPackageStartupMessages(library(org.Mm.eg.db))
   orgdb <- org.Mm.eg.db
   anno_tbl <- grcm38
   ref_build <- "Mus_musculus/GENCODE/GRCm38"
   organism_label <- "Mus_musculus"
-  cat("\n  Organism: Mouse (Mus musculus)\n")
-} else {
+  is_model <- TRUE
+  cat("\n  Organism: Mouse (Mus musculus) [model]\n")
+} else if (grepl("Homo_?sapiens|^Homo$|Human", organism_clean, ignore.case = TRUE)) {
   suppressPackageStartupMessages(library(org.Hs.eg.db))
   orgdb <- org.Hs.eg.db
   anno_tbl <- grch38
   ref_build <- "Homo_sapiens/GENCODE/GRCh38"
   organism_label <- "Homo_sapiens"
-  cat("\n  Organism: Human (Homo sapiens)\n")
+  is_model <- TRUE
+  cat("\n  Organism: Human (Homo sapiens) [model]\n")
+} else if (grepl("Rattus|^Rat$", organism_clean, ignore.case = TRUE)) {
+  # Rat is treated as a model organism (needs org.Rn.eg.db installed + annotables rnor6).
+  suppressPackageStartupMessages(library(org.Rn.eg.db))
+  orgdb <- org.Rn.eg.db
+  anno_tbl <- rnor6
+  ref_build <- "Rattus_norvegicus/Ensembl/Rnor_6.0"
+  organism_label <- "Rattus_norvegicus"
+  is_model <- TRUE
+  cat("\n  Organism: Rat (Rattus norvegicus) [model]\n")
+} else {
+  # Non-model organism: no OrgDb / annotables. Keep the provided species name.
+  orgdb <- NULL
+  anno_tbl <- NULL
+  ref_build <- organism_clean
+  organism_label <- organism_clean
+  is_model <- FALSE
+  cat("\n  Organism:", organism_clean, "[non-model]\n")
+  if (nzchar(nrf_file) && file.exists(nrf_file)) {
+    cat("    Functional enrichment from annotation file:", nrf_file, "\n")
+  } else {
+    cat("    No functional annotation file provided/found; SE will hold DE results without ORA.\n")
+  }
 }
 
 # Source shared ENSEMBL helper
@@ -109,7 +143,13 @@ de_results_list <- lapply(1:length(deg_results_files), function(i) {
   de_results <- de_results[match(rownames(tpm_counts), de_results$gene_name),]
   de_results <- de_results[complete.cases(de_results),]
   
-  if (gene_ids_are_ensembl) {
+  if (!is_model) {
+    # Non-model: no annotables available. Keep the DE gene identifier as gene_id;
+    # entrez/description are unknown (ORA below comes from the annotation file instead).
+    de_results$gene_id <- de_results$gene_name
+    de_results$description <- NA_character_
+    de_results$entrez_id <- NA_character_
+  } else if (gene_ids_are_ensembl) {
     # Match ENSEMBL IDs (stripping version) against anno_tbl$ensgene
     ids_stripped <- toupper(strip_ensembl_version(de_results$gene_name))
     anno_stripped <- toupper(anno_tbl$ensgene)
@@ -118,10 +158,11 @@ de_results_list <- lapply(1:length(deg_results_files), function(i) {
     de_results$description <- anno_tbl$description[match_idx]
     de_results$entrez_id <- anno_tbl$entrez[match_idx]
   } else {
-    # Standard symbol-based matching
-    de_results$gene_id <- anno_tbl$ensgene[match(de_results$gene_name, anno_tbl$symbol)]
-    de_results$description <- anno_tbl$description[match(de_results$gene_name, anno_tbl$symbol)]
-    de_results$entrez_id <- anno_tbl$entrez[match(de_results$gene_name, anno_tbl$symbol)]
+    # Standard symbol-based matching (case-insensitive match against anno_tbl$symbol)
+    match_idx <- match(toupper(de_results$gene_name), toupper(anno_tbl$symbol))
+    de_results$gene_id <- anno_tbl$ensgene[match_idx]
+    de_results$description <- anno_tbl$description[match_idx]
+    de_results$entrez_id <- anno_tbl$entrez[match_idx]
   }
   
   de_results
@@ -144,29 +185,39 @@ de_results_DF@listData <- de_results_list
 cat("\n\n[4/6] Reading sample metadata...")
 metadata <- read_tsv(input_metadata, col_names = F, show_col_types = FALSE)
 colnames(metadata) <- c("Name","Tissue [Factor]","Batch [Factor]")
-# Try matching with and without suffixes (handle _STAR.bam, _condition, etc.)
+# Match count-matrix columns to metadata rows. Column names commonly carry
+# aligner/fastq suffixes (e.g. "GSM3030679_1.fastq.gz_STAR.bam") while
+# metadata$Name is the bare accession ("GSM3030679"), so fall back through:
+#   1) exact match  2) one name is a prefix of the other  3) suffix-stripped.
+# IMPORTANT: match() returns NA (never 0) for no-match, so matches must be
+# counted with !is.na() — sum(x != 0) yields NA and crashes the check below.
 sample_names <- colnames(raw_counts)
-# Try direct match first
-direct_match <- match(sample_names, metadata$Name)
-if (all(!is.na(direct_match))) {
-  metadata <- metadata[direct_match, ]
-} else {
-  # Try fuzzy match: strip common suffixes from sample names
-  sample_cores <- sub("(_STAR\\.bam|_hisat2\\.bam|_(?!(Rep|R)\\d+$)[^_]+)$", "", sample_names, perl = T)
-  meta_cores <- sub("(_STAR\\.bam|_hisat2\\.bam|_(?!(Rep|R)\\d+$)[^_]+)$", "", metadata$Name, perl = T)
-  direct_match <- match(sample_cores, meta_cores)
-  if (all(!is.na(direct_match))) {
-    metadata <- metadata[direct_match, ]
-  }
+idx <- match(sample_names, metadata$Name)                        # 1) exact
+if (anyNA(idx)) {                                                # 2) prefix (either direction), longest wins
+  idx <- vapply(sample_names, function(s) {
+    h <- which(startsWith(s, metadata$Name) | startsWith(metadata$Name, s))
+    if (length(h)) h[which.max(nchar(metadata$Name[h]))] else NA_integer_
+  }, integer(1))
 }
-matched_count <- sum(direct_match!=0)
-cat("\n      Samples matched: ", matched_count, "/", nrow(metadata))
-# Ensure metadata$Name matches the actual count matrix column names
-metadata$Name <- sample_names
-if (matched_count < nrow(metadata)) {
-  message("Terminating... no valid SE object can be created")
+if (anyNA(idx)) {                                                # 3) strip fastq/aligner suffixes, then exact
+  strip <- function(x) {
+    x <- sub("\\.fastq\\.gz.*$", "", x)
+    sub("(_STAR\\.bam|_hisat2\\.bam|_(?!(Rep|R)\\d+$)[^_]+)$", "", x, perl = TRUE)
+  }
+  idx <- match(strip(sample_names), strip(metadata$Name))
+}
+matched_count <- sum(!is.na(idx))
+cat("\n      Samples matched: ", matched_count, "/", length(sample_names))
+if (matched_count < length(sample_names)) {
+  message("\nTerminating... could not match all ", length(sample_names),
+          " count-matrix columns to sample metadata (matched ", matched_count,
+          "). Check that column 1 of samples_info.txt holds the sample identifiers.")
   quit(save = "no", status = 1, runLast = FALSE)
 }
+# Reorder metadata to the count-matrix column order, then canonicalise Name to
+# the actual column names (so colData rownames line up with the assays).
+metadata <- metadata[idx, ]
+metadata$Name <- sample_names
 
 # Subset counts to common genes
 raw_counts <- raw_counts[rownames(raw_counts) %in% common_genes, , drop = FALSE]
@@ -188,9 +239,51 @@ universe_entrez <- as.character(de_results_list[[1]]$entrez_id)
 universe_entrez <- universe_entrez[!is.na(universe_entrez) & universe_entrez != "NA"]
 cat("      Genes with Entrez IDs:", length(universe_entrez), "\n")
 
+# --- Non-model functional annotation (basic GO ORA from annotation file) ---
+# For non-model organisms, parse the provided gene->GO mapping (nrf_file) ONCE into
+# per-ontology TERM2GENE / TERM2NAME tables and per-gene GO-ID lists. Mirrors the
+# parsing in R_clusterProfiler_enrichr.R so the qs2 carries the same style of results.
+nm_t2g <- list(BP = NULL, MF = NULL, CC = NULL)              # TERM2GENE per ontology
+nm_t2n <- list(BP = NULL, MF = NULL, CC = NULL)              # TERM2NAME per ontology
+nm_go_by_gene <- list(BP = list(), MF = list(), CC = list()) # gene -> GO IDs (for GO Tile)
+nm_has_go <- FALSE
+if (!is_model && nzchar(nrf_file) && file.exists(nrf_file)) {
+  tryCatch({
+    if (!requireNamespace("GOfuncR", quietly = TRUE)) stop("GOfuncR not installed")
+    ann <- as.data.frame(data.table::fread(nrf_file, head = TRUE, fill = TRUE))[, 1:2]
+    colnames(ann) <- c("source_id", "go_ids")
+    ann$source_id <- toupper(gsub(":.*", "", ann$source_id))
+    ann <- ann[!is.na(ann$source_id) & ann$source_id != "" & !is.na(ann$go_ids), ]
+    # Explode ";"-separated GO IDs into (gene, GO) long form
+    sp <- strsplit(as.character(ann$go_ids), split = ";")
+    long <- data.frame(gene = rep(ann$source_id, lengths(sp)),
+                       go   = trimws(unlist(sp)), stringsAsFactors = FALSE)
+    long <- long[grepl("^GO:", long$go), ]
+    long <- long[!duplicated(long), ]
+    if (nrow(long) > 0) {
+      nm <- GOfuncR::get_names(unique(long$go))
+      onto_map <- setNames(nm$root_node, nm$go_id)
+      name_map <- setNames(nm$go_name, nm$go_id)
+      long$onto <- onto_map[long$go]
+      root_for <- c(BP = "biological_process", MF = "molecular_function", CC = "cellular_component")
+      for (ont in c("BP", "MF", "CC")) {
+        sub <- long[!is.na(long$onto) & long$onto == root_for[[ont]], ]
+        if (nrow(sub) == 0) next
+        nm_t2g[[ont]] <- data.frame(term = sub$go, gene = sub$gene, stringsAsFactors = FALSE)
+        t2n <- unique(data.frame(term = sub$go, name = unname(name_map[sub$go]), stringsAsFactors = FALSE))
+        nm_t2n[[ont]] <- t2n[!is.na(t2n$name), ]
+        nm_go_by_gene[[ont]] <- split(sub$go, sub$gene)
+      }
+      nm_has_go <- any(vapply(nm_t2g, function(x) !is.null(x) && nrow(x) > 0, logical(1)))
+    }
+    cat("\n      Non-model GO annotation parsed. Gene-GO pairs:",
+        sum(vapply(nm_t2g, function(x) if (is.null(x)) 0L else nrow(x), integer(1))), "\n")
+  }, error = function(e) cat("\n      WARNING: could not parse annotation file (", conditionMessage(e), ") - SE will have no ORA.\n", sep = ""))
+}
+
 # Parameters for pathway analysis
 param <- list(
-  runGO = TRUE,
+  runGO = isTRUE(is_model) || isTRUE(nm_has_go),
   refBuild = ref_build,
   organism = organism_label,
   fdrThreshORA = 0.05,
@@ -208,6 +301,7 @@ n_cores <- min(length(de_results_list), parallel::detectCores() - 1, 8)
 if(n_cores < 1) n_cores <- 1
 cat(sprintf("\n      Parallelizing %d contrasts across %d cores...", length(de_results_list), n_cores))
 
+if (is_model) {
 enrichOutput_parallel <- mclapply(names(de_results_list), function(contrast_name) {
   cat("\n      Processing:", contrast_name)
   
@@ -354,6 +448,73 @@ enrichOutput_parallel <- mclapply(names(de_results_list), function(contrast_name
   ))
 }, mc.cores = n_cores)
 
+} else if (isTRUE(nm_has_go)) {
+  # --- Non-model organisms: basic GO ORA via clusterProfiler::enricher() ---
+  # Same enrichResultList shape as the model path (ora[[ont]][[direction]] holding
+  # enrichResult objects) but keyed on gene symbols via the parsed TERM2GENE tables.
+  # No GSEA / KEGG for non-model organisms.
+  enrichOutput_parallel <- lapply(names(de_results_list), function(contrast_name) {
+    cat("\n      Processing:", contrast_name)
+    de_data <- de_results_list[[contrast_name]]
+
+    sig_genes <- de_data[de_data$fdr < 0.05 & !is.na(de_data$fdr), ]
+    up_genes <- sig_genes[sig_genes$log2Ratio > 0, ]
+    down_genes <- sig_genes[sig_genes$log2Ratio < 0, ]
+    cat(" (UP:", nrow(up_genes), ", DOWN:", nrow(down_genes), ")")
+
+    up_g   <- unique(toupper(up_genes$gene_name[!is.na(up_genes$gene_name)]))
+    down_g <- unique(toupper(down_genes$gene_name[!is.na(down_genes$gene_name)]))
+    both_g <- unique(toupper(sig_genes$gene_name[!is.na(sig_genes$gene_name)]))
+
+    enrichInput_item <- list(
+      selections = list(
+        upGenes = up_genes$gene_id[!is.na(up_genes$gene_id)],
+        downGenes = down_genes$gene_id[!is.na(down_genes$gene_id)],
+        bothGenes = sig_genes$gene_id[!is.na(sig_genes$gene_id)]
+      ),
+      seqAnno = de_data,
+      log2Ratio = setNames(de_data$log2Ratio, de_data$gene_id)
+    )
+
+    ora_results <- list(
+      BP = list(upGenes = NULL, downGenes = NULL, bothGenes = NULL),
+      MF = list(upGenes = NULL, downGenes = NULL, bothGenes = NULL),
+      CC = list(upGenes = NULL, downGenes = NULL, bothGenes = NULL)
+    )
+    gsea_results <- list()  # no GSEA for non-model organisms
+
+    for (ont in c("BP", "MF", "CC")) {
+      t2g <- nm_t2g[[ont]]; t2n <- nm_t2n[[ont]]
+      if (is.null(t2g) || nrow(t2g) == 0) next
+      gsets <- list(upGenes = up_g, downGenes = down_g, bothGenes = both_g)
+      for (dir in names(gsets)) {
+        genes <- gsets[[dir]]
+        if (length(genes) >= 5) {
+          tryCatch({
+            suppressMessages(suppressWarnings(
+            er <- clusterProfiler::enricher(
+              gene = genes, TERM2GENE = t2g, TERM2NAME = t2n,
+              pvalueCutoff = 1, qvalueCutoff = 1
+            )))
+            if (!is.null(er) && nrow(er@result) > 0) {
+              er@result$geneName <- er@result$geneID
+              ora_results[[ont]][[dir]] <- er
+            }
+          }, error = function(e) cat(" [ORA-", dir, "-", ont, " failed]", sep = ""))
+        }
+      }
+    }
+
+    list(contrast_name = contrast_name,
+         enrichInput = enrichInput_item,
+         enrichResult = list(ora = ora_results, gsea = gsea_results))
+  })
+
+} else {
+  # Non-model with no usable annotation: no enrichment goes into the qs2.
+  enrichOutput_parallel <- list()
+}
+
 for(res in enrichOutput_parallel) {
   enrichResultList[[res$contrast_name]] <- res$enrichResult
   enrichInputList[[res$contrast_name]] <- res$enrichInput
@@ -363,13 +524,14 @@ for(res in enrichOutput_parallel) {
 # === Build GO annotation columns for GO Tile plots ===
 cat("\n\n      Adding GO annotations to rowData...")
 # Get GO terms for each gene
+if (is_model) {
 gene_symbols <- de_results_list[[1]]$gene_name
 
 if (gene_ids_are_ensembl) {
   # For ENSEMBL IDs: use entrez_id directly from the already-mapped de_results
   entrez_ids <- de_results_list[[1]]$entrez_id
 } else {
-  entrez_ids <- anno_tbl$entrez[match(gene_symbols, anno_tbl$symbol)]
+  entrez_ids <- anno_tbl$entrez[match(toupper(gene_symbols), toupper(anno_tbl$symbol))]
 }
 
 # Map to GO terms  
@@ -425,9 +587,23 @@ for (contrast_name in names(de_results_list)) {
     paste(go_cc[[e]], collapse = "; ")
   })
   de_results_list[[contrast_name]] <- de_data
-  
+
   # Also update enrichInput seqAnno
   enrichInputList[[contrast_name]]$seqAnno <- de_data
+}
+} else {
+  # Non-model organisms: GO IDs per gene come from the parsed annotation file,
+  # keyed by upper-cased gene_name. All NA when no annotation was provided.
+  go_bp <- nm_go_by_gene$BP; go_mf <- nm_go_by_gene$MF; go_cc <- nm_go_by_gene$CC
+  for (contrast_name in names(de_results_list)) {
+    de_data <- de_results_list[[contrast_name]]
+    k <- toupper(as.character(de_data$gene_name))
+    de_data$`GO BP` <- vapply(k, function(g) if (!g %in% names(go_bp)) NA_character_ else paste(unique(go_bp[[g]]), collapse = "; "), character(1))
+    de_data$`GO MF` <- vapply(k, function(g) if (!g %in% names(go_mf)) NA_character_ else paste(unique(go_mf[[g]]), collapse = "; "), character(1))
+    de_data$`GO CC` <- vapply(k, function(g) if (!g %in% names(go_cc)) NA_character_ else paste(unique(go_cc[[g]]), collapse = "; "), character(1))
+    de_results_list[[contrast_name]] <- de_data
+    if (!is.null(enrichInputList[[contrast_name]])) enrichInputList[[contrast_name]]$seqAnno <- de_data
+  }
 }
 
 # Update de_results_DF with new data

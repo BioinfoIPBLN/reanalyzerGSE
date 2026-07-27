@@ -137,7 +137,28 @@ do_autogo <- function(list_of_genes,
       dplyr::pull()
   }
 
-  enriched <- enrichr(list_of_genes, dbs, background)
+  enriched <- NULL
+  max_attempts <- 4
+  for (attempt in 1:max_attempts) {
+    res <- tryCatch({
+      enrichr(list_of_genes, dbs, background)
+    }, error = function(e) {
+      message(sprintf("Enrichr query attempt %d failed: %s", attempt, e$message))
+      NULL
+    })
+    if (is.list(res) && !is.null(names(res)) && length(res) > 0) {
+      enriched <- res
+      break
+    }
+    if (attempt < max_attempts) {
+      sleep_sec <- sample(3:10, 1) + runif(1, 0, 1)
+      message(sprintf("Retrying Enrichr query in %.1f seconds...", sleep_sec))
+      Sys.sleep(sleep_sec)
+    }
+  }
+  if (is.null(enriched)) {
+    stop("Enrichr query failed after max retries.")
+  }
   
   lapply(seq_along(enriched), function(i) {
     enriched[[i]] <- enriched[[i]][!is.na(enriched[[i]]$Term), ]
