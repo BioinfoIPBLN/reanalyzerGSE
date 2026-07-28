@@ -108,7 +108,20 @@ for (file in list.files(path = path, pattern = "_Gene_IDs\\.txt$")){
   a$Type <- b$root_node
   
   a$source_id <- toupper(a$source_id)
-  a_2 <- a[a$source_id %in% expression_table$Gene_ID,]
+  
+  # Match annotation source_id (e.g. ABLU38_00060) to full gene IDs in expression table (e.g. GCA_..._cds_ABLU38_00060_1) if no exact overlap
+  expr_genes <- toupper(expression_table$Gene_ID)
+  if (length(intersect(a$source_id, expr_genes)) == 0) {
+    unique_sids <- unique(a$source_id)
+    mapped <- vapply(unique_sids, function(sid) {
+      hit <- expr_genes[grep(sid, expr_genes, fixed = TRUE)]
+      if (length(hit) > 0) hit[1] else sid
+    }, character(1))
+    sid_to_full <- setNames(mapped, unique_sids)
+    a$source_id <- unname(sid_to_full[a$source_id])
+  }
+  
+  a_2 <- a[a$source_id %in% expr_genes,]
 
 
   # If user have GO annotation data (in data.frame format with first column of gene ID and second column of GO ID), they can use enricher() and gseGO() functions to perform over-representation test and gene set enrichment analysis.

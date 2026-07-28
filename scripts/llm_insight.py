@@ -92,16 +92,43 @@ def _reduce_prompt(task):
 
 
 def resolve_rows(raw, task, max_rows):
-    """Return a bounded slice of the artifact to send. For a single TSV table we
-    try to surface the most significant rows (sort by an FDR/padj column); on any
-    difficulty we fall back to the first max_rows lines. Concatenated multi-file
-    inputs (marked with '### ') are passed through as-is, only line-capped."""
+    """Return a bounded slice of the artifact to send. For DGE tables, surface top
+    UP and DOWN regulated genes sorted by FDR (balanced in both senses). For enrichment
+    tables, sort strictly by FDR. Concatenated multi-file inputs are passed through."""
     lines = raw.splitlines()
     if not lines:
         return raw
     header = lines[0]
     multi = any(l.startswith("### ") for l in lines[:5])
-    if task in ("dge", "enrichment") and not multi and "\t" in header:
+    if task == "dge" and not multi and "\t" in header:
+        try:
+            cols = [c.lower() for c in header.split("\t")]
+            sig = next((i for i, c in enumerate(cols)
+                        if any(k in c for k in ("fdr", "padj", "p.adj", "adj.p", "qvalue"))), None)
+            if sig is not None:
+                body = [l for l in lines[1:] if l.strip()]
+                def parse_fdr(l):
+                    parts = l.split("\t")
+                    try:
+                        return (float(parts[sig]), l)
+                    except (ValueError, IndexError):
+                        return (float("inf"), l)
+                parsed = [parse_fdr(l) for l in body]
+                # Keep all genes with FDR < 0.05, sorted by FDR ascending
+                degs = [p for p in parsed if p[0] < 0.05]
+                degs.sort(key=lambda x: x[0])
+                if degs:
+                    sel = [p[1] for p in degs]
+                    note = f"# Data note: {len(degs)} gene(s) met FDR < 0.05 significance."
+                else:
+                    # Fallback safeguard if no gene reaches FDR < 0.05: take top 100 by FDR
+                    parsed.sort(key=lambda x: x[0])
+                    sel = [p[1] for p in parsed[:100]]
+                    note = "# Data note: No genes met FDR < 0.05 significance. Showing a subset of the top 100 genes by FDR for exploratory trend analysis."
+                return f"{note}\n{header}\n" + "\n".join(sel)
+        except Exception:
+            pass
+    elif task == "enrichment" and not multi and "\t" in header:
         try:
             cols = header.split("\t")
             sig = next((i for i, c in enumerate(cols)
@@ -115,7 +142,7 @@ def resolve_rows(raw, task, max_rows):
                     except (ValueError, IndexError):
                         return float("inf")
                 body.sort(key=key)
-                sel = body if max_rows <= 0 else body[:max_rows]   # max_rows<=0 => ALL rows
+                sel = body if max_rows <= 0 else body[:max_rows]
                 return "\n".join([header] + sel)
         except Exception:
             pass
@@ -149,9 +176,9 @@ def _write_pertable(path, summaries):
             fh.write("table\ttps\tseconds\tsummary\n")
             for name, text, tps, sec in summaries:
                 fh.write(f"{name}\t{tps:.0f}\t{sec:.0f}\t{flat(text)}\n")
-        print(f"[llm_insight] wrote {len(summaries)} per-table note(s) to {path}", file=sys.stderr)
+        llm_common.log(f"[llm_insight] wrote {len(summaries)} per-table note(s) to {path}")
     except OSError as e:
-        print(f"[llm_insight] could not write per-table notes to {path}: {e}", file=sys.stderr)
+        llm_common.log(f"[llm_insight] could not write per-table notes to {path}: {e}")
 
 
 def _summarize_one(a, path):
@@ -202,7 +229,7 @@ def _map_reduce(a, paths):
         data = _read_capped(path, a.task, a.max_rows, a.context_window)
         name = _get_path_label(path, base_dir)
         if len([l for l in data.splitlines() if l.strip()]) <= 1:   # header-only / empty table
-            print(f"[llm_insight] skip {i}/{len(paths)}: {name} (no rows)", file=sys.stderr)
+            llm_common.log(f"[llm_insight] skip {i}/{len(paths)}: {name} (no rows)")
             continue
         user = f"{_map_prompt(a.task)}\n\nTable: {name}\n\nData:\n{data}"
         text, u = llm_common.chat_completion(
@@ -214,8 +241,8 @@ def _map_reduce(a, paths):
         # A single per-table summary should be short; drop a runaway one so it
         # cannot poison the reduce step.
         text = "" if llm_common.is_degraded(text) else (text or "").strip()
-        print(f"[llm_insight] mapped {i}/{len(paths)}: {name} ({tps:.0f} TPS, {sec:.0f}s)"
-              f"{'' if text else ' (empty)'}", file=sys.stderr)
+        llm_common.log(f"[llm_insight] mapped {i}/{len(paths)}: {name} ({tps:.0f} TPS, {sec:.0f}s)"
+                       f"{'' if text else ' (empty)'}")
         if text:
             summaries.append((name, text, tps, sec))
     avg_tps = (sum(tps_calls) / len(tps_calls)) if tps_calls else 0.0
@@ -261,11 +288,11 @@ def main():
 
     # Opt-in: silently do nothing if no LLM is configured.
     if not a.endpoint or not a.model:
-        print("[llm_insight] no LLM endpoint/model configured; skipping.", file=sys.stderr)
+        llm_common.log("[llm_insight] no LLM endpoint/model configured; skipping.")
         return 0
     inputs = [f for f in a.input if os.path.isfile(f)]
     if not inputs:
-        print(f"[llm_insight] no input file found ({', '.join(a.input)}); skipping.", file=sys.stderr)
+        llm_common.log(f"[llm_insight] no input file found ({', '.join(a.input)}); skipping.")
         return 0
 
     out = a.out or (inputs[0] + ".ai_insight.md")
@@ -275,32 +302,33 @@ def main():
         text, tps, seconds = (_summarize_one(a, inputs[0]) if len(inputs) == 1
                               else _map_reduce(a, inputs))
         if not text:
-            print(f"[llm_insight] empty response for {out}; nothing written.", file=sys.stderr)
+            llm_common.log(f"[llm_insight] empty response for {out}; nothing written.")
             return 0
         # Guard against LLM degradation / hallucination: a wildly long "answer"
         # (garbage filler) is refused rather than shown.
         if llm_common.is_degraded(text):
-            print(f"[llm_insight] response for {out} exceeds {llm_common.max_answer_chars()} chars "
-                  f"(likely degraded); nothing written.", file=sys.stderr)
+            llm_common.log(f"[llm_insight] response for {out} exceeds {llm_common.max_answer_chars()} chars "
+                           f"(likely degraded); nothing written.")
             return 0
         stamp = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime())
         # Model name is kept (useful provenance); the endpoint is never included.
         # TPS = per-call generation rate (for map-reduce, the average of the
         # individual calls' own rates); seconds = total model time.
-        header = (f"**AI summary** — Automatic interpretation by an LLM; always verify against "
-                  f"the data. — Generated by `{a.model}` on {stamp}, "
+        header = (f"**AI summary** — Automatic interpretation by an LLM; MUST always verify against "
+                  f"the data — Generated by `{a.model}` on {stamp}, "
                   f"{tps:.0f} TPS, {seconds:.0f} seconds")
         with open(out, "w", encoding="utf-8") as fh:
             fh.write(header + "\n\n" + text.strip() + "\n")
-        print(f"[llm_insight] wrote {out} ({time.time()-t0:.1f}s, {len(inputs)} table(s), "
-              f"{tps:.0f} TPS avg, {seconds:.0f}s total)", file=sys.stderr)
+        llm_common.log(f"[llm_insight] wrote {out} ({time.time()-t0:.1f}s, {len(inputs)} table(s), "
+                       f"{tps:.0f} TPS avg, {seconds:.0f}s total)")
     except llm_common.LLMTimeout as e:
         # Signal the orchestrator (reanalyzerGSE.sh) that THIS ai_insights option
         # timed out; it fills every box for the option with the timeout placeholder.
-        print(f"[llm_insight] TIMEOUT for {out}: {e}", file=sys.stderr)
+        llm_common.log(f"[llm_insight] TIMEOUT for {out}: {e}")
         return 42
     except Exception as e:
-        print(f"[llm_insight] error for {out}: {e}; skipping.", file=sys.stderr)
+        llm_common.log(f"[llm_insight] error for {out}: {e}; skipping.")
+        return 0
         return 0
     return 0
 

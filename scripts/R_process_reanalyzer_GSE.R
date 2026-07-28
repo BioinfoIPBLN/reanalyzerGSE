@@ -469,10 +469,12 @@ normalize_sample_id <- function(x) {
   write.table(gene_counts_rpkm_to_write,
               file=paste0(output_dir,"/RPKM_counts_genes.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
   tpm_counts <- rpkm_to_tpm(gene_counts_rpkm_to_write[,grep("Gene_ID",colnames(gene_counts_rpkm_to_write),invert=T)]); rownames(tpm_counts) <- gene_counts_rpkm_to_write$Gene_ID
-  write.table(tpm_counts,
-              file=paste0(output_dir,"/TPM_counts_genes.txt"),quote = F,row.names = T, col.names = NA,sep = "\t")
-  write.table(log2(tpm_counts+0.1),
-              file=paste0(output_dir,"/TPM_counts_genes_log2_0.1.txt"),quote = F,row.names = T, col.names = NA,sep = "\t")
+  tpm_counts_to_write <- data.frame(Gene_ID = rownames(tpm_counts), tpm_counts, check.names = FALSE)
+  write.table(tpm_counts_to_write,
+              file=paste0(output_dir,"/TPM_counts_genes.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
+  tpm_counts_log_to_write <- data.frame(Gene_ID = rownames(tpm_counts), log2(tpm_counts+0.1), check.names = FALSE)
+  write.table(tpm_counts_log_to_write,
+              file=paste0(output_dir,"/TPM_counts_genes_log2_0.1.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
   
   # CPM calculation and writing (mirroring the RPKM pattern to avoid case-mismatch issues)
   cpm_counts <- as.data.frame(cpm(edgeR_object_norm, normalized.lib.sizes=TRUE))
@@ -481,10 +483,12 @@ normalize_sample_id <- function(x) {
   # Reorder rows and columns to match RPKM/TPM ordering
   cpm_counts <- cpm_counts[gene_counts_rpkm_to_write$Gene_ID,]
   cpm_counts <- cpm_counts[,sort(colnames(cpm_counts))]
-  write.table(cpm_counts,
-              file=paste0(output_dir,"/CPM_counts_genes.txt"),quote = F,row.names = T, col.names = NA,sep = "\t")
-  write.table(log2(cpm_counts+0.1),
-              file=paste0(output_dir,"/CPM_counts_genes_log2_0.1.txt"),quote = F,row.names = T, col.names = NA,sep = "\t")
+  cpm_counts_to_write <- data.frame(Gene_ID = rownames(cpm_counts), cpm_counts, check.names = FALSE)
+  write.table(cpm_counts_to_write,
+              file=paste0(output_dir,"/CPM_counts_genes.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
+  cpm_counts_log_to_write <- data.frame(Gene_ID = rownames(cpm_counts), log2(cpm_counts+0.1), check.names = FALSE)
+  write.table(cpm_counts_log_to_write,
+              file=paste0(output_dir,"/CPM_counts_genes_log2_0.1.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
   # High/medium/low categ for TPM:
   tpm_counts_categ <- tpm_counts
   for (col in colnames(tpm_counts_categ)){
@@ -495,8 +499,9 @@ normalize_sample_id <- function(x) {
     b[b==levels(a)[1]] <- "Very_Low"; b[b==levels(a)[2]] <- "Low"; b[b==levels(a)[3]] <- "Medium"; b[b==levels(a)[4]] <- "High"; b[b==levels(a)[5]] <- "Very_High"
     tpm_counts_categ[,paste0(col,"_categ_2")] <- b
   }
-  write.table(tpm_counts_categ,
-              file=paste0(output_dir,"/TPM_counts_genes_categ.txt"),quote = F,row.names = T, col.names = NA,sep = "\t")
+  tpm_counts_categ_to_write <- data.frame(Gene_ID = rownames(tpm_counts_categ), tpm_counts_categ, check.names = FALSE)
+  write.table(tpm_counts_categ_to_write,
+              file=paste0(output_dir,"/TPM_counts_genes_categ.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
   tpm_counts_log <- log2(tpm_counts+0.1)
   tpm_counts_log_categ <- tpm_counts_log
   for (col in colnames(tpm_counts_log_categ)){
@@ -507,8 +512,9 @@ normalize_sample_id <- function(x) {
     b[b==levels(a)[1]] <- "Very_Low"; b[b==levels(a)[2]] <- "Low"; b[b==levels(a)[3]] <- "Medium"; b[b==levels(a)[4]] <- "High"; b[b==levels(a)[5]] <- "Very_High"
     tpm_counts_log_categ[,paste0(col,"_categ_2")] <- b
   }
-  write.table(tpm_counts_log_categ,
-              file=paste0(output_dir,"/TPM_counts_genes_log2_0.1_categ.txt"),quote = F,row.names = T, col.names = NA,sep = "\t")
+  tpm_counts_log_categ_to_write <- data.frame(Gene_ID = rownames(tpm_counts_log_categ), tpm_counts_log_categ, check.names = FALSE)
+  write.table(tpm_counts_log_categ_to_write,
+              file=paste0(output_dir,"/TPM_counts_genes_log2_0.1_categ.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
   
   # High/medium/low categ for CPM:
   cpm_counts_categ <- cpm_counts
@@ -520,8 +526,9 @@ normalize_sample_id <- function(x) {
     b[b==levels(a)[1]] <- "Very_Low"; b[b==levels(a)[2]] <- "Low"; b[b==levels(a)[3]] <- "Medium"; b[b==levels(a)[4]] <- "High"; b[b==levels(a)[5]] <- "Very_High"
     cpm_counts_categ[,paste0(col,"_categ_2")] <- b
   }
-  write.table(cpm_counts_categ,
-              file=paste0(output_dir,"/CPM_counts_genes_categ.txt"),quote = F,row.names = T, col.names = NA,sep = "\t")
+  cpm_counts_categ_to_write <- data.frame(Gene_ID = rownames(cpm_counts_categ), cpm_counts_categ, check.names = FALSE)
+  write.table(cpm_counts_categ_to_write,
+              file=paste0(output_dir,"/CPM_counts_genes_categ.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
   cpm_counts_log <- log2(cpm_counts+0.1)
   cpm_counts_log_categ <- cpm_counts_log
   for (col in colnames(cpm_counts_log)){
@@ -532,8 +539,9 @@ normalize_sample_id <- function(x) {
     b[b==levels(a)[1]] <- "Very_Low"; b[b==levels(a)[2]] <- "Low"; b[b==levels(a)[3]] <- "Medium"; b[b==levels(a)[4]] <- "High"; b[b==levels(a)[5]] <- "Very_High"
     cpm_counts_log_categ[,paste0(col,"_categ_2")] <- b
   }
-  write.table(cpm_counts_log_categ,
-              file=paste0(output_dir,"/CPM_counts_genes_log2_0.1_categ.txt"),quote = F,row.names = T, col.names = NA,sep = "\t")
+  cpm_counts_log_categ_to_write <- data.frame(Gene_ID = rownames(cpm_counts_log_categ), cpm_counts_log_categ, check.names = FALSE)
+  write.table(cpm_counts_log_categ_to_write,
+              file=paste0(output_dir,"/CPM_counts_genes_log2_0.1_categ.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
   # High/medium/low categ:
   gene_counts_rpkm_to_write_categ <- gene_counts_rpkm_to_write
   for (col in colnames(gene_counts_rpkm_to_write_categ[,-1])){
@@ -1573,7 +1581,16 @@ tryCatch({
           sub(paste0("_", gsub("([.|()\\^{}+$*?]|\\\\[|\\\\])", "\\\\\\1", cond), "$"), "", s)
         }, comp_samples, matched_conds, USE.NAMES = FALSE)
 
-        comp_roots <- unique(c(normalize_sample_id(comp_samples), normalize_sample_id(comp_samples_stripped)))
+        # Build comp_roots: normalized pheno names + GSM/SRR accession prefixes
+        # Pheno sample names (e.g. "GSM3030679_SRR6807520_condition") don't normalize
+        # to the same root as expression column names (e.g. "GSM3030679_1.fastq.gz_STAR.bam"
+        # -> "GSM3030679"), so we also extract the leading GSM/SRR accession.
+        comp_roots <- unique(c(normalize_sample_id(comp_samples),
+                               normalize_sample_id(comp_samples_stripped)))
+        # Extract GSM/SRR accession prefixes (e.g. "GSM3030679" from "GSM3030679_SRR6807520_cond")
+        gsm_ids <- unique(na.omit(stringr::str_extract(comp_samples, "GSM\\d+")))
+        srr_ids <- unique(na.omit(stringr::str_extract(comp_samples, "SRR\\d+")))
+        comp_roots <- unique(c(comp_roots, gsm_ids, srr_ids))
         comp_roots <- comp_roots[comp_roots != ""]
 
         if (length(comp_roots) == 0) {

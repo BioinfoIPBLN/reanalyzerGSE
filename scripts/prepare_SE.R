@@ -85,12 +85,14 @@ if ("Length" %in% colnames(raw_counts)){
 }
 if ("Gene_ID" %in% colnames(raw_counts)){
   raw_counts <- raw_counts %>% column_to_rownames("Gene_ID")
+} else if ("V1" %in% colnames(raw_counts)){
+  raw_counts <- raw_counts %>% column_to_rownames("V1")
 }
 
 cat("\n[2/6] Reading TPM counts...")
-tpm_counts <- data.table::fread(input_tpm_counts) %>% 
-  data.frame(check.names = F) %>% 
-  column_to_rownames("V1")
+tpm_df <- data.table::fread(input_tpm_counts) %>% data.frame(check.names = F)
+gene_col_tpm <- if ("Gene_ID" %in% colnames(tpm_df)) "Gene_ID" else if ("V1" %in% colnames(tpm_df)) "V1" else colnames(tpm_df)[1]
+tpm_counts <- tpm_df %>% column_to_rownames(gene_col_tpm)
 
 cat("\n      Sanity check: identical colnames raw counts and tpm counts: ", 
     identical(colnames(raw_counts), colnames(tpm_counts)))
@@ -183,22 +185,29 @@ de_results_DF@listData <- de_results_list
 
 # === colData (sample metadata) ===
 cat("\n\n[4/6] Reading sample metadata...")
-metadata <- read_tsv(input_metadata, col_names = F, show_col_types = FALSE)
-colnames(metadata) <- c("Name","Tissue [Factor]","Batch [Factor]")
+metadata <- read_tsv(input_metadata, col_names = FALSE, show_col_types = FALSE)
+if (ncol(metadata) > 2) {
+  # If samples_info.txt has 3 columns (e.g. SRR_ID, Sample_GSM, Condition),
+  # column 2 holds the sample identifier matching count matrix names/GSMs.
+  metadata <- metadata[, 2:ncol(metadata)]
+}
+colnames(metadata) <- c("Name", "Condition [Factor]", "Batch [Factor]")[1:ncol(metadata)]
+
 # Match count-matrix columns to metadata rows. Column names commonly carry
 # aligner/fastq suffixes (e.g. "GSM3030679_1.fastq.gz_STAR.bam") while
-# metadata$Name is the bare accession ("GSM3030679"), so fall back through:
-#   1) exact match  2) one name is a prefix of the other  3) suffix-stripped.
-# IMPORTANT: match() returns NA (never 0) for no-match, so matches must be
-# counted with !is.na() — sum(x != 0) yields NA and crashes the check below.
+# metadata$Name is the accession/sample name ("GSM3030679_SRR6807520_..."), so fall back through:
+#   1) exact match  2) GSM accession match  3) suffix-stripped  4) prefix match.
 sample_names <- colnames(raw_counts)
 idx <- match(sample_names, metadata$Name)                        # 1) exact
-if (anyNA(idx)) {                                                # 2) prefix (either direction), longest wins
-  idx <- vapply(sample_names, function(s) {
-    h <- which(startsWith(s, metadata$Name) | startsWith(metadata$Name, s))
-    if (length(h)) h[which.max(nchar(metadata$Name[h]))] else NA_integer_
-  }, integer(1))
+
+if (anyNA(idx)) {                                                # 2) GSM accession match
+  sample_gsms <- sub(".*(GSM[0-9]+).*", "\\1", sample_names)
+  meta_gsms <- sub(".*(GSM[0-9]+).*", "\\1", metadata$Name)
+  if (all(grepl("^GSM", sample_gsms)) && any(grepl("^GSM", meta_gsms))) {
+    idx <- match(sample_gsms, meta_gsms)
+  }
 }
+
 if (anyNA(idx)) {                                                # 3) strip fastq/aligner suffixes, then exact
   strip <- function(x) {
     x <- sub("\\.fastq\\.gz.*$", "", x)
@@ -206,6 +215,14 @@ if (anyNA(idx)) {                                                # 3) strip fast
   }
   idx <- match(strip(sample_names), strip(metadata$Name))
 }
+
+if (anyNA(idx)) {                                                # 4) prefix (either direction), longest wins
+  idx <- vapply(sample_names, function(s) {
+    h <- which(startsWith(s, metadata$Name) | startsWith(metadata$Name, s))
+    if (length(h)) h[which.max(nchar(metadata$Name[h]))] else NA_integer_
+  }, integer(1))
+}
+
 matched_count <- sum(!is.na(idx))
 cat("\n      Samples matched: ", matched_count, "/", length(sample_names))
 if (matched_count < length(sample_names)) {
@@ -254,6 +271,17 @@ if (!is_model && nzchar(nrf_file) && file.exists(nrf_file)) {
     colnames(ann) <- c("source_id", "go_ids")
     ann$source_id <- toupper(gsub(":.*", "", ann$source_id))
     ann <- ann[!is.na(ann$source_id) & ann$source_id != "" & !is.na(ann$go_ids), ]
+    
+    tpm_genes <- toupper(rownames(tpm_counts))
+    if (length(intersect(ann$source_id, tpm_genes)) == 0) {
+      unique_sids <- unique(ann$source_id)
+      mapped <- vapply(unique_sids, function(sid) {
+        hit <- tpm_genes[grep(sid, tpm_genes, fixed = TRUE)]
+        if (length(hit) > 0) hit[1] else sid
+      }, character(1))
+      sid_to_full <- setNames(mapped, unique_sids)
+      ann$source_id <- unname(sid_to_full[ann$source_id])
+    }
     # Explode ";"-separated GO IDs into (gene, GO) long form
     sp <- strsplit(as.character(ann$go_ids), split = ";")
     long <- data.frame(gene = rep(ann$source_id, lengths(sp)),

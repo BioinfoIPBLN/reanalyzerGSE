@@ -38,6 +38,12 @@ class LLMTimeout(Exception):
     silently omitted (so the user knows it was tried and can retry)."""
 
 
+def log(msg, file=sys.stderr):
+    """Print log message prefixed with a timestamp [YYYY-MM-DD HH:MM:SS]."""
+    ts = time.strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[{ts}] {msg}", file=file, flush=True)
+
+
 # An AI insight is meant to be a few sentences. A response far longer than that
 # is almost always model degradation / hallucinated filler (long garbage prose),
 # so we refuse to show it. Override with LLM_MAX_ANSWER_CHARS (0 disables).
@@ -225,8 +231,8 @@ def redact_outputs(out_dir, endpoint=None, api_key=None):
         if n:
             files_hit += 1
             total += n
-    print(f"[redact] AI endpoint scrubbed from report artifacts "
-          f"({total} occurrence(s) in {files_hit} file(s)).", flush=True)
+    log(f"[redact] AI endpoint scrubbed from report artifacts "
+        f"({total} occurrence(s) in {files_hit} file(s)).", file=sys.stdout)
     # The live redirect target (out_dir/multiqc.log) last; flush our own output
     # first so it is on disk and itself gets scrubbed. Nothing is printed after.
     sys.stdout.flush()

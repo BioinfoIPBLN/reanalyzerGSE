@@ -593,11 +593,20 @@ if [ -n "$llm_endpoint" ]; then
 	if [ "$ai_do_multiqc" = 1 ]; then
 		export RGSE_DO_MULTIQC=1
 		export MULTIQC_AI_ARGS="${multiqc_ai_args:---per-section --builtin}"
-		# Do NOT echo the endpoint (deployment-sensitive; the wrapper also scrubs
-		# it from the report). The model name is fine to show.
-		echo -e "\nMultiQC AI annotation ENABLED (model=${llm_model:-<unset>}; endpoint kept out of logs and scrubbed from the report; args=$MULTIQC_AI_ARGS)\n"
-	else
-		echo -e "\nMultiQC AI annotation not selected (ai_insights='$ai_insights'); MultiQC runs without AI\n"
+	fi
+
+	ai_active_list=()
+	[ "$ai_do_multiqc" = 1 ]    && ai_active_list+=("multiqc")
+	[ "$ai_do_qualimap" = 1 ]   && ai_active_list+=("qualimap")
+	[ "$ai_do_qc_pdf" = 1 ]     && ai_active_list+=("qc_pdf")
+	[ "$ai_do_design" = 1 ]     && ai_active_list+=("design")
+	[ "$ai_do_counts" = 1 ]     && ai_active_list+=("counts")
+	[ "$ai_do_dge" = 1 ]        && ai_active_list+=("dge")
+	[ "$ai_do_enrichment" = 1 ] && ai_active_list+=("enrichment")
+
+	if [ ${#ai_active_list[@]} -gt 0 ]; then
+		active_str=$(IFS=, ; echo "${ai_active_list[*]}")
+		echo -e "\nAI annotations & insights ENABLED (model=${llm_model:-<unset>}; active options: $active_str; endpoint kept out of logs and scrubbed from reports)\n"
 	fi
 fi
 

@@ -21,13 +21,24 @@ sphinx-quickstart -a $(echo $(whoami)_reanalyzerGSE) -l en -p $project_name -r "
 sed -i "s,html_theme =.*,html_theme = 'sphinxdoc',g" conf.py
 
 rnaseqqc_links=""
+bamqc_links=""
 for aligner_dir in "$path/miARma_out0"/*_results; do
     if [ -d "$aligner_dir/rnaseqqc_results" ]; then
         for qrep in "$aligner_dir/rnaseqqc_results"/*/qualimapReport.html; do
             if [ -f "$qrep" ]; then
                 sample_name=$(basename $(dirname "$qrep"))
                 display_name=$(echo "$sample_name" | sed -E 's/_(hisat2|STAR)\.bam//')
-                rnaseqqc_links="${rnaseqqc_links}   <a href=\"sphinx_report/html/${sample_name}/qualimapReport.html\" target=\"_blank\">Click to open RNASeq QC for ${display_name}</a><br>
+                rnaseqqc_links="${rnaseqqc_links}   <a href=\"sphinx_report/html/rnaseqqc_results/${sample_name}/qualimapReport.html\" target=\"_blank\">Click to open RNASeq QC for ${display_name}</a><br>
+"
+            fi
+        done
+    fi
+    if [ -d "$aligner_dir/bamqc_results" ]; then
+        for qrep in "$aligner_dir/bamqc_results"/*/qualimapReport.html; do
+            if [ -f "$qrep" ]; then
+                sample_name=$(basename $(dirname "$qrep"))
+                display_name=$(echo "$sample_name" | sed -E 's/_(hisat2|STAR)\.bam//')
+                bamqc_links="${bamqc_links}   <a href=\"sphinx_report/html/bamqc_results/${sample_name}/qualimapReport.html\" target=\"_blank\">Click to open BAM QC for ${display_name}</a><br>
 "
             fi
         done
@@ -45,8 +56,10 @@ html_extra_path = [
     \"../${final_dir_name}/DGE\",
     \"../${final_dir_name}\"
 ]
+html_extra_path.extend(glob.glob(\"../miARma_out0/*_results\"))
 html_extra_path.extend(glob.glob(\"../miARma_out0/*_results/multibamqc_results\"))
 html_extra_path.extend(glob.glob(\"../miARma_out0/*_results/rnaseqqc_results\"))
+html_extra_path.extend(glob.glob(\"../miARma_out0/*_results/bamqc_results\"))
 html_extra_path.extend(glob.glob(\"../preliminar_rrna_qc\"))
 html_extra_path = [p for p in html_extra_path if os.path.exists(p)]
 " >> conf.py
@@ -498,9 +511,8 @@ Please use the following links:
 .. raw:: html
    
    <a href=\"sphinx_report/html/multiqc_report.html\" target=\"_blank\">Click to open report by MultiQC</a><br>
-   <a href=\"sphinx_report/html/multisampleBamQcReport.html\" target=\"_blank\">Click to open Multi-sample BAM QC by Qualimap</a><br>
-${rnaseqqc_links}   <a href=\"sphinx_report/html/${project_name}_norm_QC.pdf\" target=\"_blank\">Click to open PDF with multiple QC figures</a><br>
-$(if [ -f "$path/$final_dir_name/QC_and_others/${project_name}_adjusted_QC.pdf" ]; then echo "   <a href=\"sphinx_report/html/${project_name}_adjusted_QC.pdf\" target=\"_blank\">Click to open PDF with multiple QC figures if batch correction/adjusted counts</a><br>"; fi)
+${rnaseqqc_links}${bamqc_links}$(if [ -f "$path/miARma_out0/star_results/multibamqc_results/multisampleBamQcReport.html" ] || [ -f "$path/$final_dir_name/multisampleBamQcReport.html" ] || [ $(find "$path/miARma_out0" -name "multisampleBamQcReport.html" 2>/dev/null | wc -l) -gt 0 ]; then echo "   <a href=\"sphinx_report/html/multisampleBamQcReport.html\" target=\"_blank\">Click to open Multi-sample BAM QC by Qualimap</a><br>"; fi)$(if [ -f "$path/$final_dir_name/QC_and_others/${project_name}_norm_QC_commented.pdf" ]; then echo "   <a href=\"sphinx_report/html/${project_name}_norm_QC_commented.pdf\" target=\"_blank\">Click to open PDF with multiple QC figures (with AI commentary)</a><br>"; else echo "   <a href=\"sphinx_report/html/${project_name}_norm_QC.pdf\" target=\"_blank\">Click to open PDF with multiple QC figures</a>$(if [ -f "$path/$final_dir_name/QC_and_others/QC_AI_commentary_slides.pdf" ]; then echo " - <a href=\"sphinx_report/html/QC_AI_commentary_slides.pdf\" target=\"_blank\">AI commentary slides</a>"; fi)<br>"; fi)
+$(if [ -f "$path/$final_dir_name/QC_and_others/${project_name}_adjusted_QC_commented.pdf" ]; then echo "   <a href=\"sphinx_report/html/${project_name}_adjusted_QC_commented.pdf\" target=\"_blank\">Click to open PDF with multiple QC figures if batch correction/adjusted counts (with AI commentary)</a><br>"; elif [ -f "$path/$final_dir_name/QC_and_others/${project_name}_adjusted_QC.pdf" ]; then echo "   <a href=\"sphinx_report/html/${project_name}_adjusted_QC.pdf\" target=\"_blank\">Click to open PDF with multiple QC figures if batch correction/adjusted counts</a><br>"; fi)
 
 .. index:: QC analyses
 

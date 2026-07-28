@@ -35,7 +35,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
 
 ### Normalize sample IDs across tools (BAM, flagstat, fastqc, edgeR colnames):
 normalize_sample_id <- function(x) {
-  x <- basename(x)
+  x <- basename(as.character(x))
   x <- gsub("_hisat2.*|_STAR.*", "", x)   # strip aligner suffixes
   x <- gsub("_flagstat.*|_stats.*", "", x) # strip samtools suffixes
   x <- gsub("_fastqc.*", "", x)            # strip fastqc suffixes
@@ -215,6 +215,7 @@ normalize_sample_id <- function(x) {
   ### 3. Library size and read counts figures:
   cat("\n[4/12] Library size barplots\n")
   sample_labels <- normalize_sample_id(if (!is.null(targets$Name)) targets$Name else targets$Filename)
+  sample_names <- normalize_sample_id(if (!is.null(targets$Filename)) targets$Filename else colnames(x$counts))
 
   par(mfrow=c(1,1))
   par(mar = c(10, 5, 4, 2))
@@ -243,7 +244,7 @@ normalize_sample_id <- function(x) {
   text(
     x = bar_mids,
     y = par("usr")[3] - 0.03 * diff(par("usr")[3:4]),
-    labels = sample_labels,
+    labels = sample_names,
     srt = 45,
     adj = 1,
     xpd = TRUE,
@@ -359,6 +360,13 @@ normalize_sample_id <- function(x) {
   if(length(aln_files) > 0) {
   aln <- read.table(aln_files[1], 
                     header = TRUE, sep = "\t", check.names = FALSE)
+  
+  valid_read_cats <- c("uniquely_mapped", "multimapped", "multimapped_toomany", 
+                       "unmapped_mismatches", "unmapped_tooshort", "unmapped_other")
+  cols_to_keep <- c("Sample", intersect(valid_read_cats, colnames(aln)))
+  if (length(cols_to_keep) > 1) {
+    aln <- aln[, cols_to_keep, drop = FALSE]
+  }
   
   aln_long <- aln %>%
     tidyr::pivot_longer(cols = -Sample, names_to = "category", values_to = "count") %>%
@@ -488,7 +496,7 @@ normalize_sample_id <- function(x) {
   
   ### 4. Corrplot no log
   cat("\n[5/12] Correlation plots (all genes)\n")
-  tmp <- lcpm_no_log; colnames(tmp) <- gsub("_hisat.*|_STAR.*","",colnames(tmp))
+  tmp <- lcpm_no_log; colnames(tmp) <- normalize_sample_id(colnames(tmp))
   # Adjust margins to prevent title cropping
   par(mar=c(2, 2, 4, 3))
   cor_sp <- cor(tmp, method="spearman")
@@ -563,7 +571,7 @@ normalize_sample_id <- function(x) {
   rsd <- rowSds(as.matrix(x))
   sel <- order(rsd, decreasing=TRUE)[1:250]
   
-  heatmap(na.omit(as.matrix(x[sel,])),margins=c(10,8),main="Heatmap 250 most diff entities raw counts",cexRow=0.01,cexCol=0.5,labCol=sub("_hisat2.*|_STAR.*","",rownames(x$samples)))
+  heatmap(na.omit(as.matrix(x[sel,])),margins=c(10,8),main="Heatmap 250 most diff entities raw counts",cexRow=0.01,cexCol=0.5,labCol=normalize_sample_id(rownames(x$samples)))
 
   tryCatch({
     top250_df <- data.frame(Gene = rownames(x)[sel], StandardDev = rsd[sel])
@@ -574,7 +582,7 @@ normalize_sample_id <- function(x) {
   cat("\n[9/12] Dendrograms (all genes)\n")
   par(mfrow=c(1,1), mar=c(8, 4, 4, 2),col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
   pr.hc.c <- hclust(na.omit(dist(t(cpm(x2$counts,log=F)),method = "euclidean")))
-  pr.hc.c$labels <- sub("_hisat2.*|_STAR.*","",pr.hc.c$labels)
+  pr.hc.c$labels <- normalize_sample_id(pr.hc.c$labels)
   plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of normalized counts all genes from samples of ", label, sep=""), cex=0.5)
   
   ### 8.2. Dendogram cluster raw norm colored
@@ -586,7 +594,7 @@ normalize_sample_id <- function(x) {
   ### 8.3. Dendogram cluster raw norm log
   par(mfrow=c(1,1), mar=c(8, 4, 4, 2),col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
   pr.hc.c <- hclust(na.omit(dist(t(cpm(x2$counts,log=T)),method = "euclidean")))
-  pr.hc.c$labels <- sub("_hisat2.*|_STAR.*","",pr.hc.c$labels)
+  pr.hc.c$labels <- normalize_sample_id(pr.hc.c$labels)
   plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of log2 normalized counts all genes from samples of ", label, sep=""), cex=0.5)
   
   ### 8.4. Dendogram cluster raw norm log colored
@@ -604,7 +612,7 @@ normalize_sample_id <- function(x) {
     gene_names_vec <- rownames(countFrac)
     sample_names_vec <- colnames(countFrac)
     # Clean sample names for display
-    sample_names_clean <- gsub("_hisat2.*|_STAR.*", "", sample_names_vec)
+    sample_names_clean <- normalize_sample_id(sample_names_vec)
 
     # Build long-format data frame (base R, no tibble)
     df_long <- data.frame(
@@ -689,7 +697,7 @@ normalize_sample_id <- function(x) {
 
     # Clean column names
     top_clean <- top_signal
-    colnames(top_clean) <- gsub("_hisat.*|_STAR.*", "", colnames(top_clean))
+    colnames(top_clean) <- normalize_sample_id(colnames(top_clean))
 
     ## Spearman corrplot - top genes
     par(mar = c(2, 2, 4, 3))
@@ -731,7 +739,7 @@ normalize_sample_id <- function(x) {
     if (ncol(top_signal) > 2) {
       d_top <- as.dist(1 - cor(top_signal, use = "complete.obs"))
       hc_top <- hclust(d_top, method = "ward.D2")
-      hc_top$labels <- gsub("_hisat.*|_STAR.*", "", hc_top$labels)
+      hc_top$labels <- normalize_sample_id(hc_top$labels)
 
       # Base R dendrogram
       par(mfrow = c(1, 1), mar = c(8, 4, 4, 2),
