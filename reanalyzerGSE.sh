@@ -1042,7 +1042,9 @@ _log_step "Step_3a_Prepare" "start"
 			mkdir -p $output_folder/$name/indexes
 			salmon_idx=$CURRENT_DIR/indexes/${organism}_salmon_idx
 			if [ ! -d "$salmon_idx" ]; then
-				salmon index -p $cores -t $transcripts -i $output_folder/$name/indexes/${organism}_salmon_idx --tmpdir $TMPDIR &> $output_folder/$name/indexes/${organism}_salmon_idx.log
+				if [ ! -d "$output_folder/$name/indexes/${organism}_salmon_idx" ]; then
+					salmon index -p $cores -t $transcripts -i $output_folder/$name/indexes/${organism}_salmon_idx --tmpdir $TMPDIR &> $output_folder/$name/indexes/${organism}_salmon_idx.log
+				fi
 				salmon_idx=$output_folder/$name/indexes/${organism}_salmon_idx
 			fi
 
@@ -1052,7 +1054,7 @@ _log_step "Step_3a_Prepare" "start"
 				echo -e "\nPredicting strandness with salmon on random sample: $rand_sample\n"
 				salmon quant -i $salmon_idx -l A -r $seqs_location/$rand_sample -p $cores -o $output_folder/$name/strand_prediction/salmon_out/ --skipQuant &> $output_folder/$name/strand_prediction/salmon_out/salmon_out.log
 			elif [[ $(find $output_folder/$name -name library_layout_info.txt | xargs cat) == "PAIRED" ]]; then
-				rand_sample_root=$(ls $seqs_location | sed 's,_[12].fastq.gz,,g' | uniq | shuf | head -1)
+				rand_sample_root=$(ls $seqs_location | sed -E 's/_[12]\.fastq\.gz$//' | grep -v '^\s*$' | sort -u | shuf | head -1)
 				rand_sample="${rand_sample_root}_1.fastq.gz / ${rand_sample_root}_2.fastq.gz"
 				echo -e "\nPredicting strandness with salmon on random sample: $rand_sample\n"
 				salmon quant -i $salmon_idx -l A -1 $seqs_location/${rand_sample_root}_1.fastq.gz -2 $seqs_location/${rand_sample_root}_2.fastq.gz -p $cores -o $output_folder/$name/strand_prediction/salmon_out/ --skipQuant &> $output_folder/$name/strand_prediction/salmon_out/salmon_out.log
