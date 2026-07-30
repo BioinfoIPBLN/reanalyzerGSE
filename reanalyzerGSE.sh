@@ -236,8 +236,8 @@ if run_step step1a; then
 				export cores_parallel=$((cores / number_parallel))
 			fi
 			cd $seqs_location; rm -rf *
-			echo $input | tr ',' '\n' | parallel --halt-on-error 2 --joblog $output_folder/$name/fastq_dl_log_parallel.txt -j $number_parallel --max-args 1 'if [ $(echo {} | egrep -c "PRJEB|PRJNA|PRJDB|ERX|DRX|SRX|ERP|DRP|SRP") -eq 1 ]; then fastq-dl --cpus '$cores_parallel' --silent --force --max-attempts 10 --gzip-level '$compression_level' --accession {}; fi && 
-																																		   if [ $(echo {} | egrep -c "ERS|DRS|SRS|SAMD|SAME|SAMN|ERR|DRR|SRR") -eq 1 ]; then fastq-dl --provider sra --cpus '$cores_parallel' --silent --force --max-attempts 10 --gzip-level '$compression_level' --accession {}; fi'
+			echo $input | tr ',' '\n' | parallel --halt-on-error 2 --joblog $output_folder/$name/fastq_dl_log_parallel.txt -j $number_parallel --max-args 1 "if [ \$(echo {} | egrep -c 'PRJEB|PRJNA|PRJDB|ERX|DRX|SRX|ERP|DRP|SRP') -eq 1 ]; then fastq-dl --cpus $cores_parallel --silent --force --max-attempts 10 --gzip-level $compression_level --accession {}; fi && 
+																																		   if [ \$(echo {} | egrep -c 'ERS|DRS|SRS|SAMD|SAME|SAMN|ERR|DRR|SRR') -eq 1 ]; then fastq-dl --provider sra --cpus $cores_parallel --silent --force --max-attempts 10 --gzip-level $compression_level --accession {}; fi"
 		 	if [ "$num_gz_files" -eq "$(($num_samples * 2))" ] || [ "$num_gz_files" -eq "$num_samples" ]; then
 		 		echo "It seems the download has been sucessful, but please double check"
 		 	else
@@ -247,6 +247,12 @@ if run_step step1a; then
 
 		if [ ! -z "$number_reads" ]; then
 			echo -e "\nSubsampling...\n"
+			# From the input parameter by the user, obtain a random number allowing a +- 10% window:
+			IFS=', ' read -r -a arr <<< "$number_reads"
+			IFS=', ' read -r -a arr2 <<< "$(ls | egrep .fastq.gz$ | sed 's,[12].fastq.gz,,g' | sort | uniq | tr '\n' ',')"
+			desired_number=${arr[1]}
+			apply_random_shift() {
+				Rscript -e '
 				  modify_number <- function(number) {
 				    percentage <- runif(1, 0, 10)  # Random % between 0 and 10
 				    change <- ifelse(runif(1) < 0.5, -1, 1)  # Randomly add or subtract
@@ -507,8 +513,8 @@ if run_step step1c; then
 		if [ ! -d "$seqs_location" ]; then
 			mkdir -p $seqs_location; cd $seqs_location
 			echo -e "\nDownloading from the input accessions that you manually provided...\n"
-			echo $input | tr ',' '\n' | parallel --halt-on-error 2 -j $number_parallel --max-args 1 'if [ $(echo {} | egrep -c "PRJEB|PRJNA|PRJDB|ERX|DRX|SRX|ERP|DRP|SRP") -eq 1 ]; then fastq-dl --cpus '$cores_parallel' --silent --force --max-attempts 10 --gzip-level '$compression_level' --accession {}; fi && 
-		 																		   if [ $(echo {} | egrep -c "ERS|DRS|SRS|SAMD|SAME|SAMN|ERR|DRR|SRR") -eq 1 ]; then fastq-dl --provider sra --cpus '$cores_parallel' --silent --force --max-attempts 10 --gzip-level '$compression_level' --accession {}; fi'
+			echo $input | tr ',' '\n' | parallel --halt-on-error 2 -j $number_parallel --max-args 1 "if [ \$(echo {} | egrep -c 'PRJEB|PRJNA|PRJDB|ERX|DRX|SRX|ERP|DRP|SRP') -eq 1 ]; then fastq-dl --cpus $cores_parallel --silent --force --max-attempts 10 --gzip-level $compression_level --accession {}; fi && 
+		 																		   if [ \$(echo {} | egrep -c 'ERS|DRS|SRS|SAMD|SAME|SAMN|ERR|DRR|SRR') -eq 1 ]; then fastq-dl --provider sra --cpus $cores_parallel --silent --force --max-attempts 10 --gzip-level $compression_level --accession {}; fi"
 		fi
 _log_step "Step_1_Download" "end"
 		echo -e "\n\nSTEP 1: DONE\nCurrent date/time: $(date)\n\n"
@@ -1881,17 +1887,6 @@ PYEOF
 						fi
 					done
 				fi
-				if [ "$ai_do_qualimap" = 1 ]; then
-					echo "Annotating Qualimap HTML reports with AI insights..."
-					qualimap_ai.py --analysis-dir "$output_folder/$name" >> "$ai_log" 2>&1 || true
-				fi
-				if [ "$ai_do_qc_pdf" = 1 ]; then
-					echo "Annotating QC figures PDF with AI insights..."
-					for qc_pdf_file in "$ai_fdir/QC_and_others"/*_QC.pdf; do
-						[ -f "$qc_pdf_file" ] || continue
-						qc_pdf_ai.py --tables-dir "$ai_fdir/QC_and_others/tables" --pdf "$qc_pdf_file" >> "$ai_log" 2>&1 || true
-					done
-				fi
 				echo "AI insights written under $ai_dge_dir (*.ai_insight.md); log: $ai_log"
 			fi
 		fi
@@ -1945,6 +1940,35 @@ fi
 ###### STEP 8. Sum up results in a sphinx report
 if run_step step8; then
 	_log_step "Step_8_Report" "start"
+
+	# AI Insights for Qualimap and QC PDFs
+	ai_insights_val="${ai_insights:-all}"
+	if [ "$ai_insights_val" != "no" ] && command -v llm_insight.py >/dev/null 2>&1; then
+		ai_do_qualimap=1
+		ai_do_qc_pdf=1
+		case "$ai_insights_val" in
+			enrichment|dge|counts) ai_do_qualimap=0; ai_do_qc_pdf=0 ;;
+		esac
+
+		for index in "${!array[@]}"; do
+			ai_fdir="$output_folder/$name/final_results_reanalysis$index"
+			ai_dge_dir="$ai_fdir/DGE"
+			ai_log="$ai_dge_dir/ai_insights.log"
+			mkdir -p "$ai_dge_dir"
+
+			if [ "$ai_do_qualimap" = 1 ]; then
+				echo "Annotating Qualimap HTML reports with AI insights..."
+				qualimap_ai.py --analysis-dir "$output_folder/$name" >> "$ai_log" 2>&1 || true
+			fi
+			if [ "$ai_do_qc_pdf" = 1 ]; then
+				echo "Annotating QC figures PDF with AI insights..."
+				for qc_pdf_file in "$ai_fdir/QC_and_others"/*_QC.pdf; do
+					[ -f "$qc_pdf_file" ] || continue
+					qc_pdf_ai.py --tables-dir "$ai_fdir/QC_and_others/tables" --pdf "$qc_pdf_file" >> "$ai_log" 2>&1 || true
+				done
+			fi
+		done
+	fi
 
 	# Render a preliminary Gantt chart with completed steps (1-7) so it exists when sphinx_report.sh builds
 	if [ -f "$STEP_TIMES_FILE" ]; then
