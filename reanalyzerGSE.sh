@@ -1049,11 +1049,12 @@ _log_step "Step_3a_Prepare" "start"
 			fi
 
 			mkdir -p $output_folder/$name/strand_prediction/salmon_out
-			if [[ $(find $output_folder/$name -name library_layout_info.txt | xargs cat) == "SINGLE" ]]; then
+			layout=$(find $output_folder/$name -name library_layout_info.txt 2>/dev/null | xargs cat 2>/dev/null | head -n 1 | tr -d ' \r\n')
+			if [[ "$layout" == "SINGLE" ]]; then
 				rand_sample=$(ls $seqs_location | shuf | head -1)
 				echo -e "\nPredicting strandness with salmon on random sample: $rand_sample\n"
 				salmon quant -i $salmon_idx -l A -r $seqs_location/$rand_sample -p $cores -o $output_folder/$name/strand_prediction/salmon_out/ --skipQuant &> $output_folder/$name/strand_prediction/salmon_out/salmon_out.log
-			elif [[ $(find $output_folder/$name -name library_layout_info.txt | xargs cat) == "PAIRED" ]]; then
+			elif [[ "$layout" == "PAIRED" ]]; then
 				rand_sample_root=$(ls $seqs_location | sed -E 's/_[12]\.fastq\.gz$//' | grep -v '^\s*$' | sort -u | shuf | head -1)
 				rand_sample="${rand_sample_root}_1.fastq.gz / ${rand_sample_root}_2.fastq.gz"
 				echo -e "\nPredicting strandness with salmon on random sample: $rand_sample\n"
