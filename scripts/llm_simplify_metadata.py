@@ -1,0 +1,157 @@
+#!/usr/bin/env python3
+"""
+llm_simplify_metadata.py - AI-assisted sample and condition name streamlining for reanalyzerGSE.
+
+Given sample metadata files (samples_info.txt, phenodata_extracted.txt, etc.) in a reads_study_info
+directory, this script calls the OpenAI-compatible LLM endpoint to generate short, clean,
+discriminative sample names and condition labels.
+
+Rules:
+- Condition names must be concise (e.g. "NTG" or "MCK_dOTC" instead of 100-char descriptions).
+- Sample names must be clean, discriminative, and preserve GSM/replicate tags.
+- Output contains only alphanumeric characters and underscores [A-Za-z0-9_].
+- Writes streamlined samples_info.txt, sample_names.txt, and design files.
+"""
+
+import argparse
+import os
+import sys
+import re
+
+# Import shared llm_common helper
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import llm_common
+
+PROMPT_TEMPLATE = """You are a bioinformatics metadata assistant.
+Your task is to take raw, overly verbose GEO sample metadata and simplify both:
+1. The condition/group names (column 3 of samples_info).
+2. The descriptive sample names (column 2 of samples_info).
+
+RULES:
+- Condition names must be short, clean, and discriminative (e.g., "NTG" vs "MCK_dOTC" or "WT" vs "KO").
+- Sample names must be concise, combining the condition, replicate/ID, and GSM accession if present.
+- Strictly use ONLY alphanumeric characters and underscores [A-Za-z0-9_]. No spaces, hyphens, parentheses, or special characters.
+- Keep total sample name length under 60 characters.
+- Output MUST have the exact same number of lines as input.
+- Output format per line (tab-separated):
+  <SRR_ID_OR_ACCESSION>\t<SIMPLIFIED_SAMPLE_NAME>\t<SIMPLIFIED_CONDITION>
+
+Here is the raw samples_info file:
+{samples_info}
+
+Here is additional phenotype context (if helpful):
+{phenodata}
+"""
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="LLM-based sample and condition name simplification")
+    parser.add_argument("--info-dir", required=True, help="Path to reads_study_info directory")
+    parser.add_argument("--endpoint", help="LLM endpoint URL")
+    parser.add_argument("--model", help="LLM model name")
+    parser.add_argument("--api-key", help="API key")
+    parser.add_argument("--timeout", type=int, default=120, help="LLM timeout in seconds")
+    return parser.parse_args()
+
+def main():
+    args = parse_args()
+    info_dir = args.info_dir
+    samples_info_path = os.path.join(info_dir, "samples_info.txt")
+    phenodata_path = os.path.join(info_dir, "phenodata_extracted.txt")
+
+    if not os.path.exists(samples_info_path):
+        print(f"llm_simplify_metadata.py: {samples_info_path} not found. Skipping.")
+        sys.exit(0)
+
+    # Read raw samples_info
+    with open(samples_info_path, "r", encoding="utf-8", errors="replace") as f:
+        samples_info_text = f.read().strip()
+
+    if not samples_info_text:
+        sys.exit(0)
+
+    # Read phenodata if available
+    phenodata_text = ""
+    if os.path.exists(phenodata_path):
+        with open(phenodata_path, "r", encoding="utf-8", errors="replace") as f:
+            phenodata_text = f.read().strip()[:4000] # cap context
+
+    prompt = PROMPT_TEMPLATE.format(
+        samples_info=samples_info_text,
+        phenodata=phenodata_text if phenodata_text else "None"
+    )
+
+    print("llm_simplify_metadata.py: Requesting AI metadata simplification...")
+    
+    # Override endpoint/model from args if passed
+    if args.endpoint:
+        os.environ["LLM_ENDPOINT"] = args.endpoint
+    if args.model:
+        os.environ["LLM_MODEL"] = args.model
+    if args.api_key:
+        os.environ["LLM_API_KEY"] = args.api_key
+
+    response = llm_common.query_llm(prompt, timeout=args.timeout)
+
+    if not response:
+        print("llm_simplify_metadata.py: AI simplification returned no response. Keeping original metadata.")
+        sys.exit(0)
+
+    # Clean lines from response
+    lines = [l.strip() for l in response.strip().splitlines() if l.strip() and "\t" in l]
+
+    raw_lines = [l for l in samples_info_text.splitlines() if l.strip()]
+
+    if len(lines) != len(raw_lines):
+        print(f"llm_simplify_metadata.py: Response line count ({len(lines)}) mismatch with raw input ({len(raw_lines)}). Keeping original metadata.")
+        sys.exit(0)
+
+    # Validate and sanitize response
+    new_samples_info = []
+    new_sample_names = []
+    new_conditions = []
+
+    for i, line in enumerate(lines):
+        parts = line.split("\t")
+        if len(parts) < 3:
+            print(f"llm_simplify_metadata.py: Invalid line output: '{line}'. Keeping original metadata.")
+            sys.exit(0)
+
+        srr_id = raw_lines[i].split("\t")[0]
+        s_name = re.sub(r'[^A-Za-z0-9_]', '_', parts[1].strip())
+        s_cond = re.sub(r'[^A-Za-z0-9_]', '_', parts[2].strip())
+
+        # Clean consecutive underscores
+        s_name = re.sub(r'_+', '_', s_name).strip('_')
+        s_cond = re.sub(r'_+', '_', s_cond).strip('_')
+
+        new_samples_info.append(f"{srr_id}\t{s_name}\t{s_cond}")
+        new_sample_names.append(s_name)
+        new_conditions.append(s_cond)
+
+    # Backup original files
+    os.system(f"cp '{samples_info_path}' '{samples_info_path}.raw_bak'")
+
+    # Write streamlined samples_info.txt
+    with open(samples_info_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(new_samples_info) + "\n")
+
+    # Write streamlined sample_names.txt
+    sample_names_path = os.path.join(info_dir, "sample_names.txt")
+    with open(sample_names_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(new_sample_names) + "\n")
+
+    # Write design_possible_full_1.txt & design_possible_1.txt
+    design_full_path = os.path.join(info_dir, "design_possible_full_1.txt")
+    design_uniq_path = os.path.join(info_dir, "design_possible_1.txt")
+    with open(design_full_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(new_conditions) + "\n")
+
+    unique_conds = list(dict.fromkeys(new_conditions))
+    with open(design_uniq_path, "w", encoding="utf-8") as f:
+        f.write("\n".join(unique_conds) + "\n")
+
+    print(f"llm_simplify_metadata.py: Successfully streamlined metadata for {len(lines)} samples.")
+    print("Simplified design conditions:", ", ".join(unique_conds))
+
+if __name__ == "__main__":
+    main()

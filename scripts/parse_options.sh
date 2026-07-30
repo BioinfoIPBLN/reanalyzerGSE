@@ -134,7 +134,7 @@ for argument in $options; do
 	        -Lk | -llm_api_key # API key for the endpoint (defaults to 'dummy' when AI is active and left empty)
 	        -Lcw | -llm_context_window # Model context window in tokens (e.g. 128000)
 	        -Mqa | -multiqc_ai_args # Args passed verbatim to scripts/multiqc_ai.py; selects AI mode/tuning (default '--per-section --builtin'). Options: '--per-section' (custom inline summaries), '--builtin' (MultiQC's own global summary + per-section buttons), both (default), '--ai-summary short|full', '--ai-provider custom|openai|anthropic|seqera', '--llm-timeout N', '--sys-prompt-file PATH'
-	        -aii | -ai_insights # Which AI annotations to generate, as a comma-separated list of: 'multiqc' (AI annotation of the MultiQC report), 'qualimap' (AI annotation of Qualimap reports), 'design' (study-design insight), 'counts' (per-sample expression-landscape insight from the log2(TPM+0.1) table), 'dge' (per-comparison DEG summary), 'enrichment' (per-comparison enrichment narrative); or 'all' (default, == all six); or 'no' to disable every AI annotation. 'yes' is accepted as an alias of 'all'. All reuse -llm_endpoint/-llm_model and have no effect unless -llm_endpoint is provided. Each AI option has a 5-minute per-response cap: on timeout its boxes show 'ai_insights timeout. Please try again', and implausibly long (degraded) answers are dropped
+	        -aii | -ai_insights # Which AI annotations to generate, as a comma-separated list of: 'metadata' (AI simplification of sample & condition names from GEO metadata), 'multiqc' (AI annotation of the MultiQC report), 'qualimap' (AI annotation of Qualimap reports), 'design' (study-design insight), 'counts' (per-sample expression-landscape insight from the log2(TPM+0.1) table), 'dge' (per-comparison DEG summary), 'enrichment' (per-comparison enrichment narrative); or 'all' (default, == all seven); or 'no' to disable every AI annotation. 'yes' is accepted as an alias of 'all'. All reuse -llm_endpoint/-llm_model and have no effect unless -llm_endpoint is provided. Each AI option has a 5-minute per-response cap: on timeout its boxes show 'ai_insights timeout. Please try again', and implausibly long (degraded) answers are dropped
 	        -K | -Kraken2_fast # DEPRECATED: daemon mode now replaces /dev/shm approach. This option is kept for backward compatibility but has no effect" && exit 1;;
 		-options) options_file=${arguments[index]} ;;
 		-i) input=${arguments[index]} ;;
@@ -565,13 +565,14 @@ if [ -z "$ai_insights" ]; then
 	ai_insights="all"
 fi
 ai_sel=$(echo "$ai_insights" | tr 'A-Z' 'a-z' | tr -d ' ')
-ai_do_multiqc=0; ai_do_qualimap=0; ai_do_qc_pdf=0; ai_do_design=0; ai_do_counts=0; ai_do_dge=0; ai_do_enrichment=0
+ai_do_metadata=0; ai_do_multiqc=0; ai_do_qualimap=0; ai_do_qc_pdf=0; ai_do_design=0; ai_do_counts=0; ai_do_dge=0; ai_do_enrichment=0
 case ",$ai_sel," in
 	*,no,*|*,none,*) : ;;
 	*)
 		if [[ ",$ai_sel," == *,all,* || ",$ai_sel," == *,yes,* ]]; then
-			ai_do_multiqc=1; ai_do_qualimap=1; ai_do_qc_pdf=1; ai_do_design=1; ai_do_counts=1; ai_do_dge=1; ai_do_enrichment=1
+			ai_do_metadata=1; ai_do_multiqc=1; ai_do_qualimap=1; ai_do_qc_pdf=1; ai_do_design=1; ai_do_counts=1; ai_do_dge=1; ai_do_enrichment=1
 		else
+			[[ ",$ai_sel," == *,metadata,* || ",$ai_sel," == *,meta,* ]] && ai_do_metadata=1
 			[[ ",$ai_sel," == *,multiqc,* || ",$ai_sel," == *,qc,* ]] && ai_do_multiqc=1
 			[[ ",$ai_sel," == *,qualimap,* ]] && ai_do_qualimap=1
 			[[ ",$ai_sel," == *,qc_pdf,* || ",$ai_sel," == *,pdf,* ]] && ai_do_qc_pdf=1

@@ -94,6 +94,12 @@ if run_step step1; then
 		if test -f srr_ids.txt; then
 			paste -d$'\t' srr_ids.txt sample_names.txt $(for f in $(ls | grep full); do echo $f" "$(sort $f | uniq -c | wc -l); done | grep -v " 1" | cut -d" " -f1 | head -1) > samples_info.txt # the third column is a design containing at least more than one element...
 			sed -i -r -e 's/[^[:alnum:]_\t]/_/g' -e 's/_\+/_/g' -e 's/(_[^_]*)\1+/\1/g' -e 's/_([0-9]+)/-\1/g' samples_info.txt # Should be redundant but make sure to remove special characters from the sample names and _1/_2... it's crucial for later steps such as fastqc and miarma-seq
+			
+			# AI-assisted metadata streamlining (if LLM endpoint enabled and metadata AI requested)
+			if [ -n "$llm_endpoint" ] && [ "${ai_do_metadata:-1}" = 1 ] && command -v llm_simplify_metadata.py >/dev/null 2>&1; then
+				echo -e "\nRunning AI-assisted sample and condition name streamlining..."
+				llm_simplify_metadata.py --info-dir "$output_folder/$name/reads_study_info"
+			fi
 		fi
 		if [ ! -s srr_ids.txt ]; then
 			echo -e "\nI haven't been able to find SRR accession ids to download the sequences and I'm exiting, please double check manually..."; exit 1

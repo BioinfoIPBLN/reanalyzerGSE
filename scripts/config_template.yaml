@@ -138,4 +138,4 @@ multiqc_ai_args: "--per-section --builtin"  # Args passed to multiqc_ai.py; sele
                                             #   --ai-provider NAME       custom|openai|anthropic|seqera (default custom)
                                             #   --llm-timeout N          per-request timeout in seconds (default 600)
                                             #   --sys-prompt-file PATH   use a custom system prompt for the per-section calls
-ai_insights: "all"                     # Which AI annotations to generate (reusing llm_endpoint/llm_model): comma list of 'multiqc','qualimap','qc_pdf','design','counts','dge','enrichment'; or 'all' (default = all seven); or 'no' (disable all AI). 'yes' == 'all'. No effect unless llm_endpoint is set.
+ai_insights: "all"                     # Which AI annotations to generate (reusing llm_endpoint/llm_model): comma list of 'metadata','multiqc','qualimap','qc_pdf','design','counts','dge','enrichment'; or 'all' (default = all eight); or 'no' (disable all AI). 'yes' == 'all'. No effect unless llm_endpoint is set.
