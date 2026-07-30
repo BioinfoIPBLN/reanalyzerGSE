@@ -205,6 +205,7 @@ if run_step step1a; then
 					cp -f "$output_folder/$name/reads_study_info/library_layout_info.txt" "$output_folder/$name/library_layout_info.txt" 2>/dev/null || true
 				fi
 	### Rename the fastq files (max length name 140 characters) or handle already downloaded datasets if provided:
+				cd $seqs_location
 				if [[ "$(cat $output_folder/$name/reads_study_info/library_layout_info.txt)" == "SINGLE" ]]; then
 					for i in $(cat $output_folder/$name/reads_study_info/srr_ids.txt); do
 						sname=$(awk -F'\t' -v id="$i" '$1 == id { print $2 }' $output_folder/$name/reads_study_info/samples_info.txt)
