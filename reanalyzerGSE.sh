@@ -186,7 +186,7 @@ if run_step step1a; then
 			mkdir -p $seqs_location
 			echo "Downloading the fastq files from SRR..."
 			if [ -z "$input_geo_reads" ]; then
-				download_sra_fq.sh $output_folder/$name/reads_study_info/srr_ids.txt $seqs_location $(( number_parallel*2 )) $cores
+				download_sra_fq.sh $output_folder/$name/reads_study_info/srr_ids.txt $seqs_location $number_parallel $cores $compression_level
 				if [ -f "$output_folder/$name/reads_study_info/library_layout_info.txt" ]; then
 					cp -f "$output_folder/$name/reads_study_info/library_layout_info.txt" "$output_folder/$name/library_layout_info.txt" 2>/dev/null || true
 				fi
@@ -220,12 +220,11 @@ if run_step step1a; then
 		echo -e "\nDONE. Current date/time: $(date)"; time1=`date +%s`; echo -e "Elapsed time (secs): $((time1-start))"; echo -e "Elapsed time (hours): $(echo "scale=2; $((time1-start))/3600" | bc -l)\n"
 
 	### Process if any download was not successful or subsampling was required:
-		cd $seqs_location
-		num_gz_files=$(find . -name "*.gz" | wc -l)
-		num_samples=$(cat $output_folder/$name/reads_study_info/sample_names.txt | wc -l)
+		num_gz_files=$(ls -1 $output_folder/$name/raw_reads/*.fastq.gz 2>/dev/null | wc -l)
+		num_samples=$(cat $output_folder/$name/reads_study_info/srr_ids.txt | wc -l)
+
 		if [ "$num_gz_files" -eq "$(($num_samples * 2))" ] || [ "$num_gz_files" -eq "$num_samples" ]; then
-			echo -e "\nPlease double check this order is the same than the rest of lists printed in the log, and that the info, e.g., the correspondence between GSM and SRR, is correct:"
-			cat $output_folder/$name/reads_study_info/samples_info.txt
+			echo "Number of fastq.gz files matched expected sample counts."
 		else
 			echo -e "\nRaw reads not downloaded fully? Please double check manually the log files and the folder $seqs_location to assess whether there have been errors with downloading. Retrying all downloads... with another approach\n"
 			echo -e "\nIn the future this will automatically detect and only resume the downloads that fail...\n"
@@ -237,8 +236,8 @@ if run_step step1a; then
 				export cores_parallel=$((cores / number_parallel))
 			fi
 			cd $seqs_location; rm -rf *
-			echo $input | tr ',' '\n' | parallel --halt-on-error 2 --joblog $output_folder/$name/fastq_dl_log_parallel.txt -j $number_parallel --max-args 1 'if [ $(echo {} | egrep -c "PRJEB|PRJNA|PRJDB|ERX|DRX|SRX|ERP|DRP|SRP") -eq 1 ]; then fastq-dl --cpus $cores_parallel --accession {}; fi && 
-																																		   if [ $(echo {} | egrep -c "ERS|DRS|SRS|SAMD|SAME|SAMN|ERR|DRR|SRR") -eq 1 ]; then fastq-dl --provider sra --cpus $cores_parallel --accession {}; fi'
+			echo $input | tr ',' '\n' | parallel --halt-on-error 2 --joblog $output_folder/$name/fastq_dl_log_parallel.txt -j $number_parallel --max-args 1 'if [ $(echo {} | egrep -c "PRJEB|PRJNA|PRJDB|ERX|DRX|SRX|ERP|DRP|SRP") -eq 1 ]; then fastq-dl --cpus '$cores_parallel' --silent --force --max-attempts 10 --gzip-level '$compression_level' --accession {}; fi && 
+																																		   if [ $(echo {} | egrep -c "ERS|DRS|SRS|SAMD|SAME|SAMN|ERR|DRR|SRR") -eq 1 ]; then fastq-dl --provider sra --cpus '$cores_parallel' --silent --force --max-attempts 10 --gzip-level '$compression_level' --accession {}; fi'
 		 	if [ "$num_gz_files" -eq "$(($num_samples * 2))" ] || [ "$num_gz_files" -eq "$num_samples" ]; then
 		 		echo "It seems the download has been sucessful, but please double check"
 		 	else
@@ -248,12 +247,6 @@ if run_step step1a; then
 
 		if [ ! -z "$number_reads" ]; then
 			echo -e "\nSubsampling...\n"
-			# From the input parameter by the user, obtain a random number allowing a +- 10% window:
-			IFS=', ' read -r -a arr <<< "$number_reads"
-			IFS=', ' read -r -a arr2 <<< "$(ls | egrep .fastq.gz$ | sed 's,[12].fastq.gz,,g' | sort | uniq | tr '\n' ',')"
-			desired_number=${arr[1]}
-			apply_random_shift() {
-				Rscript -e '
 				  modify_number <- function(number) {
 				    percentage <- runif(1, 0, 10)  # Random % between 0 and 10
 				    change <- ifelse(runif(1) < 0.5, -1, 1)  # Randomly add or subtract
@@ -514,8 +507,8 @@ if run_step step1c; then
 		if [ ! -d "$seqs_location" ]; then
 			mkdir -p $seqs_location; cd $seqs_location
 			echo -e "\nDownloading from the input accessions that you manually provided...\n"
-			echo $input | tr ',' '\n' | parallel --halt-on-error 2 -j $number_parallel --max-args 1 'if [ $(echo {} | egrep -c "PRJEB|PRJNA|PRJDB|ERX|DRX|SRX|ERP|DRP|SRP") -eq 1 ]; then fastq-dl --cpus $cores_parallel --accession {}; fi && 
-		 																		   if [ $(echo {} | egrep -c "ERS|DRS|SRS|SAMD|SAME|SAMN|ERR|DRR|SRR") -eq 1 ]; then fastq-dl --provider sra --cpus $cores_parallel --accession {}; fi'
+			echo $input | tr ',' '\n' | parallel --halt-on-error 2 -j $number_parallel --max-args 1 'if [ $(echo {} | egrep -c "PRJEB|PRJNA|PRJDB|ERX|DRX|SRX|ERP|DRP|SRP") -eq 1 ]; then fastq-dl --cpus '$cores_parallel' --silent --force --max-attempts 10 --gzip-level '$compression_level' --accession {}; fi && 
+		 																		   if [ $(echo {} | egrep -c "ERS|DRS|SRS|SAMD|SAME|SAMN|ERR|DRR|SRR") -eq 1 ]; then fastq-dl --provider sra --cpus '$cores_parallel' --silent --force --max-attempts 10 --gzip-level '$compression_level' --accession {}; fi'
 		fi
 _log_step "Step_1_Download" "end"
 		echo -e "\n\nSTEP 1: DONE\nCurrent date/time: $(date)\n\n"

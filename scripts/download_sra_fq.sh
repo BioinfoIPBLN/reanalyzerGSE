@@ -3,7 +3,7 @@ file=$1
 dest=$2
 number_parallel=$3 
 cores=$4
-#compression_level=$5
+compression_level=${5:-6}
 
 total_lines=$(cat $1 | wc -l)
 #echo -e "\nProcessing and downloading with fasterq-dump $total_lines files\n"
@@ -26,7 +26,7 @@ cd $dest
 # https://www.biostars.org/p/359441/
 # parallel --verbose --joblog $dest/../download_sra_fq_log_parallel.txt -j $number_parallel download_sra_fq0.sh {} $cores_parallel $compression_level ::: $(cat $file)
 
-parallel --halt-on-error 2 --verbose --joblog $dest/../download_sra_fq_log_parallel.txt -j $number_parallel fastq-dl --accession {} --cpus $cores_parallel ::: $(cat $file)
+parallel --halt-on-error 2 --verbose --joblog $dest/../download_sra_fq_log_parallel.txt -j $number_parallel fastq-dl --accession {} --cpus $cores_parallel --silent --force --max-attempts 10 --gzip-level $compression_level ::: $(cat $file)
 
 # Extract library_layout by column name
 awk -F'\t' 'NR==1 { for(i=1;i<=NF;i++) if($i=="library_layout") col=i } NR>1 && col { print $col }' fastq-run-info.tsv | head -1 > $(dirname $file)/library_layout_info.txt
