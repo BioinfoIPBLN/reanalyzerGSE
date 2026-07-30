@@ -267,7 +267,7 @@ if run_step step1a; then
 			fi
 			cd $seqs_location; rm -rf *
 			echo $input | tr ',' '\n' | parallel --halt-on-error 2 --joblog $output_folder/$name/fastq_dl_log_parallel.txt -j $number_parallel --max-args 1 "if [ \$(echo {} | egrep -c 'PRJEB|PRJNA|PRJDB|ERX|DRX|SRX|ERP|DRP|SRP') -eq 1 ]; then fastq-dl --cpus $cores_parallel --silent --force --max-attempts 10 --gzip-level $compression_level --accession {}; fi && 
-																																		   if [ \$(echo {} | egrep -c 'ERS|DRS|SRS|SAMD|SAME|SAMN|ERR|DRR|SRR') -eq 1 ]; then fastq-dl --provider sra --cpus $cores_parallel --silent --force --max-attempts 10 --gzip-level $compression_level --accession {}; fi"
+																																		   if [ \$(echo {} | egrep -c 'ERS|DRS|SRS|SAMD|SAME|SAMN|ERR|DRR|SRR') -eq 1 ]; then fastq-dl --cpus $cores_parallel --silent --force --max-attempts 10 --gzip-level $compression_level --accession {}; fi"
 		 	if [ "$num_gz_files" -eq "$(($num_samples * 2))" ] || [ "$num_gz_files" -eq "$num_samples" ]; then
 		 		echo "It seems the download has been sucessful, but please double check"
 		 	else
@@ -544,7 +544,7 @@ if run_step step1c; then
 			mkdir -p $seqs_location; cd $seqs_location
 			echo -e "\nDownloading from the input accessions that you manually provided...\n"
 			echo $input | tr ',' '\n' | parallel --halt-on-error 2 -j $number_parallel --max-args 1 "if [ \$(echo {} | egrep -c 'PRJEB|PRJNA|PRJDB|ERX|DRX|SRX|ERP|DRP|SRP') -eq 1 ]; then fastq-dl --cpus $cores_parallel --silent --force --max-attempts 10 --gzip-level $compression_level --accession {}; fi && 
-		 																		   if [ \$(echo {} | egrep -c 'ERS|DRS|SRS|SAMD|SAME|SAMN|ERR|DRR|SRR') -eq 1 ]; then fastq-dl --provider sra --cpus $cores_parallel --silent --force --max-attempts 10 --gzip-level $compression_level --accession {}; fi"
+		 																		   if [ \$(echo {} | egrep -c 'ERS|DRS|SRS|SAMD|SAME|SAMN|ERR|DRR|SRR') -eq 1 ]; then fastq-dl --cpus $cores_parallel --silent --force --max-attempts 10 --gzip-level $compression_level --accession {}; fi"
 		fi
 _log_step "Step_1_Download" "end"
 		echo -e "\n\nSTEP 1: DONE\nCurrent date/time: $(date)\n\n"
