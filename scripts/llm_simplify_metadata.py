@@ -161,13 +161,24 @@ def main():
     with open(sample_names_path, "w", encoding="utf-8") as f:
         f.write("\n".join(new_sample_names) + "\n")
 
-    # Write design_possible_full_1.txt & design_possible_1.txt
+    # Overwrite all design_possible_full_*.txt and design_possible_*.txt files in info_dir
+    unique_conds = list(dict.fromkeys(new_conditions))
+    design_files_found = 0
+    for fname in os.listdir(info_dir):
+        if fname.startswith("design_possible_full_"):
+            with open(os.path.join(info_dir, fname), "w", encoding="utf-8") as fh:
+                fh.write("\n".join(new_conditions) + "\n")
+            design_files_found += 1
+        elif fname.startswith("design_possible_") and not fname.startswith("design_possible_full_"):
+            with open(os.path.join(info_dir, fname), "w", encoding="utf-8") as fh:
+                fh.write("\n".join(unique_conds) + "\n")
+            design_files_found += 1
+
+    # Ensure fallback design_possible_full_1.txt and design_possible_1.txt are written
     design_full_path = os.path.join(info_dir, "design_possible_full_1.txt")
     design_uniq_path = os.path.join(info_dir, "design_possible_1.txt")
     with open(design_full_path, "w", encoding="utf-8") as f:
         f.write("\n".join(new_conditions) + "\n")
-
-    unique_conds = list(dict.fromkeys(new_conditions))
     with open(design_uniq_path, "w", encoding="utf-8") as f:
         f.write("\n".join(unique_conds) + "\n")
 

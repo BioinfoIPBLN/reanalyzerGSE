@@ -108,6 +108,42 @@ if run_step step1; then
 				echo -e "\nRunning AI-assisted sample and condition name streamlining..."
 				llm_simplify_metadata.py --info-dir "$output_folder/$name/reads_study_info"
 			fi
+			# Filter metadata files if GSM_filter is provided so fastq-dl only downloads requested samples
+			if [ -n "$GSM_filter" ] && [ -f gsm_manual_filter.txt ]; then
+				echo -e "\nFiltering metadata and SRR accession download list for specified GSM(s): $GSM_filter..."
+				python3 -c "
+import os, sys
+gsm_list = [g.strip() for g in open('gsm_manual_filter.txt').read().strip().split(',') if g.strip()]
+if not gsm_list:
+    sys.exit(0)
+
+# Filter samples_info.txt
+if os.path.exists('samples_info.txt'):
+    lines = [l for l in open('samples_info.txt').read().splitlines() if l.strip()]
+    kept = [l for l in lines if any(gsm in l for gsm in gsm_list)]
+    if kept:
+        open('samples_info.txt', 'w').write('\n'.join(kept) + '\n')
+        # Update srr_ids.txt and sample_names.txt from filtered samples_info.txt
+        srrs = [l.split('\t')[0] for l in kept]
+        snames = [l.split('\t')[1] for l in kept]
+        open('srr_ids.txt', 'w').write('\n'.join(srrs) + '\n')
+        open('sample_names.txt', 'w').write('\n'.join(snames) + '\n')
+
+        # Filter design files
+        for f in os.listdir('.'):
+            if f.startswith('design_possible_full_'):
+                dlines = [l for l in open(f).read().splitlines() if l.strip()]
+                # Keep matching indices from original lines
+                kept_d = [dlines[i] for i, l in enumerate(lines) if any(gsm in l for gsm in gsm_list) and i < len(dlines)]
+                if kept_d:
+                    open(f, 'w').write('\n'.join(kept_d) + '\n')
+            elif f.startswith('design_possible_') and not f.startswith('design_possible_full_'):
+                dlines = [l for l in open(f).read().splitlines() if l.strip()]
+                kept_d = list(dict.fromkeys([lines[i].split('\t')[2] if len(lines[i].split('\t'))>2 else dlines[i] for i, l in enumerate(lines) if any(gsm in l for gsm in gsm_list) and i < len(lines)]))
+                if kept_d:
+                    open(f, 'w').write('\n'.join(kept_d) + '\n')
+"
+			fi
 		fi
 		if [ ! -s srr_ids.txt ]; then
 			echo -e "\nI haven't been able to find SRR accession ids to download the sequences and I'm exiting, please double check manually..."; exit 1
