@@ -150,8 +150,17 @@ def main():
     with open(design_uniq_path, "w", encoding="utf-8") as f:
         f.write("\n".join(unique_conds) + "\n")
 
-    print(f"llm_simplify_metadata.py: Successfully streamlined metadata for {len(lines)} samples.")
-    print("Simplified design conditions:", ", ".join(unique_conds))
+    print(f"\n==========================================================================")
+    print(f"  AI Metadata Streamlining Complete ({len(lines)} samples)")
+    print(f"==========================================================================")
+    print(f"Simplified Conditions/Groups: {', '.join(unique_conds)}\n")
+    print(f"Streamlined Sample Mapping:")
+    print(f"{'SRR ID':<15} {'Simplified Sample Name':<45} {'Condition'}")
+    print(f"-" * 75)
+    for line in new_samples_info:
+        parts = line.split('\t')
+        print(f"{parts[0]:<15} {parts[1]:<45} {parts[2]}")
+    print(f"==========================================================================\n")
 
 if __name__ == "__main__":
     main()
