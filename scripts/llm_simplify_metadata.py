@@ -82,22 +82,32 @@ def main():
 
     print("llm_simplify_metadata.py: Requesting AI metadata simplification...")
     
-    # Override endpoint/model from args if passed
-    if args.endpoint:
-        os.environ["LLM_ENDPOINT"] = args.endpoint
-    if args.model:
-        os.environ["LLM_MODEL"] = args.model
-    if args.api_key:
-        os.environ["LLM_API_KEY"] = args.api_key
+    endpoint = args.endpoint or os.environ.get("LLM_ENDPOINT")
+    model = args.model or os.environ.get("LLM_MODEL")
+    api_key = args.api_key or os.environ.get("LLM_API_KEY", "dummy")
 
-    response = llm_common.query_llm(prompt, timeout=args.timeout)
+    if not endpoint or not model:
+        print("llm_simplify_metadata.py: No LLM endpoint or model set. Keeping original metadata.")
+        sys.exit(0)
 
-    if not response:
+    try:
+        messages = [
+            {"role": "system", "content": "You are a careful bioinformatics assistant."},
+            {"role": "user", "content": prompt}
+        ]
+        response_text, usage = llm_common.chat_completion(
+            endpoint, model, api_key, messages, timeout=args.timeout
+        )
+    except Exception as e:
+        print(f"llm_simplify_metadata.py: AI query error ({e}). Keeping original metadata.")
+        sys.exit(0)
+
+    if not response_text:
         print("llm_simplify_metadata.py: AI simplification returned no response. Keeping original metadata.")
         sys.exit(0)
 
     # Clean lines from response
-    lines = [l.strip() for l in response.strip().splitlines() if l.strip() and "\t" in l]
+    lines = [l.strip() for l in response_text.strip().splitlines() if l.strip() and "\t" in l]
 
     raw_lines = [l for l in samples_info_text.splitlines() if l.strip()]
 

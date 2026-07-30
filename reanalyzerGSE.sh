@@ -88,7 +88,15 @@ if run_step step1; then
 		R_download_GEO_info_process.R $input $output_folder
 		sed -i -r -e 's/[^[:alnum:]_\t]/_/g' -e 's/_\+/_/g' -e 's/(_[^_]*)\1+/\1/g' sample_names.txt
 		if test -f srx_ids.txt; then
-			for i in $(cat srx_ids.txt); do esearch -db sra -query $i | esummary | xtract -pattern DocumentSummary -element Run@acc >> srr_ids.txt; done
+			for i in $(cat srx_ids.txt); do
+				srr=""
+				for attempt in {1..3}; do
+					srr=$(esearch -db sra -query "$i" 2>/dev/null | esummary 2>/dev/null | xtract -pattern DocumentSummary -element Run@acc 2>/dev/null)
+					[ -n "$srr" ] && break
+					sleep 2
+				done
+				[ -n "$srr" ] && echo "$srr" >> srr_ids.txt
+			done
 			rm srx_ids.txt
 		fi
 		if test -f srr_ids.txt; then
