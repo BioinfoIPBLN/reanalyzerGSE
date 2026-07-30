@@ -588,7 +588,8 @@ if [ -n "$llm_endpoint" ]; then
 	[ -n "$llm_model" ]          && export LLM_MODEL="$llm_model"
 	export LLM_API_KEY="${llm_api_key:-dummy}"
 	[ -n "$llm_context_window" ] && export LLM_CONTEXT_WINDOW="$llm_context_window"
-	export ai_do_qualimap ai_do_qc_pdf ai_do_design ai_do_counts ai_do_dge ai_do_enrichment ai_do_multiqc
+	export ai_do_metadata ai_do_qualimap ai_do_qc_pdf ai_do_design ai_do_counts ai_do_dge ai_do_enrichment ai_do_multiqc
+	export RGSE_DO_METADATA=$ai_do_metadata
 	export RGSE_DO_QUALIMAP=$ai_do_qualimap
 	export RGSE_DO_QC_PDF=$ai_do_qc_pdf
 	if [ "$ai_do_multiqc" = 1 ]; then
@@ -597,6 +598,7 @@ if [ -n "$llm_endpoint" ]; then
 	fi
 
 	ai_active_list=()
+	[ "$ai_do_metadata" = 1 ]   && ai_active_list+=("metadata")
 	[ "$ai_do_multiqc" = 1 ]    && ai_active_list+=("multiqc")
 	[ "$ai_do_qualimap" = 1 ]   && ai_active_list+=("qualimap")
 	[ "$ai_do_qc_pdf" = 1 ]     && ai_active_list+=("qc_pdf")
