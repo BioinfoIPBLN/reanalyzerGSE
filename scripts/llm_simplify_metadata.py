@@ -29,7 +29,8 @@ Your task is to take raw, overly verbose GEO sample metadata and simplify both:
 
 RULES:
 - Condition names must be short, clean, and discriminative (e.g., "NTG" vs "MCK_dOTC" or "WT" vs "KO").
-- Sample names must be concise, combining the condition, replicate/ID, and GSM accession if present.
+- Sample names must be concise, combining the condition, replicate tag, and GSM accession if present.
+- Replicate tags MUST always use the exact capitalized standard format "_Rep1", "_Rep2", "_Rep3", etc. (e.g. "NTG_Rep1_GSM5770284", "MCK_dOTC_Rep2_GSM5770287"). Never use "rep1", "rep_1", "replicate1", or "biological_rep1".
 - Strictly use ONLY alphanumeric characters and underscores [A-Za-z0-9_]. No spaces, hyphens, parentheses, or special characters.
 - Keep total sample name length under 60 characters.
 - Output MUST have the exact same number of lines as input.
@@ -51,6 +52,11 @@ def parse_args():
     parser.add_argument("--api-key", help="API key")
     parser.add_argument("--timeout", type=int, default=120, help="LLM timeout in seconds")
     return parser.parse_args()
+
+def normalize_replicates(name):
+    # Convert variations like rep1, rep_1, replicate1, bio_rep1, biological_rep1 to _Rep1
+    name = re.sub(r'(?i)(?:biological_)?(?:bio_)?(?:replicate|rep)[_.-]?([0-9]+)', r'_Rep\1', name)
+    return name
 
 def main():
     args = parse_args()
@@ -127,8 +133,13 @@ def main():
             sys.exit(0)
 
         srr_id = raw_lines[i].split("\t")[0]
-        s_name = re.sub(r'[^A-Za-z0-9_]', '_', parts[1].strip())
+        s_name = parts[1].strip()
         s_cond = re.sub(r'[^A-Za-z0-9_]', '_', parts[2].strip())
+
+        # Normalize replicate patterns to _RepN
+        s_name = normalize_replicates(s_name)
+
+        s_name = re.sub(r'[^A-Za-z0-9_]', '_', s_name)
 
         # Clean consecutive underscores
         s_name = re.sub(r'_+', '_', s_name).strip('_')

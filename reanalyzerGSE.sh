@@ -205,11 +205,27 @@ if run_step step1a; then
 					cp -f "$output_folder/$name/reads_study_info/library_layout_info.txt" "$output_folder/$name/library_layout_info.txt" 2>/dev/null || true
 				fi
 	### Rename the fastq files (max length name 140 characters) or handle already downloaded datasets if provided:
-				cd $seqs_location
 				if [[ "$(cat $output_folder/$name/reads_study_info/library_layout_info.txt)" == "SINGLE" ]]; then
-					for i in $(cat $output_folder/$name/reads_study_info/srr_ids.txt); do echo "mv $(ls | egrep ^$i | head -1) $(cat $output_folder/$name/reads_study_info/samples_info.txt | grep $i | cut -f 2 | sed -e 's,%,,g;s,(,,g;s,),,g;s/[_]1/1/g;s/[_]2/2/g;s/replicate_/replicate/g' | awk -F '_GSM' '{ gsub(/-/,"",$1); print substr($1, 1, 140) "_GSM" $2 }')""_1.fastq.gz" && mv $(ls | egrep ^$i | head -1) $(cat $output_folder/$name/reads_study_info/samples_info.txt | grep $i | cut -f 2 | sed -e 's,%,,g;s,(,,g;s,),,g;s/[_]1/1/g;s/[_]2/2/g;s/replicate_/replicate/g' | awk -F '_GSM' '{ gsub(/-/,"",$1); print substr($1, 1, 140) "_GSM" $2 }')"_1.fastq.gz"; done
+					for i in $(cat $output_folder/$name/reads_study_info/srr_ids.txt); do
+						sname=$(awk -F'\t' -v id="$i" '$1 == id { print $2 }' $output_folder/$name/reads_study_info/samples_info.txt)
+						if [ -n "$sname" ]; then
+							old_file=$(ls | egrep "^${i}[._]" 2>/dev/null | head -1)
+							[ -z "$old_file" ] && old_file=$(ls | egrep "^${i}" 2>/dev/null | head -1)
+							[ -f "$old_file" ] && mv "$old_file" "${sname}_1.fastq.gz"
+						fi
+					done
 				elif [[ "$(cat $output_folder/$name/reads_study_info/library_layout_info.txt)" == "PAIRED" ]]; then
-					for i in $(cat $output_folder/$name/reads_study_info/srr_ids.txt); do echo "mv $(ls | egrep ^$i | head -1) $(cat $output_folder/$name/reads_study_info/samples_info.txt | grep $i | cut -f 2 | sed -e 's,%,,g;s,(,,g;s,),,g;s/[_]1/1/g;s/[_]2/2/g;s/replicate_/replicate/g' | awk -F '_GSM' '{ gsub(/-/,"",$1); print substr($1, 1, 140) "_GSM" $2 }')""_1.fastq.gz" && echo "mv $(ls | egrep ^$i | tail -1) $(cat $output_folder/$name/reads_study_info/samples_info.txt | grep $i | cut -f 2 | sed -e 's,%,,g;s,(,,g;s,),,g;s/[_]1/1/g;s/[_]2/2/g;s/replicate_/replicate/g' | awk -F '_GSM' '{ gsub(/-/,"",$1); print substr($1, 1, 140) "_GSM" $2 }')""_2.fastq.gz" && mv $(ls | egrep ^$i | head -1) $(cat $output_folder/$name/reads_study_info/samples_info.txt | grep $i | cut -f 2 | sed -e 's,%,,g;s,(,,g;s,),,g;s/[_]1/1/g;s/[_]2/2/g;s/replicate_/replicate/g' | awk -F '_GSM' '{ gsub(/-/,"",$1); print substr($1, 1, 140) "_GSM" $2 }')"_1.fastq.gz" && mv $(ls | egrep ^$i | tail -1) $(cat $output_folder/$name/reads_study_info/samples_info.txt | grep $i | cut -f 2 | sed -e 's,%,,g;s,(,,g;s,),,g;s/[_]1/1/g;s/[_]2/2/g;s/replicate_/replicate/g' | awk -F '_GSM' '{ gsub(/-/,"",$1); print substr($1, 1, 140) "_GSM" $2 }')"_2.fastq.gz"; done
+					for i in $(cat $output_folder/$name/reads_study_info/srr_ids.txt); do
+						sname=$(awk -F'\t' -v id="$i" '$1 == id { print $2 }' $output_folder/$name/reads_study_info/samples_info.txt)
+						if [ -n "$sname" ]; then
+							f1=$(ls | egrep "^${i}_1\." 2>/dev/null | head -1)
+							f2=$(ls | egrep "^${i}_2\." 2>/dev/null | head -1)
+							[ -z "$f1" ] && f1=$(ls | egrep "^${i}" 2>/dev/null | head -1)
+							[ -z "$f2" ] && f2=$(ls | egrep "^${i}" 2>/dev/null | tail -1)
+							[ -f "$f1" ] && mv "$f1" "${sname}_1.fastq.gz"
+							[ -f "$f2" ] && mv "$f2" "${sname}_2.fastq.gz"
+						fi
+					done
 				fi
 				# If layout is SINGLE and files still lack _1.fastq.gz or _2.fastq.gz suffix, add it
 				if [[ "$(cat $output_folder/$name/reads_study_info/library_layout_info.txt)" == "SINGLE" ]]; then
