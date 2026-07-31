@@ -125,7 +125,7 @@ number_parallel: 10                    # Files processed in parallel
 compression_level: 9                   # Gzip compression level (0-9)
 aligner_index_cache: "yes"             # Keep genome index in cache ('yes' or 'no')
 
-# === MultiQC AI annotation ===
+# === AI annotation ===
 llm_endpoint: ""                       # OpenAI-compatible chat/completions URL (e.g. http://host:8081/v1/chat/completions). Non-empty = enable AI annotation
 llm_model: ""                          # Model name served at llm_endpoint
 llm_api_key: ""                        # API key for the endpoint (defaults to 'dummy' when AI is active and left empty)
