@@ -2853,7 +2853,7 @@ sub hisat2{
 	      							  bamCoverage -b {}_hisat2.bam -o {}_hisat2.bam.bw -of bigwig -bs 10 -p $threads $norm_cmd &>> bamCoverage.log && \\
 	      							  samtools flagstat -@ $threads {}_hisat2.bam > {}_hisat2.bam.flagstat && \\
 	      							  samtools stats -@ $threads {}_hisat2.bam > {}_hisat2.bam.stats' \\
-	      							  ::: \$(cat $tmp_file | sed -E 's,_(R)?[12]\.fastq\.gz.*,,g' | sort | uniq | awk -F '/' '{print \$NF}')
+	      							  ::: \$(cat $tmp_file | sed -E 's,_(R)?[12]\.fastq.*,,g' | sort | uniq | awk -F '/' '{print \$NF}')
 
 		     						  cd $projectdir$output_dir && find . -maxdepth 1 \\( -name '*_name_sorted.bam' -o -name '*_nsort_qc_tmp*' \\) -delete 2>/dev/null || true
 		     						  mkdir -p \$PWD/bamqc_results && for f in \$( ls | egrep '_(hisat2|STAR)\.bam\$' ); do echo \$f"\t"\$PWD/bamqc_results/\$f >> \$PWD/bamqc_results/list_multi.txt; done
@@ -3401,7 +3401,7 @@ sub star{
 						}						
 						$command=qq{if [ \$(ls $projectdir$output_dir | wc -l) -eq 0 ]; then
 					                          mkdir -p $projectdir$output_dir && cd $projectdir$output_dir && export PARALLEL_SHELL=/bin/bash
-					                          name_lists=\$(cat $tmp_file | sed -E 's,_(R)?[12]\.fastq\.gz.*,,g' | sort | uniq | awk -F '/' '{ print \$NF }') && unset DISPLAY
+					                          name_lists=\$(cat $tmp_file | sed -E 's,_(R)?[12]\.fastq.*,,g' | sort | uniq | awk -F '/' '{ print \$NF }') && unset DISPLAY
 					                          STAR --runThreadN $indexthreads --genomeDir $staridx_final --genomeLoad LoadAndExit --outFileNamePrefix $projectdir${output_dir}genomeloading.tmp2 && rm -rf $projectdir${output_dir}genomeloading.tmp*
 					                          parallel --halt-on-error 2 --verbose --joblog ${projectdir}/star_log_parallel.txt -j $parallelnumber 'STAR --runMode alignReads --genomeDir $staridx_final --genomeLoad LoadAndKeep --readFilesIn \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \$(cat $tmp_file | xargs dirname | uniq)/{}_2.fastq.gz --outFileNamePrefix $projectdir${output_dir}{}_STAR_ $starpardef --outStd SAM $samtools_pipeline_pe && echo Done...{}_STAR.bam' ::: \$(echo \$name_lists)
 					                          parallel --halt-on-error 2 --verbose --joblog ${projectdir}/starprocess_log_parallel.txt -j $parallelnumber 'export _JAVA_OPTIONS="-Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD" && qualimap bamqc -bam $projectdir${output_dir}/{}_STAR.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_STAR.bam --java-mem-size="${memorylimit_div_mb}m" >> qc1.log 2>&1 || true
@@ -4172,7 +4172,7 @@ sub kallisto{
                         		# Build parallel command for PE
                         		$command=qq{if [ \$(ls $projectdir$output_dir | wc -l) -eq 0 ]; then
                                       mkdir -p $projectdir$output_dir && cd $projectdir$output_dir && export PARALLEL_SHELL=/bin/bash
-                                      name_lists=\$(cat $tmp_file | sed -E 's,_(R)?[12]\.fastq\.gz.*,,g' | sort | uniq | awk -F '/' '{ print \$NF }') && unset DISPLAY
+                                      name_lists=\$(cat $tmp_file | sed -E 's,_(R)?[12]\.fastq.*,,g' | sort | uniq | awk -F '/' '{ print \$NF }') && unset DISPLAY
                                       
                                       parallel --halt-on-error 2 --verbose --joblog ${projectdir}/kallisto_log_parallel.txt -j $parallelnumber 'mkdir -p $projectdir${output_dir}{} && kallisto quant -i $kallistoidx_final -o $projectdir${output_dir}{} -t $threads --bootstrap-samples 10 --seed 42 $kallistoparameters \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \$(cat $tmp_file | xargs dirname | uniq)/{}_2.fastq.gz > $projectdir${output_dir}{}/kallisto_quant.log 2>&1 && echo Done...{}' ::: \$(echo \$name_lists)
                                     fi

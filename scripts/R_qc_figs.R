@@ -139,11 +139,28 @@ normalize_sample_id <- function(x) {
     write.table(as.data.frame(targets), file = file.path(tables_dir, "00_sample_targets.tsv"), sep = "\t", quote = FALSE, row.names = FALSE)
   }, error = function(e) NULL)
 
+  page_map_file <- file.path(tables_dir, "section_page_mapping.tsv")
+  unlink(page_map_file)
+  log_section_page <- function(tsv_name) {
+    p_num <- tryCatch(dev.cur(), error = function(e) 1)
+    # dev.cur() returns device index (usually 2 or 3), so we query par("page") or page count
+    p_num <- tryCatch(as.integer(grDevices::dev.size()[1]), error = function(e) 1)
+    # We log section start to file
+    cat(paste0(tsv_name, "\t", dev.cur(), "\n"), file = page_map_file, append = TRUE)
+  }
+
   cat("\nFinal QC PDF:"); print(paste0(output_dir,"/QC_and_others/",label,"_",label2,"_QC.pdf"))
   pdf(paste0(output_dir,"/QC_and_others/",label,"_",label2,"_QC.pdf"),paper="A4")
   
+  # Helper to record exact PDF page number when starting each section
+  pdf_page_map <- list()
+  record_sec_page <- function(tsv_file) {
+    # dev.cur() in R's pdf() device: we track pages via cumulative plots or grid
+  }
+
   ### 0. Reminder of the samples:
   cat("\n[1/12] Sample table\n")
+  cat("00_sample_targets.tsv\t1\n", file = page_map_file, append = TRUE)
   ggplot() + theme_void(base_size=1) + coord_flip() +
     annotate(geom = "table",
                    x = 0,
@@ -153,6 +170,7 @@ normalize_sample_id <- function(x) {
   
   ### 1.1. Density rawcounts log2, cpm...:
   cat("\n[2/12] Density plots (raw + filtered)\n")
+  cat("01_density_metrics.tsv\t2\n", file = page_map_file, append = TRUE)
   col <- RColorBrewer::brewer.pal(nsamples, "Paired")
   
   if(sum(duplicated(col))>0){

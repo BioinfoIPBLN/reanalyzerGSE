@@ -133,9 +133,9 @@ def render_ai_slide(title, ai_text, usage_info, model_name, data_filename=None):
     plt.tight_layout()
     return fig
 
-def merge_pdfs_if_possible(orig_pdf, ai_pdf_pages_file, output_pdf):
-    """Attempt to interleave original plot PDF and AI PDF pages using pypdf, PyPDF2, fitz, qpdf, or pdftk."""
-    # 1. Try pypdf
+def merge_pdfs_if_possible(orig_pdf, ai_pdf_pages_file, output_pdf, tsv_to_slide_idx=None):
+    """Attempt to insert original plot PDF and AI PDF pages mapped correctly using pypdf, PyPDF2, or fitz."""
+    # Try pypdf with section-aware mapping
     try:
         import pypdf
         reader_orig = pypdf.PdfReader(orig_pdf)
@@ -145,43 +145,49 @@ def merge_pdfs_if_possible(orig_pdf, ai_pdf_pages_file, output_pdf):
         n_orig = len(reader_orig.pages)
         n_ai = len(reader_ai.pages)
 
-        for i in range(max(n_orig, n_ai)):
-            if i < n_orig:
-                writer.add_page(reader_orig.pages[i])
-            if i < n_ai:
-                writer.add_page(reader_ai.pages[i])
+        # Detect section starting pages by searching PDF page text for section numbers/keywords
+        section_start_pages = {}
+        for idx, page in enumerate(reader_orig.pages):
+            txt = page.extract_text() or ""
+            # Match titles like "Sample table", "Density plots", "Boxplots", "Library size", "PCA", "Scatter plots"
+            for sec_idx, key in enumerate(tsv_to_slide_idx.keys() if tsv_to_slide_idx else []):
+                clean_key = key.replace(".tsv", "").replace(".txt", "").split("_", 1)[-1]
+                if clean_key.lower() in txt.lower() and sec_idx not in section_start_pages:
+                    section_start_pages[sec_idx] = idx
+
+        # Sort sections by page order
+        ai_insert_map = {}
+        if section_start_pages and tsv_to_slide_idx:
+            sorted_secs = sorted(section_start_pages.items(), key=lambda x: x[1])
+            for i, (sec_idx, start_p) in enumerate(sorted_secs):
+                # Put AI slide right before the NEXT section starts, or at end for last section
+                end_p = sorted_secs[i+1][1] - 1 if i + 1 < len(sorted_secs) else n_orig - 1
+                ai_insert_map[end_p] = tsv_to_slide_idx.get(list(tsv_to_slide_idx.keys())[sec_idx])
+
+        # Write pages and insert mapped AI slides
+        ai_written = set()
+        for i in range(n_orig):
+            writer.add_page(reader_orig.pages[i])
+            if i in ai_insert_map and ai_insert_map[i] is not None:
+                slide_idx = ai_insert_map[i]
+                if slide_idx < n_ai and slide_idx not in ai_written:
+                    writer.add_page(reader_ai.pages[slide_idx])
+                    ai_written.add(slide_idx)
+
+        # Append any remaining AI slides at end
+        for s_idx in range(n_ai):
+            if s_idx not in ai_written:
+                writer.add_page(reader_ai.pages[s_idx])
 
         with open(output_pdf, "wb") as fh:
             writer.write(fh)
-        llm_common.log(f"[QC PDF AI] Successfully interleaved plot & AI pages (pypdf) into: {output_pdf}")
+        llm_common.log(f"[QC PDF AI] Successfully interleaved plot & AI pages (pypdf section-mapped) into: {output_pdf}")
         return True
-    except Exception:
+    except Exception as e:
+        llm_common.log(f"[QC PDF AI] pypdf mapping error: {e}")
         pass
 
-    # 2. Try PyPDF2
-    try:
-        import PyPDF2
-        reader_orig = PyPDF2.PdfReader(orig_pdf)
-        reader_ai = PyPDF2.PdfReader(ai_pdf_pages_file)
-        writer = PyPDF2.PdfWriter()
-
-        n_orig = len(reader_orig.pages)
-        n_ai = len(reader_ai.pages)
-
-        for i in range(max(n_orig, n_ai)):
-            if i < n_orig:
-                writer.add_page(reader_orig.pages[i])
-            if i < n_ai:
-                writer.add_page(reader_ai.pages[i])
-
-        with open(output_pdf, "wb") as fh:
-            writer.write(fh)
-        llm_common.log(f"[QC PDF AI] Successfully interleaved plot & AI pages (PyPDF2) into: {output_pdf}")
-        return True
-    except Exception:
-        pass
-
-    # 3. Try fitz (PyMuPDF)
+    # Fallback fitz section-mapped
     try:
         import fitz
         doc_orig = fitz.open(orig_pdf)
@@ -191,63 +197,41 @@ def merge_pdfs_if_possible(orig_pdf, ai_pdf_pages_file, output_pdf):
         n_orig = len(doc_orig)
         n_ai = len(doc_ai)
 
-        for i in range(max(n_orig, n_ai)):
-            if i < n_orig:
-                doc_out.insert_pdf(doc_orig, from_page=i, to_page=i)
-            if i < n_ai:
-                doc_out.insert_pdf(doc_ai, from_page=i, to_page=i)
+        section_start_pages = {}
+        for idx in range(n_orig):
+            txt = doc_orig[idx].get_text() or ""
+            for sec_idx, key in enumerate(tsv_to_slide_idx.keys() if tsv_to_slide_idx else []):
+                clean_key = key.replace(".tsv", "").replace(".txt", "").split("_", 1)[-1]
+                if clean_key.lower() in txt.lower() and sec_idx not in section_start_pages:
+                    section_start_pages[sec_idx] = idx
+
+        ai_insert_map = {}
+        if section_start_pages and tsv_to_slide_idx:
+            sorted_secs = sorted(section_start_pages.items(), key=lambda x: x[1])
+            for i, (sec_idx, start_p) in enumerate(sorted_secs):
+                end_p = sorted_secs[i+1][1] - 1 if i + 1 < len(sorted_secs) else n_orig - 1
+                ai_insert_map[end_p] = tsv_to_slide_idx.get(list(tsv_to_slide_idx.keys())[sec_idx])
+
+        ai_written = set()
+        for i in range(n_orig):
+            doc_out.insert_pdf(doc_orig, from_page=i, to_page=i)
+            if i in ai_insert_map and ai_insert_map[i] is not None:
+                slide_idx = ai_insert_map[i]
+                if slide_idx < n_ai and slide_idx not in ai_written:
+                    doc_out.insert_pdf(doc_ai, from_page=slide_idx, to_page=slide_idx)
+                    ai_written.add(slide_idx)
+
+        for s_idx in range(n_ai):
+            if s_idx not in ai_written:
+                doc_out.insert_pdf(doc_ai, from_page=s_idx, to_page=s_idx)
 
         doc_out.save(output_pdf)
-        llm_common.log(f"[QC PDF AI] Successfully interleaved plot & AI pages (fitz) into: {output_pdf}")
+        llm_common.log(f"[QC PDF AI] Successfully interleaved plot & AI pages (fitz section-mapped) into: {output_pdf}")
         return True
-    except Exception:
+    except Exception as e:
+        llm_common.log(f"[QC PDF AI] fitz mapping error: {e}")
         pass
 
-    # 4. Try system CLI utilities (qpdf, pdftk)
-    import subprocess
-    import shutil
-
-    def get_page_count(pdf_file):
-        res = subprocess.run(["pdfinfo", pdf_file], capture_output=True, text=True)
-        for line in res.stdout.splitlines():
-            if line.startswith("Pages:"):
-                try:
-                    return int(line.split(":")[1].strip())
-                except ValueError:
-                    pass
-        return 0
-
-    n_orig = get_page_count(orig_pdf)
-    n_ai = get_page_count(ai_pdf_pages_file)
-
-    if n_orig > 0 and n_ai > 0:
-        if shutil.which("qpdf"):
-            cmd = ["qpdf", "--empty", "--pages"]
-            for i in range(1, max(n_orig, n_ai) + 1):
-                if i <= n_orig:
-                    cmd.extend([orig_pdf, str(i)])
-                if i <= n_ai:
-                    cmd.extend([ai_pdf_pages_file, str(i)])
-            cmd.extend(["--", output_pdf])
-            ret = subprocess.run(cmd, capture_output=True)
-            if ret.returncode == 0 and os.path.exists(output_pdf):
-                llm_common.log(f"[QC PDF AI] Successfully interleaved plot & AI pages (qpdf) into: {output_pdf}")
-                return True
-
-        if shutil.which("pdftk"):
-            cmd = ["pdftk", f"A={orig_pdf}", f"B={ai_pdf_pages_file}", "cat"]
-            for i in range(1, max(n_orig, n_ai) + 1):
-                if i <= n_orig:
-                    cmd.append(f"A{i}")
-                if i <= n_ai:
-                    cmd.append(f"B{i}")
-            cmd.extend(["output", output_pdf])
-            ret = subprocess.run(cmd, capture_output=True)
-            if ret.returncode == 0 and os.path.exists(output_pdf):
-                llm_common.log(f"[QC PDF AI] Successfully interleaved plot & AI pages (pdftk) into: {output_pdf}")
-                return True
-
-    llm_common.log(f"[QC PDF AI] Note: PDF interleaving tools (pypdf, PyPDF2, PyMuPDF, qpdf, pdftk) unavailable. AI commentary PDF saved as standalone: {ai_pdf_pages_file}")
     return False
 
 def main():
@@ -282,6 +266,9 @@ def main():
 
     secrets = llm_common.secret_values(endpoint=cfg.llm_endpoint, api_key=cfg.llm_api_key)
 
+    tsv_to_slide_idx = {}
+    slide_counter = 0
+
     with PdfPages(out_pdf_standalone) as pdf:
         for tsv_name in tsv_files:
             tsv_path = os.path.join(tables_dir, tsv_name)
@@ -307,6 +294,8 @@ def main():
                 fig = render_ai_slide(title, ai_text, usage, cfg.llm_model, data_filename=tsv_name)
                 pdf.savefig(fig)
                 plt.close(fig)
+                tsv_to_slide_idx[tsv_name] = slide_counter
+                slide_counter += 1
             except llm_common.LLMTimeout:
                 llm_common.log(f"[QC PDF AI] Timeout generating AI commentary for {tsv_name}")
 
@@ -316,7 +305,7 @@ def main():
     # Interleave with original PDF if provided
     if args.pdf and os.path.isfile(args.pdf):
         commented_pdf = args.pdf.replace(".pdf", "_commented.pdf")
-        if merge_pdfs_if_possible(args.pdf, out_pdf_standalone, commented_pdf):
+        if merge_pdfs_if_possible(args.pdf, out_pdf_standalone, commented_pdf, tsv_to_slide_idx=tsv_to_slide_idx):
             llm_common.scrub_file(commented_pdf, secrets)
 
 if __name__ == "__main__":

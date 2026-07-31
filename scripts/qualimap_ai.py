@@ -30,31 +30,28 @@ DEF_API_KEY        = os.environ.get("LLM_API_KEY", "dummy")
 DEF_CONTEXT_WINDOW = int(os.environ.get("LLM_CONTEXT_WINDOW", "128000"))
 DEF_TIMEOUT        = int(os.environ.get("LLM_TIMEOUT", "300"))
 
-SYS_PROMPT_MULTISAMPLE = "\n".join([
-    "You are an expert bioinformatician evaluating a Qualimap Multi-sample BAM QC report for an RNA-Seq experiment.",
-    "Produce 2-4 concise bullet points summarizing key quality metrics across samples.",
-    "Assess coverage depth, GC content, mapping quality, and identify any clear outlier samples.",
-    "Use markdown. Highlight severity with directives like :span[value]{.text-red}, .text-orange, .text-yellow, .text-green.",
-    "Highlight sample names with :sample[GSM12345]{.text-red} etc.",
-    "If all samples pass quality standards and look uniform, explicitly state so.",
-])
+SYS_PROMPT_MULTISAMPLE = (
+    "You are an expert bioinformatician evaluating a Qualimap Multi-sample BAM QC report for an RNA-Seq experiment.\n"
+    "Produce 2-4 concise bullet points summarizing key quality metrics across samples.\n"
+    "Assess coverage depth, GC content, mapping quality, and identify any clear outlier samples.\n"
+    "Use standard plain markdown list items (- bullet point).\n"
+    "If all samples pass quality standards and look uniform, explicitly state so."
+)
 
-SYS_PROMPT_RNASEQ = "\n".join([
-    "You are an expert bioinformatician evaluating a Qualimap RNA-Seq QC report for a single sample.",
-    "Produce 2-3 concise bullet points summarizing key observations.",
-    "Cover: total mapped reads & mapping rate, genomic origin breakdown (Exonic vs Intronic/Intergenic %), and 5'-3' transcript coverage bias.",
-    "Highlight severity with directives like :span[value]{.text-red}, .text-orange, .text-yellow, .text-green.",
-    "Highlight sample names with :sample[name]{.text-red} etc.",
-    "State clearly if quality is satisfactory or if there are contamination/degradation flags.",
-])
+SYS_PROMPT_RNASEQ = (
+    "You are an expert bioinformatician evaluating a Qualimap RNA-Seq QC report for a single sample.\n"
+    "Produce 2-3 concise bullet points summarizing key observations.\n"
+    "Cover total mapped reads & mapping rate, genomic origin breakdown (Exonic vs Intronic/Intergenic %), and 5'-3' transcript coverage bias.\n"
+    "Use standard plain markdown list items (- bullet point).\n"
+    "State clearly if quality is satisfactory or if there are contamination/degradation flags."
+)
 
-SYS_PROMPT_BAMQC = "\n".join([
-    "You are an expert bioinformatician evaluating a Qualimap BAM QC report for a single sample.",
-    "Produce 2-3 concise bullet points summarizing key alignment quality metrics (mapping rate, duplication rate, mean coverage, mapping quality).",
-    "Highlight severity with directives like :span[value]{.text-red}, .text-orange, .text-yellow, .text-green.",
-    "Highlight sample names with :sample[name]{.text-red} etc.",
-    "State clearly if quality is satisfactory or if there are flags.",
-])
+SYS_PROMPT_BAMQC = (
+    "You are an expert bioinformatician evaluating a Qualimap BAM QC report for a single sample.\n"
+    "Produce 2-3 concise bullet points summarizing key alignment quality metrics (mapping rate, duplication rate, mean coverage, mapping quality).\n"
+    "Use standard plain markdown list items (- bullet point).\n"
+    "State clearly if quality is satisfactory or if there are flags."
+)
 
 AI_TIMEOUT_MSG = "ai_insights timeout. Please try again"
 
@@ -366,6 +363,10 @@ def process_single_sample_report(cfg, html_path, report_type):
                     raw_text = fh.read().strip()
                 if not raw_text:
                     continue
+                # Cap large raw histogram files (e.g. coverage_histogram.txt 400KB+) to max 100 lines
+                lines = [l for l in raw_text.splitlines() if l.strip()]
+                if len(lines) > 100:
+                    raw_text = "\n".join(lines[:50] + ["\n... [middle histogram data points omitted] ...\n"] + lines[-50:])
                 sec_text, sec_usage = ask_llm(cfg, f"{SYS_PROMPT_SECTION}\nSection: {heading}\nSample: {sample_name}", raw_text)
                 if not llm_common.is_degraded(sec_text):
                     sec_body_html = md_to_html(sec_text)
