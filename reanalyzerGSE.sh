@@ -704,7 +704,7 @@ if [ ! -z "$fastp_label" ]; then
 	echo -e "\n\nSTEP 1: $fastp_label...(output files will be renamed and moved to raw_reads internal folder)\nCurrent date/time: $(date)\n\n"
 	mkdir -p $output_folder/$name/fastp_out
 	cd $output_folder/$name/fastp_out
-	layout_fastp=$(find $output_folder/$name -name library_layout_info.txt | xargs cat)
+	layout_fastp=$(find $output_folder/$name -name library_layout_info.txt 2>/dev/null | head -1 | xargs cat 2>/dev/null | head -n1 | tr -d ' \r\n')
 
 	if [[ "$layout_fastp" == "SINGLE" ]]; then
 		ls -d $seqs_location/*.fastq.gz | \
@@ -723,7 +723,7 @@ if [ "$fastp_trimming" != "none" ]; then
 	mkdir -p $output_folder/$name/fastp_out
 	cd $output_folder/$name/fastp_out
 	IFS=', ' read -r -a arrfastp <<< "$fastp_trimming"
-	layout_fastp=$(find $output_folder/$name -name library_layout_info.txt | xargs cat)
+	layout_fastp=$(find $output_folder/$name -name library_layout_info.txt 2>/dev/null | head -1 | xargs cat 2>/dev/null | head -n1 | tr -d ' \r\n')
 
 	if [[ "$layout_fastp" == "SINGLE" ]]; then
 		ls -d $seqs_location/*.fastq.gz | \
@@ -753,7 +753,7 @@ _log_step "Step_2_Decontamination" "start"
 
 		IFS=',' read -r -a k2_db_array <<< "$kraken2_databases"
 		IFS=',' read -r -a k2_conf_array <<< "$kraken2_confidence"
-		layout=$(find $output_folder/$name -name library_layout_info.txt | xargs cat)
+		layout=$(find $output_folder/$name -name library_layout_info.txt 2>/dev/null | head -1 | xargs cat 2>/dev/null | head -n1 | tr -d ' \r\n')
 
 		for k2_db in "${k2_db_array[@]}"; do
 			db_basename=$(basename $k2_db)
@@ -869,7 +869,7 @@ _log_step "Step_2_Decontamination" "start"
 		cores_sortmerna=$((cores / number_parallel))
 		if [ $cores_sortmerna -lt 1 ]; then cores_sortmerna=1; fi
 
-		layout_sortmerna=$(find $output_folder/$name -name library_layout_info.txt | xargs cat)
+		layout_sortmerna=$(find $output_folder/$name -name library_layout_info.txt 2>/dev/null | head -1 | xargs cat 2>/dev/null | head -n1 | tr -d ' \r\n')
 		sortmerna_idx=$output_folder/$name/indexes/$(basename $sortmerna_databases)_sortmerna_index/idx
 		sortmerna_out=$seqs_location\_sortmerna
 
@@ -1135,9 +1135,10 @@ _log_step "Step_3a_Prepare" "start"
 		else
 			cores_parallel=$((cores / number_parallel))
 		fi
-		if [[ $(find $output_folder/$name -name library_layout_info.txt | xargs cat) == "SINGLE" ]]; then
+		layout_detected=$(find $output_folder/$name -name library_layout_info.txt 2>/dev/null | head -1 | xargs cat 2>/dev/null | head -n1 | tr -d ' \r\n')
+		if [[ "$layout_detected" == "SINGLE" ]]; then
 			library_layout=Single
-		elif [[ $(find $output_folder/$name -name library_layout_info.txt | xargs cat) == "PAIRED" ]]; then
+		elif [[ "$layout_detected" == "PAIRED" ]]; then
 			library_layout=Paired
 		fi
 		read_length_for_miarma=$(zcat $seqs_location/$(ls $seqs_location | shuf | head -1) | head -2 | sed -n '2p' | awk '{print length -1}')
@@ -1547,7 +1548,7 @@ if run_step step4b; then
 			bam_dir=$output_folder/$name/miARma_out$index/${aligner}_results
 			saser_out=$output_folder/$name/final_results_reanalysis$index/saseR_splicing
 			mkdir -p $saser_out
-			library_layout=$(find $output_folder/$name -name library_layout_info.txt | xargs cat)
+			library_layout=$(find $output_folder/$name -name library_layout_info.txt 2>/dev/null | head -1 | xargs cat 2>/dev/null | head -n1 | tr -d ' \r\n')
 			samples_info=$output_folder/$name/reads_study_info/samples_info.txt
 			design_file=$(ls $output_folder/$name/reads_study_info/design_possible_full_1.txt 2>/dev/null || echo "none")
 			R_saseR_splicing.R \
