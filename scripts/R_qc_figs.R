@@ -155,10 +155,12 @@ normalize_sample_id <- function(x) {
     pdf(paste0(output_dir,"/QC_and_others/",label,"_",label2,"_QC.pdf"),paper="A4")
   }
 
+  current_sec_name <- ""
   open_section_pdf <- function(sec_name) {
     if (split_sections != "yes") return()
-    # Close previous section's PDF (if any device is open beyond the null device)
+    if (current_sec_name == sec_name && dev.cur() > 1) return()
     if (dev.cur() > 1) dev.off()
+    current_sec_name <<- sec_name
     sec_file <- file.path(sections_dir, paste0(sec_name, ".pdf"))
     pdf(sec_file, paper = "A4")
     cat(paste0("[split_sections] Section: ", sec_name, " -> ", basename(sec_file), "\n"))
@@ -303,7 +305,7 @@ normalize_sample_id <- function(x) {
    if(length(grep("_skip_",list.files(path=input_dir,full.names=T,recursive=T)))==0 & length(grep("_stats.txt",list.files(path=input_dir,full.names=T,recursive=T)))>0){
     ### Figures with the number of reads
     cat("\n[4b/12] BAM/FASTQ read count barplots\n")
-    open_section_pdf("04_bam_reads")
+    open_section_pdf("04_alignment_categories")
     reads <- c()
     files <- grep("_flagstat.txt", list.files(path = input_dir, full.names = TRUE, recursive = TRUE), value = TRUE)
     for (f in files) {
@@ -459,7 +461,7 @@ normalize_sample_id <- function(x) {
                                       full.names = TRUE, recursive = TRUE)
     if (length(kallisto_json_files) > 0) {
       cat("\n[4b/12] Kallisto pseudoalignment QC barplots\n")
-      open_section_pdf("04_kallisto_qc")
+      open_section_pdf("04_alignment_categories")
       kallisto_stats <- do.call(rbind, lapply(kallisto_json_files, function(f) {
         tryCatch({
           info <- jsonlite::fromJSON(f)
