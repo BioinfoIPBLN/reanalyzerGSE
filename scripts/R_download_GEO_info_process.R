@@ -82,12 +82,34 @@ get_common_elements <- function(lst) {
 for (z in unlist(strsplit(GEO_ID_path,"_"))){
 	if (length(list.files(pattern="pysradb"))==0){
 		GEO_ID <- z
-		tryCatch({
-			geoquery_data <- GEOquery::getGEO(GEO_ID)
-		}, error=function(e){
-			gpl_id <- paste0("GPL",gsub('"','',noquote(system(paste0("zcat ",getwd(),"/",grep(GEO_ID,list.files(pattern='_series_matrix'),val=T), " | grep GPL | grep Series | sed 's,.*GPL,,g'"),intern=T))))
-			geoquery_data <- GEOquery::getGEO(filename=grep(gpl_id,list.files(pattern="soft.gz"),val=T))
-		})
+		geoquery_data <- NULL
+		delays <- c(0, 10, 20, 30)
+		for (attempt in 1:4) {
+			if (delays[attempt] > 0) Sys.sleep(delays[attempt])
+			tryCatch({
+				geoquery_data <- GEOquery::getGEO(GEO_ID)
+			}, error=function(e){
+				soft_files <- list.files(pattern="soft.gz")
+				if (length(soft_files) > 0) {
+					gpl_id <- paste0("GPL",gsub('"','',noquote(system(paste0("zcat ",getwd(),"/",grep(GEO_ID,list.files(pattern='_series_matrix'),val=T)[1], " | grep GPL | grep Series | sed 's,.*GPL,,g'"),intern=T))))
+					matching_soft <- grep(gpl_id, soft_files, val=T)
+					if (length(matching_soft) > 0) {
+						geoquery_data <<- GEOquery::getGEO(filename=matching_soft[1])
+					}
+				}
+			})
+			if (!is.null(geoquery_data)) break
+		}
+		if (is.null(geoquery_data)) {
+			cat("Warning: getGEO failed online and soft file missing/unparseable. Attempting fallback from series_matrix.txt.gz...\n")
+			series_files <- list.files(pattern='_series_matrix.txt.gz')
+			if (length(series_files) > 0) {
+				try({
+					geoquery_data <- GEOquery::getGEO(filename=series_files[1])
+				})
+			}
+		}
+		if (is.null(geoquery_data)) stop("Failed to load GEO metadata for ", GEO_ID)
 		phenodata <- c()
 		for (i in 1:length(geoquery_data)){
 		  phenodata <- dplyr::bind_rows(phenodata,geoquery_data[[i]]@phenoData@data[grep("characteristic|relation.1|title",names(geoquery_data[[i]]@phenoData@data),value = T)])

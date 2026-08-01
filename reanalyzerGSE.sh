@@ -90,10 +90,11 @@ if run_step step1; then
 		if test -f srx_ids.txt; then
 			for i in $(cat srx_ids.txt); do
 				srr=""
-				for attempt in {1..3}; do
+				for attempt in 1 2 3 4; do
+					delay=$(( (attempt - 1) * 10 ))
+					[ $delay -gt 0 ] && sleep $delay
 					srr=$(esearch -db sra -query "$i" 2>/dev/null | esummary 2>/dev/null | xtract -pattern DocumentSummary -element Run@acc 2>/dev/null)
 					[ -n "$srr" ] && break
-					sleep 2
 				done
 				[ -n "$srr" ] && echo "$srr" >> srr_ids.txt
 			done
