@@ -19,9 +19,13 @@ script_dir <- dirname(sub("^--file=", "", commandArgs()[grep("--file=", commandA
 ensembl_helper <- file.path(script_dir, "R_ensembl_to_symbol.R")
 if (file.exists(ensembl_helper)) source(ensembl_helper)
 
-a <- rba_panther_info(what="organisms")
-org_panther <- as.numeric(a$taxon_id[grep(gsub(" ","_",organism),gsub(" ","_",a$long_name))])
-methods <- rba_panther_info(what = "datasets")$id
+org_panther <- if (grepl("Homo", organism, ignore.case = TRUE)) 9606 else if (grepl("Mus", organism, ignore.case = TRUE)) 10090 else if (grepl("Rattus", organism, ignore.case = TRUE)) 10116 else {
+  tryCatch({
+    a <- rba_panther_info(what = "organisms")
+    as.numeric(a$taxon_id[grep(gsub(" ", "_", organism), gsub(" ", "_", a$long_name))])
+  }, error = function(e) 9606)
+}
+methods <- tryCatch(rba_panther_info(what = "datasets")$id, error = function(e) character(0))
 
 # choose_database() # Check out enrichr webpage to get updated list
 ### 04/2024:

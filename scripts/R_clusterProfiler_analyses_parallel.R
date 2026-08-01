@@ -42,7 +42,7 @@ if(organism_cp=="Homo sapiens"){
   orgDB <- "org.Mm.eg.db"
   suppressMessages(library("org.Mm.eg.db",quiet = T,warn.conflicts = F))
 }
-org <- search_kegg_organism(organism_cp, by='scientific_name')[1,1]
+org <- if (grepl("Homo", organism_cp, ignore.case = TRUE)) "hsa" else if (grepl("Mus", organism_cp, ignore.case = TRUE)) "mmu" else if (grepl("Rattus", organism_cp, ignore.case = TRUE)) "rno" else tryCatch(search_kegg_organism(organism_cp, by = "scientific_name")[1,1], error = function(e) "hsa")
 entrez_ids_keys <- select(eval(parse(text=orgDB)), keys=keys(eval(parse(text=orgDB)),keytype="ENTREZID"), columns=c("SYMBOL"), keytype="ENTREZID")
 entrez_ids_keys$Custom_ID <- paste(entrez_ids_keys$SYMBOL,entrez_ids_keys$ENTREZID,sep="_")
 

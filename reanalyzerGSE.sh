@@ -103,12 +103,7 @@ if run_step step1; then
 			paste -d$'\t' srr_ids.txt sample_names.txt $(for f in $(ls | grep full); do echo $f" "$(sort $f | uniq -c | wc -l); done | grep -v " 1" | cut -d" " -f1 | head -1) > samples_info.txt # the third column is a design containing at least more than one element...
 			sed -i -r -e 's/[^[:alnum:]_\t]/_/g' -e 's/_\+/_/g' -e 's/(_[^_]*)\1+/\1/g' -e 's/_([0-9]+)/-\1/g' samples_info.txt # Should be redundant but make sure to remove special characters from the sample names and _1/_2... it's crucial for later steps such as fastqc and miarma-seq
 			
-			# AI-assisted metadata streamlining (if LLM endpoint enabled and metadata AI requested)
-			if [ -n "$llm_endpoint" ] && [ "${ai_do_metadata:-1}" = 1 ] && command -v llm_simplify_metadata.py >/dev/null 2>&1; then
-				echo -e "\nRunning AI-assisted sample and condition name streamlining..."
-				llm_simplify_metadata.py --info-dir "$output_folder/$name/reads_study_info"
-			fi
-			# Filter metadata files if GSM_filter is provided so fastq-dl only downloads requested samples
+			# Filter metadata files if GSM_filter is provided so fastq-dl and AI metadata streamlining only process requested samples
 			if [ -n "$GSM_filter" ] && [ -f gsm_manual_filter.txt ]; then
 				echo -e "\nFiltering metadata and SRR accession download list for specified GSM(s): $GSM_filter..."
 				python3 -c "
@@ -142,7 +137,21 @@ if os.path.exists('samples_info.txt'):
                 kept_d = list(dict.fromkeys([lines[i].split('\t')[2] if len(lines[i].split('\t'))>2 else dlines[i] for i, l in enumerate(lines) if any(gsm in l for gsm in gsm_list) and i < len(lines)]))
                 if kept_d:
                     open(f, 'w').write('\n'.join(kept_d) + '\n')
+
+# Filter phenodata_extracted.txt if present
+if os.path.exists('phenodata_extracted.txt'):
+    plines = [l for l in open('phenodata_extracted.txt').read().splitlines() if l.strip()]
+    if plines:
+        pkept = [l for i, l in enumerate(plines) if i == 0 or any(gsm in l for gsm in gsm_list)]
+        if pkept:
+            open('phenodata_extracted.txt', 'w').write('\n'.join(pkept) + '\n')
 "
+			fi
+
+			# AI-assisted metadata streamlining (if LLM endpoint enabled and metadata AI requested)
+			if [ -n "$llm_endpoint" ] && [ "${ai_do_metadata:-1}" = 1 ] && command -v llm_simplify_metadata.py >/dev/null 2>&1; then
+				echo -e "\nRunning AI-assisted sample and condition name streamlining..."
+				llm_simplify_metadata.py --info-dir "$output_folder/$name/reads_study_info"
 			fi
 		fi
 		if [ ! -s srr_ids.txt ]; then
@@ -1665,6 +1674,34 @@ if run_step step6; then
 		rm -rf $(find . -type d \( -name "*_autoGO" -o -name "*_clusterProfiler" -o -name "*_panther" -o -name "*funct_enr*" \)) $(find . -type f \( -name "*_autoGO" -o -name "*_clusterProfiler" -o -name "*_panther" -o -name "*funct_enr*" \)) # So it's redone if resuming
 		if [ -z "$annotation_file" ]; then
 			annotation_file=${array[index]}
+		fi
+
+		# Check if any DGE comparison file contains significant DEGs (FDR < 0.05)
+		deg_count=0
+		dge_files=(DGE_analysis_comp*.txt)
+		if [ -e "${dge_files[0]}" ]; then
+			deg_count=$(awk -F'\t' '
+				FNR==1 {
+					fdr_col=0;
+					for(i=1;i<=NF;i++) {
+						if($i=="FDR" || $i=="adj.P.Val" || $i=="padj") fdr_col=i
+					}
+					next
+				}
+				fdr_col > 0 && $fdr_col != "" && $fdr_col+0 < 0.05 { count++ }
+				END { print count+0 }
+			' DGE_analysis_comp*.txt 2>/dev/null || echo 0)
+		fi
+
+		if [ "$deg_count" -eq 0 ]; then
+			echo -e "\n=========================================================================="
+			echo "NOTICE: 0 significant DEGs (FDR < 0.05) found across all comparisons."
+			echo "Skipping Step 6 functional enrichment & network analyses for index $index."
+			echo "==========================================================================\n"
+			echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
+			_log_step "Step_6_Enrichment" "start"
+			_log_step "Step_6_Enrichment" "end"
+			continue
 		fi
 
 		# Network analyses (WGCNA is organism-agnostic; STRINGdb supports any organism with a valid taxon ID)

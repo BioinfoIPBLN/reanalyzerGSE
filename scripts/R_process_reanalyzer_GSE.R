@@ -26,11 +26,12 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
 normalize_sample_id <- function(x) {
   x <- basename(as.character(x))
   x <- gsub("_categ(_2)?$", "", x)
-  x <- gsub("_hisat2.*|_STAR.*", "", x)
+  x <- gsub("_hisat2.*|_HISAT2.*|_star.*|_STAR.*", "", x)
   x <- gsub("_flagstat.*|_stats.*", "", x)
   x <- gsub("_fastqc.*", "", x)
   x <- gsub("\\.bam$", "", x)
   x <- gsub("\\.(fastq|fq)(\\.gz)?$", "", x)
+  x <- gsub("_[12](\\.(fastq|fq)(\\.gz)?)?$", "", x)
   x <- gsub("_[12]$", "", x)
   x
 }
@@ -102,6 +103,12 @@ normalize_sample_id <- function(x) {
   gene_counts <- gene_counts[,-1]
   gene_counts$Gene_ID <- stringr::str_to_title(rownames(gene_counts))
   colnames(gene_counts) <- basename(colnames(gene_counts))
+
+  # Clean sample column names: remove _STAR.*, _hisat2.*, .fastq.gz, _1/_2 endings
+  sample_cols <- setdiff(colnames(gene_counts), c("Geneid", "Gene_ID", "Length"))
+  clean_cols <- normalize_sample_id(sample_cols)
+  clean_cols <- make.unique(clean_cols, sep = "_")
+  colnames(gene_counts)[match(sample_cols, colnames(gene_counts))] <- clean_cols
   # Reorder so gene_counts columns follow the order of GSMXXXXXXX, or alfanumeric if GSM not present in the colnames:
   if (length(grep("_GSM[0-9]",colnames(gene_counts)))==0){
     gene_counts <- gene_counts[,c(gtools::mixedorder(grep("Length|Gene_ID",colnames(gene_counts),invert=T)),grep("Length|Gene_ID",colnames(gene_counts)))]

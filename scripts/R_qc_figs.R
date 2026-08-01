@@ -37,12 +37,14 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
 ### Normalize sample IDs across tools (BAM, flagstat, fastqc, edgeR colnames):
 normalize_sample_id <- function(x) {
   x <- basename(as.character(x))
-  x <- gsub("_hisat2.*|_STAR.*", "", x)   # strip aligner suffixes
-  x <- gsub("_flagstat.*|_stats.*", "", x) # strip samtools suffixes
-  x <- gsub("_fastqc.*", "", x)            # strip fastqc suffixes
-  x <- gsub("\\.bam$", "", x)              # strip .bam
-  x <- gsub("\\.(fastq|fq)(\\.gz)?$", "", x) # strip .fastq.gz / .fq.gz
-  x <- gsub("_[12]$", "", x)               # strip read-pair suffix
+  x <- gsub("_categ(_2)?$", "", x)
+  x <- gsub("_hisat2.*|_HISAT2.*|_star.*|_STAR.*", "", x)
+  x <- gsub("_flagstat.*|_stats.*", "", x)
+  x <- gsub("_fastqc.*", "", x)
+  x <- gsub("\\.bam$", "", x)
+  x <- gsub("\\.(fastq|fq)(\\.gz)?$", "", x)
+  x <- gsub("_[12](\\.(fastq|fq)(\\.gz)?)?$", "", x)
+  x <- gsub("_[12]$", "", x)
   x
 }
 
@@ -137,7 +139,10 @@ normalize_sample_id <- function(x) {
   tables_dir <- file.path(output_dir, "QC_and_others", "tables")
   dir.create(tables_dir, recursive = TRUE, showWarnings = FALSE)
   tryCatch({
-    write.table(as.data.frame(targets), file = file.path(tables_dir, "00_sample_targets.tsv"), sep = "\t", quote = FALSE, row.names = FALSE)
+    clean_targets <- as.data.frame(targets)
+    if (!is.null(clean_targets$Filename)) clean_targets$Filename <- normalize_sample_id(clean_targets$Filename)
+    if (!is.null(clean_targets$Name)) clean_targets$Name <- normalize_sample_id(clean_targets$Name)
+    write.table(clean_targets, file = file.path(tables_dir, "00_sample_targets.tsv"), sep = "\t", quote = FALSE, row.names = FALSE)
   }, error = function(e) NULL)
 
   # --- Per-section PDF splitting (when AI commentary is requested) ---
