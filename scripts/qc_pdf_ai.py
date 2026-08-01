@@ -35,6 +35,7 @@ SYS_PROMPT_GENERIC = "\n".join([
     "Summarise the table data in 2-4 short, clear bullet points.",
     "State key findings, flag potential anomalies or outliers, and indicate whether sample quality is acceptable.",
     "Do not invent facts not present in the data.",
+    "Always respond in English.",
 ])
 
 SECTION_PROMPTS = {
@@ -47,10 +48,11 @@ SECTION_PROMPTS = {
     "06_mds_coordinates.tsv": "Assess sample clustering in 2D MDS space. State whether samples cluster primarily by biological condition.",
     "07_pca_coordinates.tsv": "Evaluate PCA sample separation along PC1 and PC2 relative to variance explained.",
     "08_top250_variable_genes.tsv": "Comment on top 250 variable genes and expression heterogeneity.",
-    "09_top_overrepresented_genes.tsv": "Evaluate top over-represented genes per sample. Flag potential rRNA, globin, or mitochondrial dominance.",
-    "10_top100_spearman_corr.tsv": "Assess sample clustering based on the top 100 most variable genes.",
-    "11_condition_pairwise_means.tsv": "Evaluate mean expression correlation across experimental conditions.",
-    "12_gene_body_coverage.tsv": "Assess 5'-to-3' transcript coverage uniformity across gene bodies. Flag 3' bias or RNA degradation.",
+    "09_dendrogram_distances.tsv": "Analyze sample-to-sample Euclidean distance matrix and hierarchical clustering structure. Identify closely clustered sample groups and early-branching outliers.",
+    "10_top_overrepresented_genes.tsv": "Evaluate top over-represented genes per sample. Flag potential rRNA, globin, or mitochondrial dominance.",
+    "11_top100_spearman_corr.tsv": "Assess sample clustering based on the top 100 most variable genes.",
+    "12_condition_pairwise_means.tsv": "Evaluate mean expression correlation across experimental conditions.",
+    "13_gene_body_coverage.tsv": "Assess 5'-to-3' transcript coverage uniformity across gene bodies. Flag 3' bias or RNA degradation.",
 }
 
 def ask_llm(cfg, task_prompt, table_text):
@@ -70,13 +72,28 @@ def ask_llm(cfg, task_prompt, table_text):
     return (text or "_(no AI response)_"), usage
 
 def clean_markdown_text(text):
-    """Clean markdown bold/italic asterisks and formatting markers for Matplotlib rendering."""
+    """Clean markdown bold/italic asterisks, LLM directives, and formatting markers for Matplotlib rendering."""
     # Convert bold/italic asterisks (***text*** or **text** or *text*)
     text = re.sub(r"\*{1,3}(.*?)\*{1,3}", r"\1", text)
     # Convert __bold__ or _italic_
     text = re.sub(r"_{1,2}(.*?)_{1,2}", r"\1", text)
     # Convert inline backticks (`code`)
     text = re.sub(r"`([^`]+)`", r"\1", text)
+    # Strip LLM severity directives (matplotlib cannot render them)
+    # Canonical :span[text]{.text-color} or :sample[text]{.text-color} → text
+    text = re.sub(r":(?:span|sample)\[([^\]]*)\]\s*\{[^}]*\}", r"\1", text)
+    # Parenthesized variant :span[text] (.text-color) → text
+    text = re.sub(r":(?:span|sample)\[([^\]]*)\]\s*\(\.text-\w+\)", r"\1", text)
+    # Dangling :span[text] without any directive → text
+    text = re.sub(r":(?:span|sample)\[([^\]]*)\]", r"\1", text)
+    # Bare {.text-color} at end of text
+    text = re.sub(r"\s*\{\s*\.text-(?:red|orange|yellow|green)\s*\}", "", text)
+    # Bold-wrapped {.text-color}
+    text = re.sub(r"\s*\*{1,3}\{\s*\.text-(?:red|orange|yellow|green)\s*\}\*{1,3}", "", text)
+    # Bare .text-color (no delimiters)
+    text = re.sub(r"\s+\.text-(?:red|orange|yellow|green)\b", "", text)
+    # (.text-color) parenthesized standalone
+    text = re.sub(r"\s*\(\.text-(?:red|orange|yellow|green)\)", "", text)
     # Remove emoji characters that render as unformatted boxes in standard PDF fonts
     text = re.sub(r"[^\x00-\x7F\u00A0-\u024F\u2022]", "", text)
     return text
@@ -134,110 +151,114 @@ def render_ai_slide(title, ai_text, usage_info, model_name, data_filename=None):
     return fig
 
 def merge_pdfs_if_possible(orig_pdf, ai_pdf_pages_file, output_pdf, tsv_to_slide_idx=None):
-    """Attempt to insert original plot PDF and AI PDF pages mapped correctly using pypdf, PyPDF2, or fitz."""
-    # Try pypdf with section-aware mapping
+    """Merge original QC PDF with AI commentary slides: all original pages first,
+    then all AI slides appended in section order. Previous attempts to interleave
+    at exact page boundaries failed because R-generated PDF pages rarely contain
+    searchable text for section matching. Appending in order is reliable and each
+    AI slide's title already identifies which section it belongs to."""
+    # Try pypdf first
     try:
         import pypdf
         reader_orig = pypdf.PdfReader(orig_pdf)
         reader_ai = pypdf.PdfReader(ai_pdf_pages_file)
         writer = pypdf.PdfWriter()
-
-        n_orig = len(reader_orig.pages)
-        n_ai = len(reader_ai.pages)
-
-        # Detect section starting pages by searching PDF page text for section numbers/keywords
-        section_start_pages = {}
-        for idx, page in enumerate(reader_orig.pages):
-            txt = page.extract_text() or ""
-            # Match titles like "Sample table", "Density plots", "Boxplots", "Library size", "PCA", "Scatter plots"
-            for sec_idx, key in enumerate(tsv_to_slide_idx.keys() if tsv_to_slide_idx else []):
-                clean_key = key.replace(".tsv", "").replace(".txt", "").split("_", 1)[-1]
-                if clean_key.lower() in txt.lower() and sec_idx not in section_start_pages:
-                    section_start_pages[sec_idx] = idx
-
-        # Sort sections by page order
-        ai_insert_map = {}
-        if section_start_pages and tsv_to_slide_idx:
-            sorted_secs = sorted(section_start_pages.items(), key=lambda x: x[1])
-            for i, (sec_idx, start_p) in enumerate(sorted_secs):
-                # Put AI slide right before the NEXT section starts, or at end for last section
-                end_p = sorted_secs[i+1][1] - 1 if i + 1 < len(sorted_secs) else n_orig - 1
-                ai_insert_map[end_p] = tsv_to_slide_idx.get(list(tsv_to_slide_idx.keys())[sec_idx])
-
-        # Write pages and insert mapped AI slides
-        ai_written = set()
-        for i in range(n_orig):
-            writer.add_page(reader_orig.pages[i])
-            if i in ai_insert_map and ai_insert_map[i] is not None:
-                slide_idx = ai_insert_map[i]
-                if slide_idx < n_ai and slide_idx not in ai_written:
-                    writer.add_page(reader_ai.pages[slide_idx])
-                    ai_written.add(slide_idx)
-
-        # Append any remaining AI slides at end
-        for s_idx in range(n_ai):
-            if s_idx not in ai_written:
-                writer.add_page(reader_ai.pages[s_idx])
-
+        for page in reader_orig.pages:
+            writer.add_page(page)
+        for page in reader_ai.pages:
+            writer.add_page(page)
         with open(output_pdf, "wb") as fh:
             writer.write(fh)
-        llm_common.log(f"[QC PDF AI] Successfully interleaved plot & AI pages (pypdf section-mapped) into: {output_pdf}")
+        llm_common.log(f"[QC PDF AI] Merged {len(reader_orig.pages)} QC pages + "
+                       f"{len(reader_ai.pages)} AI slides into: {output_pdf}")
         return True
     except Exception as e:
-        llm_common.log(f"[QC PDF AI] pypdf mapping error: {e}")
-        pass
+        llm_common.log(f"[QC PDF AI] pypdf merge error: {e}")
 
-    # Fallback fitz section-mapped
+    # Fallback: fitz (PyMuPDF)
     try:
         import fitz
         doc_orig = fitz.open(orig_pdf)
         doc_ai = fitz.open(ai_pdf_pages_file)
         doc_out = fitz.open()
-
-        n_orig = len(doc_orig)
-        n_ai = len(doc_ai)
-
-        section_start_pages = {}
-        for idx in range(n_orig):
-            txt = doc_orig[idx].get_text() or ""
-            for sec_idx, key in enumerate(tsv_to_slide_idx.keys() if tsv_to_slide_idx else []):
-                clean_key = key.replace(".tsv", "").replace(".txt", "").split("_", 1)[-1]
-                if clean_key.lower() in txt.lower() and sec_idx not in section_start_pages:
-                    section_start_pages[sec_idx] = idx
-
-        ai_insert_map = {}
-        if section_start_pages and tsv_to_slide_idx:
-            sorted_secs = sorted(section_start_pages.items(), key=lambda x: x[1])
-            for i, (sec_idx, start_p) in enumerate(sorted_secs):
-                end_p = sorted_secs[i+1][1] - 1 if i + 1 < len(sorted_secs) else n_orig - 1
-                ai_insert_map[end_p] = tsv_to_slide_idx.get(list(tsv_to_slide_idx.keys())[sec_idx])
-
-        ai_written = set()
-        for i in range(n_orig):
-            doc_out.insert_pdf(doc_orig, from_page=i, to_page=i)
-            if i in ai_insert_map and ai_insert_map[i] is not None:
-                slide_idx = ai_insert_map[i]
-                if slide_idx < n_ai and slide_idx not in ai_written:
-                    doc_out.insert_pdf(doc_ai, from_page=slide_idx, to_page=slide_idx)
-                    ai_written.add(slide_idx)
-
-        for s_idx in range(n_ai):
-            if s_idx not in ai_written:
-                doc_out.insert_pdf(doc_ai, from_page=s_idx, to_page=s_idx)
-
+        doc_out.insert_pdf(doc_orig)
+        doc_out.insert_pdf(doc_ai)
         doc_out.save(output_pdf)
-        llm_common.log(f"[QC PDF AI] Successfully interleaved plot & AI pages (fitz section-mapped) into: {output_pdf}")
+        llm_common.log(f"[QC PDF AI] Merged {len(doc_orig)} QC pages + "
+                       f"{len(doc_ai)} AI slides (fitz) into: {output_pdf}")
         return True
     except Exception as e:
-        llm_common.log(f"[QC PDF AI] fitz mapping error: {e}")
-        pass
+        llm_common.log(f"[QC PDF AI] fitz merge error: {e}")
 
+
+    return False
+
+def _match_section_to_tsv(section_pdf_name, tsv_files):
+    """Match a section PDF filename (e.g. '03_library_size.pdf') to a TSV file
+    (e.g. '03_library_sizes.tsv') using the two-digit numeric prefix."""
+    prefix = section_pdf_name[:2]  # e.g. "03"
+    for tsv in tsv_files:
+        if tsv[:2] == prefix:
+            return tsv
+    return None
+
+def _concat_pdfs(pdf_list, output_path):
+    """Concatenate a list of PDF file paths into a single output PDF."""
+    try:
+        import pypdf
+        writer = pypdf.PdfWriter()
+        for pdf_path in pdf_list:
+            reader = pypdf.PdfReader(pdf_path)
+            for page in reader.pages:
+                writer.add_page(page)
+        with open(output_path, "wb") as fh:
+            writer.write(fh)
+        return True
+    except Exception as e:
+        llm_common.log(f"[QC PDF AI] pypdf concat error: {e}")
+    try:
+        import fitz
+        doc_out = fitz.open()
+        for pdf_path in pdf_list:
+            doc_in = fitz.open(pdf_path)
+            doc_out.insert_pdf(doc_in)
+        doc_out.save(output_path)
+        return True
+    except Exception as e:
+        llm_common.log(f"[QC PDF AI] fitz concat error: {e}")
+    return False
+
+def _append_ai_to_section(section_pdf, ai_slide_pdf, ai_slide_idx, output_pdf):
+    """Append a single AI slide (page ai_slide_idx from ai_slide_pdf) to section_pdf."""
+    try:
+        import pypdf
+        writer = pypdf.PdfWriter()
+        reader_sec = pypdf.PdfReader(section_pdf)
+        reader_ai = pypdf.PdfReader(ai_slide_pdf)
+        for page in reader_sec.pages:
+            writer.add_page(page)
+        if ai_slide_idx < len(reader_ai.pages):
+            writer.add_page(reader_ai.pages[ai_slide_idx])
+        with open(output_pdf, "wb") as fh:
+            writer.write(fh)
+        return True
+    except Exception as e:
+        llm_common.log(f"[QC PDF AI] pypdf append error: {e}")
+    try:
+        import fitz
+        doc_sec = fitz.open(section_pdf)
+        doc_ai = fitz.open(ai_slide_pdf)
+        doc_sec.insert_pdf(doc_ai, from_page=ai_slide_idx, to_page=ai_slide_idx)
+        doc_sec.save(output_pdf)
+        return True
+    except Exception as e:
+        llm_common.log(f"[QC PDF AI] fitz append error: {e}")
     return False
 
 def main():
     p = argparse.ArgumentParser(description="QC Figures AI PDF generator.")
     p.add_argument("--tables-dir", required=True, help="Directory containing exported TSV tables.")
     p.add_argument("--pdf", default="", help="Original QC PDF file to pair with (optional).")
+    p.add_argument("--sections-dir", default="", help="Directory with per-section PDFs from R (enables per-section interleaving).")
     p.add_argument("--llm-endpoint", default=DEF_ENDPOINT, help="OpenAI-compatible URL")
     p.add_argument("--llm-model", default=DEF_MODEL, help="Model name")
     p.add_argument("--llm-api-key", default=DEF_API_KEY, help="API key")
@@ -266,6 +287,7 @@ def main():
 
     secrets = llm_common.secret_values(endpoint=cfg.llm_endpoint, api_key=cfg.llm_api_key)
 
+    # --- Generate AI commentary slides ---
     tsv_to_slide_idx = {}
     slide_counter = 0
 
@@ -302,11 +324,70 @@ def main():
     llm_common.scrub_file(out_pdf_standalone, secrets)
     llm_common.log(f"[QC PDF AI] Generated AI commentary slides PDF: {out_pdf_standalone}")
 
-    # Interleave with original PDF if provided
-    if args.pdf and os.path.isfile(args.pdf):
+    # --- Per-section interleaving mode ---
+    sections_dir = args.sections_dir
+    if sections_dir and os.path.isdir(sections_dir):
+        section_pdfs = sorted([f for f in os.listdir(sections_dir) if f.endswith(".pdf")])
+        if not section_pdfs:
+            llm_common.log(f"[QC PDF AI] No section PDFs found in {sections_dir}")
+            return
+
+        llm_common.log(f"[QC PDF AI] Per-section interleaving: {len(section_pdfs)} section PDFs, "
+                       f"{len(tsv_to_slide_idx)} AI slides")
+
+        # Build commented section PDFs (original + AI slide appended)
+        commented_section_paths = []
+        original_section_paths = []
+        for sec_pdf_name in section_pdfs:
+            sec_pdf_path = os.path.join(sections_dir, sec_pdf_name)
+            original_section_paths.append(sec_pdf_path)
+
+            # Find matching TSV → AI slide index
+            matched_tsv = _match_section_to_tsv(sec_pdf_name, tsv_files)
+            slide_idx = tsv_to_slide_idx.get(matched_tsv) if matched_tsv else None
+
+            if slide_idx is not None:
+                # Append AI slide to this section
+                commented_path = sec_pdf_path.replace(".pdf", "_commented.pdf")
+                if _append_ai_to_section(sec_pdf_path, out_pdf_standalone, slide_idx, commented_path):
+                    commented_section_paths.append(commented_path)
+                    llm_common.log(f"[QC PDF AI] Appended AI slide for {matched_tsv} to {sec_pdf_name}")
+                else:
+                    commented_section_paths.append(sec_pdf_path)  # fallback: use original
+            else:
+                commented_section_paths.append(sec_pdf_path)  # no AI slide for this section
+
+        # Assemble monolithic *_QC.pdf from original sections
+        if args.pdf:
+            qc_pdf_path = args.pdf
+        else:
+            qc_pdf_path = os.path.join(parent_dir, "assembled_QC.pdf")
+        if _concat_pdfs(original_section_paths, qc_pdf_path):
+            llm_common.log(f"[QC PDF AI] Assembled monolithic QC PDF: {qc_pdf_path}")
+
+        # Assemble *_QC_commented.pdf from commented sections
+        if args.pdf:
+            commented_pdf = args.pdf.replace(".pdf", "_commented.pdf")
+        else:
+            commented_pdf = os.path.join(parent_dir, "assembled_QC_commented.pdf")
+        if _concat_pdfs(commented_section_paths, commented_pdf):
+            llm_common.scrub_file(commented_pdf, secrets)
+            llm_common.log(f"[QC PDF AI] Assembled commented QC PDF: {commented_pdf}")
+
+        # Clean up sections directory
+        import shutil
+        try:
+            shutil.rmtree(sections_dir)
+            llm_common.log(f"[QC PDF AI] Cleaned up sections directory: {sections_dir}")
+        except OSError as e:
+            llm_common.log(f"[QC PDF AI] Could not remove sections directory: {e}")
+
+    elif args.pdf and os.path.isfile(args.pdf):
+        # Fallback: append all AI slides at end of monolithic PDF
         commented_pdf = args.pdf.replace(".pdf", "_commented.pdf")
         if merge_pdfs_if_possible(args.pdf, out_pdf_standalone, commented_pdf, tsv_to_slide_idx=tsv_to_slide_idx):
             llm_common.scrub_file(commented_pdf, secrets)
 
 if __name__ == "__main__":
     main()
+

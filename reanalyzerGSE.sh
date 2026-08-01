@@ -1485,12 +1485,19 @@ _log_step "Step_4_R_Process" "start"
 			echo "Check $output_folder/$name/R_process_reanalyzer.log for details. Skipping remaining post-processing for this index."
 			continue
 		fi
-    		echo 'R_qc_figs.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index "edgeR_object_prefilter" "edgeR_object" "edgeR_object_norm" $pattern_to_remove $annotation_file $fc_feat_type' > $output_folder/$name/R_qc_figs.log
-			R_qc_figs.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index "edgeR_object_prefilter" "edgeR_object" "edgeR_object_norm" $pattern_to_remove $annotation_file $fc_feat_type | tee -a $output_folder/$name/R_qc_figs.log
+    		echo 'R_qc_figs.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index "edgeR_object_prefilter" "edgeR_object" "edgeR_object_norm" $pattern_to_remove $annotation_file $fc_feat_type $split_sections' > $output_folder/$name/R_qc_figs.log
+			# Determine if per-section PDF splitting is needed for AI interleaving
+			_ai_val="${ai_insights:-all}"
+			if [ -n "$LLM_ENDPOINT" ] && [ "$_ai_val" != "no" ] && [ "$_ai_val" != "enrichment" ] && [ "$_ai_val" != "dge" ] && [ "$_ai_val" != "counts" ] && command -v qc_pdf_ai.py >/dev/null 2>&1; then
+				split_sections="yes"
+			else
+				split_sections="no"
+			fi
+			R_qc_figs.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index "edgeR_object_prefilter" "edgeR_object" "edgeR_object_norm" $pattern_to_remove $annotation_file $fc_feat_type $split_sections | tee -a $output_folder/$name/R_qc_figs.log
 		if [[ -e "$output_folder/$name/final_results_reanalysis$index/counts_adjusted.txt" ]]; then
 			echo -e "\n\nRemember that batch effect correction/covariables have been only provided to Combat-Seq/limma for visualization purposes, to include covariables in the DGE model after checking the visualization the argument -C will be used\n\n\nQC_PDF adjusted counts\n\nRemember that you have requested batch effect correction/count adjustment, so you have to mind the figures in this QC_PDF from ComBat-seq/limma counts...\n"
-			echo -e 'R_qc_figs.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index "edgeR_object_prefilter_adjusted" "edgeR_object_adjusted" "edgeR_object_norm_adjusted" $pattern_to_remove $annotation_file $fc_feat_type' > $output_folder/$name/R_qc_figs_adjusted.log
-			R_qc_figs.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index "edgeR_object_prefilter_adjusted" "edgeR_object_adjusted" "edgeR_object_norm_adjusted" $pattern_to_remove $annotation_file $fc_feat_type | tee -a $output_folder/$name/R_qc_figs_adjusted.log
+			echo -e 'R_qc_figs.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index "edgeR_object_prefilter_adjusted" "edgeR_object_adjusted" "edgeR_object_norm_adjusted" $pattern_to_remove $annotation_file $fc_feat_type $split_sections' > $output_folder/$name/R_qc_figs_adjusted.log
+			R_qc_figs.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index "edgeR_object_prefilter_adjusted" "edgeR_object_adjusted" "edgeR_object_norm_adjusted" $pattern_to_remove $annotation_file $fc_feat_type $split_sections | tee -a $output_folder/$name/R_qc_figs_adjusted.log
 		fi
 		if [ -d "$output_folder/$name/final_results_reanalysis$index/DGE/" ]; then
 			cd $output_folder/$name/final_results_reanalysis$index/DGE/
@@ -2033,9 +2040,18 @@ if run_step step8; then
 			fi
 			if [ "$ai_do_qc_pdf" = 1 ]; then
 				echo "Annotating QC figures PDF with AI insights..."
-				for qc_pdf_file in "$ai_fdir/QC_and_others"/*_QC.pdf; do
-					[ -f "$qc_pdf_file" ] || continue
-					qc_pdf_ai.py --tables-dir "$ai_fdir/QC_and_others/tables" --pdf "$qc_pdf_file" >> "$ai_log" 2>&1 || true
+				_label=$(basename "$output_folder/$name")
+				# Process each edgeR variant's sections directory independently
+				for edger_suffix in "norm" "norm_adjusted"; do
+					sections_dir="$ai_fdir/QC_and_others/sections_${edger_suffix}"
+					_qc_pdf="$ai_fdir/QC_and_others/${_label}_${edger_suffix}_QC.pdf"
+					if [ -d "$sections_dir" ]; then
+						# Per-section mode: R created per-section PDFs, Python assembles + interleaves
+						qc_pdf_ai.py --tables-dir "$ai_fdir/QC_and_others/tables" --pdf "$_qc_pdf" --sections-dir "$sections_dir" >> "$ai_log" 2>&1 || true
+					elif [ -f "$_qc_pdf" ]; then
+						# Fallback: monolithic PDF exists, append AI slides at end
+						qc_pdf_ai.py --tables-dir "$ai_fdir/QC_and_others/tables" --pdf "$_qc_pdf" >> "$ai_log" 2>&1 || true
+					fi
 				done
 			fi
 		done

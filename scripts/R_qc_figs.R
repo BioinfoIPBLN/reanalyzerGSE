@@ -11,6 +11,7 @@ edgeR_object_norm <- eval(as.symbol(args[6]))
 pattern_to_remove <- args[7]
 annotation_file <- args[8]
 fc_feat_type <- ifelse(length(args) >= 9, args[9], "exon")
+split_sections <- ifelse(length(args) >= 10, args[10], "no")
 label <- basename(path)
 label2 <- sub(".*_","",args[6])
 
@@ -139,28 +140,28 @@ normalize_sample_id <- function(x) {
     write.table(as.data.frame(targets), file = file.path(tables_dir, "00_sample_targets.tsv"), sep = "\t", quote = FALSE, row.names = FALSE)
   }, error = function(e) NULL)
 
-  page_map_file <- file.path(tables_dir, "section_page_mapping.tsv")
-  unlink(page_map_file)
-  log_section_page <- function(tsv_name) {
-    p_num <- tryCatch(dev.cur(), error = function(e) 1)
-    # dev.cur() returns device index (usually 2 or 3), so we query par("page") or page count
-    p_num <- tryCatch(as.integer(grDevices::dev.size()[1]), error = function(e) 1)
-    # We log section start to file
-    cat(paste0(tsv_name, "\t", dev.cur(), "\n"), file = page_map_file, append = TRUE)
+  # --- Per-section PDF splitting (when AI commentary is requested) ---
+  sections_dir <- file.path(output_dir, "QC_and_others", paste0("sections_", label2))
+  if (split_sections == "yes") {
+    dir.create(sections_dir, recursive = TRUE, showWarnings = FALSE)
+    cat(paste0("\n[split_sections] Generating per-section PDFs in: ", sections_dir, "\n"))
+  } else {
+    cat("\nFinal QC PDF:"); print(paste0(output_dir,"/QC_and_others/",label,"_",label2,"_QC.pdf"))
+    pdf(paste0(output_dir,"/QC_and_others/",label,"_",label2,"_QC.pdf"),paper="A4")
   }
 
-  cat("\nFinal QC PDF:"); print(paste0(output_dir,"/QC_and_others/",label,"_",label2,"_QC.pdf"))
-  pdf(paste0(output_dir,"/QC_and_others/",label,"_",label2,"_QC.pdf"),paper="A4")
-  
-  # Helper to record exact PDF page number when starting each section
-  pdf_page_map <- list()
-  record_sec_page <- function(tsv_file) {
-    # dev.cur() in R's pdf() device: we track pages via cumulative plots or grid
+  open_section_pdf <- function(sec_name) {
+    if (split_sections != "yes") return()
+    # Close previous section's PDF (if any device is open beyond the null device)
+    if (dev.cur() > 1) dev.off()
+    sec_file <- file.path(sections_dir, paste0(sec_name, ".pdf"))
+    pdf(sec_file, paper = "A4")
+    cat(paste0("[split_sections] Section: ", sec_name, " -> ", basename(sec_file), "\n"))
   }
 
   ### 0. Reminder of the samples:
   cat("\n[1/12] Sample table\n")
-  cat("00_sample_targets.tsv\t1\n", file = page_map_file, append = TRUE)
+  open_section_pdf("00_sample_targets")
   ggplot() + theme_void(base_size=1) + coord_flip() +
     annotate(geom = "table",
                    x = 0,
@@ -170,7 +171,19 @@ normalize_sample_id <- function(x) {
   
   ### 1.1. Density rawcounts log2, cpm...:
   cat("\n[2/12] Density plots (raw + filtered)\n")
-  cat("01_density_metrics.tsv\t2\n", file = page_map_file, append = TRUE)
+  open_section_pdf("01_density")
+  tryCatch({
+    density_df <- data.frame(
+      Sample = targets$Name,
+      Prefilter_Mean_lcpm = round(colMeans(lcpm_prefilter), 3),
+      Prefilter_Median_lcpm = round(apply(lcpm_prefilter, 2, median), 3),
+      Filtered_Mean_lcpm = round(colMeans(lcpm), 3),
+      Filtered_Median_lcpm = round(apply(lcpm, 2, median), 3),
+      Recommended_Cutoff = round(lcpm.cutoff, 4),
+      Applied_Cutoff = ifelse(is.na(applied.cutoff), "NA", as.character(round(applied.cutoff, 4)))
+    )
+    write.table(density_df, file = file.path(tables_dir, "01_density_metrics.tsv"), sep = "\t", quote = FALSE, row.names = FALSE)
+  }, error = function(e) NULL)
   col <- RColorBrewer::brewer.pal(nsamples, "Paired")
   
   if(sum(duplicated(col))>0){
@@ -212,6 +225,7 @@ normalize_sample_id <- function(x) {
   
   ### 2.1. Boxplots non-normalised:
   cat("\n[3/12] Boxplots (unnorm + norm)\n")
+  open_section_pdf("02_boxplots")
   par(mfrow=c(1,2))
   boxplot(lcpm, las=2, col=col.group, main="", names=targets$Name, cex.axis=0.4)
   title(main="Unnormalized data (lcpm)",ylab="Log-cpm")
@@ -232,6 +246,7 @@ normalize_sample_id <- function(x) {
   
   ### 3. Library size and read counts figures:
   cat("\n[4/12] Library size barplots\n")
+  open_section_pdf("03_library_size")
   sample_labels <- normalize_sample_id(if (!is.null(targets$Name)) targets$Name else targets$Filename)
   sample_names <- normalize_sample_id(if (!is.null(targets$Filename)) targets$Filename else colnames(x$counts))
 
@@ -283,6 +298,7 @@ normalize_sample_id <- function(x) {
    if(length(grep("_skip_",list.files(path=input_dir,full.names=T,recursive=T)))==0 & length(grep("_stats.txt",list.files(path=input_dir,full.names=T,recursive=T)))>0){
     ### Figures with the number of reads
     cat("\n[4b/12] BAM/FASTQ read count barplots\n")
+    open_section_pdf("04_bam_reads")
     reads <- c()
     files <- grep("_flagstat.txt", list.files(path = input_dir, full.names = TRUE, recursive = TRUE), value = TRUE)
     for (f in files) {
@@ -365,6 +381,7 @@ normalize_sample_id <- function(x) {
 
   ## Barplot 3 no. of alignments
   cat("\n[4c/12] Alignment category barplots\n")
+  open_section_pdf("04_alignment_categories")
   multiqc_dirs <- c(
     file.path(input_dir, "../multiqc_out/multiqc_data"),
     file.path(input_dir, "../multiqc_out/multiqc_report_data"),
@@ -378,6 +395,9 @@ normalize_sample_id <- function(x) {
   if(length(aln_files) > 0) {
   aln <- read.table(aln_files[1], 
                     header = TRUE, sep = "\t", check.names = FALSE)
+  tryCatch({
+    write.table(aln, file = file.path(tables_dir, "04_alignment_categories.tsv"), sep = "\t", quote = FALSE, row.names = FALSE)
+  }, error = function(e) NULL)
   
   valid_read_cats <- c("uniquely_mapped", "multimapped", "multimapped_toomany", 
                        "unmapped_mismatches", "unmapped_tooshort", "unmapped_other")
@@ -434,6 +454,7 @@ normalize_sample_id <- function(x) {
                                       full.names = TRUE, recursive = TRUE)
     if (length(kallisto_json_files) > 0) {
       cat("\n[4b/12] Kallisto pseudoalignment QC barplots\n")
+      open_section_pdf("04_kallisto_qc")
       kallisto_stats <- do.call(rbind, lapply(kallisto_json_files, function(f) {
         tryCatch({
           info <- jsonlite::fromJSON(f)
@@ -514,6 +535,7 @@ normalize_sample_id <- function(x) {
   
   ### 4. Corrplot no log
   cat("\n[5/12] Correlation plots (all genes)\n")
+  open_section_pdf("05_correlation")
   tmp <- lcpm_no_log; colnames(tmp) <- normalize_sample_id(colnames(tmp))
   # Adjust margins to prevent title cropping
   par(mar=c(2, 2, 4, 3))
@@ -531,6 +553,7 @@ normalize_sample_id <- function(x) {
   
   ### 5.1. MDS_norm
   cat("\n[6/12] MDS-PCoA plots\n")
+  open_section_pdf("06_mds_pcoa")
   par(mar = c(5, 4, 4, 2))
   z <- plotMDS(lcpm2_no_log, labels=targets$Name, col=col.group, gene.selection = "pairwise", plot=F)
   edge <- sd(z$x)
@@ -559,6 +582,7 @@ normalize_sample_id <- function(x) {
   
   ### 6. PCA
   cat("\n[7/12] PCA plots\n")
+  open_section_pdf("07_pca")
   data_pca <- as.matrix(x)
   data_pca <- as.data.frame(t(data_pca))
   rownames(data_pca) <- targets$Name
@@ -572,7 +596,7 @@ normalize_sample_id <- function(x) {
   print(suppressWarnings(autoplot(data_pca.PC,label=T,data=data_pca,colour=col.group,xlim = c(-0.8,0.8),label.size=3,label.repel=T) + theme_minimal() + ggtitle("PCA")))
 
   tryCatch({
-    write.table(cor_sp, file = file.path(tables_dir, "04_spearman_correlation.tsv"), sep = "\t", quote = FALSE)
+    write.table(cor_sp, file = file.path(tables_dir, "05_spearman_correlation.tsv"), sep = "\t", quote = FALSE)
     write.table(cor_pe, file = file.path(tables_dir, "05_pearson_correlation.tsv"),  sep = "\t", quote = FALSE)
     
     mds_df <- data.frame(Sample = targets$Name, Group = targets$Type, Dim1 = z$x, Dim2 = z$y)
@@ -586,6 +610,7 @@ normalize_sample_id <- function(x) {
   
   ### 7. Heatmap 250 most differential entities
   cat("\n[8/12] Heatmap (top 250 most variable)\n")
+  open_section_pdf("08_heatmap")
   rsd <- rowSds(as.matrix(x))
   sel <- order(rsd, decreasing=TRUE)[1:250]
   
@@ -598,6 +623,7 @@ normalize_sample_id <- function(x) {
   
   ### 8.1. Dendogram cluster raw norm
   cat("\n[9/12] Dendrograms (all genes)\n")
+  open_section_pdf("09_dendrograms")
   par(mfrow=c(1,1), mar=c(8, 4, 4, 2),col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
   pr.hc.c <- hclust(na.omit(dist(t(cpm(x2$counts,log=F)),method = "euclidean")))
   pr.hc.c$labels <- normalize_sample_id(pr.hc.c$labels)
@@ -621,9 +647,17 @@ normalize_sample_id <- function(x) {
   suppressWarnings(print(ggdendrogram(pr.hc.c, rotate = FALSE, theme_dendro=F) + theme_minimal() + theme(axis.text.x = element_text(face="bold", color=unique(col.group)[group_index])) +
     labs(title=paste("Hierarchical Clustering of normalized counts from samples of ", label, sep=""), y="Height",x="Samples") + ggpubr::rotate_x_text() + ylim(c(min(pr.hc.c$height),tail(sort(pr.hc.c$height),2)[1]))))
 
+  tryCatch({
+    dist_mat <- as.matrix(dist(t(cpm(x2$counts, log = TRUE)), method = "euclidean"))
+    colnames(dist_mat) <- normalize_sample_id(colnames(dist_mat))
+    rownames(dist_mat) <- colnames(dist_mat)
+    write.table(dist_mat, file = file.path(tables_dir, "09_dendrogram_distances.tsv"), sep = "\t", quote = FALSE)
+  }, error = function(e) NULL)
+
 
   ### 9. Top N over-represented genes per sample (inspired by ezRun CountQC)
   cat("\n[10/12] Top N over-represented genes\n")
+  open_section_pdf("10_top_overrepresented")
   tryCatch({
     counts_mat <- as.matrix(x$counts)
     countFrac <- sweep(counts_mat, 2, colSums(counts_mat), FUN = "/")
@@ -696,7 +730,7 @@ normalize_sample_id <- function(x) {
     cat("\nTop 10 genes per sample plot done.\n")
 
     tryCatch({
-      write.table(df_long, file = file.path(tables_dir, "09_top_overrepresented_genes.tsv"), sep = "\t", quote = FALSE, row.names = FALSE)
+      write.table(df_long, file = file.path(tables_dir, "10_top_overrepresented_genes.tsv"), sep = "\t", quote = FALSE, row.names = FALSE)
     }, error = function(e) NULL)
 
   }, error = function(e) {
@@ -706,6 +740,7 @@ normalize_sample_id <- function(x) {
 
   ### 10. Correlation and clustering using only the top 100 most variable genes
   cat("\n[11a/12] Correlation/clustering (top 100 genes)\n")
+  open_section_pdf("11_top100_correlation")
   tryCatch({
     log2signal <- lcpm2  # log2 normalized CPM
     gene_sds <- apply(log2signal, 1, sd, na.rm = TRUE)
@@ -724,7 +759,7 @@ normalize_sample_id <- function(x) {
     cor_pe_top <- cor(top_clean, method = "pearson", use = "complete.obs")
 
     tryCatch({
-      write.table(cor_sp_top, file = file.path(tables_dir, "10_top100_spearman_corr.tsv"), sep = "\t", quote = FALSE)
+      write.table(cor_sp_top, file = file.path(tables_dir, "11_top100_spearman_corr.tsv"), sep = "\t", quote = FALSE)
     }, error = function(e) NULL)
     aoe_sp_top <- corrMatOrder(cor_sp_top, order = "AOE")
     aoe_pe_top <- corrMatOrder(cor_pe_top, order = "AOE")
@@ -790,6 +825,7 @@ normalize_sample_id <- function(x) {
 
   ### 11. Scatter plots by condition (pairwise condition averages)
   cat("\n[11b/12] Scatter plots by condition\n")
+  open_section_pdf("12_scatter_condition")
   tryCatch({
     conds <- as.character(x$samples$group)
     unique_conds <- unique(conds)
@@ -802,7 +838,7 @@ normalize_sample_id <- function(x) {
       colnames(signalCond_mat) <- unique_conds
 
       tryCatch({
-        write.table(as.data.frame(signalCond_mat), file = file.path(tables_dir, "11_condition_pairwise_means.tsv"), sep = "\t", quote = FALSE)
+        write.table(as.data.frame(signalCond_mat), file = file.path(tables_dir, "12_condition_pairwise_means.tsv"), sep = "\t", quote = FALSE)
       }, error = function(e) NULL)
 
       # Pairwise scatter plots
@@ -841,6 +877,7 @@ normalize_sample_id <- function(x) {
   ### 12. geneBody_coverage logic
   if (args[6] == "edgeR_object_norm" && bam_files_present) {
     cat("\n[12/12] Gene body coverage\n")
+    open_section_pdf("13_gene_body_coverage")
     tryCatch({
       cat("Preparing annotation for geneBody_coverage...\n")
       suppressMessages(library(rtracklayer, quiet = T, warn.conflicts = F))
@@ -1053,7 +1090,7 @@ normalize_sample_id <- function(x) {
           if (length(bin_mat_list) > 0) {
              plot_df <- do.call(rbind, bin_mat_list)
              tryCatch({
-               write.table(plot_df, file = file.path(tables_dir, "12_gene_body_coverage.tsv"), sep = "\t", quote = FALSE, row.names = FALSE)
+               write.table(plot_df, file = file.path(tables_dir, "13_gene_body_coverage.tsv"), sep = "\t", quote = FALSE, row.names = FALSE)
              }, error = function(e) NULL)
              p <- ggplot(plot_df, aes(x=Percentage, y=Coverage, color=Sample)) +
                 geom_line(linewidth=1) +

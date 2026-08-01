@@ -35,7 +35,8 @@ SYS_PROMPT_MULTISAMPLE = (
     "Produce 2-4 concise bullet points summarizing key quality metrics across samples.\n"
     "Assess coverage depth, GC content, mapping quality, and identify any clear outlier samples.\n"
     "Use standard plain markdown list items (- bullet point).\n"
-    "If all samples pass quality standards and look uniform, explicitly state so."
+    "If all samples pass quality standards and look uniform, explicitly state so.\n"
+    "Always respond in English."
 )
 
 SYS_PROMPT_RNASEQ = (
@@ -43,14 +44,16 @@ SYS_PROMPT_RNASEQ = (
     "Produce 2-3 concise bullet points summarizing key observations.\n"
     "Cover total mapped reads & mapping rate, genomic origin breakdown (Exonic vs Intronic/Intergenic %), and 5'-3' transcript coverage bias.\n"
     "Use standard plain markdown list items (- bullet point).\n"
-    "State clearly if quality is satisfactory or if there are contamination/degradation flags."
+    "State clearly if quality is satisfactory or if there are contamination/degradation flags.\n"
+    "Always respond in English."
 )
 
 SYS_PROMPT_BAMQC = (
     "You are an expert bioinformatician evaluating a Qualimap BAM QC report for a single sample.\n"
     "Produce 2-3 concise bullet points summarizing key alignment quality metrics (mapping rate, duplication rate, mean coverage, mapping quality).\n"
     "Use standard plain markdown list items (- bullet point).\n"
-    "State clearly if quality is satisfactory or if there are flags."
+    "State clearly if quality is satisfactory or if there are flags.\n"
+    "Always respond in English."
 )
 
 AI_TIMEOUT_MSG = "ai_insights timeout. Please try again"
@@ -82,13 +85,29 @@ def style_directives(txt):
         "yellow": "color:#b8860b;font-weight:600;",
         "green": "color:#5cb85c;font-weight:600;"
     }
+    # Canonical :span[text]{.text-color} and :sample[text]{.text-color}
     for sev, css in colors.items():
         txt = re.sub(rf":span\[([^\]]*)\]\{{\.text-{sev}\}}", rf'<span style="{css}">\1</span>', txt)
         txt = re.sub(rf":sample\[([^\]]*)\]\{{\.text-{sev}\}}",
                      rf'<span style="{css}font-style:italic;">\1</span>', txt)
+    # Fallback: :span[text]{anything} or :sample[text]{anything} → text
     txt = re.sub(r":span\[([^\]]*)\]\{[^}]*\}", r"\1", txt)
     txt = re.sub(r":sample\[([^\]]*)\]\{[^}]*\}",
                  r'<span style="font-weight:600;font-style:italic;">\1</span>', txt)
+
+    # --- Safety-net cleanup for all directive variants the LLM may produce ---
+    # Parenthesized variant: :span[text] (.text-color) → text
+    txt = re.sub(r":(?:span|sample)\[([^\]]*)\]\s*\(\.text-\w+\)", r"\1", txt)
+    # Dangling :span[text] without any closing directive → text
+    txt = re.sub(r":(?:span|sample)\[([^\]]*)\]", r"\1", txt)
+    # Bare {.text-color} at end of text (no :span wrapper)
+    txt = re.sub(r"\s*\{\s*\.text-(?:red|orange|yellow|green)\s*\}", "", txt)
+    # Bold-wrapped directive: <strong>{.text-color}</strong> → remove
+    txt = re.sub(r"\s*<strong>\{\s*\.text-(?:red|orange|yellow|green)\s*\}</strong>", "", txt)
+    # Bare .text-color with no delimiters (e.g. ") .text-red, indicating")
+    txt = re.sub(r"\s+\.text-(?:red|orange|yellow|green)\b", "", txt)
+    # (.text-color) parenthesized standalone
+    txt = re.sub(r"\s*\(\.text-(?:red|orange|yellow|green)\)", "", txt)
     return txt
 
 def md_to_html(txt):
@@ -304,7 +323,8 @@ SECTION_MAP = {
 SYS_PROMPT_SECTION = "\n".join([
     "You are an expert bioinformatician evaluating a specific plot/section of a Qualimap report.",
     "Produce 1-2 concise bullet points summarizing key observations from the provided plot raw data.",
-    "Use markdown. Highlight severity with directives like :span[value]{.text-red}, .text-orange, .text-yellow, .text-green if applicable.",
+    "Use markdown. Use **bold** for important findings.",
+    "Always respond in English.",
 ])
 
 def inject_section_ai_box(html_content, heading_name, summary_body_html, footer_html):

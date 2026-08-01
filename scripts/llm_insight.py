@@ -41,7 +41,8 @@ COMMON = ("You are a careful bioinformatics assistant. Base every statement only
           "on the data provided; never invent genes, terms, numbers or conditions. "
           "Write plain prose (no markdown headings, tables or bullet points), a few "
           "short sentences at most. Your text is shown to researchers under an "
-          "'AI summary (verify)' label, so hedge biological interpretation.")
+          "'AI summary (verify)' label, so hedge biological interpretation. "
+          "Always respond in English.")
 TASKS = {
     "design": ("Given sample metadata, describe the experiment in 2-4 sentences: the "
                "organism, the groups/conditions being compared, the number of samples "

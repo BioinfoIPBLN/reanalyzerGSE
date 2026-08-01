@@ -22,7 +22,7 @@ import re
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import llm_common
 
-PROMPT_TEMPLATE = """You are a bioinformatics metadata assistant.
+PROMPT_TEMPLATE = """You are a bioinformatics metadata assistant. Always respond in English.
 Your task is to take raw, overly verbose GEO sample metadata and simplify both:
 1. The condition/group names (column 3 of samples_info).
 2. The descriptive sample names (column 2 of samples_info).
@@ -98,7 +98,7 @@ def main():
 
     try:
         messages = [
-            {"role": "system", "content": "You are a careful bioinformatics assistant."},
+            {"role": "system", "content": "You are a careful bioinformatics assistant. Always respond in English."},
             {"role": "user", "content": prompt}
         ]
         response_text, usage = llm_common.chat_completion(

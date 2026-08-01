@@ -130,32 +130,65 @@ def cap_text(text, context_window, floor=0):
         return text[:limit] + "\n[... truncated ...]"
     return text
 
+_RETRY_BACKOFFS = [10, 30]  # seconds to wait before retry 2 and 3
+_RETRYABLE_HTTP_CODES = {429, 500, 502, 503, 504}
+
 def chat_completion(endpoint, model, api_key, messages, timeout=600):
-    """One TEXT-ONLY, SERIALISED chat call. Returns (text, usage) where usage
-    carries the server's token counts plus 'duration_s' (model time, excluding
-    any time spent waiting for the sequential lock). Raises on network/HTTP/JSON
-    error -- callers decide whether to swallow (per-section) or bubble up."""
+    """One TEXT-ONLY, SERIALISED chat call with retry.  Returns (text, usage)
+    where usage carries the server's token counts plus 'duration_s' (model time,
+    excluding any time spent waiting for the sequential lock).
+
+    Retries up to 3 times total on transient failures (timeouts, HTTP 429/5xx,
+    connection errors) with exponential backoff (10 s, 30 s).  Permanent errors
+    (HTTP 400/401/403) are raised immediately."""
     _ensure_text_only(messages)
-    req = urllib.request.Request(
-        endpoint, data=json.dumps({"model": model, "messages": messages}).encode(),
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"})
-    with _Serial(endpoint):                        # <= no two LLM queries ever overlap
-        t0 = time.time()
-        try:
-            with urllib.request.urlopen(req, timeout=timeout) as r:
-                body = json.loads(r.read())
-        except (socket.timeout, TimeoutError) as e:
-            raise LLMTimeout(f"no response within {timeout}s") from e
-        except urllib.error.URLError as e:
-            # A timed-out socket surfaces here as URLError(reason=timeout).
-            if isinstance(getattr(e, "reason", None), (socket.timeout, TimeoutError)):
-                raise LLMTimeout(f"no response within {timeout}s") from e
-            raise
-        dur = time.time() - t0
-    usage = dict(body.get("usage") or {})
-    usage["duration_s"] = dur
-    text = (body.get("choices") or [{}])[0].get("message", {}).get("content") or ""
-    return text, usage
+    max_attempts = 1 + len(_RETRY_BACKOFFS)  # 3 total
+    last_exc = None
+    for attempt in range(max_attempts):
+        req = urllib.request.Request(
+            endpoint, data=json.dumps({"model": model, "messages": messages}).encode(),
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"})
+        with _Serial(endpoint):                        # <= no two LLM queries ever overlap
+            t0 = time.time()
+            try:
+                with urllib.request.urlopen(req, timeout=timeout) as r:
+                    body = json.loads(r.read())
+                dur = time.time() - t0
+                usage = dict(body.get("usage") or {})
+                usage["duration_s"] = dur
+                text = (body.get("choices") or [{}])[0].get("message", {}).get("content") or ""
+                return text, usage
+            except (socket.timeout, TimeoutError) as e:
+                last_exc = LLMTimeout(f"no response within {timeout}s (attempt {attempt+1}/{max_attempts})")
+                last_exc.__cause__ = e
+            except urllib.error.URLError as e:
+                reason = getattr(e, "reason", None)
+                if isinstance(reason, (socket.timeout, TimeoutError)):
+                    last_exc = LLMTimeout(f"no response within {timeout}s (attempt {attempt+1}/{max_attempts})")
+                    last_exc.__cause__ = e
+                elif isinstance(reason, ConnectionRefusedError):
+                    last_exc = e  # retryable: server temporarily down
+                else:
+                    raise  # non-retryable URLError
+            except urllib.error.HTTPError as e:
+                if e.code in _RETRYABLE_HTTP_CODES:
+                    last_exc = e  # retryable server error
+                else:
+                    raise  # 400/401/403 etc. — permanent
+        # Decide whether to retry
+        if attempt < max_attempts - 1:
+            wait = _RETRY_BACKOFFS[attempt]
+            log(f"[LLM] Retryable error (attempt {attempt+1}/{max_attempts}): "
+                f"{last_exc}. Waiting {wait}s before retry...")
+            time.sleep(wait)
+        else:
+            break
+    # All attempts exhausted
+    if isinstance(last_exc, LLMTimeout):
+        raise last_exc
+    if last_exc is not None:
+        raise last_exc
+    raise RuntimeError("chat_completion: unexpected exit from retry loop")
 
 # --------------------------------------------------------------- secret redaction
 # The LLM endpoint (and API key) are deployment-sensitive and must not survive in

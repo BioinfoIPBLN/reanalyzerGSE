@@ -59,6 +59,7 @@ DEF_SYS_PROMPT = "\n".join([
     "Use markdown. Highlight severity with directives like :span[39.2%]{.text-red}, .text-orange, .text-yellow, .text-green.",
     "Highlight sample names with :sample[name]{.text-red} etc.",
     "Use 4 spaces to indent nested lists. Do not add headers.",
+    "Always respond in English.",
 ])
 
 # Secret redaction + the text-only, sequential LLM call now live in llm_common
