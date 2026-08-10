@@ -37,6 +37,40 @@ run_step() {
 	fi
 	return 0
 }
+# Build the table of "alignment units" that STEP 3a/3b iterate over (and that STEP 9 needs to know
+# about to convert each BAM against the right genome). Without genome groups there is one unit per
+# annotation given in -a: the historical behaviour of independent quantifications over the same
+# alignments/genome. With -rG there is one unit per genome group instead, all of them sharing the
+# single annotation, and their per-sample count tables are merged into miARma_out0 after STEP 3b.
+# Re-derived from the options on every invocation, so it is also correct when resuming with -Dm.
+build_alignment_units() {
+	unit_ini=(); unit_out=(); unit_fasta=(); unit_gtf=(); unit_reads=(); unit_ri=(); unit_label=()
+	local _i; local _annot_arr=()
+	IFS=', ' read -r -a _annot_arr <<< "$annotation"
+	# In kallisto mode annotation is optional; ensure there is at least one unit
+	if [[ "$aligner" == "kallisto" && ${#_annot_arr[@]} -eq 0 ]]; then _annot_arr=(""); fi
+	if [ ! -z "$reference_genome_groups" ]; then
+		for _i in "${!genome_group_labels[@]}"; do
+			unit_ini+=("miarma_genome$_i.ini")
+			unit_out+=("$output_folder/$name/miARma_out_genome$_i")
+			unit_fasta+=("${genome_group_fastas[$_i]}")
+			unit_gtf+=("${_annot_arr[0]}")
+			unit_reads+=("$output_folder/$name/reads_group$_i")
+			unit_ri+=("")
+			unit_label+=("${genome_group_labels[$_i]}")
+		done
+	else
+		for _i in "${!_annot_arr[@]}"; do
+			unit_ini+=("miarma$_i.ini")
+			unit_out+=("$output_folder/$name/miARma_out$_i")
+			unit_fasta+=("$reference_genome")
+			unit_gtf+=("${_annot_arr[$_i]}")
+			unit_reads+=("$seqs_location")
+			unit_ri+=("$reference_genome_index")
+			unit_label+=("")
+		done
+	fi
+}
 # Validate -Es/end_step and its ordering against -Dm/debug_step (resume point).
 if [[ -n "$end_step" && "$end_step" != "none" && "$end_step" != "all" ]]; then
 	if [ "$(_step_pos "$end_step")" -lt 0 ]; then
@@ -644,6 +678,19 @@ if [[ "$reference_genome" == *.gz ]]; then
 	reference_genome="$decompressed_genome"
 fi
 
+for _gi in "${!genome_group_fastas[@]}"; do
+	if [[ "${genome_group_fastas[$_gi]}" == *.gz ]]; then
+		_decompressed_gg="$output_folder/$name/indexes/$(basename ${genome_group_fastas[$_gi]%.gz})"
+		if [ ! -f "$_decompressed_gg" ]; then
+			files_to_decompress+=("${genome_group_fastas[$_gi]}")
+			decompressed_outputs+=("$_decompressed_gg")
+		else
+			echo -e "\nDecompressed genome of group '${genome_group_labels[$_gi]}' already exists: $_decompressed_gg\n"
+		fi
+		genome_group_fastas[$_gi]="$_decompressed_gg"
+	fi
+done
+
 IFS=', ' read -r -a _annot_array <<< "$annotation"
 for _ai in "${!_annot_array[@]}"; do
 	if [[ "${_annot_array[$_ai]}" == *.gz ]]; then
@@ -1081,8 +1128,8 @@ _log_step "Step_3a_Prepare" "start"
 		organism=$(cat $output_folder/$name/reads_study_info/organism.txt | sed 's, ,_,g;s,_+,_,g')
 	fi
 
-	### Prepare the salmon index from the trancripts sequences if required and strandness prediction... (if the miarma0.ini does not exist yet, pointing to a previous miarma run)
-	if [[ ! -e "$output_folder/$name/miarma0.ini" ]]; then
+	### Prepare the salmon index from the trancripts sequences if required and strandness prediction... (if the first miarma ini does not exist yet, pointing to a previous miarma run)
+	if [[ ! -e "$output_folder/$name/miarma0.ini" && ! -e "$output_folder/$name/miarma_genome0.ini" ]]; then
 		if [ -z "$strand" ]; then
 			echo -e "\nLooking for indexes or indexing transcripts in $transcripts...\n"
 			mkdir -p $output_folder/$name/indexes
@@ -1139,12 +1186,6 @@ _log_step "Step_3a_Prepare" "start"
 
 	### Prepare other info required by the updated version of miARma...
 		echo -e "\nPreparing miARma-seq execution...\n"
-		number_files=$(ls $seqs_location | sed 's,_[12].fastq.gz.*,,g' | uniq | wc -l)
-		if [ $number_files -le $number_parallel ]; then
-			cores_parallel=$((cores / number_files))
-		else
-			cores_parallel=$((cores / number_parallel))
-		fi
 		layout_detected=$(find $output_folder/$name -name library_layout_info.txt 2>/dev/null | head -1 | xargs cat 2>/dev/null | head -n1 | tr -d ' \r\n')
 		if [[ "$layout_detected" == "SINGLE" ]]; then
 			library_layout=Single
@@ -1152,6 +1193,135 @@ _log_step "Step_3a_Prepare" "start"
 			library_layout=Paired
 		fi
 		read_length_for_miarma=$(zcat $seqs_location/$(ls $seqs_location | shuf | head -1) | head -2 | sed -n '2p' | awk '{print length -1}')
+
+		# Final renaming of fastq raw files if SRR present in the filename. Done once here, before
+		# anything points at these files (the genome group folders below symlink to them):
+		if [ $(ls $seqs_location | grep -c SRR) -gt 0 ]; then
+			for i in $(ls $seqs_location/*); do mv $i $(echo $i | sed 's,_SRR.*_,_,g'); done
+		fi
+
+	### Genome groups (-rG): assign every sample to exactly one reference genome, verify that the
+	### shared annotation is usable on all of them, and stage one reads folder per group. Each group
+	### is aligned and counted independently and the per-sample count tables are merged back into a
+	### single miARma_out0 at the end of STEP 3b, so everything downstream sees one cohort.
+		declare -A gg_index_of_sample=()
+		if [ ! -z "$reference_genome_groups" ]; then
+			echo -e "\nResolving genome groups (-rG)...\n"
+			gg_assignment_file=$output_folder/$name/reads_study_info/genome_group_assignment.tsv
+			mkdir -p $output_folder/$name/reads_study_info
+			echo -e "sample\tgenome_group\treference_genome" > $gg_assignment_file
+			mapfile -t _gg_samples < <(ls $seqs_location | egrep "\.fastq\.gz$|\.fq\.gz$" | sed -E 's,_(R)?[12]\.(fastq|fq)\.gz$,,;s,\.(fastq|fq)\.gz$,,' | sort -u)
+			if [ ${#_gg_samples[@]} -eq 0 ]; then
+				echo -e "\n\033[1;31mERROR:\033[0m No fastq files found in $seqs_location, so genome groups (-rG) cannot be resolved.\n" >&2; exit 1
+			fi
+			_gg_unassigned=(); _gg_ambiguous=()
+			for _s in "${_gg_samples[@]}"; do
+				_hits=()
+				for _i in "${!genome_group_labels[@]}"; do
+					if echo "$_s" | egrep -q "${genome_group_regexes[$_i]}"; then _hits+=("$_i"); fi
+				done
+				if [ ${#_hits[@]} -eq 0 ]; then
+					_gg_unassigned+=("$_s")
+				elif [ ${#_hits[@]} -gt 1 ]; then
+					_lab=""; for _h in "${_hits[@]}"; do _lab="$_lab, ${genome_group_labels[$_h]}"; done
+					_gg_ambiguous+=("$_s (matches: ${_lab#, })")
+				else
+					gg_index_of_sample[$_s]=${_hits[0]}
+					echo -e "$_s\t${genome_group_labels[${_hits[0]}]}\t${genome_group_fastas[${_hits[0]}]}" >> $gg_assignment_file
+				fi
+			done
+			if [ ${#_gg_unassigned[@]} -gt 0 ] || [ ${#_gg_ambiguous[@]} -gt 0 ]; then
+				echo -e "\n\033[1;31mERROR:\033[0m every sample must match exactly one genome group in -rG.\n" >&2
+				if [ ${#_gg_unassigned[@]} -gt 0 ]; then
+					echo -e "Samples matching NO group (${#_gg_unassigned[@]}):" >&2
+					printf '  %s\n' "${_gg_unassigned[@]}" >&2
+				fi
+				if [ ${#_gg_ambiguous[@]} -gt 0 ]; then
+					echo -e "Samples matching MORE THAN ONE group (${#_gg_ambiguous[@]}):" >&2
+					printf '  %s\n' "${_gg_ambiguous[@]}" >&2
+				fi
+				echo -e "\nGroups provided:" >&2
+				for _i in "${!genome_group_labels[@]}"; do echo "  ${genome_group_labels[$_i]}: '${genome_group_regexes[$_i]}'" >&2; done
+				echo -e "\nPlease adjust the regexes in -rG so the groups partition the samples exactly.\n" >&2
+				exit 1
+			fi
+			echo "Sample to reference genome assignment (also saved in $gg_assignment_file):"
+			column -t -s$'\t' $gg_assignment_file 2>/dev/null || cat $gg_assignment_file
+
+			### Gate: the shared annotation must be coordinate-valid on EVERY group genome, otherwise
+			### the per-group counts are not in a common feature space. Checked before aligning.
+			_gg_shared_annot=$(echo "$annotation" | cut -d',' -f1)
+			_gg_gtf_extents=$TMPDIR/gg_gtf_extents.txt
+			mkdir -p $TMPDIR
+			zcat -f "$_gg_shared_annot" | awk -F'\t' '!/^#/ && NF>=9 { if ($5+0 > m[$1]) m[$1]=$5+0 } END { for (k in m) print k"\t"m[k] }' > $_gg_gtf_extents
+			if [ ! -s "$_gg_gtf_extents" ]; then
+				echo -e "\n\033[1;31mERROR:\033[0m could not read any feature from the annotation $_gg_shared_annot to validate it against the genome groups.\n" >&2; exit 1
+			fi
+			for _i in "${!genome_group_labels[@]}"; do
+				_gg_fa=${genome_group_fastas[$_i]}
+				_gg_fai=$output_folder/$name/indexes/$(basename $_gg_fa).gg.fai
+				if [ -s "${_gg_fa}.fai" ]; then
+					_gg_fai="${_gg_fa}.fai"
+				elif [ ! -s "$_gg_fai" ]; then
+					if ! { samtools faidx "$_gg_fa" --fai-idx "$_gg_fai" &>/dev/null && [ -s "$_gg_fai" ]; }; then
+						if samtools faidx "$_gg_fa" &>/dev/null && [ -s "${_gg_fa}.fai" ]; then
+							_gg_fai="${_gg_fa}.fai"
+						else
+							echo "  Could not index $_gg_fa with samtools, reading contig lengths directly (slower)..."
+							awk '/^>/ { if (n != "") print n"\t"l; n=substr($1,2); l=0; next } { l+=length($0) } END { if (n != "") print n"\t"l }' "$_gg_fa" > "$_gg_fai"
+						fi
+					fi
+				fi
+				if [ ! -s "$_gg_fai" ]; then
+					echo -e "\n\033[1;31mERROR:\033[0m could not determine the contig names/lengths of ${genome_group_labels[$_i]} ($_gg_fa).\n" >&2; exit 1
+				fi
+				_gg_bad=$(awk -F'\t' 'NR==FNR { len[$1]=$2+0; next }
+					{ if (!($1 in len)) { print "  missing contig: "$1; bad++ }
+					  else if ($2+0 > len[$1]) { print "  "$1": annotation reaches "$2" but the contig is only "len[$1]" bp"; bad++ }
+					} END { if (bad > 10) print "  ... and "bad-10" more" }' "$_gg_fai" "$_gg_gtf_extents" | head -11)
+				if [ ! -z "$_gg_bad" ]; then
+					echo -e "\n\033[1;31mERROR:\033[0m the annotation $_gg_shared_annot is not valid on the genome of group '${genome_group_labels[$_i]}' ($_gg_fa):\n$_gg_bad\n" >&2
+					echo -e "All the genome groups must share one feature space, so the same annotation has to be usable on every genome (same contig names and compatible coordinates). This is the case for variant-personalized genomes built by substituting SNPs, or for a common assembly plus extra sample-specific contigs, but NOT for assemblies with shifted coordinates (indels, different builds). Please provide per-genome annotations lifted to a common gene-ID space, or use one reference for all samples.\n" >&2
+					exit 1
+				fi
+				echo "  Annotation validated against ${genome_group_labels[$_i]} ($(basename $_gg_fa))"
+			done
+
+			### Gate (warning): if the genome group is collinear with the experimental design, the
+			### merged differential expression cannot separate biology from reference effects.
+			_gg_sinfo=$output_folder/$name/reads_study_info/samples_info.txt
+			if [ -s "$_gg_sinfo" ]; then
+				_gg_pairs=$TMPDIR/gg_design_pairs.txt; : > $_gg_pairs
+				for _s in "${!gg_index_of_sample[@]}"; do
+					_gg_des=$(awk -F'\t' -v s="$_s" '{ for (i=1;i<=NF;i++) if ($i==s) { print $NF; exit } }' $_gg_sinfo)
+					[ ! -z "$_gg_des" ] && echo -e "${genome_group_labels[${gg_index_of_sample[$_s]}]}\t$_gg_des" >> $_gg_pairs
+				done
+				_gg_ngroups=$(cut -f1 $_gg_pairs | sort -u | wc -l)
+				_gg_nlevels=$(cut -f2 $_gg_pairs | sort -u | wc -l)
+				_gg_shared=$(sort -u $_gg_pairs | cut -f2 | sort | uniq -c | awk '$1>1' | wc -l)
+				if [ "$_gg_ngroups" -gt 1 ] && [ "$_gg_nlevels" -gt 1 ] && [ "$_gg_shared" -eq 0 ]; then
+					echo -e "\n\033[1;31mWARNING:\033[0m the genome group is perfectly confounded with the experimental design: no condition is present in more than one genome group."
+					echo -e "Differential expression computed on the merged matrix would not be able to separate the biological effect from the reference/mapping effect. Consider aligning all the samples to a single common reference for the contrasts you care about, or restrict the interpretation to within-group comparisons."
+					echo -e "Genome group vs design:"; sort -u $_gg_pairs | column -t -s$'\t' 2>/dev/null || sort -u $_gg_pairs
+					_gg_secs=15
+					while [ $_gg_secs -gt 0 ]; do echo -ne "Continuing in $_gg_secs\033[0K\r"; sleep 1; : $((_gg_secs--)); done
+					echo ""
+				fi
+			fi
+
+			### Stage one reads folder per group (symlinks, so no data is duplicated)
+			for _i in "${!genome_group_labels[@]}"; do
+				rm -rf $output_folder/$name/reads_group$_i; mkdir -p $output_folder/$name/reads_group$_i
+			done
+			for _f in $(ls $seqs_location | egrep "\.fastq\.gz$|\.fq\.gz$"); do
+				_s=$(echo "$_f" | sed -E 's,_(R)?[12]\.(fastq|fq)\.gz$,,;s,\.(fastq|fq)\.gz$,,')
+				_i=${gg_index_of_sample[$_s]}
+				ln -sf $seqs_location/$_f $output_folder/$name/reads_group$_i/$_f
+			done
+			for _i in "${!genome_group_labels[@]}"; do
+				echo "  Group ${genome_group_labels[$_i]}: $(ls $output_folder/$name/reads_group$_i | wc -l) fastq file(s) staged in reads_group$_i"
+			done
+		fi
 
 	### Prepare the ini file:
 		IFS=', ' read -r -a array <<< "$annotation"
@@ -1161,69 +1331,84 @@ _log_step "Step_3a_Prepare" "start"
 		if [[ "$aligner" == "kallisto" && ${#array[@]} -eq 0 ]]; then
 			array=("")
 		fi
-		for index in "${!array[@]}"; do
+		### Build the table of "alignment units". Normally one unit per annotation (all of them over
+		### the same genome). With genome groups (-rG) it is one unit per group instead: same single
+		### annotation, different genome and different subset of reads.
+		build_alignment_units
+		for index in "${!unit_ini[@]}"; do
 			cd $output_folder/$name
-			cp $CURRENT_DIR/external_software/miARma-seq/bakk_miARma1.7.ini miarma$index.ini
-			gff=${array[index]}
-			sed -i "s,read_length=,read_length=$read_length_for_miarma,g" miarma$index.ini
-			sed -i "s,read_dir=,read_dir=$seqs_location,g" miarma$index.ini
-			sed -i "s,^threads=,threads=$cores_parallel,g" miarma$index.ini
-			sed -i "s,label=,label=$name,g" miarma$index.ini
-			sed -i "s,miARmaPath=,miARmaPath=$miarma_path,g" miarma$index.ini
-			sed -i "s,output_dir=,output_dir=$output_folder/$name/miARma_out$index,g" miarma$index.ini
-			sed -i "s,stats_file=miARma_stat.log,stats_file=$output_folder/$name/miARma_out$index/miARma_stat$index.log,g" miarma$index.ini
-			sed -i "s,logfile=miARma_logfile.log,logfile=$output_folder/$name/miARma_out$index/miARma_logfile$index.log,g" miarma$index.ini
-			sed -i "s,strand=yes,strand=$strand,g" miarma$index.ini
-			sed -i "s,fasta=,fasta=$reference_genome,g" miarma$index.ini
-			sed -i "s,gtf=,gtf=$gff,g" miarma$index.ini
-			sed -i "s,database=,database=$gff,g" miarma$index.ini
-			sed -i "s,seqtype=Paired,seqtype=$library_layout,g" miarma$index.ini
-			sed -i "s,organism=mouse,organism=$organism,g" miarma$index.ini
-			sed -i "s,indexthreads=,indexthreads=$indexthreads,g" miarma$index.ini
-			sed -i "s,parallelnumber=,parallelnumber=$number_parallel,g" miarma$index.ini
-			sed -i "s,memorylimit=,memorylimit=$memory_max,g" miarma$index.ini
+			cp $CURRENT_DIR/external_software/miARma-seq/bakk_miARma1.7.ini ${unit_ini[index]}
+			gff=${unit_gtf[index]}
+			# featureCounts options are given per annotation; with genome groups there is only one
+			if [ ! -z "$reference_genome_groups" ]; then fc_opt_index=0; else fc_opt_index=$index; fi
+			# Cores are shared out according to the number of samples this unit actually processes
+			number_files=$(ls ${unit_reads[index]} | sed 's,_[12].fastq.gz.*,,g' | uniq | wc -l)
+			if [ "$number_files" -lt 1 ]; then number_files=1; fi
+			if [ $number_files -le $number_parallel ]; then
+				cores_parallel=$((cores / number_files))
+			else
+				cores_parallel=$((cores / number_parallel))
+			fi
+			if [ $cores_parallel -lt 1 ]; then cores_parallel=1; fi
+			sed -i "s,read_length=,read_length=$read_length_for_miarma,g" ${unit_ini[index]}
+			sed -i "s,read_dir=,read_dir=${unit_reads[index]},g" ${unit_ini[index]}
+			sed -i "s,^threads=,threads=$cores_parallel,g" ${unit_ini[index]}
+			sed -i "s,label=,label=$name,g" ${unit_ini[index]}
+			sed -i "s,miARmaPath=,miARmaPath=$miarma_path,g" ${unit_ini[index]}
+			sed -i "s,output_dir=,output_dir=${unit_out[index]},g" ${unit_ini[index]}
+			sed -i "s,stats_file=miARma_stat.log,stats_file=${unit_out[index]}/miARma_stat$index.log,g" ${unit_ini[index]}
+			sed -i "s,logfile=miARma_logfile.log,logfile=${unit_out[index]}/miARma_logfile$index.log,g" ${unit_ini[index]}
+			sed -i "s,strand=yes,strand=$strand,g" ${unit_ini[index]}
+			sed -i "s,fasta=,fasta=${unit_fasta[index]},g" ${unit_ini[index]}
+			sed -i "s,gtf=,gtf=$gff,g" ${unit_ini[index]}
+			sed -i "s,database=,database=$gff,g" ${unit_ini[index]}
+			sed -i "s,seqtype=Paired,seqtype=$library_layout,g" ${unit_ini[index]}
+			sed -i "s,organism=mouse,organism=$organism,g" ${unit_ini[index]}
+			sed -i "s,indexthreads=,indexthreads=$indexthreads,g" ${unit_ini[index]}
+			sed -i "s,parallelnumber=,parallelnumber=$number_parallel,g" ${unit_ini[index]}
+			sed -i "s,memorylimit=,memorylimit=$memory_max,g" ${unit_ini[index]}
 			if [[ "$aligner" == "star" ]]; then
-				if [ -z "$reference_genome_index" ]; then
-					sed -i "s,indexname=,indexname=${organism}_$(basename ${reference_genome%.*})_$(basename ${gff%.*})_star_idx,g" miarma$index.ini
-					sed -i "s,indexdir=,indexdir=$output_folder/$name/indexes/,g" miarma$index.ini
+				if [ -z "${unit_ri[index]}" ]; then
+					sed -i "s,indexname=,indexname=${organism}_$(basename ${unit_fasta[index]%.*})_$(basename ${gff%.*})_star_idx,g" ${unit_ini[index]}
+					sed -i "s,indexdir=,indexdir=$output_folder/$name/indexes/,g" ${unit_ini[index]}
 				else
-					sed -i "s,starindex=,starindex=$reference_genome_index,g" miarma$index.ini
-					sed -i "s,indexname=,indexname=${organism}_star_idx,g" miarma$index.ini
-					sed -i "s,indexdir=,indexdir=$output_folder/$name/indexes/,g" miarma$index.ini
+					sed -i "s,starindex=,starindex=${unit_ri[index]},g" ${unit_ini[index]}
+					sed -i "s,indexname=,indexname=${organism}_star_idx,g" ${unit_ini[index]}
+					sed -i "s,indexdir=,indexdir=$output_folder/$name/indexes/,g" ${unit_ini[index]}
 				fi
 			elif [[ "$aligner" == "hisat2" ]]; then
-				sed -i "s,aligner=star,aligner=hisat2,g" miarma$index.ini
-				if [ -z "$reference_genome_index" ]; then
-					sed -i "s,indexname=,indexname=${organism}_$(basename ${reference_genome%.*})_$(basename ${gff%.*})_hisat2_idx,g" miarma$index.ini
-					sed -i "s,indexdir=,indexdir=$output_folder/$name/indexes/,g" miarma$index.ini
+				sed -i "s,aligner=star,aligner=hisat2,g" ${unit_ini[index]}
+				if [ -z "${unit_ri[index]}" ]; then
+					sed -i "s,indexname=,indexname=${organism}_$(basename ${unit_fasta[index]%.*})_$(basename ${gff%.*})_hisat2_idx,g" ${unit_ini[index]}
+					sed -i "s,indexdir=,indexdir=$output_folder/$name/indexes/,g" ${unit_ini[index]}
 				else
-					sed -i "s,hisat2index=,hisat2index=$reference_genome_index,g" miarma$index.ini
-					sed -i "s,indexname=,indexname=${organism}_hisat2_idx,g" miarma$index.ini
-					sed -i "s,indexdir=,indexdir=$output_folder/$name/indexes/,g" miarma$index.ini
+					sed -i "s,hisat2index=,hisat2index=${unit_ri[index]},g" ${unit_ini[index]}
+					sed -i "s,indexname=,indexname=${organism}_hisat2_idx,g" ${unit_ini[index]}
+					sed -i "s,indexdir=,indexdir=$output_folder/$name/indexes/,g" ${unit_ini[index]}
 				fi
 			elif [[ "$aligner" == "kallisto" ]]; then
-				sed -i "s,aligner=star,aligner=kallisto,g" miarma$index.ini
-				sed -i "s,fasta=$reference_genome,fasta=$transcripts,g" miarma$index.ini
-				if [ -z "$reference_genome_index" ]; then
-					sed -i "s,indexname=,indexname=${organism}_$(basename ${transcripts%.*})_kallisto_idx,g" miarma$index.ini
-					sed -i "s,indexdir=,indexdir=$output_folder/$name/indexes/,g" miarma$index.ini
+				sed -i "s,aligner=star,aligner=kallisto,g" ${unit_ini[index]}
+				sed -i "s,fasta=${unit_fasta[index]},fasta=$transcripts,g" ${unit_ini[index]}
+				if [ -z "${unit_ri[index]}" ]; then
+					sed -i "s,indexname=,indexname=${organism}_$(basename ${transcripts%.*})_kallisto_idx,g" ${unit_ini[index]}
+					sed -i "s,indexdir=,indexdir=$output_folder/$name/indexes/,g" ${unit_ini[index]}
 				else
-					sed -i "s,kallistoindex=,kallistoindex=$reference_genome_index,g" miarma$index.ini
-					sed -i "s,indexname=,indexname=${organism}_kallisto_idx,g" miarma$index.ini
-					sed -i "s,indexdir=,indexdir=$output_folder/$name/indexes/,g" miarma$index.ini
+					sed -i "s,kallistoindex=,kallistoindex=${unit_ri[index]},g" ${unit_ini[index]}
+					sed -i "s,indexname=,indexname=${organism}_kallisto_idx,g" ${unit_ini[index]}
+					sed -i "s,indexdir=,indexdir=$output_folder/$name/indexes/,g" ${unit_ini[index]}
 				fi
 			fi
 			if [ ! -z "$optionsFeatureCounts_seq" ]; then
-				sed -i "s,seqid=gene_name,seqid=${array2[index]},g" miarma$index.ini
+				sed -i "s,seqid=gene_name,seqid=${array2[fc_opt_index]},g" ${unit_ini[index]}
 			fi
 			if [ ! -z "$optionsFeatureCounts_feat" ]; then
-				sed -i "s,featuretype=exon,featuretype=${array3[index]},g" miarma$index.ini
+				sed -i "s,featuretype=exon,featuretype=${array3[fc_opt_index]},g" ${unit_ini[index]}
 			fi
 
 			# ── Validate featureCounts parameters against annotation file ──
 			mkdir -p $TMPDIR
-			fc_feat_val="${array3[index]:-exon}"
-			fc_seq_val="${array2[index]:-gene_name}"
+			fc_feat_val="${array3[fc_opt_index]:-exon}"
+			fc_seq_val="${array2[fc_opt_index]:-gene_name}"
 			if [ -f "$gff" ]; then
 				# Check feature type (-t) exists in column 3
 				available_feats=$(zcat -f "$gff" | awk -F'\t' '!/^#/ && NF>=9 {print $3}' | sort -u | tr '\n' ', ' | sed 's/,$//')
@@ -1242,46 +1427,42 @@ _log_step "Step_3a_Prepare" "start"
 			fi
 			# ── End featureCounts parameter validation ──
 			if [ "$bam_mapq_threshold" -gt 0 ] 2>/dev/null; then
-				sed -i "s,quality=10,quality=$bam_mapq_threshold,g" miarma$index.ini
-				sed -i "s,bam_mapq_threshold=,bam_mapq_threshold=$bam_mapq_threshold,g" miarma$index.ini
+				sed -i "s,quality=10,quality=$bam_mapq_threshold,g" ${unit_ini[index]}
+				sed -i "s,bam_mapq_threshold=,bam_mapq_threshold=$bam_mapq_threshold,g" ${unit_ini[index]}
 			fi
 			if [ ! -z "$bam_require_flags" ]; then
-				sed -i "s,bam_require_flags=,bam_require_flags=$bam_require_flags,g" miarma$index.ini
+				sed -i "s,bam_require_flags=,bam_require_flags=$bam_require_flags,g" ${unit_ini[index]}
 			fi
 			if [ ! -z "$bam_exclude_flags" ]; then
-				sed -i "s,bam_exclude_flags=,bam_exclude_flags=$bam_exclude_flags,g" miarma$index.ini
+				sed -i "s,bam_exclude_flags=,bam_exclude_flags=$bam_exclude_flags,g" ${unit_ini[index]}
 			fi
 			if [ ! -z "$bam_dedup" ]; then
-				sed -i "s,bam_dedup=no,bam_dedup=$bam_dedup,g" miarma$index.ini
+				sed -i "s,bam_dedup=no,bam_dedup=$bam_dedup,g" ${unit_ini[index]}
 			fi
 			if [ ! -z "$bam_custom_filter" ]; then
 				bam_custom_filter_escaped=$(printf '%s' "$bam_custom_filter" | sed 's/[\\&]/\\&/g')
-				sed -i "s,bam_custom_filter=,bam_custom_filter=$bam_custom_filter_escaped,g" miarma$index.ini
+				sed -i "s,bam_custom_filter=,bam_custom_filter=$bam_custom_filter_escaped,g" ${unit_ini[index]}
 			fi
 			if [ ! -z "$bam_normalization" ]; then
-				sed -i "s,bam_normalization=,bam_normalization=$bam_normalization,g" miarma$index.ini
+				sed -i "s,bam_normalization=,bam_normalization=$bam_normalization,g" ${unit_ini[index]}
 			fi
 			if [ "$save_unaligned" == "yes" ]; then
-				sed -i "s,save_unaligned=no,save_unaligned=yes,g" miarma$index.ini
+				sed -i "s,save_unaligned=no,save_unaligned=yes,g" ${unit_ini[index]}
 			fi
 			if [ ! -z "$featureCounts_extra_args" ]; then
 				fc_extra_escaped=$(printf '%s' "$featureCounts_extra_args" | sed 's/[\\&]/\\&/g')
-				sed -i "s,parameters=-M -O -C -B,parameters=$fc_extra_escaped,g" miarma$index.ini
+				sed -i "s,parameters=-M -O -C -B,parameters=$fc_extra_escaped,g" ${unit_ini[index]}
 			fi
 			if [ ! -z "$aligner_extra_args" ]; then
 				ae_escaped=$(printf '%s' "$aligner_extra_args" | sed 's/[\\&]/\\&/g')
 				if [[ "$aligner" == "star" ]]; then
-					sed -i "s,starparameters=,starparameters=$ae_escaped,g" miarma$index.ini
+					sed -i "s,starparameters=,starparameters=$ae_escaped,g" ${unit_ini[index]}
 				elif [[ "$aligner" == "hisat2" ]]; then
-					sed -i "s,hisat2parameters=,hisat2parameters=$ae_escaped,g" miarma$index.ini
+					sed -i "s,hisat2parameters=,hisat2parameters=$ae_escaped,g" ${unit_ini[index]}
 				elif [[ "$aligner" == "kallisto" ]]; then
-					sed -i "s,kallistoparameters=,kallistoparameters=$ae_escaped,g" miarma$index.ini
+					sed -i "s,kallistoparameters=,kallistoparameters=$ae_escaped,g" ${unit_ini[index]}
 				fi
 				echo "Aligner extra args for $aligner: $aligner_extra_args"
-			fi
-			# Final renaming of fastq raw files if SRR present in the filename:
-			if [ $(ls $seqs_location | grep -c SRR) -gt 0 ]; then
-				for i in $(ls $seqs_location/*); do mv $i $(echo $i | sed 's,_SRR.*_,_,g'); done
 			fi
 		done
 	fi
@@ -1303,40 +1484,129 @@ _log_step "Step_3b_miARma" "start"
 	if [ -z "$organism" ]; then
 		organism=$(cat $output_folder/$name/reads_study_info/organism.txt | sed 's, ,_,g;s,_+,_,g')
 	fi
+	build_alignment_units
 
 	echo -e "miARma configuration .ini:"
-        cat miarma0.ini
+        cat ${unit_ini[0]}
 	echo -e "\nPlease double check all the parameters above for miARma, in particular the stranded or the reference genome files and annotation used. Proceeding with miARma execution in..."
 	secs=$((1 * 15))
-	dir=$output_folder/$name/miARma_out0
+	dir=${unit_out[0]}
+	# With genome groups, miARma would otherwise run MultiQC from within the first group's
+	# featureCounts step (it is gated on multiqc_out being empty), covering only that group's
+	# samples. Keep the folder non-empty so every group skips it, and build MultiQC once below,
+	# after all the groups have been merged.
+	if [ ! -z "$reference_genome_groups" ]; then
+		mkdir -p $output_folder/$name/multiqc_out && touch $output_folder/$name/multiqc_out/.rgse_multiqc_deferred
+	fi
 	while [ $secs -gt 0 ]; do
 		echo -ne "$secs\033[0K\r"
 		sleep 1
 		: $((secs--))
 	done
-	for index in "${!array[@]}"; do
+	for index in "${!unit_ini[@]}"; do
 		if [ -d "$dir" ] && [ "$(ls -A $dir)" ] && [ "$index" -gt 0 ]; then
-			dir2=$(echo $dir | sed "s,out0,out$index,g")
-			mkdir -p $dir2; cd $dir2
+			mkdir -p ${unit_out[index]}; cd ${unit_out[index]}
 		fi
 		cd $output_folder/$name
-		if [ "$qc_raw_reads" == "no" ]; then
-			mkdir -p $output_folder/$name/miARma_out$index/Pre_fastqc_results/_skip_
+		if [ ! -z "${unit_label[index]}" ]; then
+			echo -e "\n\nAligning and counting genome group '${unit_label[index]}' ($(ls ${unit_reads[index]} | wc -l) fastq file(s)) against $(basename ${unit_fasta[index]})...\n"
 		fi
-		$miarma_path/miARma miarma$index.ini
+		if [ "$qc_raw_reads" == "no" ]; then
+			mkdir -p ${unit_out[index]}/Pre_fastqc_results/_skip_
+		fi
+		$miarma_path/miARma ${unit_ini[index]}
 		miarma_exit=$?
 		if [ $miarma_exit -ne 0 ]; then
-			echo -e "\n\033[1;31mERROR:\033[0m miARma-seq exited with code $miarma_exit for miarma$index.ini. Please check the log above for details.\n" >&2
+			echo -e "\n\033[1;31mERROR:\033[0m miARma-seq exited with code $miarma_exit for ${unit_ini[index]}. Please check the log above for details.\n" >&2
 			exit $miarma_exit
 		fi
 	done
 
+	### Genome groups (-rG): merge the groups back into a single miARma_out0, so that everything
+	### from STEP 4 onwards sees one cohort. This is only sound because all the groups were counted
+	### with the same annotation, i.e. their count tables share one feature space (checked below).
+	if [ ! -z "$reference_genome_groups" ]; then
+		echo -e "\n\nMerging the genome groups into a single quantification...\n"
+		merged_dir=$output_folder/$name/miARma_out0
+		rc_suffix=$(basename $(find ${unit_out[0]} -maxdepth 1 -type d -name "*_readcount_results" 2>/dev/null | head -1))
+		if [ -z "$rc_suffix" ]; then
+			echo -e "\n\033[1;31mERROR:\033[0m no *_readcount_results folder found in ${unit_out[0]}. The alignment/counting of the first genome group did not produce counts.\n" >&2; exit 1
+		fi
+		aligner_results_dir=${aligner}_results
+		gg_assignment_file=$output_folder/$name/reads_study_info/genome_group_assignment.tsv
+		rm -rf $merged_dir
+		mkdir -p $merged_dir/$rc_suffix $merged_dir/$aligner_results_dir $merged_dir/Pre_fastqc_results
+
+		# Gate: every group must have produced the same set of features, otherwise the per-sample
+		# tables cannot be placed side by side in one matrix.
+		ref_ids=$TMPDIR/gg_feature_ids_ref.txt; cur_ids=$TMPDIR/gg_feature_ids_cur.txt
+		for index in "${!unit_out[@]}"; do
+			_one_tab=$(find ${unit_out[index]}/$rc_suffix -maxdepth 1 -name "*.tab" 2>/dev/null | head -1)
+			if [ -z "$_one_tab" ]; then
+				echo -e "\n\033[1;31mERROR:\033[0m genome group '${unit_label[index]}' produced no count tables in ${unit_out[index]}/$rc_suffix.\n" >&2; exit 1
+			fi
+			grep -v "^#" "$_one_tab" | tail -n +2 | cut -f1 | sort > $cur_ids
+			if [ "$index" -eq 0 ]; then
+				cp $cur_ids $ref_ids
+			elif ! cmp -s $ref_ids $cur_ids; then
+				echo -e "\n\033[1;31mERROR:\033[0m the count tables of genome group '${unit_label[index]}' do not have the same features as those of '${unit_label[0]}' ($(wc -l < $cur_ids) vs $(wc -l < $ref_ids) rows)." >&2
+				echo -e "All the genome groups must be quantified into one shared feature space to be mergeable. This usually means the annotation is not equally usable on every genome. Merge aborted; the per-group results are kept in miARma_out_genome*.\n" >&2
+				exit 1
+			fi
+		done
+		echo "  Feature space verified: $(wc -l < $ref_ids) features shared by all the genome groups."
+
+		# Counts are copied (not linked): STEP 4 rewrites them in place when -Fgene is used
+		for index in "${!unit_out[@]}"; do
+			cp -f ${unit_out[index]}/$rc_suffix/*.tab ${unit_out[index]}/$rc_suffix/*.tab.summary $merged_dir/$rc_suffix/ 2>/dev/null
+			# Alignments, coverage tracks and per-sample QC are symlinked (they can be large)
+			for _f in $(find ${unit_out[index]}/$aligner_results_dir -maxdepth 1 -mindepth 1 2>/dev/null); do
+				_b=$(basename $_f)
+				[ "$_b" == "list_multi.txt" ] && continue
+				if [ -d "$_f" ]; then
+					# bamqc/rnaseqqc folders hold one subfolder per sample, and samples are disjoint
+					mkdir -p $merged_dir/$aligner_results_dir/$_b
+					for _s in $(find $_f -maxdepth 1 -mindepth 1 2>/dev/null); do ln -sfn $_s $merged_dir/$aligner_results_dir/$_b/$(basename $_s); done
+				else
+					ln -sf $_f $merged_dir/$aligner_results_dir/$_b
+				fi
+			done
+			for _f in $(find ${unit_out[index]}/Pre_fastqc_results -maxdepth 1 -type f 2>/dev/null); do
+				[ "$(basename $_f)" == "list_of_files.txt" ] && continue
+				ln -sf $_f $merged_dir/Pre_fastqc_results/$(basename $_f)
+			done
+			cat ${unit_out[index]}/Pre_fastqc_results/list_of_files.txt >> $merged_dir/Pre_fastqc_results/list_of_files.txt 2>/dev/null
+		done
+		if [ "$qc_raw_reads" == "no" ]; then mkdir -p $merged_dir/Pre_fastqc_results/_skip_; fi
+
+		n_tabs=$(ls $merged_dir/$rc_suffix/*.tab 2>/dev/null | wc -l)
+		n_samples=$(cut -f1 $gg_assignment_file 2>/dev/null | tail -n +2 | sort -u | wc -l)
+		if [ "$n_tabs" -ne "$n_samples" ]; then
+			echo -e "\n\033[1;31mERROR:\033[0m merged $n_tabs count table(s) but $n_samples sample(s) were assigned to genome groups. Some samples were not quantified; please check the per-group logs in miARma_out_genome*.\n" >&2
+			exit 1
+		fi
+		echo "  Merged $n_tabs per-sample count table(s) from ${#unit_out[@]} genome group(s) into $merged_dir/$rc_suffix"
+
+		# MultiQC was deferred above so that it covers every group; build it once now
+		rm -rf $output_folder/$name/multiqc_out; mkdir -p $output_folder/$name/multiqc_out
+		echo "  Building MultiQC over all the genome groups..."
+		if [ -n "$RGSE_DO_MULTIQC" ] && command -v multiqc_ai.py >/dev/null 2>&1; then
+			multiqc_ai.py --analysis-dir $output_folder/$name --out-dir $output_folder/$name/multiqc_out ${MULTIQC_AI_ARGS} > $output_folder/$name/multiqc_out/multiqc.log 2>&1 || {
+				echo "AI MultiQC failed - using standard MultiQC" >> $output_folder/$name/multiqc_out/multiqc.log
+				multiqc -f $output_folder/$name --ignore 'miARma_stat*' -n multiqc_report -o $output_folder/$name/multiqc_out -p -q >> $output_folder/$name/multiqc_out/multiqc.log 2>&1; }
+		else
+			multiqc -f $output_folder/$name --ignore 'miARma_stat*' -n multiqc_report -o $output_folder/$name/multiqc_out -p -q > $output_folder/$name/multiqc_out/multiqc.log 2>&1
+		fi
+	fi
+
 	### Reformat the logs by parallel...
 	for f in $(find $output_folder/$name -name "*_log_parallel.txt"); do awk -F"\t" 'NR==1; NR > 1{OFS="\t"; $3=strftime("%Y-%m-%d %H:%M:%S", $3); print $0}' $f > tmp && mv tmp $f; done
 
- 	### Clean genome index cache?
+ 	### Clean genome index cache? (one call per distinct index, since genome groups use several)
   	if [ "$aligner" == "star" ] && [ "$aligner_index_cache" == "no" ]; then
-		STAR --runThreadN $cores --genomeDir $(find $output_folder/$name/ -name "star_log_parallel.txt" | xargs cat | grep "genomeDir" | sed 's,.*genomeDir ,,g;s, .*,,g' | sort | uniq) --genomeLoad Remove --outFileNamePrefix genomeloading.tmp
+		for genome_dir_loaded in $(find $output_folder/$name/ -name "star_log_parallel.txt" | xargs cat 2>/dev/null | grep "genomeDir" | sed 's,.*genomeDir ,,g;s, .*,,g' | sort | uniq); do
+			STAR --runThreadN $cores --genomeDir $genome_dir_loaded --genomeLoad Remove --outFileNamePrefix genomeloading.tmp
+		done
 	fi
 
 	echo -e "\nmiARma-seq DONE. Current date/time: $(date)"; time1=`date +%s`; echo -e "Elapsed time (secs): $((time1-start))"; echo -e "Elapsed time (hours): $(echo "scale=2; $((time1-start))/3600" | bc -l)\n"
@@ -2163,21 +2433,51 @@ _log_step "Step_9_Cleanup" "start"
 		mv $f $(echo $f"_"$(basename $output_folder))
 	done
 	if [ "$tidy_tmp_files" == "yes" ]; then
-		num_raw_files=$(cat $output_folder/$name/miARma_out0/Pre_fastqc_results/list_of_files.txt | grep -c "fastq.gz")
-		for index in "${!array[@]}"; do
-			if [ -d "$output_folder/$name/final_results_reanalysis$index" ] && [[ $(ls $output_folder/$name/miARma_out$index/$aligner\_results | egrep -c ".bam$") -eq $num_raw_files || $(ls $output_folder/$name/miARma_out$index/$aligner\_results | egrep -c ".bam$") -eq $((num_raw_files / 2)) ]]; then
-				echo -e "\nTidying up...\n"
-				cd $seqs_location
-				echo "After execution, raw reads have been removed for the sake of efficient storage. These were... " > readme
-				ls -lh >> readme
-				ls | grep -v readme | xargs -r rm -rf
-
-				cd $output_folder/$name/miARma_out$index/$aligner\_results
+		build_alignment_units
+		any_tidied=0
+		for index in "${!unit_out[@]}"; do
+			# Each unit is checked against the number of raw files IT processed: with genome groups
+			# every unit only holds its own subset of the samples.
+			num_raw_files=$(cat ${unit_out[index]}/Pre_fastqc_results/list_of_files.txt 2>/dev/null | grep -c "fastq.gz")
+			[ "$num_raw_files" -lt 1 ] && continue
+			# The results folders have just been renamed above to 'final_results_reanalysisN_<outdir>',
+			# so they have to be matched with a glob. With genome groups there is a single merged
+			# analysis (index 0) covering all the units.
+			if [ ! -z "$reference_genome_groups" ]; then _fr_glob="final_results_reanalysis0*"; else _fr_glob="final_results_reanalysis$index*"; fi
+			if [ -z "$(find $output_folder/$name -maxdepth 1 -type d -name "$_fr_glob" 2>/dev/null | head -1)" ]; then
+				echo "Skipping the clean up of ${unit_out[index]}: no results folder matching '$_fr_glob' (the analysis did not complete)"
+				continue
+			fi
+			n_bams=$(ls ${unit_out[index]}/$aligner\_results 2>/dev/null | egrep -c ".bam$")
+			# The merged miARma_out0 only holds symlinks under genome groups, so always convert the
+			# real BAMs living in the unit's own folder, each against ITS OWN reference genome.
+			if [[ "$n_bams" -eq "$num_raw_files" || "$n_bams" -eq $((num_raw_files / 2)) ]]; then
+				echo -e "\nTidying up${unit_label[index]:+ (genome group ${unit_label[index]})}...\n"
+				cd ${unit_out[index]}/$aligner\_results
 				echo "For the sake of efficiente storage: samtools view -@ cores -T ref_genome -C -o xxx.bam.cram xxx.bam && rm xx.bam" >> conversion_bam_to_cram.txt
-				find . -type f -name "*.bam" | parallel --halt-on-error 2 --verbose -j $number_parallel --max-args 1 samtools view -T $reference_genome -C -@ $((cores / number_parallel)) -o {}.cram {}
-				rm -rf $(ls | egrep ".bam$") $TMPDIR
+				echo "Reference genome used for this CRAM conversion: ${unit_fasta[index]}" >> conversion_bam_to_cram.txt
+				find . -type f -name "*.bam" | parallel --halt-on-error 2 --verbose -j $number_parallel --max-args 1 samtools view -T ${unit_fasta[index]} -C -@ $((cores / number_parallel)) -o {}.cram {}
+				rm -rf $(ls | egrep ".bam$")
+				any_tidied=1
 			fi
 		done
+		# Raw reads are shared by all the units, so they are removed once, after every unit is done
+		if [ "$any_tidied" -eq 1 ] && [ -d "$seqs_location" ]; then
+			cd $seqs_location
+			echo "After execution, raw reads have been removed for the sake of efficient storage. These were... " > readme
+			ls -lh | grep -v "^total" | grep -v " readme$" >> readme
+			ls | grep -v readme | xargs -r rm -rf
+			rm -rf $TMPDIR
+		fi
+		# Genome groups: the merged folder points at BAMs that have just been replaced by CRAMs
+		if [ ! -z "$reference_genome_groups" ] && [ -d "$output_folder/$name/miARma_out0/${aligner}_results" ]; then
+			find $output_folder/$name/miARma_out0/${aligner}_results -xtype l -delete 2>/dev/null
+			for index in "${!unit_out[@]}"; do
+				for _f in $(find ${unit_out[index]}/${aligner}_results -maxdepth 1 -type f -name "*.cram" 2>/dev/null); do
+					ln -sf $_f $output_folder/$name/miARma_out0/${aligner}_results/$(basename $_f)
+				done
+			done
+		fi
 		# Remove the indexes folder since data has been converted to CRAM
 		if [ -d "$output_folder/$name/indexes" ]; then
 			echo "Removing indexes folder: $output_folder/$name/indexes"
@@ -2201,6 +2501,24 @@ _log_step "Step_9_Cleanup" "start"
 				sed -i "s|/path/to/annotation.gtf|${gtf_for_igv}|g"          "$final_dir_igv/igvShinyApp.R"
 				sed -i "s|/path/to/bigwig_folder/|${bw_dir}/|g"              "$final_dir_igv/igvShinyApp.R"
 				sed -i "s|GENOME_NAME_PLACEHOLDER|${organism}|g"             "$final_dir_igv/igvShinyApp.R"
+				# Genome groups: the app can only be pointed at one reference at a time, so make the
+				# mismatch explicit instead of letting it load tracks against the wrong genome.
+				if [ ! -z "$reference_genome_groups" ]; then
+					{
+						echo "LIMITATION: this analysis used SEVERAL reference genomes (-rG), but igvShinyApp.R can only be configured with one."
+						echo "The deployed app points at: ${reference_genome} (the -r genome), with coverage tracks from ${bw_dir}/"
+						echo "Only the samples aligned to that same genome will be displayed correctly. To browse the others, edit igvShinyApp.R"
+						echo "and replace the reference genome and the bigwig folder with the matching pair from the table below."
+						echo ""
+						echo "group<TAB>reference_genome<TAB>bigwig_folder" | sed 's,<TAB>,\t,g'
+						for _gi in "${!genome_group_labels[@]}"; do
+							echo -e "${genome_group_labels[$_gi]}\t${genome_group_fastas[$_gi]}\t$output_folder/$name/miARma_out_genome$_gi/${aligner}_results"
+						done
+						echo ""
+						echo "The per-sample assignment is in reads_study_info/genome_group_assignment.tsv"
+					} > "$final_dir_igv/igvShinyApp_README.txt"
+					echo "Genome groups in use: wrote $final_dir_igv/igvShinyApp_README.txt documenting the single-reference limitation of the IGV app"
+				fi
 			fi
 		done
 	fi

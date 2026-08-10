@@ -27,6 +27,7 @@ for argument in $options; do
 	        #### Reference and databases:
 	        -r | -reference_genome # Reference genome to be used (.fasta file or .gz, absolute pathway)
 	        -ri | -reference_genome_index # If the reference genome to be used already has an index that would like to reuse, please provide full pathway here (by default the provided genome is indexed)
+	        -rG | -reference_genome_groups # Align different subsets of samples to different reference genomes, then quantify them ALL with the single shared annotation given in '-a', so that one merged count matrix and one differential expression analysis are produced. Provide a semicolon-separated list of 'label:regex:fasta' triplets, e.g. 'hostA:^(A|B|C)_:/ref/genomeA.fa;hostB:^(D|E|F)_:/ref/genomeB.fa'. The regex is matched against the sample names (file names in the reads folder without the _1/_2.fastq.gz suffix). Every sample must match exactly one group (samples matching none, or more than one, are an error). Requires a single annotation in '-a' and is incompatible with '-ri' and with the kallisto aligner. Intended for variant-personalized references or a common assembly plus sample-specific extra contigs: the shared annotation MUST be coordinate-valid on every genome (this is verified before aligning), otherwise the resulting counts are not comparable
 	        -a | -annotation # Reference annotation to be used (.gtf file, absolute pathway). If hisat2 is used, a gff file (make sure format is '.gff' and not '.gff3') is accepted (some QC steps like 'qualimap rnaseqqc' may be skipped though). You can provide a comma-separated list of the pathways to different annotation, and multiple/independent quantification/outputs from the same alignments will be generated.
 	        -t | -transcripts # Reference transcripts to be used (.fasta cDNA file, absolute pathway, only used if '-s' argument not provided so salmon prediction of strandness is required)
 	        -Dk | -kraken2_databases # Comma-separated list of Kraken2 database folders (e.g. '/path/to/core_nt,/path/to/gtdb'). Any input here activates the kraken2-based decontamination step. All DB+confidence combinations will be run
@@ -149,6 +150,7 @@ for argument in $options; do
 		-s) strand=${arguments[index]} ;;
 		-r) reference_genome=${arguments[index]} ;;
 		-ri) reference_genome_index=${arguments[index]} ;;
+		-rG | -reference_genome_groups) reference_genome_groups=${arguments[index]} ;;
 		-g) genes=${arguments[index]} ;;
 		-G) GSM_filter=${arguments[index]} ;;
 		-rev) revigo_threshold_similarity=${arguments[index]} ;;
@@ -287,6 +289,65 @@ fi
 
 if [ -z "$transcripts" ] && [ "$aligner" == "kallisto" ]; then
 	echo "Please check usage with 'reanalyzer_GSE_RNA_seq.sh -h'. Transcripts FASTA (-t) is required when using kallisto aligner."; exit 1
+fi
+
+##### Genome groups (-rG): parse and validate the 'label:regex:fasta' triplets.
+# The sample<->group resolution needs the actual read files, so it happens later (STEP 3a).
+# Here we only check the syntax, the referenced files, and the mode incompatibilities, so that
+# a malformed request fails immediately instead of after downloading/processing the reads.
+declare -a genome_group_labels=()
+declare -a genome_group_regexes=()
+declare -a genome_group_fastas=()
+if [ ! -z "$reference_genome_groups" ]; then
+	if [ "$aligner" == "kallisto" ]; then
+		echo "Error: -rG/-reference_genome_groups aligns samples to different reference genomes and is not compatible with the kallisto aligner (which quantifies against the transcriptome given in -t)."; exit 1
+	fi
+	if [ ! -z "$reference_genome_index" ]; then
+		echo "Error: -rG/-reference_genome_groups is not compatible with -ri/-reference_genome_index. Each genome group builds (or reuses) its own index, so a single pre-built index cannot be shared. Please drop -ri."; exit 1
+	fi
+	if [ $(echo "$annotation" | awk -F',' '{print NF}') -gt 1 ]; then
+		echo "Error: -rG/-reference_genome_groups requires a SINGLE annotation in -a, because all the genome groups have to be quantified into one shared feature space to be mergeable. You provided: $annotation"; exit 1
+	fi
+	IFS=';' read -r -a _gg_entries <<< "$reference_genome_groups"
+	if [ ${#_gg_entries[@]} -lt 1 ]; then
+		echo "Error: -rG/-reference_genome_groups is empty or malformed. Expected 'label:regex:fasta' triplets separated by ';'."; exit 1
+	fi
+	for _gg in "${_gg_entries[@]}"; do
+		_gg=$(echo "$_gg" | sed 's,^[[:space:]]*,,;s,[[:space:]]*$,,')
+		[ -z "$_gg" ] && continue
+		if [ $(awk -F':' '{print NF}' <<< "$_gg") -ne 3 ]; then
+			echo "Error: malformed genome group '$_gg' in -rG. Expected exactly three colon-separated fields: 'label:regex:fasta'."; exit 1
+		fi
+		_gg_label=$(cut -d':' -f1 <<< "$_gg")
+		_gg_regex=$(cut -d':' -f2 <<< "$_gg")
+		_gg_fasta=$(cut -d':' -f3 <<< "$_gg")
+		if [ -z "$_gg_label" ] || [ -z "$_gg_regex" ] || [ -z "$_gg_fasta" ]; then
+			echo "Error: genome group '$_gg' in -rG has an empty label, regex or fasta field."; exit 1
+		fi
+		if [[ ! "$_gg_label" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+			echo "Error: genome group label '$_gg_label' in -rG contains unsupported characters. Please use only letters, numbers, '_', '.' and '-'."; exit 1
+		fi
+		for _seen in "${genome_group_labels[@]}"; do
+			if [ "$_seen" == "$_gg_label" ]; then
+				echo "Error: duplicated genome group label '$_gg_label' in -rG. Labels must be unique."; exit 1
+			fi
+		done
+		if [ ! -f "$_gg_fasta" ]; then
+			echo "Error: the reference genome '$_gg_fasta' of genome group '$_gg_label' (-rG) does not exist or is not a file."; exit 1
+		fi
+		genome_group_labels+=("$_gg_label")
+		genome_group_regexes+=("$_gg_regex")
+		genome_group_fastas+=("$_gg_fasta")
+	done
+	if [ ${#genome_group_labels[@]} -lt 1 ]; then
+		echo "Error: no valid genome group could be parsed from -rG: '$reference_genome_groups'"; exit 1
+	fi
+	export reference_genome_groups
+	echo -e "\nreference_genome_groups=$reference_genome_groups\n"
+	echo "Genome groups requested (${#genome_group_labels[@]}); all of them will be quantified with the single annotation in -a and merged into one count matrix:"
+	for _i in "${!genome_group_labels[@]}"; do
+		echo "  ${genome_group_labels[$_i]}: samples matching '${genome_group_regexes[$_i]}' -> ${genome_group_fastas[$_i]}"
+	done
 fi
 
 echo -e "\n\nArguments:"

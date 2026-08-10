@@ -161,6 +161,14 @@ def chat_completion(endpoint, model, api_key, messages, timeout=600):
             except (socket.timeout, TimeoutError) as e:
                 last_exc = LLMTimeout(f"no response within {timeout}s (attempt {attempt+1}/{max_attempts})")
                 last_exc.__cause__ = e
+            # HTTPError MUST be caught before URLError: it is a subclass of it, so the
+            # broader clause would shadow this one and no HTTP status would ever be retried
+            # (HTTPError.reason is a plain string, matching none of the isinstance checks below).
+            except urllib.error.HTTPError as e:
+                if e.code in _RETRYABLE_HTTP_CODES:
+                    last_exc = e  # retryable server error
+                else:
+                    raise  # 400/401/403 etc. — permanent
             except urllib.error.URLError as e:
                 reason = getattr(e, "reason", None)
                 if isinstance(reason, (socket.timeout, TimeoutError)):
@@ -170,11 +178,6 @@ def chat_completion(endpoint, model, api_key, messages, timeout=600):
                     last_exc = e  # retryable: server temporarily down
                 else:
                     raise  # non-retryable URLError
-            except urllib.error.HTTPError as e:
-                if e.code in _RETRYABLE_HTTP_CODES:
-                    last_exc = e  # retryable server error
-                else:
-                    raise  # 400/401/403 etc. — permanent
         # Decide whether to retry
         if attempt < max_attempts - 1:
             wait = _RETRY_BACKOFFS[attempt]

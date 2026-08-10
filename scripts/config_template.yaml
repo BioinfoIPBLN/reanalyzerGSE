@@ -20,6 +20,14 @@ TMPDIR_arg: ""                         # TMPDIR directory ('system' for system d
 # === Reference and databases ===
 reference_genome: ""                   # Reference genome (.fasta or .gz, absolute path)
 reference_genome_index: ""             # Pre-built genome index (absolute path)
+reference_genome_groups: ""            # Align sample subsets to different genomes, quantify them all with the single
+                                       # annotation above and merge into one count matrix. Semicolon-separated
+                                       # 'label:regex:fasta' triplets, e.g.
+                                       # "hostA:^(A|B|C)_:/ref/genomeA.fa;hostB:^(D|E|F)_:/ref/genomeB.fa"
+                                       # The regex matches sample names (file name without _1/_2.fastq.gz). Every
+                                       # sample must match exactly one group. Requires a single annotation, and is
+                                       # incompatible with reference_genome_index and with the kallisto aligner.
+                                       # The annotation must be coordinate-valid on every genome (this is verified)
 annotation: ""                         # Reference annotation (.gtf, absolute path; comma-separated for multiple)
 transcripts: ""                        # Reference transcripts (.fasta cDNA, used if -s not provided)
 kraken2_databases: ""                  # Comma-separated Kraken2 DB folders (e.g. '/path/to/core_nt,/path/to/gtdb')

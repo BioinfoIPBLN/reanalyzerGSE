@@ -50,6 +50,21 @@ Several different pipeline modes can be activated but others are automatic. For 
 
 It is advisable to fine tune parameters such as the maximum RAM available, number of cores to be used in steps allowing multithreading, or number of samples to be processed simultaneously when possible (mostly leveraging GNU's parallel).
 
+### Aligning different samples to different reference genomes
+
+By default, all samples are aligned to the single genome in `-r`, and a comma-separated list in `-a` produces one independent quantification per annotation. If instead you need different subsets of samples aligned to *different* genomes, use `-rG` with semicolon-separated `label:regex:fasta` triplets:
+
+```
+-r /ref/genomeA.fa -a /ref/annotation.gtf \
+-rG "hostA:^(A|B|C)_:/ref/genomeA.fa;hostB:^(D|E|F)_:/ref/genomeB.fa"
+```
+
+The regex is matched against sample names (the file name without the `_1`/`_2.fastq.gz` suffix), and every sample must match exactly one group. Each group is aligned and counted separately, and the per-sample count tables are then merged into a single matrix, so differential expression, functional enrichment and the final report all run once over the whole cohort as usual.
+
+This is only valid because every group is quantified with the **same annotation**, i.e. all samples end up in one shared feature space. The typical use cases are variant-personalized genomes (built by substituting SNPs, so coordinates are preserved) and a common assembly plus sample-specific extra contigs (transgenes, plasmids, viral constructs). The pipeline verifies before aligning that the annotation is coordinate-valid on every genome, and refuses to merge if the resulting count tables do not share the same features. Assemblies with shifted coordinates (indels, different builds) are therefore rejected.
+
+Two caveats. Genome groups require a single annotation and are incompatible with `-ri` and with the kallisto aligner. And if the genome group turns out to be perfectly confounded with the experimental design (no condition present in more than one group), the pipeline warns: in that situation the merged differential expression cannot separate the biological effect from the reference/mapping effect, and only within-group comparisons are interpretable.
+
 An updated version of [miARma-seq](https://github.com/eandresleon/miARma-seq) has been included in reanalyzerGSE [here](https://github.com/BioinfoIPBLN/reanalyzerGSE/tree/main/external_software/miARma-seq).
 
 Please refer to the help ('-h') or contact us for any further clarification.
