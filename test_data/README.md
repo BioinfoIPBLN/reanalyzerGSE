@@ -4,9 +4,7 @@
 This is a case example of a mouse transcriptomic dataset, analyzed in a machine with 12 cores and 32GB RAM available. The 4 samples are processed in parlalel and the genes Rpl4 and Krt14 are highlighted in various plots. 
 It may depend on the machine, but the analyses should take ~30 min (reference genome indexing will take ~20 min).
 
-Depending on the installation method, you can either:
-
-1) Use the Apptainer image:
+Using the Apptainer image:
 
 ```
 # wget -q https://bit.ly/reanalyzer_appt_image -O reanalyzerGSE.sif # Download the Apptainer image or use the one you created (see Installation instructions in main README)
@@ -21,27 +19,10 @@ wget -q https://github.com/BioinfoIPBLN/reanalyzerGSE/raw/refs/heads/main/test_d
 apptainer exec reanalyzerGSE.sif reanalyzerGSE.sh -options options_test.yaml 2>&1 | tee -a out_test.log
 ```
 
-2) Use the conda-based installation
-```
-cd reanalyzerGSE # Cloned repo
-source external_software/source_path.sh # To set up the PATH
-
-cd test_data
-wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M36/GRCm39.primary_assembly.genome.fa.gz # Download reference genome
-wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M36/gencode.vM36.primary_assembly.basic.annotation.gtf.gz # Download reference genome annotation
-gzip -d *.gz # To uncompress the references
-wget -q https://github.com/BioinfoIPBLN/reanalyzerGSE/raw/refs/heads/main/test_data/options_test.yaml # To get updated yaml file
-
-# Make sure to double check all directories and options in the template yaml file are ok
-reanalyzerGSE.sh -options options_test.yaml 2>&1 | tee -a out_test.log
-```
-
 ## Reanalysis of a GEO dataset:
 This is a case example of a the mouse transcriptomic dataset GSE118451, analyzed in a machine with 12 cores and 32GB RAM available. The 6 samples are processed in parlalel and the genes Rpl4 and Krt14 are highlighted in various plots. 
 
-Depending on the installation method, you can either:
-
-1) Use the Apptainer image:
+Using the Apptainer image:
 
 ```
 # wget -q https://bit.ly/reanalyzer_appt_image -O reanalyzerGSE.sif # Download the Apptainer image or use the one you created (see Installation instructions in main README)
@@ -53,20 +34,5 @@ wget -q https://github.com/BioinfoIPBLN/reanalyzerGSE/raw/refs/heads/main/test_d
 
 # Make sure to double check all directories and options in the template yaml file are ok, you may also need to use --bind or advanced apptainer options depending on your system
 apptainer exec reanalyzerGSE.sif reanalyzerGSE.sh -options options_test_GEO.yaml 2>&1 | tee -a out_test_GEO.log
-```
-
-2) Use the conda-based installation
-```
-cd reanalyzerGSE # Cloned repo
-source external_software/source_path.sh # To set up the PATH
-
-cd test_data
-wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M36/GRCm39.primary_assembly.genome.fa.gz # Download reference genome
-wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M36/gencode.vM36.primary_assembly.basic.annotation.gtf.gz # Download reference genome annotation
-gzip -d *.gz # To uncompress the references
-wget -q https://github.com/BioinfoIPBLN/reanalyzerGSE/raw/refs/heads/main/test_data/options_test_GEO.yaml # To get updated yaml file
-
-# Make sure to double check all directories and options in the template yaml file are ok, you may also need to use --bind or advanced apptainer options depending on your system
-reanalyzerGSE.sh -options options_test_GEO.yaml 2>&1 | tee -a out_test_GEO.log
 ```
 

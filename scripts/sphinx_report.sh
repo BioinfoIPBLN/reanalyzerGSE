@@ -450,7 +450,7 @@ Please use the following links:
    <a href=\"sphinx_report/html/RPKM_counts_genes_log2_0.1_categ.txt\" target=\"_blank\">Click to get RPKM counts (log2 + 0.1)</a>$(if [ -f "$path/$final_dir_name/RPKM_counts_genes_log2_0.1_categ.xlsx" ]; then echo ' (<a href="sphinx_report/html/RPKM_counts_genes_log2_0.1_categ.xlsx" target="_blank">xlsx version</a>)'; fi)<br>
    <a href=\"sphinx_report/html/CPM_counts_genes_log2_0.1_categ.txt\" target=\"_blank\">Click to get CPM counts (log2 + 0.1)</a>$(if [ -f "$path/$final_dir_name/CPM_counts_genes_log2_0.1_categ.xlsx" ]; then echo ' (<a href="sphinx_report/html/CPM_counts_genes_log2_0.1_categ.xlsx" target="_blank">xlsx version</a>)'; fi)
 
-If requested, please go to \"$project_name/$final_dir_name/violin\" to check out the figures showing the transcriptional profiles of genes of interest. You may also find the tables \"_annotation.txt\" including the gene annotation available. The ExpressionVisualization or exploreDE apps may be also used (see below).
+If requested, please go to \"$project_name/$final_dir_name/violin\" to check out the figures showing the transcriptional profiles of genes of interest. You may also find the tables \"_annotation.txt\" including the gene annotation available.$(if [ -f "$path/$final_dir_name/DGE/deResults.qs2" ]; then echo " The exploreLocalDE app may be also used (see below)."; fi)
 $ai_counts_rst
 .. index:: Counts
 
@@ -571,23 +571,19 @@ A local R Shiny app (``igvShinyApp.R``) has also been placed in your results fol
 
 
 
+$(if [ -f "$path/$final_dir_name/DGE/deResults.qs2" ]; then echo "
 Interactive exploration
 ------------------------------------------------------------------------------------
-If you chose the option \`\`-eDe yes\`\` or \`\`exploreDE_se: \"yes\"\`\` to create a SummarizedExperiment object compatible with \`exploreDE <https://zenodo.org/records/13927692>\`_, you can use it to interactively explore your differential expression results.
+A SummarizedExperiment object has been generated for this analysis, so you can interactively explore your differential expression results, pathway analyses and more in the exploreLocalDE Shiny app.
 
 .. raw:: html
 
    <a href=\"https://shiny-public.fgcz.uzh.ch/app/exploreLocalDE\" target=\"_blank\">Open exploreLocalDE Shiny app</a>
 
-The generated .qs2 file can be found in the :file:\`${final_dir_name}/DGE/\` results folder and can be loaded into exploreDE/exploreLocalDE for interactive visualization of DE results, pathway analyses, and more.
+Load the following object into the app: :download:\`deResults.qs2 <../$final_dir_name/DGE/deResults.qs2>\` (also available in the :file:\`${final_dir_name}/DGE/\` results folder).
 
-The ExpressionVisualization app could be also used for interactive exploration:
-
-.. raw:: html
-
-   <a href=\"https://bioinfoipbln.shinyapps.io/expressionvisualizationapp/\" target=\"_blank\">Open ExpressionVisualization Shiny app</a>
-
-.. index:: exploreDE
+.. index:: exploreLocalDE
+"; fi)
 " > index.rst
 
 ######### Build

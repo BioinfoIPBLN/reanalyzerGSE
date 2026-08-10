@@ -2,33 +2,22 @@
 reanalyzerGSE is a pipeline to assist with and streamline transcriptomic analyses of various datasets (i.e. microarrays, RNA-seq, scRNA-seq) by automatically reanalyzing raw data submitted to public databases like [GEO](https://www.ncbi.nlm.nih.gov/geo/), [ENA](https://www.ebi.ac.uk/ena/browser/home) or [SRA](https://www.ncbi.nlm.nih.gov/sra). Local data can also be provided by the user. The pipeline is based on several steps implementing standard tools and novel scripts. (i.e. data download, quality control, alignment to reference genome, quantification, differential gene expression analyses, functional enrichment analyses...)
 
 ## Installation
-We suggest alternatives for installation. Please choose one of:
+reanalyzerGSE is distributed as an Apptainer/Singularity container (~6 GB), which is the recommended and supported way to install it. You can either:
 
-1) An Apptainer/Singularity container (~6 GB) is provided. You can either:
-
-1.1) Use the .def file to create the .sif image by executing:
+1) Use the .def file to create the .sif image by executing:
 ```
 git clone https://github.com/BioinfoIPBLN/reanalyzerGSE
 # May need to set or clean APPTAINER_TMPDIR or APPTAINER_CACHEDIR
 apptainer build reanalyzerGSE.sif reanalyzerGSE/external_software/installation/reanalyzerGSE.def | tee -a reanalyzerGSE.sif.build.log
 ```
-1.2) Download the ready-to-use .sif image:
+2) Download the ready-to-use .sif image:
 ```
 wget -q https://bit.ly/reanalyzer_apptainer -O reanalyzerGSE.sif
 ```
 
 
-2) Another option is to use the folder 'external_software', which contain some of the required software (i.e. miARma-seq), and within the 'external_software/installation' folder a wrapper script installs and configures all dependencies (mainly through miniconda and pip, 'external_software/installation/install.sh'). To perform a conda-based installation and setup everything required to run reanalyzerGSE, please execute:
-```
-git clone https://github.com/BioinfoIPBLN/reanalyzerGSE
-bash reanalyzerGSE/external_software/installation/install.sh 2>&1 | tee -a reanalyzerGSE/external_software/installation/install.sh.log # Check log to make sure that installation of all dependencies has been succesful
-```
-
-This should work if you already have miniconda3 installed, or install miniconda3 within the reanalyzerGSE folder if not available or if you have kept it out of the PATH. Plese keep in mind that in the 'install.sh' script most of the versions of the tools installed by conda are frozen (by means of multiple '.yml' files corresponding to different environments), so please open an issue or try to install with conda if there are dependency-related problems or any software is not installed.
-
-
-3) The less recommended option is to manually install the required software.
-If you want to manually install the software, check out the list of required tools in the .def file (Apptainer/Singularity) or in the files '.yml' within the folder 'external_software/installation'. Please be aware that many scripts (bash, perl...) within the 'scripts' folder are also used, so you may need to manually change the interpreter in the corresponding statements (first line #!) to ensure that everything works in your system. You may also check out the 'install.sh' script to conform to other needs, such as making scripts executable ('chmod' command).
+Alternatively, and much less recommended, you can manually install the required software.
+If you want to manually install the software, check out the list of required tools in the .def file (Apptainer/Singularity) within the folder 'external_software/installation'. Please be aware that many scripts (bash, perl...) within the 'scripts' folder are also used, so you may need to manually change the interpreter in the corresponding statements (first line #!) to ensure that everything works in your system, and to make them executable ('chmod' command).
 
 
 ## Quick start / Minimal examples

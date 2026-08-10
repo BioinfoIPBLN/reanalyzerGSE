@@ -1784,9 +1784,9 @@ _log_step "Step_4_R_Process" "start"
 			tar -cf - $(ls | egrep ".RData$") | pigz -p $cores > allRData.tar.gz; rm -rf $(ls | egrep ".RData$")
 		fi
 	done
-	### Generate SummarizedExperiment for exploreDE app if requested
+	### Generate SummarizedExperiment for the exploreLocalDE app if requested
 	if [[ "$exploreDE_se" == "yes" ]]; then
-		echo -e "\nGenerating SummarizedExperiment for exploreDE...\n"
+		echo -e "\nGenerating SummarizedExperiment for exploreLocalDE...\n"
 		for index in "${!array[@]}"; do
 			final_dir=$output_folder/$name/final_results_reanalysis$index
 			if [ -f "$final_dir/Raw_counts_genes.txt" ] && [ -f "$final_dir/TPM_counts_genes.txt" ] && [ -f "$final_dir/DGE/list_comp.txt" ]; then
@@ -1802,7 +1802,7 @@ _log_step "Step_4_R_Process" "start"
 					"$organism" \
 					"$non_reference_funct_enrichm" 2>&1 | tee -a "$final_dir/DGE/deResults_prepare_SE.log"
 			else
-				echo "Skipping exploreDE SE generation for index $index: required files not found"
+				echo "Skipping exploreLocalDE SE generation for index $index: required files not found"
 			fi
 		done
 	fi

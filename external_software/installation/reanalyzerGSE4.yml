@@ -1,9 +1,0 @@
-name: reanalyzerGSE_4
-channels:
- - bioconda
- - conda-forge
-dependencies:
- - python==3.6.13
- - kallisto==0.44
- - rseqc
- - pip

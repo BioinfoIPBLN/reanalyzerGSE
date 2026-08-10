@@ -72,7 +72,7 @@ for argument in $options; do
 	        -Na | -network_analyses # Whether to perform network analyses ('yes' or 'no', by default). WGCNA is organism-agnostic; STRINGdb supports any organism with a valid taxon ID
 	        -Wm | -wgcna_mode # WGCNA mode: 'all' (canonical, runs on all expressed genes, by default) or 'degs' (runs on DEGs only, per comparison)
 	        -apl | -auto_panther_log # Whether to perform additional autoGO and Panther analyses for DEGs separated by log2Fc positive or negative ('yes' or 'no', by default)
-	        -eDe | -exploreDE_se # Whether to generate a SummarizedExperiment object (.qs2) for the exploreDE Shiny app ('yes' or 'no', by default). Only works for Human (Homo_sapiens) analyses.
+	        -eDe | -exploreDE_se # Whether to generate a SummarizedExperiment object (.qs2) for the exploreLocalDE Shiny app (https://shiny-public.fgcz.uzh.ch/app/exploreLocalDE) ('yes' or 'no', by default). Human, Mouse and Rat get the full annotation/enrichment suite; any other organism gets a basic GO over-representation route built from the file given in '-nrf'
 	        -sO | -splicing_option # Splicing analysis method: 'no' (default), 'saser' (differential splicing via saseR with adapted offsets in edgeR), or 'isoformswitchr' (isoform switch analysis via IsoformSwitchAnalyzeR, requires transcript-level quantification from Kallisto or Salmon)
 
 	        #### Processing parameters:
