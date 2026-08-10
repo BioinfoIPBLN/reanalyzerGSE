@@ -2751,7 +2751,7 @@ sub hisat2{
 	#Collecting hisat2 parameters provided by the user
 	if(defined($args{"hisat2parameters"})){
 		my $hisatparameters=$args{"hisat2parameters"};
-		$hisatpardef.=" hisat2parameters";
+		$hisatpardef.=" $hisatparameters";
 	}
 	#Number of threads can be provided by the user
 	if($threads>0){
@@ -2839,7 +2839,7 @@ sub hisat2{
 						$command=qq{if [ \$(ls $projectdir$output_dir | wc -l) -eq 0 ]; then
       								  mkdir -p $projectdir$output_dir && cd $projectdir$output_dir && unset DISPLAY && export PARALLEL_SHELL=/bin/bash
 	      							  parallel --halt-on-error 2 --verbose --joblog ${projectdir}/hisat2_log_parallel.txt -j $parallelnumber \\
-	      							  'hisat2 -q -t --seed 123 --very-sensitive $hisatpardef -x $hisat2idx_final \\
+	      							  'hisat2 -q -t --seed 123 $hisatpardef -x $hisat2idx_final \\
 	      							    -1 \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \\
 	      							    -2 \$(cat $tmp_file | xargs dirname | uniq)/{}_2.fastq.gz \\
 	      							    --met-file {}.metrics $unaligned_cmd_pe \\
@@ -2935,7 +2935,7 @@ sub hisat2{
 						$command=qq{if [ \$(ls $projectdir$output_dir | wc -l) -eq 0 ]; then
       								  mkdir -p $projectdir$output_dir && cd $projectdir$output_dir && unset DISPLAY && export PARALLEL_SHELL=/bin/bash
 	      							  parallel --halt-on-error 2 --verbose --joblog ${projectdir}/hisat2_log_parallel.txt -j $parallelnumber \\
-	      							  'hisat2 -q -t --seed 123 --very-sensitive $hisatpardef -x $hisat2idx_final \\
+	      							  'hisat2 -q -t --seed 123 $hisatpardef -x $hisat2idx_final \\
 	      							    -U \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \\
 	      							    -U \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \\
 	      							    --met-file {}.metrics $unaligned_cmd_se \\
@@ -3283,8 +3283,8 @@ sub star{
 	}
 	#Collecting star parameters provided by the user
 	if(defined($args{"starparameters"})){
-		my $hisatparameters=$args{"starparameters"};
-		$starpardef.=" starparameters";
+		my $starparameters=$args{"starparameters"};
+		$starpardef.=" $starparameters";
 	}
 	#Number of threads can be provided by the user
 	if($threads>0){

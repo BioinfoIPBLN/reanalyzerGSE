@@ -254,6 +254,15 @@ if os.path.exists('phenodata_extracted.txt'):
 			echo $organism > $output_folder/$name/reads_study_info/organism.txt
 			echo -e "$organism\nPlease request on the next run a stop with parameter '-S' and modify manually the file reads_study_info/organism.txt if not required...\n"
 		fi
+		# An organism provided manually with '-O' always takes precedence over the one detected in
+		# the GEO metadata. It is written to organism.txt because every later step re-reads that
+		# file, so this is what makes the manual choice effective throughout the whole pipeline.
+		if [ ! -z "$organism_argument" ]; then
+			organism_from_geo="$organism"
+			organism=$(echo $organism_argument | sed 's,_, ,g')
+			echo -e "\nOrganism detected in GEO: '$organism_from_geo'. Overriding it with the one provided in '-O': '$organism' (this manual value will be used in all the following steps).\n"
+			echo $organism > $output_folder/$name/reads_study_info/organism.txt
+		fi
 _log_step "Step_1_Download" "end"
 		echo -e "\nSTEP 1 DONE. Current time: $(date)\n"
 	fi
@@ -1453,16 +1462,21 @@ _log_step "Step_3a_Prepare" "start"
 				fc_extra_escaped=$(printf '%s' "$featureCounts_extra_args" | sed 's/[\\&]/\\&/g')
 				sed -i "s,parameters=-M -O -C -B,parameters=$fc_extra_escaped,g" ${unit_ini[index]}
 			fi
-			if [ ! -z "$aligner_extra_args" ]; then
-				ae_escaped=$(printf '%s' "$aligner_extra_args" | sed 's/[\\&]/\\&/g')
-				if [[ "$aligner" == "star" ]]; then
-					sed -i "s,starparameters=,starparameters=$ae_escaped,g" ${unit_ini[index]}
-				elif [[ "$aligner" == "hisat2" ]]; then
-					sed -i "s,hisat2parameters=,hisat2parameters=$ae_escaped,g" ${unit_ini[index]}
-				elif [[ "$aligner" == "kallisto" ]]; then
-					sed -i "s,kallistoparameters=,kallistoparameters=$ae_escaped,g" ${unit_ini[index]}
-				fi
-				echo "Aligner extra args for $aligner: $aligner_extra_args"
+			# Extra aligner arguments: each aligner has its own option, so a preset that is only
+			# valid for one of them (e.g. hisat2's '--very-sensitive') can never reach another.
+			if [[ "$aligner" == "star" ]]; then
+				aligner_extra_args_used="$star_extra_args"
+			elif [[ "$aligner" == "hisat2" ]]; then
+				aligner_extra_args_used="$hisat2_extra_args"
+			elif [[ "$aligner" == "kallisto" ]]; then
+				aligner_extra_args_used="$kallisto_extra_args"
+			else
+				aligner_extra_args_used=""
+			fi
+			if [ ! -z "$aligner_extra_args_used" ]; then
+				ae_escaped=$(printf '%s' "$aligner_extra_args_used" | sed 's/[\\&]/\\&/g')
+				sed -i "s,${aligner}parameters=,${aligner}parameters=$ae_escaped,g" ${unit_ini[index]}
+				echo "Extra args for $aligner: $aligner_extra_args_used"
 			fi
 		done
 	fi

@@ -25,7 +25,7 @@ for argument in $options; do
 	        -TMP | -TMPDIR # Directory to export the environmental variable TMPDIR (by default or if left empty an internal folder of the output directory is used, or please enter 'system' to use system's default, or an absolute pathway that will be created if it does not exist)
 
 	        #### Reference and databases:
-	        -r | -reference_genome # Reference genome to be used (.fasta file or .gz, absolute pathway)
+	        -r | -reference_genome # Reference genome to be used (.fasta file or .gz, absolute pathway). Optional if '-rG' is used, since each genome group brings its own genome (the first group's genome is then used as default for genome-scoped steps outside alignment, such as the IGV app)
 	        -ri | -reference_genome_index # If the reference genome to be used already has an index that would like to reuse, please provide full pathway here (by default the provided genome is indexed)
 	        -rG | -reference_genome_groups # Align different subsets of samples to different reference genomes, then quantify them ALL with the single shared annotation given in '-a', so that one merged count matrix and one differential expression analysis are produced. Provide a semicolon-separated list of 'label:regex:fasta' triplets, e.g. 'hostA:^(A|B|C)_:/ref/genomeA.fa;hostB:^(D|E|F)_:/ref/genomeB.fa'. The regex is matched against the sample names (file names in the reads folder without the _1/_2.fastq.gz suffix). Every sample must match exactly one group (samples matching none, or more than one, are an error). Requires a single annotation in '-a' and is incompatible with '-ri' and with the kallisto aligner. Intended for variant-personalized references or a common assembly plus sample-specific extra contigs: the shared annotation MUST be coordinate-valid on every genome (this is verified before aligning), otherwise the resulting counts are not comparable
 	        -a | -annotation # Reference annotation to be used (.gtf file, absolute pathway). If hisat2 is used, a gff file (make sure format is '.gff' and not '.gff3') is accepted (some QC steps like 'qualimap rnaseqqc' may be skipped though). You can provide a comma-separated list of the pathways to different annotation, and multiple/independent quantification/outputs from the same alignments will be generated.
@@ -111,7 +111,9 @@ for argument in $options; do
 	        -Fcust | -bam_custom_filter # Custom shell command to pipe SAM text through post-alignment (e.g. "grep -E '^@|\\<NM:i:0\\>'" for perfect matches). Must preserve header lines (^@).
 	        -bN | -bam_normalization # Normalization method using deeptool's bamCoverage. Choices: RPKM, CPM, BPM, RPGC, None. ('BPM' by default)
 	        -Su | -save_unaligned # Save unaligned reads from hisat2/STAR ('no' by default, or 'yes'). When enabled, reads that did not align to the reference genome are written to compressed fastq files alongside the BAM files
-	        -Ae | -aligner_extra_args # Extra arguments to pass directly to the aligner (STAR, hisat2, or kallisto). These are appended verbatim to the aligner command line (e.g. '--outSAMmultNmax 1 --alignIntronMax 100000' for STAR, or '--no-mixed --no-discordant' for hisat2). Empty by default
+	        -Ah | -hisat2_extra_args # Extra arguments appended verbatim to the hisat2 command line (e.g. '--very-sensitive --no-mixed --no-discordant'). Only used when '-A hisat2'
+	        -As | -star_extra_args # Extra arguments appended verbatim to the STAR command line (e.g. '--outSAMmultNmax 1 --alignIntronMax 100000'). Only used when '-A star'
+	        -Ak | -kallisto_extra_args # Extra arguments appended verbatim to the kallisto command line (e.g. '--bias'). Only used when '-A kallisto'
 
 	        #### Count-level options (quantification):
 	        -Ofc | -featureCounts_extra_args # Extra arguments to pass to featureCounts (default '-M -O -C -B'). These are appended to the automatically built featureCounts command line after strand, feature type, seqid, threads, and MAPQ options.
@@ -235,7 +237,9 @@ for argument in $options; do
 		-Fcust) bam_custom_filter=${arguments[index]} ;;
 		-bN) bam_normalization=${arguments[index]} ;;
 		-Su | -save_unaligned) save_unaligned=${arguments[index]} ;;
-		-Ae | -aligner_extra_args) aligner_extra_args=${arguments[index]} ;;
+		-Ah | -hisat2_extra_args) hisat2_extra_args=${arguments[index]} ;;
+		-As | -star_extra_args) star_extra_args=${arguments[index]} ;;
+		-Ak | -kallisto_extra_args) kallisto_extra_args=${arguments[index]} ;;
 		-Ofc) featureCounts_extra_args=${arguments[index]} ;;
 		-Fgene) counts_custom_gene_filter=${arguments[index]} ;;
 		-nrf) non_reference_funct_enrichm=${arguments[index]} ;;
@@ -283,8 +287,8 @@ if [ -z "$annotation" ] && [ "$aligner" != "kallisto" ]; then
 	echo "Please check usage with 'reanalyzer_GSE_RNA_seq.sh -h'. Annotation (-a) is required unless using kallisto aligner."; exit 1
 fi
 
-if [ -z "$reference_genome" ] && [ "$aligner" != "kallisto" ]; then
-	echo "Please check usage with 'reanalyzer_GSE_RNA_seq.sh -h'. Reference genome (-r) is required unless using kallisto aligner."; exit 1
+if [ -z "$reference_genome" ] && [ -z "$reference_genome_groups" ] && [ "$aligner" != "kallisto" ]; then
+	echo "Please check usage with 'reanalyzer_GSE_RNA_seq.sh -h'. Reference genome (-r) is required unless using kallisto aligner or providing per-group genomes with -rG."; exit 1
 fi
 
 if [ -z "$transcripts" ] && [ "$aligner" == "kallisto" ]; then
@@ -341,6 +345,13 @@ if [ ! -z "$reference_genome_groups" ]; then
 	done
 	if [ ${#genome_group_labels[@]} -lt 1 ]; then
 		echo "Error: no valid genome group could be parsed from -rG: '$reference_genome_groups'"; exit 1
+	fi
+	# -r is optional in genome-group mode (every alignment uses its group's own genome). It is
+	# still used for genome-scoped extras outside alignment, e.g. templating the IGV app, so
+	# fall back to the first group's genome when the user did not provide one.
+	if [ -z "$reference_genome" ]; then
+		reference_genome="${genome_group_fastas[0]}"
+		echo -e "\nNo -r provided: using the genome of group '${genome_group_labels[0]}' ($reference_genome) as the default reference for genome-scoped steps outside alignment (e.g. the IGV app). Every sample is still aligned to the genome of its own group.\n"
 	fi
 	export reference_genome_groups
 	echo -e "\nreference_genome_groups=$reference_genome_groups\n"
@@ -608,9 +619,15 @@ fi
 if [ -z "$rrna_qc_min_score" ]; then
 	rrna_qc_min_score="-20"
 fi
-if [ -z "$aligner_extra_args" ]; then
-	aligner_extra_args=""
+# Extra aligner arguments, one option per aligner so that presets valid for one (e.g. hisat2's
+# '--very-sensitive') can never leak into another. No values are defaulted here: the defaults
+# live in config_template.yaml, where the user can see and change them.
+if [ ! -z "$aligner_extra_args" ]; then
+	echo "Error: 'aligner_extra_args' (-Ae) no longer exists, because a single option could not hold presets valid for only one aligner. Please use 'hisat2_extra_args' (-Ah), 'star_extra_args' (-As) or 'kallisto_extra_args' (-Ak) instead, depending on the aligner set in '-A'."; exit 1
 fi
+if [ ! -z "$hisat2_extra_args" ]; then echo -e "\nhisat2_extra_args=$hisat2_extra_args\n"; fi
+if [ ! -z "$star_extra_args" ]; then echo -e "\nstar_extra_args=$star_extra_args\n"; fi
+if [ ! -z "$kallisto_extra_args" ]; then echo -e "\nkallisto_extra_args=$kallisto_extra_args\n"; fi
 
 # MultiQC AI annotation: activated only when an LLM endpoint is provided (no
 # defaults => standard MultiQC). When active, export the env vars the wrapper

@@ -116,10 +116,15 @@ bam_dedup: "no"                        # Duplicate removal: 'no', 'samtools', 'p
 bam_custom_filter: ""                  # Custom shell command to pipe SAM text through post-alignment (e.g. "grep -E '^@|\\<NM:i:0\\>'" for perfect matches). Must preserve header lines (^@).
 bam_normalization: "BPM"               # Normalization option for bamCoverage. Choices: RPKM, CPM, BPM, RPGC, None. (default "BPM")
 save_unaligned: "no"                   # Save unaligned reads from hisat2/STAR to compressed fastq files ('yes' or 'no')
-aligner_extra_args: ""                 # Extra arguments appended verbatim to the aligner command line. Examples:
-                                       #   STAR:     "--outSAMmultNmax 1 --alignIntronMax 100000"
-                                       #   hisat2:   "--no-mixed --no-discordant --maxins 800"
-                                       #   kallisto: "--bias"
+                                       # Extra arguments appended verbatim to the aligner command line. One
+                                       # option per aligner: only the one matching 'aligner' above is used,
+                                       # so a preset valid for one aligner can never leak into another.
+                                       # Empty them to run the aligner with no extra arguments.
+hisat2_extra_args: "--very-sensitive"  # e.g. "--very-sensitive --no-mixed --no-discordant --maxins 800"
+                                       # ('--very-sensitive' used to be hardcoded in the hisat2 call; it is
+                                       # now just this default, so keep it here if you still want it)
+star_extra_args: ""                    # e.g. "--outSAMmultNmax 1 --alignIntronMax 100000"
+kallisto_extra_args: ""                # e.g. "--bias"
 
 # === Count-level options (quantification) ===
 featureCounts_extra_args: "-M -O -C -B" # Extra arguments to pass to featureCounts (default '-M -O -C -B').
