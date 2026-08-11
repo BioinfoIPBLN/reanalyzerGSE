@@ -176,7 +176,7 @@ pkgs <- c(
   "dendextend", "DEoptimR", "Deriv", "desc", "DESeq2", "devtools", "DEXSeq", "dichromat", "diffobj", "digest", 
   "dir.expiry", "dirmult", "doBy", "doParallel", "doSNOW", "DOSE", "dotCall64", "downlit", "dplyr", "dqrng", "DT", 
   "dtplyr", "dynamicTreeCut", "DynDoc", "e1071", "edgeR", "ellipse", "ellipsis", "emmeans", "EnhancedVolcano", "enrichplot", "enrichR",
-  "ensembldb", "estimability", "evaluate", "expm", "FactoMineR", "fansi", "farver", "fastcluster", "fastDummies", "fastmap", 
+  "ensembldb", "estimability", "europepmc", "evaluate", "expm", "FactoMineR", "fansi", "farver", "fastcluster", "fastDummies", "fastmap", 
   "fastmatch", "fgsea", "filelock", "fitdistrplus", "flashClust", "FNN", "fontawesome", "fontBitstreamVera", "fontLiberation", "fontquiver", 
   "forcats", "foreach", "forecast", "formatR", "Formula", "fracdiff", "fs", "futile.logger", "futile.options", "future", 
   "future.apply", "gargle", "gdtools", "genefilter", "geneplotter", "generics", "GenomeInfoDb", "GenomeInfoDbData", "GenomicAlignments", "GenomicFeatures", 

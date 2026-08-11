@@ -666,8 +666,8 @@ normalize_sample_id <- function(x) {
       ### If the user has requested to analyze only some of the samples/column based on the GSMXXXXX, filter and restrict here.
       if (file.exists(paste0(path,"/reads_study_info/gsm_manual_filter.txt"))){
           gsm_manual_filter <- data.table::fread(paste0(path,"/reads_study_info/gsm_manual_filter.txt"),head=F,sep="*")$V1
-          idxs_gsm_manual <- which(unlist(lapply(strsplit(gtools:mixedsort(colnames(gene_counts_rpkm)),"_"),function(x){any(x %in% unlist(strsplit(gsm_manual_filter,",")))})))
-          gene_counts_rpkm_to_plot <- gene_counts_rpkm[,gtools:mixedsort(colnames(gene_counts_rpkm))]
+          idxs_gsm_manual <- which(unlist(lapply(strsplit(gtools::mixedsort(colnames(gene_counts_rpkm)),"_"),function(x){any(x %in% unlist(strsplit(gsm_manual_filter,",")))})))
+          gene_counts_rpkm_to_plot <- gene_counts_rpkm[,gtools::mixedsort(colnames(gene_counts_rpkm))]
           gene_counts_rpkm_to_plot <- gene_counts_rpkm_to_plot[,
                                                         c(idxs_gsm_manual,which(colnames(gene_counts_rpkm_to_plot)=="Gene_ID"))]
           a <- gene_counts_rpkm_to_plot[gene_counts_rpkm_to_plot$Gene_ID==i,-grep("Gene_ID",colnames(gene_counts_rpkm_to_plot))]
@@ -1699,7 +1699,8 @@ cat("\nSaved R global environment in 'QC_and_others/globalenvir.qs2'")
 suppressWarnings(list2env(as.list(environment()), envir = .GlobalEnv)); rgse_save_env(paste0(output_dir,"/QC_and_others/globalenvir.qs2"))
 
 ###### WIP add DESeq2 as a full alternative to edgeR, for now, generate and provide/write independently the counts if the user ask for it:
-if (diff_soft=="DESeq2"){  
+if (diff_soft=="DESeq2"){
+  suppressMessages(library(DESeq2,quiet = T,warn.conflicts = F))
   sampleFiles <- grep("Gene_ID|Length",colnames(gene_counts),invert=T)
   sampleCondition <- pheno$condition
   sampleInf <- paste0(d, "_rep", ave(pheno$condition, pheno$condition, FUN = seq_along))
