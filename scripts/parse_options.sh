@@ -74,6 +74,8 @@ for argument in $options; do
 	        -apl | -auto_panther_log # Whether to perform additional autoGO and Panther analyses for DEGs separated by log2Fc positive or negative ('yes' or 'no', by default)
 	        -eDe | -exploreDE_se # Whether to generate a SummarizedExperiment object (.qs2) for the exploreLocalDE Shiny app (https://shiny-public.fgcz.uzh.ch/app/exploreLocalDE) ('yes' or 'no', by default). Human, Mouse and Rat get the full annotation/enrichment suite; any other organism gets a basic GO over-representation route built from the file given in '-nrf'
 	        -sO | -splicing_option # Splicing analysis method: 'no' (default), 'saser' (differential splicing via saseR with adapted offsets in edgeR), or 'isoformswitchr' (isoform switch analysis via IsoformSwitchAnalyzeR, requires transcript-level quantification from Kallisto or Salmon)
+	        -lit | -literature # Whether to gather bibliographic context for the top DEGs of each comparison ('yes' or 'no', by default). Queries NCBI Gene and PubMed (E-utilities) for the strongest genes in each direction, saving the curated RefSeq summary and the most recent linked papers into a 'literature' folder and a section of the report. Requires outbound access to eutils.ncbi.nlm.nih.gov, and gene identifiers that NCBI recognises for the organism (custom assembly identifiers will not resolve). Set NCBI_API_KEY in the environment to raise the rate limit from 3 to 10 requests/s
+	        -lita | -literature_args # Args passed verbatim to scripts/lit_gather.py (default '--genes-per-sense 5 --papers-per-gene 5'). Options: '--genes-per-sense N' (top N genes per direction, ranked by FDR), '--papers-per-gene N' (most recent linked papers to keep per gene), '--email ADDRESS' (contact address sent to NCBI)
 
 	        #### Processing parameters:
 	        -s | -strand # Strandness of the library ('yes, 'no', 'reverse'). If not provided and '-t' used, this would be predicted by salmon. Please use this parameter if prediction not correct, see explanations in for example in bit.ly/strandness0 and bit.ly/strandness
@@ -137,7 +139,7 @@ for argument in $options; do
 	        -Lk | -llm_api_key # API key for the endpoint (defaults to 'dummy' when AI is active and left empty)
 	        -Lcw | -llm_context_window # Model context window in tokens (e.g. 128000)
 	        -Mqa | -multiqc_ai_args # Args passed verbatim to scripts/multiqc_ai.py; selects AI mode/tuning (default '--per-section --builtin'). Options: '--per-section' (custom inline summaries), '--builtin' (MultiQC's own global summary + per-section buttons), both (default), '--ai-summary short|full', '--ai-provider custom|openai|anthropic|seqera', '--llm-timeout N', '--sys-prompt-file PATH'
-	        -aii | -ai_insights # Which AI annotations to generate, as a comma-separated list of: 'metadata' (AI simplification of sample & condition names from GEO metadata), 'multiqc' (AI annotation of the MultiQC report), 'qualimap' (AI annotation of Qualimap reports), 'design' (study-design insight), 'counts' (per-sample expression-landscape insight from the log2(TPM+0.1) table), 'dge' (per-comparison DEG summary), 'enrichment' (per-comparison enrichment narrative); or 'all' (default, == all seven); or 'no' to disable every AI annotation. 'yes' is accepted as an alias of 'all'. All reuse -llm_endpoint/-llm_model and have no effect unless -llm_endpoint is provided. Each AI option has a 5-minute per-response cap: on timeout its boxes show 'ai_insights timeout. Please try again', and implausibly long (degraded) answers are dropped
+	        -aii | -ai_insights # Which AI annotations to generate, as a comma-separated list of: 'metadata' (AI simplification of sample & condition names from GEO metadata), 'multiqc' (AI annotation of the MultiQC report), 'qualimap' (AI annotation of Qualimap reports), 'design' (study-design insight), 'counts' (per-sample expression-landscape insight from the log2(TPM+0.1) table), 'qc_pdf' (AI annotation of the QC PDF), 'dge' (per-comparison DEG summary), 'enrichment' (per-comparison enrichment narrative), 'literature' (per-comparison synthesis of the bibliographic context gathered by '-lit', and only if that gathering produced results); or 'all' (default, == all nine); or 'no' to disable every AI annotation. 'yes' is accepted as an alias of 'all'. All reuse -llm_endpoint/-llm_model and have no effect unless -llm_endpoint is provided. Each AI option has a 5-minute per-response cap: on timeout its boxes show 'ai_insights timeout. Please try again', and implausibly long (degraded) answers are dropped
 	        -K | -Kraken2_fast # DEPRECATED: daemon mode now replaces /dev/shm approach. This option is kept for backward compatibility but has no effect" && exit 1;;
 		-options) options_file=${arguments[index]} ;;
 		-i) input=${arguments[index]} ;;
@@ -245,6 +247,8 @@ for argument in $options; do
 		-nrf) non_reference_funct_enrichm=${arguments[index]} ;;
 		-eDe) exploreDE_se=${arguments[index]} ;;
 		-sO | -splicing_option) splicing_option=${arguments[index]} ;;
+		-lit | -literature) literature=${arguments[index]} ;;
+		-lita | -literature_args) literature_args=${arguments[index]} ;;
 		-Lep | -llm_endpoint) llm_endpoint=${arguments[index]} ;;
 		-Lm | -llm_model) llm_model=${arguments[index]} ;;
 		-Lk | -llm_api_key) llm_api_key=${arguments[index]} ;;
@@ -295,10 +299,6 @@ if [ -z "$transcripts" ] && [ "$aligner" == "kallisto" ]; then
 	echo "Please check usage with 'reanalyzer_GSE_RNA_seq.sh -h'. Transcripts FASTA (-t) is required when using kallisto aligner."; exit 1
 fi
 
-##### Genome groups (-rG): parse and validate the 'label:regex:fasta' triplets.
-# The sample<->group resolution needs the actual read files, so it happens later (STEP 3a).
-# Here we only check the syntax, the referenced files, and the mode incompatibilities, so that
-# a malformed request fails immediately instead of after downloading/processing the reads.
 declare -a genome_group_labels=()
 declare -a genome_group_regexes=()
 declare -a genome_group_fastas=()
@@ -346,9 +346,6 @@ if [ ! -z "$reference_genome_groups" ]; then
 	if [ ${#genome_group_labels[@]} -lt 1 ]; then
 		echo "Error: no valid genome group could be parsed from -rG: '$reference_genome_groups'"; exit 1
 	fi
-	# -r is optional in genome-group mode (every alignment uses its group's own genome). It is
-	# still used for genome-scoped extras outside alignment, e.g. templating the IGV app, so
-	# fall back to the first group's genome when the user did not provide one.
 	if [ -z "$reference_genome" ]; then
 		reference_genome="${genome_group_fastas[0]}"
 		echo -e "\nNo -r provided: using the genome of group '${genome_group_labels[0]}' ($reference_genome) as the default reference for genome-scoped steps outside alignment (e.g. the IGV app). Every sample is still aligned to the genome of its own group.\n"
@@ -613,15 +610,18 @@ fi
 if [ -z "$splicing_option" ]; then
 	splicing_option="no"
 fi
+if [ -z "$literature" ]; then
+	literature="no"
+fi
+if [ -z "$literature_args" ]; then
+	literature_args="--genes-per-sense 5 --papers-per-gene 5"
+fi
 if [ -z "$rrna_qc_databases" ]; then
 	rrna_qc_databases=""
 fi
 if [ -z "$rrna_qc_min_score" ]; then
 	rrna_qc_min_score="-20"
 fi
-# Extra aligner arguments, one option per aligner so that presets valid for one (e.g. hisat2's
-# '--very-sensitive') can never leak into another. No values are defaulted here: the defaults
-# live in config_template.yaml, where the user can see and change them.
 if [ ! -z "$aligner_extra_args" ]; then
 	echo "Error: 'aligner_extra_args' (-Ae) no longer exists, because a single option could not hold presets valid for only one aligner. Please use 'hisat2_extra_args' (-Ah), 'star_extra_args' (-As) or 'kallisto_extra_args' (-Ak) instead, depending on the aligner set in '-A'."; exit 1
 fi
@@ -643,12 +643,12 @@ if [ -z "$ai_insights" ]; then
 	ai_insights="all"
 fi
 ai_sel=$(echo "$ai_insights" | tr 'A-Z' 'a-z' | tr -d ' ')
-ai_do_metadata=0; ai_do_multiqc=0; ai_do_qualimap=0; ai_do_qc_pdf=0; ai_do_design=0; ai_do_counts=0; ai_do_dge=0; ai_do_enrichment=0
+ai_do_metadata=0; ai_do_multiqc=0; ai_do_qualimap=0; ai_do_qc_pdf=0; ai_do_design=0; ai_do_counts=0; ai_do_dge=0; ai_do_enrichment=0; ai_do_literature=0
 case ",$ai_sel," in
 	*,no,*|*,none,*) : ;;
 	*)
 		if [[ ",$ai_sel," == *,all,* || ",$ai_sel," == *,yes,* ]]; then
-			ai_do_metadata=1; ai_do_multiqc=1; ai_do_qualimap=1; ai_do_qc_pdf=1; ai_do_design=1; ai_do_counts=1; ai_do_dge=1; ai_do_enrichment=1
+			ai_do_metadata=1; ai_do_multiqc=1; ai_do_qualimap=1; ai_do_qc_pdf=1; ai_do_design=1; ai_do_counts=1; ai_do_dge=1; ai_do_enrichment=1; ai_do_literature=1
 		else
 			[[ ",$ai_sel," == *,metadata,* || ",$ai_sel," == *,meta,* ]] && ai_do_metadata=1
 			[[ ",$ai_sel," == *,multiqc,* || ",$ai_sel," == *,qc,* ]] && ai_do_multiqc=1
@@ -658,6 +658,7 @@ case ",$ai_sel," in
 			[[ ",$ai_sel," == *,counts,* || ",$ai_sel," == *,count,* ]] && ai_do_counts=1
 			[[ ",$ai_sel," == *,dge,* || ",$ai_sel," == *,deg,* ]] && ai_do_dge=1
 			[[ ",$ai_sel," == *,enrichment,* || ",$ai_sel," == *,enrich,* ]] && ai_do_enrichment=1
+			[[ ",$ai_sel," == *,literature,* || ",$ai_sel," == *,lit,* ]] && ai_do_literature=1
 		fi ;;
 esac
 
@@ -666,7 +667,7 @@ if [ -n "$llm_endpoint" ]; then
 	[ -n "$llm_model" ]          && export LLM_MODEL="$llm_model"
 	export LLM_API_KEY="${llm_api_key:-dummy}"
 	[ -n "$llm_context_window" ] && export LLM_CONTEXT_WINDOW="$llm_context_window"
-	export ai_do_metadata ai_do_qualimap ai_do_qc_pdf ai_do_design ai_do_counts ai_do_dge ai_do_enrichment ai_do_multiqc
+	export ai_do_metadata ai_do_qualimap ai_do_qc_pdf ai_do_design ai_do_counts ai_do_dge ai_do_enrichment ai_do_multiqc ai_do_literature
 	export RGSE_DO_METADATA=$ai_do_metadata
 	export RGSE_DO_QUALIMAP=$ai_do_qualimap
 	export RGSE_DO_QC_PDF=$ai_do_qc_pdf
@@ -684,6 +685,7 @@ if [ -n "$llm_endpoint" ]; then
 	[ "$ai_do_counts" = 1 ]     && ai_active_list+=("counts")
 	[ "$ai_do_dge" = 1 ]        && ai_active_list+=("dge")
 	[ "$ai_do_enrichment" = 1 ] && ai_active_list+=("enrichment")
+	[ "$ai_do_literature" = 1 ] && ai_active_list+=("literature")
 
 	if [ ${#ai_active_list[@]} -gt 0 ]; then
 		active_str=$(IFS=, ; echo "${ai_active_list[*]}")
@@ -701,6 +703,7 @@ if [ -z "$alignment_removal" ]; then
 	alignment_removal=""
 fi
 echo -e "\nsplicing_option=$splicing_option\n"
+if [ "$literature" != "no" ]; then echo -e "\nliterature=$literature (args: $literature_args)\n"; fi
 
 seqs_location=$output_folder/$name/raw_reads
 

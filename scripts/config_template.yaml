@@ -76,6 +76,19 @@ exploreDE_se: "no"                     # Generate SummarizedExperiment (.qs2) fo
                                        # https://shiny-public.fgcz.uzh.ch/app/exploreLocalDE
 splicing_option: "no"                  # Splicing analysis: 'no' (default), 'saser' (differential splicing), or 'isoformswitchr' (isoform switch analysis, requires Kallisto/Salmon)
 
+# === Literature ===
+literature: "no"                       # Gather bibliographic context for the top DEGs of each comparison ('yes' or 'no')
+                                       # Queries NCBI Gene and PubMed (E-utilities) for the strongest genes in each
+                                       # direction and saves the curated RefSeq summary plus the most recent linked
+                                       # papers, as tables under <results>/DGE/literature/ and a report section.
+                                       # Needs outbound access to eutils.ncbi.nlm.nih.gov, and gene identifiers that
+                                       # NCBI recognises for the organism (custom assembly IDs will not resolve).
+                                       # Set NCBI_API_KEY in the environment to go from 3 to 10 requests/s.
+literature_args: "--genes-per-sense 5 --papers-per-gene 5"   # Args passed to lit_gather.py:
+                                       #   --genes-per-sense N   top N genes per direction, ranked by FDR (default 5)
+                                       #   --papers-per-gene N   most recent linked papers kept per gene (default 5)
+                                       #   --email ADDRESS       contact address sent to NCBI with each request
+
 # === Processing parameters ===
 strand: ""                             # Strandness ('yes', 'no', 'reverse'; predicted by salmon if empty)
 filter: "standard"                     # Gene count threshold ('bin', 'filterbyexpr', 'standard' or 'standard,X' to set min_group, or a numeric value for absolute raw count threshold per group)
@@ -152,4 +165,5 @@ multiqc_ai_args: "--per-section --builtin"  # Args passed to multiqc_ai.py; sele
                                             #   --ai-provider NAME       custom|openai|anthropic|seqera (default custom)
                                             #   --llm-timeout N          per-request timeout in seconds (default 600)
                                             #   --sys-prompt-file PATH   use a custom system prompt for the per-section calls
-ai_insights: "all"                     # Which AI annotations to generate (reusing llm_endpoint/llm_model): comma list of 'metadata','multiqc','qualimap','qc_pdf','design','counts','dge','enrichment'; or 'all' (default = all eight); or 'no' (disable all AI). 'yes' == 'all'. No effect unless llm_endpoint is set.
+ai_insights: "all"                     # Which AI annotations to generate (reusing llm_endpoint/llm_model): comma list of 'metadata','multiqc','qualimap','qc_pdf','design','counts','dge','enrichment','literature'; or 'all' (default = all nine); or 'no' (disable all AI). 'yes' == 'all'. No effect unless llm_endpoint is set.
+                                       # 'literature' summarises what the 'literature' option above gathered, and is skipped unless that gathering produced results.

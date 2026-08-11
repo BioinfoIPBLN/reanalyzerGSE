@@ -224,11 +224,16 @@ render_pertable_ai <- function(path) {
 # set while labelling it "p < 0.05". These helpers render one block per input
 # threshold instead, so the two are never conflated.
 threshold_token <- function(path) {
-  m <- regmatches(basename(path), regexpr("fdr_0[15]", basename(path)))
+  m <- regmatches(basename(path), regexpr("fdr_0[15](_log(pos|neg))?", basename(path)))
   if (length(m) == 0) NA_character_ else m
 }
 threshold_label <- function(tok) {
-  switch(tok, fdr_05 = "DEGs at FDR < 0.05", fdr_01 = "DEGs at FDR < 0.01", tok)
+  thr <- if (grepl("^fdr_05", tok)) "FDR < 0.05"
+         else if (grepl("^fdr_01", tok)) "FDR < 0.01"
+         else return(tok)
+  if (grepl("_logpos$", tok))      sprintf("Up-regulated DEGs (%s)", thr)
+  else if (grepl("_logneg$", tok)) sprintf("Down-regulated DEGs (%s)", thr)
+  else                             sprintf("All DEGs (%s)", thr)
 }
 
 # Render the clusterProfiler ORA + GSEA sections for ONE DEG-input threshold
@@ -700,7 +705,13 @@ for (idx in seq_along(comp_names)) {
 
     # DEG-input threshold as the top-level tab: FDR < 0.05 and FDR < 0.01 each get
     # their own ORA + GSEA sub-tabs, so the two thresholds are never mixed.
-    for (tok in c("fdr_05", "fdr_01")) {
+    cp_toks <- vapply(list.files(cp_dir, pattern = "\\.txt$"), threshold_token,
+                      character(1), USE.NAMES = FALSE)
+    cp_toks <- unique(cp_toks[!is.na(cp_toks)])
+    cp_toks <- intersect(c("fdr_05", "fdr_05_logpos", "fdr_05_logneg",
+                           "fdr_01", "fdr_01_logpos", "fdr_01_logneg"), cp_toks)
+    if (length(cp_toks) == 0) cp_toks <- c("fdr_05", "fdr_01")
+    for (tok in cp_toks) {
       cat(sprintf("\n## %s {.tabset}\n\n", threshold_label(tok)))
       render_cp_threshold(cp_dir, comp, tok, full_mode_ran, primary = identical(tok, "fdr_05"))
     }

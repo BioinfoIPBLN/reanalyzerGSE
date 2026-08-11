@@ -330,6 +330,65 @@ for aif in "$path/$final_dir_name/DGE/"DGE_analysis_comp*.ai_insight.md; do
 done
 
 
+######### Optional bibliographic context section (scripts/lit_gather.py wrote
+######### literature/status.json plus per-comparison tables when -lit was enabled).
+######### Stays empty when the option was off or nothing usable was gathered.
+lit_dir="$path/$final_dir_name/DGE/literature"
+lit_section_rst=""
+if [ -f "$lit_dir/status.json" ]; then
+	lit_comps=$(python3 -c "import json,sys; print(' '.join(json.load(open(sys.argv[1]))['usable_comparisons']))" \
+		"$lit_dir/status.json" 2>/dev/null)
+	if [ -n "$lit_comps" ]; then
+		lit_tmp=$(mktemp)
+		{
+			printf '\n\nBibliographic context\n'
+			printf -- '------------------------------------------------------------------------------------\n'
+			python3 - "$lit_dir/status.json" <<'PYEOF'
+import json, sys
+st = json.load(open(sys.argv[1]))
+g, p = st.get("genes_per_sense", 5), st.get("papers_per_gene", 5)
+print(f"For each comparison, the strongest {g} differentially expressed gene(s) in each direction "
+      f"(ranked by FDR) were resolved against NCBI Gene, and up to {p} of their most recent curated "
+      f"PubMed references retrieved. Organism used for the lookup: {st.get('organism','?')}.")
+PYEOF
+			for lit_c in $lit_comps; do
+				python3 - "$lit_dir/$lit_c/genes.tsv" "$lit_c" "$lit_dir/status.json" "$final_dir_name" <<'PYEOF'
+import csv, json, sys
+tsv, comp, statusf, final_dir = sys.argv[1:5]
+st = {c["comparison"]: c for c in json.load(open(statusf))["comparisons"]}.get(comp, {})
+contrast = (st.get("contrast") or "").replace("__VS__", " vs ").strip("_ ")
+title = f"{comp}" + (f" ({contrast})" if contrast else "")
+rows = list(csv.DictReader(open(tsv), delimiter="\t"))
+print(f"\n.. list-table:: {title}")
+print("   :header-rows: 1")
+print("   :widths: 20 8 10 12 10 26\n")
+hdr = ["Gene", "Sense", "logFC", "FDR", "Papers", "NCBI Gene"]
+print("   * - " + hdr[0])
+for c in hdr[1:]:
+    print("     - " + c)
+for r in rows:
+    gid = r.get("GeneID", "-")
+    url = r.get("PubMed_URL", "")
+    link = f"`{gid} <{url}>`_" if url else "not found"
+    print("   * - " + r["Gene"])
+    for c in (r["Sense"], r["logFC"], r["FDR"], r["Papers_shown"], link):
+        print("     - " + c)
+print(f"\nFull abstracts for these genes: :file:`{final_dir}/DGE/literature/{comp}/`. "
+      f"Gene table: :download:`genes.tsv <../{final_dir}/DGE/literature/{comp}/genes.tsv>`.")
+PYEOF
+				ai_rst "$path/$final_dir_name/DGE/${lit_c}.literature_ai_insight.md"
+			done
+			if [ -f "$lit_dir/unresolved.tsv" ]; then
+				printf '\nSome identifiers had no NCBI Gene record for this organism and were skipped; they are listed in :download:`unresolved.tsv <../%s/DGE/literature/unresolved.tsv>`.\n' "$final_dir_name"
+			fi
+			printf '\n.. index:: literature\n'
+		} > "$lit_tmp"
+		lit_section_rst=$(cat "$lit_tmp")
+		rm -f "$lit_tmp"
+	fi
+fi
+
+
 ######### Pipeline timing: turn the raw start/end epoch rows in step_times.tsv into a
 ######### per-step DURATION table (hh:mm:ss) + a total, indented 3 spaces for an RST
 ######### code-block. Empty if the file is absent; a step with a start but no end yet
@@ -446,9 +505,9 @@ Please use the following links:
 
 .. raw:: html
    
-   <a href=\"sphinx_report/html/TPM_counts_genes_log2_0.1_categ.txt\" target=\"_blank\">Click to get TPM counts (log2 + 0.1)</a>$(if [ -f "$path/$final_dir_name/TPM_counts_genes_log2_0.1_categ.xlsx" ]; then echo ' (<a href="sphinx_report/html/TPM_counts_genes_log2_0.1_categ.xlsx" target="_blank">xlsx version</a>)'; fi)<br>
-   <a href=\"sphinx_report/html/RPKM_counts_genes_log2_0.1_categ.txt\" target=\"_blank\">Click to get RPKM counts (log2 + 0.1)</a>$(if [ -f "$path/$final_dir_name/RPKM_counts_genes_log2_0.1_categ.xlsx" ]; then echo ' (<a href="sphinx_report/html/RPKM_counts_genes_log2_0.1_categ.xlsx" target="_blank">xlsx version</a>)'; fi)<br>
-   <a href=\"sphinx_report/html/CPM_counts_genes_log2_0.1_categ.txt\" target=\"_blank\">Click to get CPM counts (log2 + 0.1)</a>$(if [ -f "$path/$final_dir_name/CPM_counts_genes_log2_0.1_categ.xlsx" ]; then echo ' (<a href="sphinx_report/html/CPM_counts_genes_log2_0.1_categ.xlsx" target="_blank">xlsx version</a>)'; fi)
+   <a href=\"sphinx_report/html/TPM_counts_genes_log2_1_categ.txt\" target=\"_blank\">Click to get TPM counts (log2 + 1)</a>$(if [ -f "$path/$final_dir_name/TPM_counts_genes_log2_1_categ.xlsx" ]; then echo ' (<a href="sphinx_report/html/TPM_counts_genes_log2_1_categ.xlsx" target="_blank">xlsx version</a>)'; fi)<br>
+   <a href=\"sphinx_report/html/RPKM_counts_genes_log2_1_categ.txt\" target=\"_blank\">Click to get RPKM counts (log2 + 1)</a>$(if [ -f "$path/$final_dir_name/RPKM_counts_genes_log2_1_categ.xlsx" ]; then echo ' (<a href="sphinx_report/html/RPKM_counts_genes_log2_1_categ.xlsx" target="_blank">xlsx version</a>)'; fi)<br>
+   <a href=\"sphinx_report/html/CPM_counts_genes_log2_1_categ.txt\" target=\"_blank\">Click to get CPM counts (log2 + 1)</a>$(if [ -f "$path/$final_dir_name/CPM_counts_genes_log2_1_categ.xlsx" ]; then echo ' (<a href="sphinx_report/html/CPM_counts_genes_log2_1_categ.xlsx" target="_blank">xlsx version</a>)'; fi)
 
 If requested, please go to \"$project_name/$final_dir_name/violin\" to check out the figures showing the transcriptional profiles of genes of interest. You may also find the tables \"_annotation.txt\" including the gene annotation available.$(if [ -f "$path/$final_dir_name/DGE/deResults.qs2" ]; then echo " The exploreLocalDE app may be also used (see below)."; fi)
 $ai_counts_rst
@@ -584,6 +643,7 @@ Load the following object into the app: :download:\`deResults.qs2 <../$final_dir
 
 .. index:: exploreLocalDE
 "; fi)
+$lit_section_rst
 " > index.rst
 
 ######### Build

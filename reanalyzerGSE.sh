@@ -37,12 +37,6 @@ run_step() {
 	fi
 	return 0
 }
-# Build the table of "alignment units" that STEP 3a/3b iterate over (and that STEP 9 needs to know
-# about to convert each BAM against the right genome). Without genome groups there is one unit per
-# annotation given in -a: the historical behaviour of independent quantifications over the same
-# alignments/genome. With -rG there is one unit per genome group instead, all of them sharing the
-# single annotation, and their per-sample count tables are merged into miARma_out0 after STEP 3b.
-# Re-derived from the options on every invocation, so it is also correct when resuming with -Dm.
 build_alignment_units() {
 	unit_ini=(); unit_out=(); unit_fasta=(); unit_gtf=(); unit_reads=(); unit_ri=(); unit_label=()
 	local _i; local _annot_arr=()
@@ -1203,16 +1197,11 @@ _log_step "Step_3a_Prepare" "start"
 		fi
 		read_length_for_miarma=$(zcat $seqs_location/$(ls $seqs_location | shuf | head -1) | head -2 | sed -n '2p' | awk '{print length -1}')
 
-		# Final renaming of fastq raw files if SRR present in the filename. Done once here, before
-		# anything points at these files (the genome group folders below symlink to them):
+		# Final renaming of fastq raw files if SRR present in the filename:
 		if [ $(ls $seqs_location | grep -c SRR) -gt 0 ]; then
 			for i in $(ls $seqs_location/*); do mv $i $(echo $i | sed 's,_SRR.*_,_,g'); done
 		fi
 
-	### Genome groups (-rG): assign every sample to exactly one reference genome, verify that the
-	### shared annotation is usable on all of them, and stage one reads folder per group. Each group
-	### is aligned and counted independently and the per-sample count tables are merged back into a
-	### single miARma_out0 at the end of STEP 3b, so everything downstream sees one cohort.
 		declare -A gg_index_of_sample=()
 		if [ ! -z "$reference_genome_groups" ]; then
 			echo -e "\nResolving genome groups (-rG)...\n"
@@ -1257,8 +1246,6 @@ _log_step "Step_3a_Prepare" "start"
 			echo "Sample to reference genome assignment (also saved in $gg_assignment_file):"
 			column -t -s$'\t' $gg_assignment_file 2>/dev/null || cat $gg_assignment_file
 
-			### Gate: the shared annotation must be coordinate-valid on EVERY group genome, otherwise
-			### the per-group counts are not in a common feature space. Checked before aligning.
 			_gg_shared_annot=$(echo "$annotation" | cut -d',' -f1)
 			_gg_gtf_extents=$TMPDIR/gg_gtf_extents.txt
 			mkdir -p $TMPDIR
@@ -1296,8 +1283,6 @@ _log_step "Step_3a_Prepare" "start"
 				echo "  Annotation validated against ${genome_group_labels[$_i]} ($(basename $_gg_fa))"
 			done
 
-			### Gate (warning): if the genome group is collinear with the experimental design, the
-			### merged differential expression cannot separate biology from reference effects.
 			_gg_sinfo=$output_folder/$name/reads_study_info/samples_info.txt
 			if [ -s "$_gg_sinfo" ]; then
 				_gg_pairs=$TMPDIR/gg_design_pairs.txt; : > $_gg_pairs
@@ -1340,17 +1325,12 @@ _log_step "Step_3a_Prepare" "start"
 		if [[ "$aligner" == "kallisto" && ${#array[@]} -eq 0 ]]; then
 			array=("")
 		fi
-		### Build the table of "alignment units". Normally one unit per annotation (all of them over
-		### the same genome). With genome groups (-rG) it is one unit per group instead: same single
-		### annotation, different genome and different subset of reads.
 		build_alignment_units
 		for index in "${!unit_ini[@]}"; do
 			cd $output_folder/$name
 			cp $CURRENT_DIR/external_software/miARma-seq/bakk_miARma1.7.ini ${unit_ini[index]}
 			gff=${unit_gtf[index]}
-			# featureCounts options are given per annotation; with genome groups there is only one
 			if [ ! -z "$reference_genome_groups" ]; then fc_opt_index=0; else fc_opt_index=$index; fi
-			# Cores are shared out according to the number of samples this unit actually processes
 			number_files=$(ls ${unit_reads[index]} | sed 's,_[12].fastq.gz.*,,g' | uniq | wc -l)
 			if [ "$number_files" -lt 1 ]; then number_files=1; fi
 			if [ $number_files -le $number_parallel ]; then
@@ -1505,10 +1485,6 @@ _log_step "Step_3b_miARma" "start"
 	echo -e "\nPlease double check all the parameters above for miARma, in particular the stranded or the reference genome files and annotation used. Proceeding with miARma execution in..."
 	secs=$((1 * 15))
 	dir=${unit_out[0]}
-	# With genome groups, miARma would otherwise run MultiQC from within the first group's
-	# featureCounts step (it is gated on multiqc_out being empty), covering only that group's
-	# samples. Keep the folder non-empty so every group skips it, and build MultiQC once below,
-	# after all the groups have been merged.
 	if [ ! -z "$reference_genome_groups" ]; then
 		mkdir -p $output_folder/$name/multiqc_out && touch $output_folder/$name/multiqc_out/.rgse_multiqc_deferred
 	fi
@@ -1536,9 +1512,6 @@ _log_step "Step_3b_miARma" "start"
 		fi
 	done
 
-	### Genome groups (-rG): merge the groups back into a single miARma_out0, so that everything
-	### from STEP 4 onwards sees one cohort. This is only sound because all the groups were counted
-	### with the same annotation, i.e. their count tables share one feature space (checked below).
 	if [ ! -z "$reference_genome_groups" ]; then
 		echo -e "\n\nMerging the genome groups into a single quantification...\n"
 		merged_dir=$output_folder/$name/miARma_out0
@@ -1550,25 +1523,35 @@ _log_step "Step_3b_miARma" "start"
 		gg_assignment_file=$output_folder/$name/reads_study_info/genome_group_assignment.tsv
 		rm -rf $merged_dir
 		mkdir -p $merged_dir/$rc_suffix $merged_dir/$aligner_results_dir $merged_dir/Pre_fastqc_results
+		mkdir -p $TMPDIR
 
-		# Gate: every group must have produced the same set of features, otherwise the per-sample
-		# tables cannot be placed side by side in one matrix.
 		ref_ids=$TMPDIR/gg_feature_ids_ref.txt; cur_ids=$TMPDIR/gg_feature_ids_cur.txt
+		common_ids=$TMPDIR/gg_feature_ids_common.txt
 		for index in "${!unit_out[@]}"; do
 			_one_tab=$(find ${unit_out[index]}/$rc_suffix -maxdepth 1 -name "*.tab" 2>/dev/null | head -1)
 			if [ -z "$_one_tab" ]; then
 				echo -e "\n\033[1;31mERROR:\033[0m genome group '${unit_label[index]}' produced no count tables in ${unit_out[index]}/$rc_suffix.\n" >&2; exit 1
 			fi
-			grep -v "^#" "$_one_tab" | tail -n +2 | cut -f1 | sort > $cur_ids
+			grep -v "^#" "$_one_tab" | tail -n +2 | cut -f1 | sort -u > $cur_ids
+			if [ ! -s "$cur_ids" ]; then
+				echo -e "\n\033[1;31mERROR:\033[0m could not read any feature id from $_one_tab (or could not write to \$TMPDIR=$TMPDIR). This is a problem reading the counts, not a difference between the genome groups.\n" >&2; exit 1
+			fi
 			if [ "$index" -eq 0 ]; then
-				cp $cur_ids $ref_ids
-			elif ! cmp -s $ref_ids $cur_ids; then
-				echo -e "\n\033[1;31mERROR:\033[0m the count tables of genome group '${unit_label[index]}' do not have the same features as those of '${unit_label[0]}' ($(wc -l < $cur_ids) vs $(wc -l < $ref_ids) rows)." >&2
-				echo -e "All the genome groups must be quantified into one shared feature space to be mergeable. This usually means the annotation is not equally usable on every genome. Merge aborted; the per-group results are kept in miARma_out_genome*.\n" >&2
-				exit 1
+				cp $cur_ids $ref_ids; cp $cur_ids $common_ids
+			else
+				if ! cmp -s $ref_ids $cur_ids; then
+					echo -e "\n\033[1;33mWARNING:\033[0m genome group '${unit_label[index]}' was quantified over a different set of features than '${unit_label[0]}' ($(wc -l < $cur_ids) vs $(wc -l < $ref_ids) features)."
+					echo "The merged count matrix will only keep the features present in every group. If this is unexpected, check that the annotation is equally usable on all the group genomes and that featureCounts completed for every sample (see miARma_out_genome*/)."
+				fi
+				comm -12 $common_ids $cur_ids > $common_ids.tmp && mv $common_ids.tmp $common_ids
 			fi
 		done
-		echo "  Feature space verified: $(wc -l < $ref_ids) features shared by all the genome groups."
+		n_common=$(wc -l < $common_ids)
+		if [ "$n_common" -lt 1 ]; then
+			echo -e "\n\033[1;31mERROR:\033[0m the genome groups share no feature at all, so their counts cannot be merged into one matrix. Please check that the annotation given in '-a' is the one used for every group. The per-group results are kept in miARma_out_genome*.\n" >&2
+			exit 1
+		fi
+		echo "  Feature space: $n_common feature(s) shared by all the genome groups."
 
 		# Counts are copied (not linked): STEP 4 rewrites them in place when -Fgene is used
 		for index in "${!unit_out[@]}"; do
@@ -1616,7 +1599,7 @@ _log_step "Step_3b_miARma" "start"
 	### Reformat the logs by parallel...
 	for f in $(find $output_folder/$name -name "*_log_parallel.txt"); do awk -F"\t" 'NR==1; NR > 1{OFS="\t"; $3=strftime("%Y-%m-%d %H:%M:%S", $3); print $0}' $f > tmp && mv tmp $f; done
 
- 	### Clean genome index cache? (one call per distinct index, since genome groups use several)
+ 	### Clean genome index cache?
   	if [ "$aligner" == "star" ] && [ "$aligner_index_cache" == "no" ]; then
 		for genome_dir_loaded in $(find $output_folder/$name/ -name "star_log_parallel.txt" | xargs cat 2>/dev/null | grep "genomeDir" | sed 's,.*genomeDir ,,g;s, .*,,g' | sort | uniq); do
 			STAR --runThreadN $cores --genomeDir $genome_dir_loaded --genomeLoad Remove --outFileNamePrefix genomeloading.tmp
@@ -1995,7 +1978,7 @@ if run_step step6; then
 			echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
 _log_step "Step_6_Enrichment" "start"
     			echo -e "\nPerforming network analyses (WGCNA mode: $wgcna_mode)...\n"
-			R_functional_network_analyses.R $output_folder/$name/final_results_reanalysis$index/DGE/ $output_folder/$name/final_results_reanalysis$index/RM_counts_genes.txt "^DGE_analysis_comp[0-9]+.txt$" $taxonid $wgcna_mode $organism &> network_analyses_funct_enrichment.log
+			R_functional_network_analyses.R $output_folder/$name/final_results_reanalysis$index/DGE/ $output_folder/$name/final_results_reanalysis$index/Raw_counts_genes.txt "^DGE_analysis_comp[0-9]+.txt$" $taxonid $wgcna_mode $organism $output_folder/$name/reads_study_info/samples_info.txt &> network_analyses_funct_enrichment.log
 		fi
 
 		# Functional Enrichment Analyses
@@ -2185,11 +2168,11 @@ _log_step "Step_6_Enrichment" "start"
 					rm -f "$ai_tmp"
 				fi
 
-				# --- counts: per-sample expression landscape. The full log2(TPM+0.1)
+				# --- counts: per-sample expression landscape. The full log2(TPM+1)
 				#     table is NEVER sent; we send a compact per-sample summary (value
 				#     ranges/quartiles + Low/Medium/High category counts) plus the
 				#     sample->condition metadata, so the LLM can comment on it. ---
-				ai_counts_tbl="$ai_fdir/TPM_counts_genes_log2_0.1_categ.txt"
+				ai_counts_tbl="$ai_fdir/TPM_counts_genes_log2_1_categ.txt"
 				if [ "$ai_do_counts" = 1 ] && [ -f "$ai_counts_tbl" ]; then
 					ai_tmp=$(mktemp)
 					python3 - "$ai_counts_tbl" "$ai_sinfo" > "$ai_tmp" 2>/dev/null <<'PYEOF'
@@ -2217,7 +2200,7 @@ def q(s, pr):
     if not s: return float("nan")
     k = (len(s) - 1) * pr; f = int(k); c = min(f + 1, len(s) - 1)
     return s[f] + (s[c] - s[f]) * (k - f)
-print("Per-sample expression summary (values are log2(TPM+0.1)); genes: %d" % ngenes)
+print("Per-sample expression summary (values are log2(TPM+1)); genes: %d" % ngenes)
 for i in num_cols:
     s = sorted(vals[i]); name = header[i]
     ci = cat_of.get(name + "_categ")
@@ -2330,6 +2313,52 @@ _log_step "Step_7_Annotation" "start"
 															grep -i \"=\$gene\" \"$annotation_file\" | head -1 | awk -v id=\"\$gene\" -v fc=\"\$foldchange\" '{ print \$1\"\\t\"\$4\"\\t\"\$5\"\\t\"id\"_\"fc\"\\t.\t\"\$7 }' >> \"$file.bed\""
 			done
 		fi
+
+		### Bibliographic context for the top DEGs:
+		lit_dge_dir="$output_folder/$name/final_results_reanalysis$index/DGE"
+		lit_out="$lit_dge_dir/literature"
+		lit_log="$lit_dge_dir/lit_gather.log"
+		: "${ai_do_literature:=0}"
+		if [ "$literature" != "no" ] && [ -d "$lit_dge_dir" ] && command -v lit_gather.py >/dev/null 2>&1; then
+			echo -e "\nGathering bibliographic context for the top DEGs (organism: $organism)..."
+			lit_gather.py --dge-dir "$lit_dge_dir" --organism "$organism" \
+				--out-dir "$lit_out" \
+				--cache-dir "$output_folder/$name/reads_study_info/literature_cache" \
+				$literature_args > "$lit_log" 2>&1
+			lit_rc=$?
+			case $lit_rc in
+				0) echo "Bibliographic context saved under $lit_out" ;;
+				3) echo "No usable bibliographic context: no significant genes, none resolved at NCBI, or no literature linked. See $lit_log" ;;
+				4) echo "NCBI E-utilities unreachable; bibliographic context skipped. See $lit_log" ;;
+				*) echo "Literature gathering failed (exit $lit_rc); see $lit_log" ;;
+			esac
+
+			if [ "$lit_rc" = 0 ] && [ -n "$LLM_ENDPOINT" ] && [ "$ai_do_literature" = 1 ]; then
+				lit_write_timeout() {
+					printf '%s\n\n%s\n' "**AI summary** — the LLM did not respond in time." \
+						"ai_insights timeout. Please try again" > "$1"
+				}
+				lit_comps=$(python3 -c "import json,sys; print(' '.join(json.load(open(sys.argv[1]))['usable_comparisons']))" \
+					"$lit_out/status.json" 2>/dev/null)
+				if [ -n "$lit_comps" ]; then
+					echo "Generating AI literature synthesis (model=${llm_model:-<unset>})..."
+					lit_to=0
+					for lit_c in $lit_comps; do
+						lit_box="$lit_dge_dir/${lit_c}.literature_ai_insight.md"
+						if [ "$lit_to" = 1 ]; then lit_write_timeout "$lit_box"; continue; fi
+						llm_insight.py --input "$lit_out/$lit_c/for_llm.txt" --task literature \
+							--title "$lit_c" --max-rows 0 \
+							--pmid-whitelist "$lit_out/$lit_c/pmids.txt" \
+							--out "$lit_box" >> "$lit_log" 2>&1
+						if [ $? -eq 42 ]; then lit_to=1; lit_write_timeout "$lit_box"; fi
+					done
+				fi
+			elif [ "$lit_rc" = 0 ] && [ "$ai_do_literature" = 1 ] && [ -z "$LLM_ENDPOINT" ]; then
+				echo "AI literature synthesis skipped: no -llm_endpoint provided (the gathered tables are still in the report)."
+			fi
+		elif [ "$literature" = "no" ] && [ "$ai_do_literature" = 1 ] && [ -n "$LLM_ENDPOINT" ] && [ "$index" = 0 ]; then
+			echo -e "\nNOTE: 'literature' is among the requested ai_insights, but literature gathering is off ('-lit no'), so there is nothing to summarise."
+		fi
 	done
 	export debug_step="all"
 _log_step "Step_7_Annotation" "end"
@@ -2417,11 +2446,14 @@ _log_step "Step_9_Cleanup" "start"
 
 
 	# Remove intermediate DEG-list text files (DGE_analysis_comp*_fdr_05.txt, logpos/logneg),
-	# but spare the clusterProfiler enrichment result tables, which carry a double token
-	# (e.g. GO_overrepresentation_test_BP_fdr_fdr_05.txt). Without the exclusion the broad
-	# "*_fdr_05.txt" glob deleted the fdr_05 enrichment tables while keeping fdr_01, so the
-	# archived report could no longer be re-rendered with both thresholds.
-	cd $output_folder/$name/ && find . -type f \( -name "*_fdr_05.txt" -o -name "*_logneg.txt" -o -name "*_logpos.txt" \) ! -name "*_fdr_fdr_05.txt" -exec rm -f {} +
+	# but spare everything inside the enrichment result folders: those tables are named after
+	# the gene set they came from (e.g. GO_overrepresentation_test_BP_fdr_fdr_05_logpos.txt)
+	# and match the same globs. Without the exclusion the broad "*_fdr_05.txt" glob deleted the
+	# fdr_05 enrichment tables while keeping fdr_01, so the archived report could no longer be
+	# re-rendered with both thresholds.
+	cd $output_folder/$name/ && find . -type f \( -name "*_fdr_05.txt" -o -name "*_logneg.txt" -o -name "*_logpos.txt" \) \
+		! -path "*_funct_enrich_clusterProfiler/*" ! -path "*_funct_enrichment_panther/*" ! -path "*/enrichr_clusterProfiler/*" \
+		-exec rm -f {} +
 	# Note: xlsx conversion now happens in STEP 8 (before sphinx report), not here
 
 	for index in "${!array[@]}"; do
@@ -2450,21 +2482,14 @@ _log_step "Step_9_Cleanup" "start"
 		build_alignment_units
 		any_tidied=0
 		for index in "${!unit_out[@]}"; do
-			# Each unit is checked against the number of raw files IT processed: with genome groups
-			# every unit only holds its own subset of the samples.
 			num_raw_files=$(cat ${unit_out[index]}/Pre_fastqc_results/list_of_files.txt 2>/dev/null | grep -c "fastq.gz")
 			[ "$num_raw_files" -lt 1 ] && continue
-			# The results folders have just been renamed above to 'final_results_reanalysisN_<outdir>',
-			# so they have to be matched with a glob. With genome groups there is a single merged
-			# analysis (index 0) covering all the units.
 			if [ ! -z "$reference_genome_groups" ]; then _fr_glob="final_results_reanalysis0*"; else _fr_glob="final_results_reanalysis$index*"; fi
 			if [ -z "$(find $output_folder/$name -maxdepth 1 -type d -name "$_fr_glob" 2>/dev/null | head -1)" ]; then
 				echo "Skipping the clean up of ${unit_out[index]}: no results folder matching '$_fr_glob' (the analysis did not complete)"
 				continue
 			fi
 			n_bams=$(ls ${unit_out[index]}/$aligner\_results 2>/dev/null | egrep -c ".bam$")
-			# The merged miARma_out0 only holds symlinks under genome groups, so always convert the
-			# real BAMs living in the unit's own folder, each against ITS OWN reference genome.
 			if [[ "$n_bams" -eq "$num_raw_files" || "$n_bams" -eq $((num_raw_files / 2)) ]]; then
 				echo -e "\nTidying up${unit_label[index]:+ (genome group ${unit_label[index]})}...\n"
 				cd ${unit_out[index]}/$aligner\_results
@@ -2475,7 +2500,6 @@ _log_step "Step_9_Cleanup" "start"
 				any_tidied=1
 			fi
 		done
-		# Raw reads are shared by all the units, so they are removed once, after every unit is done
 		if [ "$any_tidied" -eq 1 ] && [ -d "$seqs_location" ]; then
 			cd $seqs_location
 			echo "After execution, raw reads have been removed for the sake of efficient storage. These were... " > readme
@@ -2483,7 +2507,6 @@ _log_step "Step_9_Cleanup" "start"
 			ls | grep -v readme | xargs -r rm -rf
 			rm -rf $TMPDIR
 		fi
-		# Genome groups: the merged folder points at BAMs that have just been replaced by CRAMs
 		if [ ! -z "$reference_genome_groups" ] && [ -d "$output_folder/$name/miARma_out0/${aligner}_results" ]; then
 			find $output_folder/$name/miARma_out0/${aligner}_results -xtype l -delete 2>/dev/null
 			for index in "${!unit_out[@]}"; do
@@ -2515,8 +2538,6 @@ _log_step "Step_9_Cleanup" "start"
 				sed -i "s|/path/to/annotation.gtf|${gtf_for_igv}|g"          "$final_dir_igv/igvShinyApp.R"
 				sed -i "s|/path/to/bigwig_folder/|${bw_dir}/|g"              "$final_dir_igv/igvShinyApp.R"
 				sed -i "s|GENOME_NAME_PLACEHOLDER|${organism}|g"             "$final_dir_igv/igvShinyApp.R"
-				# Genome groups: the app can only be pointed at one reference at a time, so make the
-				# mismatch explicit instead of letting it load tracks against the wrong genome.
 				if [ ! -z "$reference_genome_groups" ]; then
 					{
 						echo "LIMITATION: this analysis used SEVERAL reference genomes (-rG), but igvShinyApp.R can only be configured with one."

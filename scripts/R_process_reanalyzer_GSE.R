@@ -23,6 +23,10 @@ sc_count_matrix <- args[20] # sc/snRNA count matrix path, or "none"
 sc_phenotype <- args[21] # sc phenotype file path, or "none"
 bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
 
+PSEUDOCOUNT <- 1
+PSEUDO_TAG  <- paste0("log2_", PSEUDOCOUNT)
+expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
+
 normalize_sample_id <- function(x) {
   x <- basename(as.character(x))
   x <- gsub("_categ(_2)?$", "", x)
@@ -291,8 +295,8 @@ normalize_sample_id <- function(x) {
     } else if(covariab_format == "num"){
       cov <- as.numeric(unlist(strsplit(as.character(covariab),",")))      
     }    
-    cat("\nProcessing counts (log scale + pseudocount of 0.1) with limma::removeBatchEffect...\nApplied the covariates and group:\n"); print(data.frame(group=pheno$condition,covar=cov))
-    adjusted_counts <- limma::removeBatchEffect(x=log(count_matrix+0.1),covariates=cov, group=pheno$condition)
+    cat("\nProcessing counts (log2-CPM, prior.count=2) with limma::removeBatchEffect...\nApplied the covariates and group:\n"); print(data.frame(group=pheno$condition,covar=cov))
+    adjusted_counts <- limma::removeBatchEffect(x=edgeR::cpm(count_matrix, log=TRUE, prior.count=2),covariates=cov, group=pheno$condition)
   }
   if (file.exists(paste0(path,"/reads_study_info/batch_vector.txt")) && !file.exists(paste0(path,"/reads_study_info/batch_biological_variables.txt"))){
     count_matrix <- as.matrix(gene_counts[,grep("Gene_ID|Length",colnames(gene_counts),invert=T)])
@@ -479,9 +483,9 @@ normalize_sample_id <- function(x) {
   tpm_counts_to_write <- data.frame(Gene_ID = rownames(tpm_counts), tpm_counts, check.names = FALSE)
   write.table(tpm_counts_to_write,
               file=paste0(output_dir,"/TPM_counts_genes.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
-  tpm_counts_log_to_write <- data.frame(Gene_ID = rownames(tpm_counts), log2(tpm_counts+0.1), check.names = FALSE)
+  tpm_counts_log_to_write <- data.frame(Gene_ID = rownames(tpm_counts), log2(tpm_counts+PSEUDOCOUNT), check.names = FALSE)
   write.table(tpm_counts_log_to_write,
-              file=paste0(output_dir,"/TPM_counts_genes_log2_0.1.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
+              file=paste0(output_dir,"/TPM_counts_genes_",PSEUDO_TAG,".txt"),quote = F,row.names = F, col.names = T,sep = "\t")
   
   # CPM calculation and writing (mirroring the RPKM pattern to avoid case-mismatch issues)
   cpm_counts <- as.data.frame(cpm(edgeR_object_norm, normalized.lib.sizes=TRUE))
@@ -493,9 +497,9 @@ normalize_sample_id <- function(x) {
   cpm_counts_to_write <- data.frame(Gene_ID = rownames(cpm_counts), cpm_counts, check.names = FALSE)
   write.table(cpm_counts_to_write,
               file=paste0(output_dir,"/CPM_counts_genes.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
-  cpm_counts_log_to_write <- data.frame(Gene_ID = rownames(cpm_counts), log2(cpm_counts+0.1), check.names = FALSE)
+  cpm_counts_log_to_write <- data.frame(Gene_ID = rownames(cpm_counts), log2(cpm_counts+PSEUDOCOUNT), check.names = FALSE)
   write.table(cpm_counts_log_to_write,
-              file=paste0(output_dir,"/CPM_counts_genes_log2_0.1.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
+              file=paste0(output_dir,"/CPM_counts_genes_",PSEUDO_TAG,".txt"),quote = F,row.names = F, col.names = T,sep = "\t")
   # High/medium/low categ for TPM:
   tpm_counts_categ <- tpm_counts
   for (col in colnames(tpm_counts_categ)){
@@ -509,7 +513,7 @@ normalize_sample_id <- function(x) {
   tpm_counts_categ_to_write <- data.frame(Gene_ID = rownames(tpm_counts_categ), tpm_counts_categ, check.names = FALSE)
   write.table(tpm_counts_categ_to_write,
               file=paste0(output_dir,"/TPM_counts_genes_categ.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
-  tpm_counts_log <- log2(tpm_counts+0.1)
+  tpm_counts_log <- log2(tpm_counts+PSEUDOCOUNT)
   tpm_counts_log_categ <- tpm_counts_log
   for (col in colnames(tpm_counts_log_categ)){
     a <- Hmisc::cut2(tpm_counts_log_categ[,col],g=3); b <- as.character(a)
@@ -521,7 +525,7 @@ normalize_sample_id <- function(x) {
   }
   tpm_counts_log_categ_to_write <- data.frame(Gene_ID = rownames(tpm_counts_log_categ), tpm_counts_log_categ, check.names = FALSE)
   write.table(tpm_counts_log_categ_to_write,
-              file=paste0(output_dir,"/TPM_counts_genes_log2_0.1_categ.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
+              file=paste0(output_dir,"/TPM_counts_genes_",PSEUDO_TAG,"_categ.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
   
   # High/medium/low categ for CPM:
   cpm_counts_categ <- cpm_counts
@@ -536,7 +540,7 @@ normalize_sample_id <- function(x) {
   cpm_counts_categ_to_write <- data.frame(Gene_ID = rownames(cpm_counts_categ), cpm_counts_categ, check.names = FALSE)
   write.table(cpm_counts_categ_to_write,
               file=paste0(output_dir,"/CPM_counts_genes_categ.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
-  cpm_counts_log <- log2(cpm_counts+0.1)
+  cpm_counts_log <- log2(cpm_counts+PSEUDOCOUNT)
   cpm_counts_log_categ <- cpm_counts_log
   for (col in colnames(cpm_counts_log)){
     a <- Hmisc::cut2(cpm_counts_log_categ[,col],g=3); b <- as.character(a)
@@ -548,7 +552,7 @@ normalize_sample_id <- function(x) {
   }
   cpm_counts_log_categ_to_write <- data.frame(Gene_ID = rownames(cpm_counts_log_categ), cpm_counts_log_categ, check.names = FALSE)
   write.table(cpm_counts_log_categ_to_write,
-              file=paste0(output_dir,"/CPM_counts_genes_log2_0.1_categ.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
+              file=paste0(output_dir,"/CPM_counts_genes_",PSEUDO_TAG,"_categ.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
   # High/medium/low categ:
   gene_counts_rpkm_to_write_categ <- gene_counts_rpkm_to_write
   for (col in colnames(gene_counts_rpkm_to_write_categ[,-1])){
@@ -561,11 +565,11 @@ normalize_sample_id <- function(x) {
   }
   write.table(gene_counts_rpkm_to_write_categ,
               file=paste0(output_dir,"/RPKM_counts_genes_categ.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
-  gene_counts_rpkm_log <- log2(gene_counts_rpkm_to_write[,-1]+0.1)
+  gene_counts_rpkm_log <- log2(gene_counts_rpkm_to_write[,-1]+PSEUDOCOUNT)
   gene_counts_rpkm_log$Gene_ID <- gene_counts_rpkm_to_write$Gene_ID
   gene_counts_rpkm_log <- gene_counts_rpkm_log[,c(length(colnames(gene_counts_rpkm_log)),grep("Gene_ID",colnames(gene_counts_rpkm_log),invert=T))]
   write.table(gene_counts_rpkm_log,
-              file=paste0(output_dir,"/RPKM_counts_genes_log2_0.1.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
+              file=paste0(output_dir,"/RPKM_counts_genes_",PSEUDO_TAG,".txt"),quote = F,row.names = F, col.names = T,sep = "\t")
   gene_counts_rpkm_log_categ <- gene_counts_rpkm_log
   for (col in colnames(gene_counts_rpkm_log_categ[,-1])){
     a <- Hmisc::cut2(gene_counts_rpkm_log_categ[,col],g=3); b <- as.character(a)
@@ -576,7 +580,7 @@ normalize_sample_id <- function(x) {
     gene_counts_rpkm_log_categ[,paste0(col,"_categ_2")] <- b
   }
   write.table(gene_counts_rpkm_log_categ,
-              file=paste0(output_dir,"/RPKM_counts_genes_log2_0.1_categ.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
+              file=paste0(output_dir,"/RPKM_counts_genes_",PSEUDO_TAG,"_categ.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
 
   
 ###### Similar to above, obtain RPKM counts but from the adjusted counts instead of the raw counts (ComBat-Seq, edgeR...)
@@ -606,16 +610,16 @@ normalize_sample_id <- function(x) {
     gene_counts_rpkm_adjusted_to_write <- gene_counts_rpkm_adjusted_to_write[,c("Gene_ID",sort(colnames(gene_counts_rpkm_adjusted_to_write)[-1]))]
     write.table(gene_counts_rpkm_adjusted_to_write,
           file=paste0(output_dir,"/RPKM_counts_adjusted_genes.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
-    gene_counts_rpkm_adjusted_log <- log2(gene_counts_rpkm_adjusted_to_write[,grep("Gene_ID",colnames(gene_counts_rpkm_adjusted_to_write),invert=T)] + 0.1)
+    gene_counts_rpkm_adjusted_log <- log2(gene_counts_rpkm_adjusted_to_write[,grep("Gene_ID",colnames(gene_counts_rpkm_adjusted_to_write),invert=T)] + PSEUDOCOUNT)
     gene_counts_rpkm_adjusted_log <- cbind(gene_counts_rpkm_adjusted_to_write$Gene_ID,gene_counts_rpkm_adjusted_log)
     colnames(gene_counts_rpkm_adjusted_log)[1] <- "Gene_ID"
     write.table(gene_counts_rpkm_adjusted_log,
-          file=paste0(output_dir,"/RPKM_counts_adjusted_genes_log2_0.1.txt"),quote = F,row.names = F, col.names = T,sep = "\t")
+          file=paste0(output_dir,"/RPKM_counts_adjusted_genes_",PSEUDO_TAG,".txt"),quote = F,row.names = F, col.names = T,sep = "\t")
     tpm_counts <- rpkm_to_tpm(gene_counts_rpkm_adjusted_to_write[,grep("Gene_ID",colnames(gene_counts_rpkm_adjusted_to_write),invert=T)]); rownames(tpm_counts) <- gene_counts_rpkm_adjusted_to_write$Gene_ID
     write.table(tpm_counts,
                 file=paste0(output_dir,"/TPM_counts_adjusted_genes.txt"),quote = F,row.names = T, col.names = NA,sep = "\t")
-    write.table(log2(tpm_counts+0.1),
-                file=paste0(output_dir,"/TPM_counts_adjusted_genes_log2_0.1.txt"),quote = F,row.names = T, col.names = NA,sep = "\t")
+    write.table(log2(tpm_counts+PSEUDOCOUNT),
+                file=paste0(output_dir,"/TPM_counts_adjusted_genes_",PSEUDO_TAG,".txt"),quote = F,row.names = T, col.names = NA,sep = "\t")
     
     # CPM calculation and writing for adjusted counts
     cpm_counts_adjusted <- as.data.frame(cpm(edgeR_object_norm_adjusted, normalized.lib.sizes=TRUE))
@@ -625,8 +629,8 @@ normalize_sample_id <- function(x) {
     cpm_counts_adjusted <- cpm_counts_adjusted[,sort(colnames(cpm_counts_adjusted))]
     write.table(cpm_counts_adjusted,
                 file=paste0(output_dir,"/CPM_counts_adjusted_genes.txt"),quote = F,row.names = T, col.names = NA,sep = "\t")
-    write.table(log2(cpm_counts_adjusted+0.1),
-                file=paste0(output_dir,"/CPM_counts_adjusted_genes_log2_0.1.txt"),quote = F,row.names = T, col.names = NA,sep = "\t")
+    write.table(log2(cpm_counts_adjusted+PSEUDOCOUNT),
+                file=paste0(output_dir,"/CPM_counts_adjusted_genes_",PSEUDO_TAG,".txt"),quote = F,row.names = T, col.names = NA,sep = "\t")
   }
   cat(paste0("\nCounts written. Current date: ",date(),"\n"))
 
@@ -673,7 +677,7 @@ normalize_sample_id <- function(x) {
         }
       }
       print("Please double check that the order betwen the columns is correct and association between conditions and samples in the rows is correct:"); print(df)
-        df$"Expr_RPKM_log2_01" <- round(log2(df$expr_RPKM + 0.1),2)
+        df[[expr_col]] <- round(log2(df$expr_RPKM + PSEUDOCOUNT),2)
         lab_title <- tryCatch({
                   tmp_lab_title <- data.table::fread(list.files(pattern = "series_matrix.txt.gz$", recursive = TRUE, full.names=T, path=path)[1],fill=T)
                   lab_title <- paste(tmp_lab_title$V2[grep("Series_geo_accession",tmp_lab_title$V1)],tmp_lab_title$V2[grep("Series_title",tmp_lab_title$V1)],sep=": ")
@@ -685,7 +689,7 @@ normalize_sample_id <- function(x) {
         suppressMessages(library(ggpubr,quiet = T,warn.conflicts = F))
         suppressMessages(library(plotly,quiet = T,warn.conflicts = F))
         suppressMessages(library(dplyr,quiet = T,warn.conflicts = F))
-        p <- ggbarplot(df, x = "sample", y = "Expr_RPKM_log2_01", color = "condition",
+        p <- ggbarplot(df, x = "sample", y = expr_col, color = "condition",
           add = "mean_se", label=T,lab.vjust = 4,
           position = ggplot2::position_dodge()) +
           theme_classic() + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size=9)) +
@@ -694,7 +698,7 @@ normalize_sample_id <- function(x) {
         suppressWarnings(htmlwidgets::saveWidget(widget = ggplotly(p),file = paste0(output_dir,"/violin/",i,"_barplot_",gsub(".txt","",basename(z)),".html"),selfcontained = TRUE))
 
         df2 <- reshape2::melt(df)
-        df2 <- unique(df2[df2$variable=="Expr_RPKM_log2_01",c("condition","value","sample")])        
+        df2 <- unique(df2[df2$variable==expr_col,c("condition","value","sample")])        
         df2 <- df2 %>%
           add_count(condition, name = "condition_n")
           df2$sample2 <- as.numeric(1:dim(df2)[1])
@@ -711,7 +715,7 @@ normalize_sample_id <- function(x) {
         geom_point(data = dplyr::filter(df2, condition_n == 1)) +
         geom_text(data=labs_total,aes(x=condition,y= max(df2$value) + 0.1,label=i)) +
         theme_classic() + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size=9)) +
-        labs(x="",y="Expr_RPKM_log2_01",color="Condition", title=paste0(lab_title,"// GENE SHOWN: ", i))
+        labs(x="",y=expr_col,color="Condition", title=paste0(lab_title,"// GENE SHOWN: ", i))
         ggsave(p, filename = paste0(output_dir,"/violin/",i,"_violin_",gsub(".txt","",basename(z)),".pdf"),width=30, height=30)
         suppressWarnings(htmlwidgets::saveWidget(widget = ggplotly(p),file = paste0(output_dir,"/violin/",i,"_violin_",gsub(".txt","",basename(z)),".html"),selfcontained = TRUE))
         write.table(paste0("Samples_numbering:\n",paste0("Number_",1:length(df2$sample),": ",df2$sample,collapse="\n")),
@@ -728,7 +732,7 @@ normalize_sample_id <- function(x) {
         ggrepel::geom_label_repel(position = position_jitter(0.2,seed = 1)) +
         geom_point(data = dplyr::filter(df2, condition_n == 1)) +
         theme_classic() + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size=9)) +
-        labs(x="",y="Expr_RPKM_log2_01",color="Condition", title=paste0(lab_title,"// GENE SHOWN: ", i))
+        labs(x="",y=expr_col,color="Condition", title=paste0(lab_title,"// GENE SHOWN: ", i))
         ggsave(p, filename = paste0(output_dir,"/violin/",i,"_violin_ttest_",gsub(".txt","",basename(z)),".pdf"),width=30, height=30)
         suppressWarnings(htmlwidgets::saveWidget(widget = ggplotly(p),file = paste0(output_dir,"/violin/",i,"_violin_ttest_",gsub(".txt","",basename(z)),".html"),selfcontained = TRUE))
         p <- ggplot(df2, aes(x=condition, y=value,color=condition,label = sample2)) +
@@ -742,7 +746,7 @@ normalize_sample_id <- function(x) {
         ggrepel::geom_label_repel(position = position_jitter(0.2,seed = 1)) +
         geom_point(data = dplyr::filter(df2, condition_n == 1)) +
         theme_classic() + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size=9)) +
-        labs(x="",y="Expr_RPKM_log2_01",color="Condition", title=paste0(lab_title,"// GENE SHOWN: ", i))
+        labs(x="",y=expr_col,color="Condition", title=paste0(lab_title,"// GENE SHOWN: ", i))
         ggsave(p, filename = paste0(output_dir,"/violin/",i,"_violin_wilcoxtest_",gsub(".txt","",basename(z)),".pdf"),width=30, height=30)
         suppressWarnings(htmlwidgets::saveWidget(widget = ggplotly(p),file = paste0(output_dir,"/violin/",i,"_violin_wilcoxtest_",gsub(".txt","",basename(z)),".html"),selfcontained = TRUE))
         p <- ggplot(df2, aes(x=condition, y=value,color=condition,label = sample2)) +
@@ -756,7 +760,7 @@ normalize_sample_id <- function(x) {
         ggrepel::geom_label_repel(position = position_jitter(0.2,seed = 1)) +
         geom_point(data = dplyr::filter(df2, condition_n == 1)) +
         theme_classic() + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size=9)) +
-        labs(x="",y="Expr_RPKM_log2_01",color="Condition", title=paste0(lab_title,"// GENE SHOWN: ", i))
+        labs(x="",y=expr_col,color="Condition", title=paste0(lab_title,"// GENE SHOWN: ", i))
         ggsave(p, filename = paste0(output_dir,"/violin/",i,"_violin_kruskaltest_",gsub(".txt","",basename(z)),".pdf"),width=30, height=30)
         suppressWarnings(htmlwidgets::saveWidget(widget = ggplotly(p),file = paste0(output_dir,"/violin/",i,"_violin_kruskaltest_",gsub(".txt","",basename(z)),".html"),selfcontained = TRUE))
         p <- ggplot(df2, aes(x=condition, y=value,color=condition,label = sample2)) +
@@ -770,7 +774,7 @@ normalize_sample_id <- function(x) {
         ggrepel::geom_label_repel(position = position_jitter(0.2,seed = 1)) +
         geom_point(data = dplyr::filter(df2, condition_n == 1)) +
         theme_classic() + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size=9)) +
-        labs(x="",y="Expr_RPKM_log2_01",color="Condition", title=paste0(lab_title,"// GENE SHOWN: ", i))
+        labs(x="",y=expr_col,color="Condition", title=paste0(lab_title,"// GENE SHOWN: ", i))
         ggsave(p, filename = paste0(output_dir,"/violin/",i,"_violin_anova_",gsub(".txt","",basename(z)),".pdf"),width=30, height=30)
         suppressWarnings(htmlwidgets::saveWidget(widget = ggplotly(p),file = paste0(output_dir,"/violin/",i,"_violin_anova_",gsub(".txt","",basename(z)),".html"),selfcontained = TRUE))  
   }

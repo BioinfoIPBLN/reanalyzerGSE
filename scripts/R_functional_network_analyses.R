@@ -6,6 +6,55 @@ pattern_search <- args[3]
 organism <- as.numeric(args[4])
 wgcna_mode <- if (length(args) >= 5) tolower(args[5]) else "all"  # "all" (canonical) or "degs"
 organism_name <- if (length(args) >= 6) args[6] else ""
+samples_info <- if (length(args) >= 7) args[7] else ""   # reads_study_info/samples_info.txt
+
+# Condition per sample, taken from samples_info.txt (col1 = sample, col3 = condition).
+# Falls back to stripping "_Rep..." off the sample name when the file is absent or a
+# sample is missing from it, which is what this script did for every sample before.
+sample_conditions <- function(sample_names) {
+    fallback <- gsub("_Rep.*", "", sample_names)
+    if (!nzchar(samples_info) || !file.exists(samples_info)) return(fallback)
+    si <- tryCatch(as.data.frame(data.table::fread(samples_info, header = FALSE)),
+                   error = function(e) NULL)
+    if (is.null(si) || ncol(si) < 3) return(fallback)
+    cond <- as.character(si[[3]])[match(sample_names, as.character(si[[1]]))]
+    if (all(is.na(cond))) return(fallback)
+    cond[is.na(cond)] <- fallback[is.na(cond)]
+    cond
+}
+
+# `expr` is the RAW count table. Co-expression needs a homoscedastic matrix, so the
+# counts are variance-stabilised with DESeq2 before WGCNA and BONOBO see them.
+# vst() needs enough genes to fit dispersions on; small or sparse matrices fall back
+# to the exact transformation, and then to log2(CPM+1) so the step never dies here.
+load_expression <- function(counts_file) {
+    raw <- as.data.frame(data.table::fread(counts_file))
+    m <- as.matrix(raw[, grep("Gene_ID|Length", colnames(raw), invert = TRUE), drop = FALSE])
+    rownames(m) <- raw$Gene_ID
+    m <- round(m); m[is.na(m)] <- 0; mode(m) <- "integer"
+    trans <- tryCatch({
+        v <- DESeq2::vst(m, blind = TRUE)
+        cat("Expression for network analyses: DESeq2::vst on raw counts\n"); v
+    }, error = function(e) {
+        cat(paste0("  vst() not applicable (", conditionMessage(e),
+                   "); trying varianceStabilizingTransformation()\n"))
+        tryCatch({
+            v <- DESeq2::varianceStabilizingTransformation(m, blind = TRUE)
+            cat("Expression for network analyses: DESeq2::varianceStabilizingTransformation\n"); v
+        }, error = function(e2) {
+            cat(paste0("  VST unavailable (", conditionMessage(e2),
+                       "); falling back to log2(CPM+1)\n"))
+            log2(edgeR::cpm(m) + 1)
+        })
+    })
+    data.frame(Gene_ID = rownames(trans), trans, check.names = FALSE)
+}
+
+.expr_cache <- NULL
+get_expression <- function() {
+    if (is.null(.expr_cache)) .expr_cache <<- load_expression(expr)
+    .expr_cache
+}
 
 suppressMessages(library(WGCNA, quiet = T, warn.conflicts = F))
 suppressMessages(library(tidyr, quiet = T, warn.conflicts = F))
@@ -230,6 +279,7 @@ run_gsea <- function(deg_df, label, gsea_base_dir, orgdb, kegg_org, species_labe
 #### Helper: run WGCNA analysis
 ################################################################################
 run_wgcna <- function(nexpr_mat, new_path, label, orgdb = NULL, all_gene_ids = NULL, minSize = 30, MEDissThres = 0.25) {
+    nexpr_mat <- nexpr_mat[rowSums(nexpr_mat, na.rm = TRUE) > 0, , drop = FALSE]
     if (nrow(nexpr_mat) < minSize) {
         cat(paste0("Skipping WGCNA for ", label, ": only ", nrow(nexpr_mat),
                    " genes (minimum ", minSize, " required)\n"))
@@ -240,6 +290,17 @@ run_wgcna <- function(nexpr_mat, new_path, label, orgdb = NULL, all_gene_ids = N
     system(paste("mkdir -p", new_path))
 
     t_exprs <- t(nexpr_mat)
+    gsg <- goodSamplesGenes(t_exprs, verbose = 0)
+    if (!gsg$allOK) {
+        cat(paste0("WGCNA QC for ", label, ": dropping ", sum(!gsg$goodGenes), " gene(s) and ",
+                   sum(!gsg$goodSamples), " sample(s) with zero variance or too many missing values\n"))
+        t_exprs <- t_exprs[gsg$goodSamples, gsg$goodGenes, drop = FALSE]
+    }
+    if (ncol(t_exprs) < minSize) {
+        cat(paste0("Skipping WGCNA for ", label, ": only ", ncol(t_exprs),
+                   " genes left after QC (minimum ", minSize, " required)\n"))
+        return(invisible(NULL))
+    }
 
     ## Choose a set of soft-thresholding powers
     powers = c(c(1:10), seq(from = 12, to=20, by=2))
@@ -323,7 +384,7 @@ run_wgcna <- function(nexpr_mat, new_path, label, orgdb = NULL, all_gene_ids = N
     # Get Module Eigengenes per cluster
     MEs0 = orderMEs(netwk$MEs)
     module_order = gsub("ME","",names(MEs0))
-    MEs0$treatment = gsub("_Rep.*","",colnames(nexpr_mat))
+    MEs0$treatment = sample_conditions(rownames(t_exprs))
 
     mME = MEs0 %>%
       pivot_longer(-treatment) %>%
@@ -353,7 +414,7 @@ run_wgcna <- function(nexpr_mat, new_path, label, orgdb = NULL, all_gene_ids = N
     tryCatch({
         nSamples <- nrow(t_exprs)
         MEs_ordered <- orderMEs(netwk$MEs)
-        conditions <- gsub("_Rep.*", "", rownames(t_exprs))
+        conditions <- sample_conditions(rownames(t_exprs))
         unique_conds <- unique(conditions)
         trait_mat <- matrix(0, nrow = nSamples, ncol = length(unique_conds))
         colnames(trait_mat) <- unique_conds
@@ -666,7 +727,7 @@ run_stringdb <- function(deg_df, label, new_path, organism_taxid, orgdb = NULL) 
 if (wgcna_mode == "all") {
     cat("Running WGCNA on all expressed genes (canonical mode)...\n\n")
     setwd(path)
-    a <- as.data.frame(data.table::fread(expr))
+    a <- get_expression()
     nexpr_mat <- as.matrix(a[, -grep("Gene_ID", colnames(a))])
     rownames(nexpr_mat) <- a$Gene_ID
     new_path <- paste0(out_base, "WGCNA/")
@@ -684,7 +745,7 @@ for (genes_interest in list.files(pattern = pattern_search, path = path)){
     if (wgcna_mode == "degs") {
 		cat(paste0("Processing WGCNA of DEGs from ",genes_interest,"...\n\n"))
 		setwd(path)
-		a <- as.data.frame(data.table::fread(expr))
+		a <- get_expression()
 		b <- as.data.frame(data.table::fread(genes_interest))
 		if("FDR" %in% colnames(b)){b <- b[b$FDR < 0.05,]}
 		a <- a[a$Gene_ID %in% b$Gene_ID,]
@@ -693,7 +754,7 @@ for (genes_interest in list.files(pattern = pattern_search, path = path)){
 		label=sub("\\..*","",basename(genes_interest))
 		new_path=paste0(out_base,"WGCNA/")
 		run_wgcna(nexpr_mat, new_path, label = label,
-		          orgdb = orgdb, all_gene_ids = as.data.frame(data.table::fread(expr))$Gene_ID)
+		          orgdb = orgdb, all_gene_ids = get_expression()$Gene_ID)
     }
 
   
@@ -761,15 +822,17 @@ for (genes_interest in list.files(pattern = pattern_search, path = path)){
 		if (nzchar(Sys.which("netzoopy"))) {
 			cat(paste0("Processing BONOBO of ",genes_interest,"...\n\n"))
 			setwd(path)
-			a <- as.data.frame(data.table::fread(expr))
+			a <- get_expression()
 			b <- as.data.frame(data.table::fread(genes_interest))
 			if("FDR" %in% colnames(b)){b <- b[b$FDR < 0.05,]}
 			a <- a[a$Gene_ID %in% b$Gene_ID,]
 			nexpr_mat <- as.matrix(a[,-grep("Gene_ID",colnames(a))])
 			rownames(nexpr_mat) <- a$Gene_ID
 			bonobo_out <- paste0(out_base, "BONOBO/results_", tools::file_path_sans_ext(genes_interest), "/")
-			write.table(nexpr_mat, file = paste0(expr,"_expr_degs_no_header.txt"),sep="\t",row.names = T, col.names=F,quote=F)
-			system(paste0("netzoopy bonobo --expression_file ",paste0(expr,'_expr_degs_no_header.txt')," --output_folder '", bonobo_out, "' --output_format '.csv' --sparsify --save_pvals"))
+			dir.create(bonobo_out, recursive = TRUE, showWarnings = FALSE)
+			bonobo_expr <- paste0(bonobo_out, "expression_vst_degs_no_header.txt")
+			write.table(nexpr_mat, file = bonobo_expr,sep="\t",row.names = T, col.names=F,quote=F)
+			system(paste0("netzoopy bonobo --expression_file ",bonobo_expr," --output_folder '", bonobo_out, "' --output_format '.csv' --sparsify --save_pvals"))
 		} else {
 			cat("netzoopy is not installed or not in PATH. Skipping BONOBO analysis.\n")
 		}

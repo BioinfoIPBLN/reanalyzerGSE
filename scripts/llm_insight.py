@@ -29,7 +29,7 @@ Exit codes: 0 = wrote an insight, or nothing to do / non-fatal error (box omitte
 42 = the LLM timed out (>--timeout s). The caller uses 42 to fill that AI option's
 boxes with a 'timeout, please try again' placeholder.
 """
-import argparse, os, sys, time
+import argparse, os, re, sys, time
 
 # Import the sibling shared module regardless of how this script is invoked.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -58,15 +58,47 @@ TASKS = {
                    "3-5 sentences describing the main biological themes among the enriched "
                    "terms and what hypothesis they suggest. Make clear this is a hypothesis "
                    "to be verified, not a conclusion."),
-    "counts": ("Given a per-sample summary of expression (log2(TPM+0.1)) for one experiment - "
+    "counts": ("Given a per-sample summary of expression (log2(TPM+1)) for one experiment - "
                "each sample's expression-value range/quartiles and how many genes fall in the "
                "Low/Medium/High expression categories, plus which condition each sample belongs "
                "to - write 2-4 sentences on the overall expression landscape: whether samples "
                "look comparable, whether any sample stands out as an outlier (unusually shifted "
                "range or category split), and whether samples of the same condition look "
                "consistent. Use only the numbers given; do not name individual genes."),
+    "literature": ("Given the strongest differentially expressed genes of one comparison, each "
+                   "with its curated NCBI Gene summary and a few recent linked papers (PMIDs, "
+                   "titles, abstracts), write 4-6 sentences on what is already known about these "
+                   "genes and what the published context suggests for this comparison. Cite "
+                   "evidence as PMID:12345678, using ONLY PMIDs present in the input; never "
+                   "invent a PMID, title or finding. Group genes by shared biology where the "
+                   "material supports it. Make clear this is background context and a hypothesis "
+                   "to verify, not a conclusion about these data."),
     "generic": "Summarise the following bioinformatics output concisely and factually.",
 }
+
+PMID_RE = re.compile(r"PMID:?\s*(\d{6,9})", re.IGNORECASE)
+
+def drop_unknown_pmids(text, whitelist_path):
+    """Remove citations to any PMID that was not in the material sent to the model."""
+    try:
+        with open(whitelist_path, encoding="utf-8") as fh:
+            allowed = {ln.strip() for ln in fh if ln.strip()}
+    except OSError:
+        return text, 0
+    if not allowed:
+        return text, 0
+    dropped = []
+    def repl(m):
+        if m.group(1) in allowed:
+            return m.group(0)
+        dropped.append(m.group(1))
+        return ""
+    out = PMID_RE.sub(repl, text)
+    if dropped:
+        out = re.sub(r"[ \t]*[\(\[]\s*[,;]?\s*[\)\]]", "", out)
+        out = re.sub(r"\s+([.,;])", r"\1", out)
+        out = re.sub(r"[ \t]{2,}", " ", out)
+    return out, len(dropped)
 
 # For map-reduce over MANY tables (used by --task enrichment with several inputs):
 # summarise each table on its own (MAP), then synthesise all summaries (REDUCE).
@@ -279,6 +311,9 @@ def main():
     p.add_argument("--rel-dir", default=None,
                    help="Base directory to format relative paths for per-table labels")
     p.add_argument("--max-rows", type=int, default=40)
+    p.add_argument("--pmid-whitelist", default=None,
+                   help="file of PMIDs that were sent to the model; citations to any "
+                        "other PMID are stripped from the answer before it is written")
     p.add_argument("--endpoint", default=os.environ.get("LLM_ENDPOINT"))
     p.add_argument("--model", default=os.environ.get("LLM_MODEL"))
     p.add_argument("--api-key", default=os.environ.get("LLM_API_KEY", "dummy"))
@@ -311,6 +346,11 @@ def main():
             llm_common.log(f"[llm_insight] response for {out} exceeds {llm_common.max_answer_chars()} chars "
                            f"(likely degraded); nothing written.")
             return 0
+        if a.pmid_whitelist:
+            text, n_bad = drop_unknown_pmids(text, a.pmid_whitelist)
+            if n_bad:
+                llm_common.log(f"[llm_insight] dropped {n_bad} PMID citation(s) not present "
+                               f"in the material sent for {out}")
         stamp = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime())
         # Model name is kept (useful provenance); the endpoint is never included.
         # TPS = per-call generation rate (for map-reduce, the average of the

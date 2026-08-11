@@ -223,6 +223,15 @@ def mask(text, secrets):
             text = text.replace(s, REDACT)
     return text, n
 
+_AI_DISCLAIMER = re.compile(
+    r"Provider:\s*<span[^>]*ai-summary-disclaimer-provider[^>]*>\s*"
+    + re.escape(REDACT) + r"\s*</span>,\s*model:\s*", re.IGNORECASE)
+
+def drop_masked_provider(text):
+    """MultiQC's AI disclaimer reads 'Provider: <endpoint>, model: <model>'; once the
+    endpoint is masked the provider half says nothing, so keep only the model."""
+    return _AI_DISCLAIMER.subn("Model: ", text)
+
 def scrub_file(path, secrets):
     # surrogateescape round-trips any non-UTF8 bytes losslessly, so the big
     # self-contained HTML (base64 blobs etc.) is never corrupted -- only the
@@ -233,7 +242,8 @@ def scrub_file(path, secrets):
     except OSError:
         return 0
     new, n = mask(s, secrets)
-    if n:
+    new, n_prov = drop_masked_provider(new)
+    if n or n_prov:
         try:
             with open(path, "w", encoding="utf-8", errors="surrogateescape", newline="") as fh:
                 fh.write(new)
