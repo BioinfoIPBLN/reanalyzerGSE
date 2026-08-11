@@ -67,6 +67,7 @@ for argument in $options; do
 	        -vv | -perform_volcano_venn # Whether to perform all Volcano plots and Venn diagrams, which may take a long time if many comparisons ('no' or 'yes', by default)
 	        -aP | -aPEAR_execution # Whether to simplify pathway enrichment analysis results by detecting clusters of similar pathways and visualizing enrichment networks by aPEAR package, which may be slow ('yes' or 'no', by default)
 	        -Ti | -tidy_tmp_files # Space-efficient run, with a last step removing raw reads if downloaded, converting bam to cram, removing tmp files... etc ('yes' or 'no', by default)
+	        -Tr | -tidy_report_files # Whether to shrink the built report tree once Sphinx is done ('yes', by default, or 'no'). Sphinx copies whole result folders into 'sphinx_report/html', which duplicates most of the analysis; this drops the copies no page links to and hard-links the ones that are linked back to their originals. A file is only ever touched when the same file still exists elsewhere in the output folder, so nothing is lost and every link in the report keeps working
 	        -Txls | -convert_tables_excel # Convert all tables in results from .txt format, without limitation of size to Excel's .xlsx format, with a limitation of 32,767 characters ('yes' or 'no', by default)
 	        -Tc | -time_course # Whether to perform additional time-course analyses as a last step ('yes' or 'no', by default)
 	        -Na | -network_analyses # Whether to perform network analyses ('yes' or 'no', by default). WGCNA is organism-agnostic; STRINGdb supports any organism with a valid taxon ID
@@ -211,6 +212,7 @@ for argument in $options; do
 		-iG) input_geo_reads=${arguments[index]} ;;
 		-cG) compression_level=${arguments[index]} ;;
 		-Ti) tidy_tmp_files=${arguments[index]} ;;
+		-Tr) tidy_report_files=${arguments[index]} ;;
 		-Txls) convert_tables_excel=${arguments[index]} ;;
 		-Tx) taxonid=${arguments[index]} ;;
 		-Tc) time_course=${arguments[index]} ;;
@@ -362,6 +364,7 @@ echo -e "\n\nArguments:"
 echo -e "\ninput=$input\n"
 echo -e "\noutput_folder=$output_folder\n"
 echo -e "\ncores=$cores\n"
+export RGSE_QS_THREADS=$(( cores < 8 ? cores : 8 ))
 if [ -z "$name" ]; then
 	if [[ $input == G* ]]; then
 		arrIN=(${input//,/ }); name=$(for a in "${arrIN[@]}"; do echo "$a"; done | sort | tr '\n' '_' | sed 's,_$,,g')
@@ -522,6 +525,10 @@ fi
 if [ -z "$tidy_tmp_files" ]; then
 	tidy_tmp_files="no"
 fi
+if [ -z "$tidy_report_files" ]; then
+	tidy_report_files="yes"
+fi
+export tidy_report_files
 if [ -z "$network_analyses" ]; then
 	network_analyses="no"
 fi

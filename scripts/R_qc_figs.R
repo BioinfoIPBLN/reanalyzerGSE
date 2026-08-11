@@ -1,5 +1,7 @@
 #!/usr/bin/env Rscript
-load(file.path(commandArgs(trailingOnly=TRUE)[3],"QC_and_others/globalenvir.RData"))
+.rgse_scripts_dir <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[1])))
+source(file.path(.rgse_scripts_dir, "R_qs_helpers.R"))
+rgse_load_env(file.path(commandArgs(trailingOnly=TRUE)[3],"QC_and_others/globalenvir.qs2"))
 
 args = commandArgs(trailingOnly=TRUE)
 path <- args[1]

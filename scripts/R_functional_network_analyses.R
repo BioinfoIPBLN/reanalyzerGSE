@@ -8,6 +8,9 @@ wgcna_mode <- if (length(args) >= 5) tolower(args[5]) else "all"  # "all" (canon
 organism_name <- if (length(args) >= 6) args[6] else ""
 samples_info <- if (length(args) >= 7) args[7] else ""   # reads_study_info/samples_info.txt
 
+.rgse_scripts_dir <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[1])))
+source(file.path(.rgse_scripts_dir, "R_qs_helpers.R"))
+
 # Condition per sample, taken from samples_info.txt (col1 = sample, col3 = condition).
 # Falls back to stripping "_Rep..." off the sample name when the file is absent or a
 # sample is missing from it, which is what this script did for every sample before.
@@ -842,4 +845,4 @@ for (genes_interest in list.files(pattern = pattern_search, path = path)){
 }
 
 					  
-save.image(file=paste0(out_base,"network_analyses_envir.RData"))
+rgse_save_env(paste0(out_base,"network_analyses_envir.qs2"))

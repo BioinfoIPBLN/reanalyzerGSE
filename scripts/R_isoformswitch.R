@@ -391,9 +391,9 @@ write.table(aSwitchList$isoformFeatures,
 
 # Save the full object for potential downstream use
 tryCatch({
-  saveRDS(aSwitchList, file = file.path(output_dir, "switchAnalyzeRlist.rds"))
-  cat("Full switchAnalyzeRlist saved as RDS.\n")
-}, error = function(e) cat(paste0("Could not save RDS: ", e$message, "\n")))
+  qs2::qs_save(aSwitchList, file.path(output_dir, "switchAnalyzeRlist.qs2"))
+  cat("Full switchAnalyzeRlist saved as qs2.\n")
+}, error = function(e) cat(paste0("Could not save qs2: ", e$message, "\n")))
 
 # ── 12. Overlap between comparisons ──
 if (nrow(myComparisons) > 1) {

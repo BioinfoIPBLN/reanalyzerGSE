@@ -102,7 +102,7 @@ if (id!="agilent" & id!="HT12V4"){
 	GSEXXXXX <- affy::rma(GSEXXXXX_raw) # If the required libraries for the precise array were not installed previously, this function would also install them
 	# Gathering expression values
 	GSEXXXXX_1 <- affy::exprs(GSEXXXXX) # Eset object
-	save(GSEXXXXX_1,file=paste0(path,"/final_results_reanalysis/QC_and_others/final_eset_object.RData"))
+	qs2::qs_save(GSEXXXXX_1,paste0(path,"/final_results_reanalysis/QC_and_others/final_eset_object.qs2"))
 
 	matriz_GSEXXXXX<-as.data.frame(GSEXXXXX_1)
 	# Obtaining the relation gene - probe
@@ -122,7 +122,7 @@ if (id!="agilent" & id!="HT12V4"){
 	project.NormData <- limma::normalizeBetweenArrays(project.bgc,method="quantile")
 	# Adding genenames & colapsing
 	GSEXXXXX_2 <- project.NormData$E # Eset object
-	save(GSEXXXXX_2,file=paste0(path,"/final_results_reanalysis/QC_and_others/final_eset_object.RData"))
+	qs2::qs_save(GSEXXXXX_2,paste0(path,"/final_results_reanalysis/QC_and_others/final_eset_object.qs2"))
 
 	GSEXXXXX <- as.data.frame(GSEXXXXX_2)
 	GSEXXXXX$Probes <- project.NormData$genes$GeneName
@@ -156,7 +156,7 @@ if (id!="agilent" & id!="HT12V4"){
 	GSEXXXXX_agg <- GSEXXXXX_agg[setdiff(names(GSEXXXXX),"SYMBOL")]
 	# head(GSEXXXXX_agg)
 	GSEXXXXX_3 <- bead.results$eset # Eset object
-	save(GSEXXXXX_3,file=paste0(path,"/final_results_reanalysis/QC_and_others/final_eset_object.RData"))
+	qs2::qs_save(GSEXXXXX_3,paste0(path,"/final_results_reanalysis/QC_and_others/final_eset_object.qs2"))
 }
 
 write.table(GSEXXXXX_agg,

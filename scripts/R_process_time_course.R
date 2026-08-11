@@ -6,6 +6,9 @@ object <- args[3]
 min.std <- as.numeric(args[4])
 mestimate_value <- as.numeric(args[5])
 
+.rgse_scripts_dir <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[1])))
+source(file.path(.rgse_scripts_dir, "R_qs_helpers.R"))
+
 suppressMessages(library(limma,quiet = T,warn.conflicts = F))
 suppressMessages(library(Mfuzz,quiet = T,warn.conflicts = F))
 
@@ -85,8 +88,7 @@ Venn_funct <- function(files){
 
 ###### Load read counts, format... etc:
 setwd(paste0(path,"/DGE"))
-tmpfile <- tempfile(); system(paste("tar -xzf", shQuote("allRData.tar.gz"), input, "-O >", tmpfile))
-load(tmpfile); unlink(tmpfile); path <- dirname(getwd())
+rgse_load_env(input); path <- dirname(getwd())
 
 dir.create(paste0(path,"/time_course_analyses"),showWarnings = FALSE); setwd(paste0(path,"/time_course_analyses"))
 eset <- eval(parse(text=object))
@@ -260,4 +262,4 @@ if(length(list.files(path=paste0(path,"/time_course_analyses"),full.names=T,patt
       dev.off()
 
 
-save.image(file="time_course_envir.RData")
+rgse_save_env("time_course_envir.qs2")

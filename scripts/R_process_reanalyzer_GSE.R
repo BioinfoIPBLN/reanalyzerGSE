@@ -23,6 +23,9 @@ sc_count_matrix <- args[20] # sc/snRNA count matrix path, or "none"
 sc_phenotype <- args[21] # sc phenotype file path, or "none"
 bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
 
+.rgse_scripts_dir <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[1])))
+source(file.path(.rgse_scripts_dir, "R_qs_helpers.R"))
+
 PSEUDOCOUNT <- 1
 PSEUDO_TAG  <- paste0("log2_", PSEUDOCOUNT)
 expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
@@ -141,7 +144,7 @@ normalize_sample_id <- function(x) {
                           dilution_factor = 10,
                           mcmc_iterations = 1000,
                           verbose = T)
-    save(result_cdseq,file=paste0(output_dir,"/result_cdseq.RData"))
+    qs2::qs_save(result_cdseq,paste0(output_dir,"/result_cdseq.qs2"))
     print(paste0("Number of cell types estimated by CDSeq: ",result_cdseq$estT))
     print("Estimated proportions for the number of cell types estimated by CDSeq: ")
     result_cdseq$estProp; cat("\n\n")
@@ -202,7 +205,7 @@ normalize_sample_id <- function(x) {
       write.table(res_bisque$bulk.props,
                   file = paste0(output_dir, "/deconvolution/BisqueRNA_results.txt"),
                   sep = "\t", quote = FALSE)
-      save(res_bisque, file = paste0(output_dir, "/deconvolution/BisqueRNA_results.RData"))
+      qs2::qs_save(res_bisque, paste0(output_dir, "/deconvolution/BisqueRNA_results.qs2"))
       cat("BisqueRNA results saved.\n")
 
       # Stacked barplot
@@ -985,7 +988,7 @@ normalize_sample_id <- function(x) {
       if (pattern_to_remove!="none"){
         list_combinations <- list_combinations[grep(pattern_to_remove,list_combinations,invert=T)]
       }
-      existing <- length(list.files(path=paste0(output_dir,"/DGE/"),pattern=".RData$"))
+      existing <- length(list.files(path=paste0(output_dir,"/DGE/"),pattern="^DGE_analysis_comp[0-9]+\\.qs2$"))
       print(list_combinations)
     for (i in 1:length(list_combinations)){
       # print(i)    
@@ -1074,7 +1077,7 @@ normalize_sample_id <- function(x) {
           }
         }
         conflicts <- intersect(ls(envir = environment()), ls(envir = .GlobalEnv))
-        suppressWarnings(list2env(as.list(environment()), envir = .GlobalEnv)); save.image(file=paste0(output_dir,"/DGE/DGE_analysis_comp",i+existing,".RData"))
+        suppressWarnings(list2env(as.list(environment()), envir = .GlobalEnv)); rgse_save_env(paste0(output_dir,"/DGE/DGE_analysis_comp",i+existing,".qs2"))
         write.table(edgeR_results$table,
                 file=paste0(output_dir,"/DGE/DGE_analysis_comp",i+existing,".txt"),quote = F,row.names = F, col.names = T,sep = "\t")
       }
@@ -1692,8 +1695,8 @@ tryCatch({
 })
 
 conflicts <- intersect(ls(envir = environment()), ls(envir = .GlobalEnv))
-cat("\nSaved R global environment in 'QC_and_others/globalenvir.RData'")
-suppressWarnings(list2env(as.list(environment()), envir = .GlobalEnv)); save.image(paste0(output_dir,"/QC_and_others/globalenvir.RData"))
+cat("\nSaved R global environment in 'QC_and_others/globalenvir.qs2'")
+suppressWarnings(list2env(as.list(environment()), envir = .GlobalEnv)); rgse_save_env(paste0(output_dir,"/QC_and_others/globalenvir.qs2"))
 
 ###### WIP add DESeq2 as a full alternative to edgeR, for now, generate and provide/write independently the counts if the user ask for it:
 if (diff_soft=="DESeq2"){  

@@ -1776,10 +1776,6 @@ _log_step "Step_4_R_Process" "start"
 			echo -e 'R_qc_figs.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index "edgeR_object_prefilter_adjusted" "edgeR_object_adjusted" "edgeR_object_norm_adjusted" $pattern_to_remove $annotation_file $fc_feat_type $split_sections' > $output_folder/$name/R_qc_figs_adjusted.log
 			R_qc_figs.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index "edgeR_object_prefilter_adjusted" "edgeR_object_adjusted" "edgeR_object_norm_adjusted" $pattern_to_remove $annotation_file $fc_feat_type $split_sections | tee -a $output_folder/$name/R_qc_figs_adjusted.log
 		fi
-		if [ -d "$output_folder/$name/final_results_reanalysis$index/DGE/" ]; then
-			cd $output_folder/$name/final_results_reanalysis$index/DGE/
-			tar -cf - $(ls | egrep ".RData$") | pigz -p $cores > allRData.tar.gz; rm -rf $(ls | egrep ".RData$")
-		fi
 	done
 	### Generate SummarizedExperiment for the exploreLocalDE app if requested
 	if [[ "$exploreDE_se" == "yes" ]]; then
@@ -1903,7 +1899,7 @@ if run_step step5; then
 			echo -e "\n\nSTEP 5: Starting...\nCurrent date/time: $(date)\n\n"
 _log_step "Step_5_QC_Figs" "start"
    			echo -e "\nPerforming time course analyses."
-			R_process_time_course.R $output_folder/$name/final_results_reanalysis$index/ DGE_analysis_comp1.RData edgeR_object_norm $minstd $mestimate
+			R_process_time_course.R $output_folder/$name/final_results_reanalysis$index/ DGE_analysis_comp1.qs2 edgeR_object_norm $minstd $mestimate
 _log_step "Step_5_QC_Figs" "end"
    			echo -e "\n\nSTEP 5: DONE\nCurrent date/time: $(date)\n\n"
 		fi
@@ -2577,6 +2573,13 @@ if [ -f "$STEP_TIMES_FILE" ]; then
 		Rscript $CURRENT_DIR/scripts/R_gantt_chart.R "$STEP_TIMES_FILE" "$output_folder/$name/sphinx_report/html/pipeline_gantt_chart.pdf" 2>&1 || \
 			echo "WARNING: Sphinx report Gantt chart update failed."
 	fi
+fi
+
+# Shrink the built report tree, once nothing else writes into it
+if [ "${tidy_report_files:-yes}" != "no" ] && [ -d "$output_folder/$name/sphinx_report/html" ]; then
+	$CURRENT_DIR/scripts/prune_sphinx_html.py "$output_folder/$name/sphinx_report/html" \
+		--extra-html "$output_folder/$name/final_report.html" || \
+		echo "WARNING: report tidying failed. The report itself is unaffected."
 fi
 
 if [[ -n "$end_step" && "$end_step" != "none" && "$end_step" != "all" ]]; then

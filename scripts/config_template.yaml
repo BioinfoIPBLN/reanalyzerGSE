@@ -67,6 +67,7 @@ bulk_expression_matrix: ""             # Path to bulk expression matrix for Bisq
 perform_volcano_venn: "yes"            # Volcano plots and Venn diagrams ('yes' or 'no')
 aPEAR_execution: "no"                  # aPEAR pathway clustering ('yes' or 'no')
 tidy_tmp_files: "no"                   # Space-efficient run, remove tmp files ('yes' or 'no')
+tidy_report_files: "yes"               # Shrink sphinx_report/html by dropping unlinked copies and hard-linking the rest ('yes' or 'no')
 convert_tables_excel: "no"             # Convert tables to .xlsx ('yes' or 'no')
 time_course: "no"                      # Time-course analyses ('yes' or 'no')
 network_analyses: "no"                 # Network analyses: WGCNA + STRINGdb + BONOBO ('yes' or 'no')

@@ -6,6 +6,9 @@ path <- args[3]
 pattern_search <- args[4]
 kegg_annotation <- if (length(args) >= 5 && nchar(args[5]) > 0) args[5] else NULL
 
+.rgse_scripts_dir <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[1])))
+source(file.path(.rgse_scripts_dir, "R_qs_helpers.R"))
+
 suppressMessages(library(clusterProfiler,quiet = T,warn.conflicts = F))
 suppressMessages(library(aPEAR,quiet = T,warn.conflicts = F))
 suppressMessages(library(ggplot2,quiet = T,warn.conflicts = F))
@@ -381,7 +384,7 @@ for (file in list.files(path = path, pattern = "_Gene_IDs\\.txt$")){
   } # end KEGG
 }
 
-dir.create(file.path(getwd(), "enrichr_clusterProfiler")); save.image(file.path(getwd(), "enrichr_clusterProfiler/globalenvir.RData"))
+dir.create(file.path(getwd(), "enrichr_clusterProfiler")); rgse_save_env(file.path(getwd(), "enrichr_clusterProfiler/globalenvir.qs2"))
 # Move each file to the new directory
 for (file in list.files(path = getwd(), pattern = "_functional_clusterProfiler_enrichr_", full.names = TRUE)) {    
   file.rename(from = file, to = file.path(file.path(getwd(), "enrichr_clusterProfiler"), basename(file)))
