@@ -2845,7 +2845,7 @@ sub hisat2{
 	      							    --met-file {}.metrics $unaligned_cmd_pe \\
 	      							    --new-summary --summary-file {}_hisat2.log \\
 	      							  $samtools_pipeline_pe && \\
-	      							  echo Done...{}_hisat2.bam && \\
+	      							  echo && echo Done...{}_hisat2.bam && \\
 	      							  export _JAVA_OPTIONS=\"-Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD\" && \\
 	      							  qualimap bamqc -bam {}_hisat2.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_hisat2.bam --java-mem-size=${memorylimit_div_mb}m >> qc1.log 2>&1 || true && \\
 	      							  case \"$gtf\" in *.gtf) samtools sort -n -@ $threads_sort -T {}_nsort_qc_tmp -m ${memorylimit_div_mb_sort_cores}M -o {}_hisat2_name_sorted.bam {}_hisat2.bam && \\
@@ -2941,7 +2941,7 @@ sub hisat2{
 	      							    --met-file {}.metrics $unaligned_cmd_se \\
 	      							    --new-summary --summary-file {}_hisat2.log \\
 	      							  $samtools_pipeline_se && \\
-	      							  echo Done...{}_hisat2.bam && \\
+	      							  echo && echo Done...{}_hisat2.bam && \\
 	      							  export _JAVA_OPTIONS=\"-Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD\" && \\
 	      							  qualimap bamqc -bam {}_hisat2.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_hisat2.bam --java-mem-size=${memorylimit_div_mb}m >> qc1.log 2>&1 || true && \\
 	      							  case \"$gtf\" in *.gtf) qualimap rnaseq -bam {}_hisat2.bam -gtf $gtf -outdir \$PWD/rnaseqqc_results/{}_hisat2.bam --java-mem-size=${memorylimit_div_mb}m >> qc2.log 2>&1 || true ;; esac && \\
@@ -3403,7 +3403,7 @@ sub star{
 					                          mkdir -p $projectdir$output_dir && cd $projectdir$output_dir && export PARALLEL_SHELL=/bin/bash
 					                          name_lists=\$(cat $tmp_file | sed -E 's,_(R)?[12]\.fastq.*,,g' | sort | uniq | awk -F '/' '{ print \$NF }') && unset DISPLAY
 					                          STAR --runThreadN $indexthreads --genomeDir $staridx_final --genomeLoad LoadAndExit --outFileNamePrefix $projectdir${output_dir}genomeloading.tmp2 && rm -rf $projectdir${output_dir}genomeloading.tmp*
-					                          parallel --halt-on-error 2 --verbose --joblog ${projectdir}/star_log_parallel.txt -j $parallelnumber 'STAR --runMode alignReads --genomeDir $staridx_final --genomeLoad LoadAndKeep --readFilesIn \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \$(cat $tmp_file | xargs dirname | uniq)/{}_2.fastq.gz --outFileNamePrefix $projectdir${output_dir}{}_STAR_ $starpardef --outStd SAM $samtools_pipeline_pe && echo Done...{}_STAR.bam' ::: \$(echo \$name_lists)
+					                          parallel --halt-on-error 2 --verbose --joblog ${projectdir}/star_log_parallel.txt -j $parallelnumber 'STAR --runMode alignReads --genomeDir $staridx_final --genomeLoad LoadAndKeep --readFilesIn \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \$(cat $tmp_file | xargs dirname | uniq)/{}_2.fastq.gz --outFileNamePrefix $projectdir${output_dir}{}_STAR_ $starpardef --outStd SAM $samtools_pipeline_pe && echo && echo Done...{}_STAR.bam' ::: \$(echo \$name_lists)
 					                          parallel --halt-on-error 2 --verbose --joblog ${projectdir}/starprocess_log_parallel.txt -j $parallelnumber 'export _JAVA_OPTIONS="-Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD" && qualimap bamqc -bam $projectdir${output_dir}/{}_STAR.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_STAR.bam --java-mem-size="${memorylimit_div_mb}m" >> qc1.log 2>&1 || true
 					                          samtools sort -n -@ $threads_sort -T {}_nsort_qc_tmp -m ${memorylimit_div_mb_sort_cores}M -o {}_STAR_name_sorted.bam $projectdir${output_dir}/{}_STAR.bam && \\
 					                          qualimap rnaseq -bam {}_STAR_name_sorted.bam -gtf $gtf -pe --sorted -outdir \$PWD/rnaseqqc_results/{}_STAR.bam --java-mem-size="${memorylimit_div_mb}m" >> qc2.log 2>&1; rm -f {}_STAR_name_sorted.bam || true
@@ -3488,7 +3488,7 @@ sub star{
 		                          mkdir -p $projectdir$output_dir && cd $projectdir$output_dir
 		                          name_lists=\$(cat $tmp_file | awk -F '/' '{ print \$NF }') && unset DISPLAY && export PARALLEL_SHELL=/bin/bash
 		                          STAR --runThreadN $indexthreads --genomeDir $staridx_final --genomeLoad LoadAndExit --outFileNamePrefix $projectdir${output_dir}genomeloading.tmp2 && rm -rf $projectdir${output_dir}genomeloading.tmp*
-					  parallel --halt-on-error 2 --verbose --joblog ${projectdir}/star_log_parallel.txt -j $parallelnumber 'STAR --runMode alignReads --genomeDir $staridx_final --genomeLoad LoadAndKeep --readFilesIn \$(cat $tmp_file | xargs dirname | uniq)/{} --outFileNamePrefix $projectdir${output_dir}{}_STAR_ $starpardef --outStd SAM $samtools_pipeline_se && echo Done...{}_STAR.bam' ::: \$(echo \$name_lists)
+					  parallel --halt-on-error 2 --verbose --joblog ${projectdir}/star_log_parallel.txt -j $parallelnumber 'STAR --runMode alignReads --genomeDir $staridx_final --genomeLoad LoadAndKeep --readFilesIn \$(cat $tmp_file | xargs dirname | uniq)/{} --outFileNamePrefix $projectdir${output_dir}{}_STAR_ $starpardef --outStd SAM $samtools_pipeline_se && echo && echo Done...{}_STAR.bam' ::: \$(echo \$name_lists)
 					  parallel --halt-on-error 2 --verbose --joblog ${projectdir}/starprocess_log_parallel.txt -j $parallelnumber 'export _JAVA_OPTIONS="-Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD" && qualimap bamqc -bam $projectdir${output_dir}/{}_STAR.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_STAR.bam --java-mem-size="${memorylimit_div_mb}m" >> qc1.log 2>&1 || true
 		                          qualimap rnaseq -bam $projectdir${output_dir}/{}_STAR.bam -gtf $gtf -outdir \$PWD/rnaseqqc_results/{}_STAR.bam --java-mem-size="${memorylimit_div_mb}m" >> qc2.log 2>&1 || true
 		                          bamCoverage -b {}_STAR.bam -o {}_STAR.bam.bw -of bigwig -bs 10 -p $threads $norm_cmd' ::: \$(echo \$name_lists)
@@ -3527,7 +3527,7 @@ sub star{
 			print STATS "STAR :: File:".$file."\n";
 			#commandef is the command will be executed by system composed of the results directory creation
 			#and the hisat execution. The stats data will be redirected to the stats.log file
-			$commanddef= "mkdir -p ".$projectdir.$output_dir." ;".$command." >> ".$logfile." 2>&1";
+			$commanddef= "mkdir -p ".$projectdir.$output_dir." ;".$command." 2>> ".$logfile;
 		}
 		#Opening the run.log and printing the execution data
 		open (LOG,">> ".$logfile) || die "STAR ERROR :: Can't open $logfile: $!";
@@ -4174,7 +4174,7 @@ sub kallisto{
                                       mkdir -p $projectdir$output_dir && cd $projectdir$output_dir && export PARALLEL_SHELL=/bin/bash
                                       name_lists=\$(cat $tmp_file | sed -E 's,_(R)?[12]\.fastq.*,,g' | sort | uniq | awk -F '/' '{ print \$NF }') && unset DISPLAY
                                       
-                                      parallel --halt-on-error 2 --verbose --joblog ${projectdir}/kallisto_log_parallel.txt -j $parallelnumber 'mkdir -p $projectdir${output_dir}{} && kallisto quant -i $kallistoidx_final -o $projectdir${output_dir}{} -t $threads --bootstrap-samples 10 --seed 42 $kallistoparameters \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \$(cat $tmp_file | xargs dirname | uniq)/{}_2.fastq.gz > $projectdir${output_dir}{}/kallisto_quant.log 2>&1 && echo Done...{}' ::: \$(echo \$name_lists)
+                                      parallel --halt-on-error 2 --verbose --joblog ${projectdir}/kallisto_log_parallel.txt -j $parallelnumber 'mkdir -p $projectdir${output_dir}{} && kallisto quant -i $kallistoidx_final -o $projectdir${output_dir}{} -t $threads --bootstrap-samples 10 --seed 42 $kallistoparameters \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \$(cat $tmp_file | xargs dirname | uniq)/{}_2.fastq.gz > $projectdir${output_dir}{}/kallisto_quant.log 2>&1 && echo && echo Done...{}' ::: \$(echo \$name_lists)
                                     fi
 	 			    cd $projectdir && mkdir -p \$PWD/../multiqc_out && if [ \$(ls \$PWD/../multiqc_out | wc -l) -eq 0 ]; then
        				       echo 'Gathering all QC reports with MultiQC'
@@ -4204,7 +4204,7 @@ sub kallisto{
                                   mkdir -p $projectdir$output_dir && cd $projectdir$output_dir && export PARALLEL_SHELL=/bin/bash
                                   name_lists=\$(cat $tmp_file | awk -F '/' '{ print \$NF }') && unset DISPLAY
                                   
-                                  parallel --halt-on-error 2 --verbose --joblog ${projectdir}/kallisto_log_parallel.txt -j $parallelnumber 'mkdir -p $projectdir${output_dir}{} && kallisto quant -i $kallistoidx_final -o $projectdir${output_dir}{} --single -t $threads --bootstrap-samples 10 --seed 42 $kallistoparameters \$(cat $tmp_file | xargs dirname | uniq)/{} > $projectdir${output_dir}{}/kallisto_quant.log 2>&1 && echo Done...{}' ::: \$(echo \$name_lists)
+                                  parallel --halt-on-error 2 --verbose --joblog ${projectdir}/kallisto_log_parallel.txt -j $parallelnumber 'mkdir -p $projectdir${output_dir}{} && kallisto quant -i $kallistoidx_final -o $projectdir${output_dir}{} --single -t $threads --bootstrap-samples 10 --seed 42 $kallistoparameters \$(cat $tmp_file | xargs dirname | uniq)/{} > $projectdir${output_dir}{}/kallisto_quant.log 2>&1 && echo && echo Done...{}' ::: \$(echo \$name_lists)
                                 fi
 	 			    cd $projectdir && mkdir -p \$PWD/../multiqc_out && if [ \$(ls \$PWD/../multiqc_out | wc -l) -eq 0 ]; then
        				       echo 'Gathering all QC reports with MultiQC'
@@ -4215,7 +4215,7 @@ sub kallisto{
 		# Execution block 
 		open (STATS,">> ".$statsfile) || die "KALLISTO ERROR :: Can't open $statsfile: $!";
 		print STATS "KALLISTO :: File:".$file."\n";
-		$commanddef= "mkdir -p ".$projectdir.$output_dir." ;".$command." >> ".$logfile." 2>&1";
+		$commanddef= "mkdir -p ".$projectdir.$output_dir." ;".$command." 2>> ".$logfile;
 		
         	#Logging
 		open (LOG,">> ".$logfile) || die "KALLISTO ERROR :: Can't open $logfile: $!";
