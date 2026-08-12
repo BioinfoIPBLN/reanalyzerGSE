@@ -135,8 +135,6 @@ save_unaligned: "no"                   # Save unaligned reads from hisat2/STAR t
                                        # so a preset valid for one aligner can never leak into another.
                                        # Empty them to run the aligner with no extra arguments.
 hisat2_extra_args: "--very-sensitive"  # e.g. "--very-sensitive --no-mixed --no-discordant --maxins 800"
-                                       # ('--very-sensitive' used to be hardcoded in the hisat2 call; it is
-                                       # now just this default, so keep it here if you still want it)
 star_extra_args: ""                    # e.g. "--outSAMmultNmax 1 --alignIntronMax 100000"
 kallisto_extra_args: ""                # e.g. "--bias"
 
