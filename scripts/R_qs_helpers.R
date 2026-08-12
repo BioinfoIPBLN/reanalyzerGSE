@@ -3,7 +3,7 @@
 local({
   n <- suppressWarnings(as.integer(Sys.getenv("RGSE_QS_THREADS", unset = "")))
   if (length(n) != 1 || is.na(n) || n < 1L) n <- 4L
-  qs2::qopt(nthreads = as.integer(min(n, 8L)))
+  qs2::qopt("nthreads", as.integer(min(n, 8L)))
 })
 
 rgse_save_env <- function(file, envir = .GlobalEnv) {
