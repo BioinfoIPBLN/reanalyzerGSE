@@ -2279,8 +2279,6 @@ _log_step "Step_7_Annotation" "start"
 						if [ $? -eq 42 ]; then lit_to=1; lit_write_timeout "$lit_box"; fi
 					done
 				fi
-			elif [ "$lit_rc" = 0 ] && [ "$ai_do_literature" = 1 ] && [ -z "$LLM_ENDPOINT" ]; then
-				echo "AI literature synthesis skipped: no -llm_endpoint provided (the gathered tables are still in the report)."
 			fi
 		elif [ "$literature" = "no" ] && [ "$ai_do_literature" = 1 ] && [ -n "$LLM_ENDPOINT" ] && [ "$index" = 0 ]; then
 			echo -e "\nNOTE: 'literature' is among the requested ai_insights, but literature gathering is off ('-lit no'), so there is nothing to summarise."
@@ -2296,9 +2294,9 @@ fi
 if run_step step8; then
 	_log_step "Step_8_Report" "start"
 
-	# AI Insights for Qualimap and QC PDFs
+	# AI Insights for Qualimap and QC PDFs (only when LLM endpoint is provided)
 	ai_insights_val="${ai_insights:-all}"
-	if [ "$ai_insights_val" != "no" ] && command -v llm_insight.py >/dev/null 2>&1; then
+	if [ -n "$LLM_ENDPOINT" ] && [ "$ai_insights_val" != "no" ] && command -v llm_insight.py >/dev/null 2>&1; then
 		ai_do_qualimap=1
 		ai_do_qc_pdf=1
 		case "$ai_insights_val" in
