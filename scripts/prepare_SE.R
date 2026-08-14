@@ -264,9 +264,35 @@ nm_t2g <- list(BP = NULL, MF = NULL, CC = NULL)              # TERM2GENE per ont
 nm_t2n <- list(BP = NULL, MF = NULL, CC = NULL)              # TERM2NAME per ontology
 nm_go_by_gene <- list(BP = list(), MF = list(), CC = list()) # gene -> GO IDs (for GO Tile)
 nm_has_go <- FALSE
+get_go_names_se <- function(ids) {
+  ids <- as.character(ids)
+  if (requireNamespace("GOfuncR", quietly = TRUE)) {
+    return(GOfuncR::get_names(ids))
+  }
+  onto <- c(BP = "biological_process", MF = "molecular_function", CC = "cellular_component")
+  if (requireNamespace("GO.db", quietly = TRUE) && requireNamespace("AnnotationDbi", quietly = TRUE)) {
+    uid <- unique(ids[!is.na(ids) & grepl("^GO:", ids)])
+    nm <- setNames(rep(NA_character_, length(uid)), uid)
+    rt <- setNames(rep(NA_character_, length(uid)), uid)
+    if (length(uid)) {
+      res <- tryCatch(suppressWarnings(suppressMessages(
+        AnnotationDbi::select(GO.db::GO.db, keys = uid,
+                              columns = c("TERM", "ONTOLOGY"), keytype = "GOID"))),
+        error = function(e) NULL)
+      if (!is.null(res)) {
+        res <- res[!duplicated(res$GOID), ]
+        nm[res$GOID] <- res$TERM
+        rt[res$GOID] <- onto[res$ONTOLOGY]
+      }
+    }
+    return(data.frame(go_id = ids, go_name = unname(nm[ids]),
+                      root_node = unname(rt[ids]), stringsAsFactors = FALSE))
+  }
+  data.frame(go_id = ids, go_name = ids, root_node = NA_character_, stringsAsFactors = FALSE)
+}
+
 if (!is_model && nzchar(nrf_file) && file.exists(nrf_file)) {
   tryCatch({
-    if (!requireNamespace("GOfuncR", quietly = TRUE)) stop("GOfuncR not installed")
     ann <- as.data.frame(data.table::fread(nrf_file, head = TRUE, fill = TRUE))[, 1:2]
     colnames(ann) <- c("source_id", "go_ids")
     ann$source_id <- toupper(gsub(":.*", "", ann$source_id))
@@ -289,7 +315,7 @@ if (!is_model && nzchar(nrf_file) && file.exists(nrf_file)) {
     long <- long[grepl("^GO:", long$go), ]
     long <- long[!duplicated(long), ]
     if (nrow(long) > 0) {
-      nm <- GOfuncR::get_names(unique(long$go))
+      nm <- get_go_names_se(unique(long$go))
       onto_map <- setNames(nm$root_node, nm$go_id)
       name_map <- setNames(nm$go_name, nm$go_id)
       long$onto <- onto_map[long$go]

@@ -1606,6 +1606,14 @@ _log_step "Step_3b_miARma" "start"
 		done
 	fi
 
+	### Display alignment percentages per sample on screen and save summary table
+	if [ -f "$CURRENT_DIR/scripts/show_alignment_stats.py" ]; then
+		python3 $CURRENT_DIR/scripts/show_alignment_stats.py \
+			--dir "$output_folder/$name" \
+			--aligner "$aligner" \
+			--save "$output_folder/$name/reads_study_info/alignment_summary.tsv" 2>/dev/null || true
+	fi
+
 	echo -e "\nmiARma-seq DONE. Current date/time: $(date)"; time1=`date +%s`; echo -e "Elapsed time (secs): $((time1-start))"; echo -e "Elapsed time (hours): $(echo "scale=2; $((time1-start))/3600" | bc -l)\n"
 	export debug_step="all"
 _log_step "Step_3b_miARma" "end"
@@ -1652,7 +1660,7 @@ _log_step "Step_4_R_Process" "start"
 		_pre_go_annot=""
 		if [ ! -z "$non_reference_funct_enrichm" ]; then
 			_pre_go_annot="$non_reference_funct_enrichm"
-		elif [ ! -z "$annotation_file" ] && [ -f "$annotation_file" ] && [ $(zcat -f "$annotation_file" 2>/dev/null | head -500 | egrep -c '(^|[^[:alnum:]])GO:[0-9]{7}|[Oo]ntology_term') -gt 0 ]; then
+		elif [ ! -z "$annotation_file" ] && [ -f "$annotation_file" ] && [ $(zcat -f "$annotation_file" 2>/dev/null | head -500 | egrep -c '(^|[^[:alnum:]])GO:[0-9]{7}|[Oo]ntology_term|go_(process|function|component)') -gt 0 ]; then
 			_pre_go_annot="$annotation_file"
 		fi
 		if [ ! -z "$_pre_go_annot" ]; then
@@ -1660,94 +1668,16 @@ _log_step "Step_4_R_Process" "start"
 			mkdir -p "$_pre_go_outdir"
 			_pre_go_outfile="$_pre_go_outdir/$(basename $_pre_go_annot).automatically_extracted_GO_terms.txt"
 			if [ ! -f "$_pre_go_outfile" ]; then
-				echo "Pre-extracting GO terms from $_pre_go_annot for merged tables..."
-				if [[ "$_pre_go_annot" == *.gaf ]] || [[ "$_pre_go_annot" == *.gaf.gz ]] || [[ "$_pre_go_annot" == *.txt ]] || [[ "$_pre_go_annot" == *.txt.gz ]] || [[ "$_pre_go_annot" == *.tsv ]] || [[ "$_pre_go_annot" == *.tsv.gz ]]; then
-					gaf_ncols_pre=$(zcat -f "$_pre_go_annot" | grep -v "^!" | head -1 | awk -F'\t' '{print NF}')
-					echo -e "source_id\tComputed_GO_Process_IDs" > "$_pre_go_outfile"
-					if [ "$gaf_ncols_pre" -le 2 ]; then
-						first_col_pre=$(zcat -f "$_pre_go_annot" | grep -v "^!" | head -1 | cut -f1)
-						if [[ "$first_col_pre" == GO:* ]]; then
-							# Format: GO_term<tab>gene_id — split comma/semicolon-separated terms
-							zcat -f "$_pre_go_annot" | grep -v "^!" | awk -F'\t' '{
-								gene=$2; n=split($1, terms, /[,;] */)
-								for(i=1;i<=n;i++) { gsub(/^ +| +$/,"",terms[i]); if(terms[i]~/^GO:/) print gene"\t"terms[i] }
-							}' | sort -u >> "$_pre_go_outfile"
-						else
-							# Format: gene_id<tab>GO_terms — split comma/semicolon-separated terms
-							zcat -f "$_pre_go_annot" | grep -v "^!" | awk -F'\t' '{
-								gene=$1; n=split($2, terms, /[,;] */)
-								for(i=1;i<=n;i++) { gsub(/^ +| +$/,"",terms[i]); if(terms[i]~/^GO:/) print gene"\t"terms[i] }
-							}' | sort -u >> "$_pre_go_outfile"
-						fi
-					else
-						zcat -f "$_pre_go_annot" | grep -v "^!" | cut -f 3,5 | sort -u >> "$_pre_go_outfile"
-					fi
-				elif [[ "$_pre_go_annot" == *.gmt ]] || [[ "$_pre_go_annot" == *.gmt.gz ]]; then
-					echo -e "source_id\tComputed_GO_Process_IDs" > "$_pre_go_outfile"
-					zcat -f "$_pre_go_annot" | awk -F'\t' '{term=$1; for(i=3;i<=NF;i++) print $i"\t"term}' | sort -u >> "$_pre_go_outfile"
-				else
-					echo -e "source_id\tComputed_GO_Process_IDs" > "$_pre_go_outfile"
-					zcat -f "$_pre_go_annot" | awk -F'\t' '/GO:/ && !/^#/ {
-					attrs = $9; gid = ""
-					if (attrs ~ /gene_id "/) { tmp = attrs; sub(/.*gene_id "/, "", tmp); sub(/".*/, "", tmp); gid = tmp }
-					if (gid == "" && attrs ~ /ID=/) { tmp = attrs; sub(/.*ID=/, "", tmp); sub(/[;].*/, "", tmp); gid = tmp }
-					if (gid == "" && attrs ~ /Parent=/) { tmp = attrs; sub(/.*Parent=/, "", tmp); sub(/[;].*/, "", tmp); gid = tmp }
-					if (attrs ~ /[Oo]ntology_term/) { tmp = attrs; sub(/.*[Oo]ntology_term[= ]*"?/, "", tmp); sub(/"?[;].*/, "", tmp); sub(/"$/, "", tmp); go = tmp }
-					if (gid != "" && go != "") { n = split(go, a, ","); for (i = 1; i <= n; i++) if (a[i] ~ /^GO:/) print gid "\t" a[i] }
-					}' | sort -u >> "$_pre_go_outfile"
-				fi
-			go_pre_lines=$(grep "GO:" "$_pre_go_outfile" 2>/dev/null | wc -l)
-			echo "  Pre-extracted $go_pre_lines gene-GO associations for merged tables."
-		fi
-		# Also pre-extract KEGG terms (K-number orthology IDs and map/ko pathway IDs)
-		_pre_kegg_outfile="$_pre_go_outdir/$(basename $_pre_go_annot).automatically_extracted_KEGG_terms.txt"
-		if [ ! -f "$_pre_kegg_outfile" ]; then
-			if [[ "$_pre_go_annot" == *.gaf ]] || [[ "$_pre_go_annot" == *.gaf.gz ]] || [[ "$_pre_go_annot" == *.txt ]] || [[ "$_pre_go_annot" == *.txt.gz ]] || [[ "$_pre_go_annot" == *.tsv ]] || [[ "$_pre_go_annot" == *.tsv.gz ]]; then
-				gaf_ncols_pre=${gaf_ncols_pre:-$(zcat -f "$_pre_go_annot" | grep -v "^!" | head -1 | awk -F'\t' '{print NF}')}
-				if [ "$gaf_ncols_pre" -le 2 ]; then
-					# 2-column TSV: split comma/semicolon-separated KEGG terms (K-numbers + map/ko pathways)
-					zcat -f "$_pre_go_annot" | grep -v "^!" | awk -F'\t' '{
-					gene=$1; n=split($2, terms, /[,;] */)
-					for(i=1;i<=n;i++) { gsub(/^ +| +$/,"",terms[i]); if(terms[i]~/^(ko|map)[0-9]/ || terms[i]~/^(ko:)?K[0-9]{5}$/) print gene"\t"terms[i] }
-					}' | sort -u > "$_pre_kegg_outfile"
-				else
-					# Standard GAF (>2 cols): scan all fields for K-numbers and pathway IDs
-					zcat -f "$_pre_go_annot" | grep -v "^!" | awk -F'\t' '{
-					for (i=1; i<=NF; i++) {
-						if ($i ~ /K[0-9]{5}/ || $i ~ /(ko|map)[0-9]/) {
-							n = split($i, arr, /[,; ]/);
-							for (j=1; j<=n; j++) {
-								if (arr[j] ~ /^(ko:)?K[0-9]{5}$/ || arr[j] ~ /^(ko|map)[0-9]+$/) {
-									kid = arr[j]; sub(/^ko:/, "", kid)
-									print $3 "\t" kid
-								}
-							}
-						}
-					}
-					}' | sort -u > "$_pre_kegg_outfile"
-				fi
-			elif [[ "$_pre_go_annot" == *.gmt ]] || [[ "$_pre_go_annot" == *.gmt.gz ]]; then
-				zcat -f "$_pre_go_annot" | awk -F'\t' '$1 ~ /^(ko|map|K[0-9])/ { term=$1; for(i=3;i<=NF;i++) print $i"\t"term }' | sort -u > "$_pre_kegg_outfile"
-			else
-				zcat -f "$_pre_go_annot" | awk -F'\t' '/K[0-9]{5}/ && !/^#/ {
-				attrs = $9; gid = ""
-				if (attrs ~ /gene_id "/) { tmp = attrs; sub(/.*gene_id "/, "", tmp); sub(/".*/, "", tmp); gid = tmp }
-				if (gid == "" && attrs ~ /ID=/) { tmp = attrs; sub(/.*ID=/, "", tmp); sub(/[;].*/, "", tmp); gid = tmp }
-				if (gid == "" && attrs ~ /Parent=/) { tmp = attrs; sub(/.*Parent=/, "", tmp); sub(/[;].*/, "", tmp); gid = tmp }
-				if (gid != "") {
-					n = split(attrs, parts, /[,;= "]+/)
-					for (i = 1; i <= n; i++) {
-						if (parts[i] ~ /^(ko:)?K[0-9]{5}$/) {
-							kid = parts[i]; sub(/^ko:/, "", kid)
-							print gid "\t" kid
-						}
-					}
-				}
-				}' | sort -u > "$_pre_kegg_outfile"
-			fi
-				kegg_pre_lines=$(wc -l < "$_pre_kegg_outfile" 2>/dev/null || echo 0)
+				echo "Pre-extracting GO and functional terms from $_pre_go_annot for merged tables..."
+				python3 $CURRENT_DIR/scripts/parse_functional_annotation.py \
+					-i "$_pre_go_annot" \
+					${annotation_file:+-r "$annotation_file"} \
+					-o "$_pre_go_outfile" \
+					-k "$_pre_kegg_outfile"
+				go_pre_lines=$(grep "GO:" "$_pre_go_outfile" 2>/dev/null | wc -l)
+				echo "  Pre-extracted $go_pre_lines gene-GO associations for merged tables."
+				kegg_pre_lines=$(grep -v "^source_id" "$_pre_kegg_outfile" 2>/dev/null | wc -l || echo 0)
 				if [ "$kegg_pre_lines" -gt 0 ]; then
-					sed -i '1s/^/source_id\tKEGG_KO_ID\n/' "$_pre_kegg_outfile"
 					echo "  Pre-extracted $kegg_pre_lines gene-KEGG associations for merged tables."
 				else
 					echo "  No KEGG terms found in annotation."
@@ -1793,7 +1723,7 @@ _log_step "Step_4_R_Process" "start"
 					"^DGE_analysis_comp[0-9].txt$" \
 					"$name" \
 					"$organism" \
-					"$non_reference_funct_enrichm" 2>&1 | tee -a "$final_dir/DGE/deResults_prepare_SE.log"
+					"${_pre_go_outfile:-$non_reference_funct_enrichm}" 2>&1 | tee -a "$final_dir/DGE/deResults_prepare_SE.log"
 			else
 				echo "Skipping exploreLocalDE SE generation for index $index: required files not found"
 			fi
@@ -2006,7 +1936,7 @@ _log_step "Step_6_Enrichment" "start"
 				if [ ! -z "$non_reference_funct_enrichm" ]; then
 					echo "Using provided non-reference functional enrichment file: $non_reference_funct_enrichm"
 					annot_enrichm="$non_reference_funct_enrichm"
-				elif [ $(egrep -c "GO:|Ontology|tology_term|tology term" $annotation_file) -gt 0 ]; then
+				elif [ $(zcat -f "$annotation_file" 2>/dev/null | head -500 | egrep -c "GO:|Ontology|tology_term|go_(process|function|component)") -gt 0 ]; then
 					echo "Using main annotation file for functional enrichment: $annotation_file"
 					annot_enrichm="$annotation_file"
 				fi
