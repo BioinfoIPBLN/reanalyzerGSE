@@ -182,13 +182,23 @@ def parse_alignment_stats(analysis_dir, aligner=""):
     return detected_aligner, list(sample_stats.values())
 
 
-def display_and_save_stats(analysis_dir, aligner="", save_path=None):
+def colorize(text, ansi_code, use_color=True):
+    """Wrap text in ANSI color escape codes only if use_color is True."""
+    if use_color:
+        return f"\033[{ansi_code}m{text}\033[0m"
+    return text
+
+
+def display_and_save_stats(analysis_dir, aligner="", save_path=None, force_no_color=False):
     """Print a clean terminal table and optionally save to TSV."""
     detected_aligner, stats = parse_alignment_stats(analysis_dir, aligner)
 
     if not stats:
         print(f"\n[Alignment Summary] No alignment log files found in {analysis_dir}.")
         return
+
+    # Check if stdout is an interactive terminal and no color-suppression is requested
+    use_color = sys.stdout.isatty() and not force_no_color and "NO_COLOR" not in os.environ
 
     # Sort samples alphabetically
     stats = sorted(stats, key=lambda x: x["sample"])
@@ -210,16 +220,18 @@ def display_and_save_stats(analysis_dir, aligner="", save_path=None):
         uniq_str = f"{format_number(s['unique'])} ({s['unique_pct']:.1f}%)"
         multi_str = f"{format_number(s['multi'])} ({s['multi_pct']:.1f}%)"
 
-        # Color coding: Green >= 70%, Yellow 40-70%, Red < 40%
         rate = s["overall_pct"]
-        if rate >= 70.0:
-            rate_str = f"\033[1;32m{rate:6.2f}%\033[0m"
-        elif rate >= 40.0:
-            rate_str = f"\033[1;33m{rate:6.2f}%\033[0m"
-        else:
-            rate_str = f"\033[1;31m{rate:6.2f}%\033[0m"
+        rate_clean = f"{rate:6.2f}%"
 
-        print(f"{s_name:<25} {tot_str:<14} {uniq_str:<20} {multi_str:<18} {rate_str:<12}")
+        # Color coding: Green >= 70%, Yellow 40-70%, Red < 40%
+        if rate >= 70.0:
+            rate_fmt = colorize(rate_clean, "1;32", use_color)
+        elif rate >= 40.0:
+            rate_fmt = colorize(rate_clean, "1;33", use_color)
+        else:
+            rate_fmt = colorize(rate_clean, "1;31", use_color)
+
+        print(f"{s_name:<25} {tot_str:<14} {uniq_str:<20} {multi_str:<18} {rate_fmt}")
         total_input += s["total"]
         total_uniq += s["unique"]
         total_multi += s["multi"]
@@ -229,8 +241,9 @@ def display_and_save_stats(analysis_dir, aligner="", save_path=None):
     tot_in_str = format_number(total_input)
     tot_un_str = f"{format_number(total_uniq)} ({total_uniq / total_input * 100:.1f}%)" if total_input > 0 else "0"
     tot_mu_str = f"{format_number(total_multi)} ({total_multi / total_input * 100:.1f}%)" if total_input > 0 else "0"
-    avg_col = f"\033[1;32m{avg_rate:6.2f}%\033[0m" if avg_rate >= 70 else f"\033[1;33m{avg_rate:6.2f}%\033[0m" if avg_rate >= 40 else f"\033[1;31m{avg_rate:6.2f}%\033[0m"
-    print(f"{'TOTAL / MEAN':<25} {tot_in_str:<14} {tot_un_str:<20} {tot_mu_str:<18} {avg_col:<12}")
+    avg_clean = f"{avg_rate:6.2f}%"
+    avg_col = colorize(avg_clean, "1;32" if avg_rate >= 70 else "1;33" if avg_rate >= 40 else "1;31", use_color)
+    print(f"{'TOTAL / MEAN':<25} {tot_in_str:<14} {tot_un_str:<20} {tot_mu_str:<18} {avg_col}")
     print("=" * 80 + "\n")
 
     if save_path:
@@ -247,9 +260,10 @@ def main():
     parser.add_argument("-d", "--dir", required=True, help="Analysis output directory.")
     parser.add_argument("-a", "--aligner", default="", help="Aligner name: star, hisat2, kallisto.")
     parser.add_argument("-s", "--save", default=None, help="Optional output TSV file path.")
+    parser.add_argument("--no-color", action="store_true", help="Disable ANSI color output.")
     args = parser.parse_args()
 
-    display_and_save_stats(args.dir, args.aligner, args.save)
+    display_and_save_stats(args.dir, args.aligner, args.save, args.no_color)
 
 
 if __name__ == "__main__":

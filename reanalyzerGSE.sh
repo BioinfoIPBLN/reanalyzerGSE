@@ -20,6 +20,39 @@ mkdir -p $TMPDIR
 STEP_TIMES_FILE="$output_folder/$name/step_times.tsv"
 _log_step() { mkdir -p "$(dirname "$STEP_TIMES_FILE")" 2>/dev/null; echo -e "$1\t$(date +%s)\t$2" >> "$STEP_TIMES_FILE" 2>/dev/null; }
 
+# STAR POSIX shared memory & stale cache guard
+_cleanup_star_shared_memory() {
+	local index_dir="${1:-$reference_genome_index}"
+	
+	# 1. Cleanly request STAR to unload index if path exists and STAR is available
+	if [ -n "$index_dir" ] && [ -d "$index_dir" ] && command -v STAR >/dev/null 2>&1; then
+		STAR --genomeDir "$index_dir" --genomeLoad Remove --outFileNamePrefix /tmp/star_rm_tmp >/dev/null 2>&1 || true
+		rm -rf /tmp/star_rm_tmp* 2>/dev/null || true
+	fi
+
+	# 2. Inspect Linux kernel shared memory (ipcs) for unattached segments (nattch=0, >100MB) owned by current user
+	if command -v ipcs >/dev/null 2>&1 && command -v ipcrm >/dev/null 2>&1; then
+		local stale_shmids
+		stale_shmids=$(ipcs -m 2>/dev/null | awk -v u="$USER" '$3 == u && $6 == 0 && $5 > 100000000 {print $2}')
+		if [ -n "$stale_shmids" ]; then
+			echo -e "\n[STAR Memory Guard] Cleaning unattached shared memory segments in kernel RAM..."
+			for sid in $stale_shmids; do
+				ipcrm -m "$sid" 2>/dev/null || true
+			done
+		fi
+	fi
+
+	# 3. Clean leftover FIFO named pipes from previous aborted runs
+	if [ -n "$output_folder" ] && [ -n "$name" ]; then
+		rm -rf "$output_folder/$name"/miARma_out*/star_results/*__STARtmp 2>/dev/null || true
+		rm -rf "$output_folder/$name"/miARma_out*/star_results/genomeloading.tmp* 2>/dev/null || true
+	fi
+	rm -rf /dev/shm/*STAR* /tmp/*STAR* 2>/dev/null || true
+}
+
+# Trap to clean shared memory on interrupt / termination
+trap '_cleanup_star_shared_memory "$reference_genome_index"' INT TERM
+
 ###### Step gating (resume with -Dm/debug_step, force-end with -Es/end_step):
 # Ordered list of pipeline steps. MUST stay in sync with the block order below,
 # including the optional/internal 'step1a_bis', so the after-comparison is correct.
@@ -1474,6 +1507,9 @@ if run_step step3b; then
 _log_step "Step_3b_miARma" "start"
 	rm -rf $output_folder/$name/miARma_out*
 	mkdir -p $TMPDIR
+	if [ "$aligner" == "star" ]; then
+		_cleanup_star_shared_memory "$reference_genome_index"
+	fi
 	# If the running is resumed in this step, the above has to be done
 	if [ -z "$organism" ]; then
 		organism=$(cat $output_folder/$name/reads_study_info/organism.txt | sed 's, ,_,g;s,_+,_,g')
@@ -1599,11 +1635,9 @@ _log_step "Step_3b_miARma" "start"
 	### Reformat the logs by parallel...
 	for f in $(find $output_folder/$name -name "*_log_parallel.txt"); do awk -F"\t" 'NR==1; NR > 1{OFS="\t"; $3=strftime("%Y-%m-%d %H:%M:%S", $3); print $0}' $f > tmp && mv tmp $f; done
 
- 	### Clean genome index cache?
-  	if [ "$aligner" == "star" ] && [ "$aligner_index_cache" == "no" ]; then
-		for genome_dir_loaded in $(find $output_folder/$name/ -name "star_log_parallel.txt" | xargs cat 2>/dev/null | grep "genomeDir" | sed 's,.*genomeDir ,,g;s, .*,,g' | sort | uniq); do
-			STAR --runThreadN $cores --genomeDir $genome_dir_loaded --genomeLoad Remove --outFileNamePrefix genomeloading.tmp
-		done
+ 	### Clean STAR genome index and shared memory cache
+	if [ "$aligner" == "star" ]; then
+		_cleanup_star_shared_memory "$reference_genome_index"
 	fi
 
 	### Display alignment percentages per sample on screen and save summary table
@@ -1687,10 +1721,11 @@ _log_step "Step_4_R_Process" "start"
 		fi
   			echo -e "R_process_reanalyzer_GSE.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index $genes ${array2[index]} $organism $target $differential_expr_soft $batch_format $covariables $covariables_format $deconvolution $differential_expr_comparisons $perform_differential_analyses $perform_volcano_venn $pattern_to_remove $annotation_file $fc_seq_key $fc_feat_type $sc_count_matrix $sc_phenotype $bulk_expression_matrix\n\n" > $output_folder/$name/R_process_reanalyzer.log
     		R_process_reanalyzer_GSE.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index $genes ${array2[index]} $organism $target $differential_expr_soft $batch_format $covariables $covariables_format $deconvolution $differential_expr_comparisons $perform_differential_analyses $perform_volcano_venn $pattern_to_remove $annotation_file $fc_seq_key $fc_feat_type $sc_count_matrix $sc_phenotype $bulk_expression_matrix | tee -a $output_folder/$name/R_process_reanalyzer.log
-		if [ ! -d "$output_folder/$name/final_results_reanalysis$index" ]; then
-			echo -e "\nWARNING: R_process_reanalyzer_GSE.R did not create $output_folder/$name/final_results_reanalysis$index."
-			echo "Check $output_folder/$name/R_process_reanalyzer.log for details. Skipping remaining post-processing for this index."
-			continue
+		r_process_exit=${PIPESTATUS[0]}
+		if [ $r_process_exit -ne 0 ] || [ ! -d "$output_folder/$name/final_results_reanalysis$index" ] || [ ! -f "$output_folder/$name/final_results_reanalysis$index/Raw_counts_genes.txt" ]; then
+			echo -e "\n\033[1;31mERROR:\033[0m R_process_reanalyzer_GSE.R failed (exit code $r_process_exit) and did not produce counts in $output_folder/$name/final_results_reanalysis$index." >&2
+			echo -e "Please check $output_folder/$name/R_process_reanalyzer.log and alignment/readcount logs for details.\n" >&2
+			exit 1
 		fi
     		echo 'R_qc_figs.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index "edgeR_object_prefilter" "edgeR_object" "edgeR_object_norm" $pattern_to_remove $annotation_file $fc_feat_type $split_sections' > $output_folder/$name/R_qc_figs.log
 			# Determine if per-section PDF splitting is needed for AI interleaving

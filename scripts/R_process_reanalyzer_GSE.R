@@ -90,17 +90,20 @@ normalize_sample_id <- function(x) {
       cat(paste0("\nWarning: Multiple readcount directories found. Using: ", rc_dir, "\n"))
     }
     
-    cat(paste0("\nReading counts from: ", rc_dir, "\n"))
+    tab_files <- list.files(rc_dir, pattern = "\\.tab$", full.names = TRUE)
+    if (length(tab_files) == 0) {
+      stop(paste0("No .tab count files found in readcount directory: ", rc_dir, ". Please check that featureCounts / alignment completed successfully."))
+    }
+    
+    cat(paste0("\nReading counts from: ", rc_dir, " (", length(tab_files), " count files)\n"))
 
-    a <- lapply(paste0(rc_dir,"/",list.files(rc_dir,pattern = ".tab$")),
-                function(x){data.table::fread(x)[,c(1,7)]})
-    b <- as.data.frame(unique(data.table::rbindlist(lapply(paste0(rc_dir,"/",list.files(rc_dir,pattern = ".tab$")),
-                function(x){data.table::fread(x)[,c(1,6)]}))))
+    a <- lapply(tab_files, function(x) { data.table::fread(x)[, c(1, 7)] })
+    b <- as.data.frame(unique(data.table::rbindlist(lapply(tab_files, function(x) { data.table::fread(x)[, c(1, 6)] }))))
     cat("\nReads loaded...\n")
     b$Length[is.na(b$Length)] <- 0
-    gene_counts <- Reduce(merge,a)
-    colnames(gene_counts)[2:dim(gene_counts)[2]] <- gsub(".*_results/|_readcount\\.tab$|_nat.*|_hisat2_readcount\\.tab$|_star_readcount\\.tab$","",colnames(gene_counts)[2:dim(gene_counts)[2]])
-    gene_counts <- as.data.frame(merge(gene_counts,b))
+    gene_counts <- Reduce(merge, a)
+    colnames(gene_counts)[2:dim(gene_counts)[2]] <- gsub(".*_results/|_readcount\\.tab$|_nat.*|_hisat2_readcount\\.tab$|_star_readcount\\.tab$", "", colnames(gene_counts)[2:dim(gene_counts)[2]])
+    gene_counts <- as.data.frame(merge(gene_counts, b))
   } else {
     stop(paste0("No readcount results directory found in ", input_dir))
   }
