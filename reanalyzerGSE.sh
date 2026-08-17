@@ -1648,6 +1648,19 @@ _log_step "Step_3b_miARma" "start"
 			--save "$output_folder/$name/reads_study_info/alignment_summary.tsv" 2>/dev/null || true
 	fi
 
+	### Validate alignment and read counts for 100% of expected samples
+	if [ -f "$CURRENT_DIR/scripts/validate_alignment_counts.py" ]; then
+		python3 $CURRENT_DIR/scripts/validate_alignment_counts.py \
+			--dir "$output_folder/$name" \
+			--aligner "$aligner" \
+			--samples "$output_folder/$name/reads_study_info/samples_info.txt"
+		val_exit=$?
+		if [ $val_exit -ne 0 ]; then
+			echo -e "\n\033[1;31mERROR:\033[0m Step 3b alignment/readcount validation failed. Halting pipeline before Step 4.\n" >&2
+			exit $val_exit
+		fi
+	fi
+
 	echo -e "\nmiARma-seq DONE. Current date/time: $(date)"; time1=`date +%s`; echo -e "Elapsed time (secs): $((time1-start))"; echo -e "Elapsed time (hours): $(echo "scale=2; $((time1-start))/3600" | bc -l)\n"
 	export debug_step="all"
 _log_step "Step_3b_miARma" "end"

@@ -239,7 +239,7 @@ sub featureCount{
 			my $parallelnumber=$args{"parallelnumber"} || 5;
 			$tmp_file=$projectdir."/Pre_fastqc_results/list_of_files.txt";
 
-			# ── JLR: Verify all expected BAMs exist before running featureCounts ──
+			# ── JLR: Verify all expected BAMs exist and their alignments completed before running featureCounts ──
 			my @expected_samples = do {
 				open(my $fh, "<", $tmp_file) or die "SEQCOUNT ERROR :: Cannot open '$tmp_file': $!\n";
 				my %seen;
@@ -253,6 +253,7 @@ sub featureCount{
 				sort keys %seen;
 			};
 			my @missing_bams;
+			my @incomplete_bams;
 			for my $sample (@expected_samples) {
 				my $found = 0;
 				for my $dir_suffix ("hisat2_results", "star_results") {
@@ -261,7 +262,21 @@ sub featureCount{
 						# so match with a glob rather than an exact name.
 						my @hits = glob("$projectdir/${dir_suffix}/${sample}*_${aligner}.bam");
 						if (@hits) {
-							$found = 1; last;
+							$found = 1;
+							my ($log_glob, $marker) = ($aligner eq "STAR")
+								? ("$projectdir/${dir_suffix}/${sample}*_STAR_Log.final.out", "Number of input reads")
+								: ("$projectdir/${dir_suffix}/${sample}*_hisat2.log", "Overall alignment rate");
+							my $complete = 0;
+							for my $log_file (glob($log_glob)) {
+								open(my $lh, "<", $log_file) or next;
+								while (my $line = <$lh>) {
+									if (index($line, $marker) >= 0) { $complete = 1; last; }
+								}
+								close($lh);
+								last if $complete;
+							}
+							push @incomplete_bams, $sample unless $complete;
+							last;
 						}
 					}
 					last if $found;
@@ -275,6 +290,15 @@ sub featureCount{
 				die "SEQCOUNT ERROR :: $n_missing of $n_total expected BAM files are missing.\n"
 				  . "  Missing samples: $list\n"
 				  . "  This means the alignment step failed for these samples.\n"
+				  . "  Please check the alignment logs (hisat2_log_parallel.txt / star_log_parallel.txt) and re-run.\n";
+			}
+			if (@incomplete_bams) {
+				my $n_bad   = scalar @incomplete_bams;
+				my $n_total = scalar @expected_samples;
+				my $list    = join(", ", @incomplete_bams);
+				die "SEQCOUNT ERROR :: $n_bad of $n_total samples have a BAM but no completed alignment summary.\n"
+				  . "  Affected samples: $list\n"
+				  . "  The aligner exited before finishing, so these BAMs are truncated and the counts would be wrong.\n"
 				  . "  Please check the alignment logs (hisat2_log_parallel.txt / star_log_parallel.txt) and re-run.\n";
 			}
 			# ── End BAM validation ──
