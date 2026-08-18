@@ -87,16 +87,51 @@ build_alignment_units() {
 			unit_label+=("${genome_group_labels[$_i]}")
 		done
 	else
-		for _i in "${!_annot_arr[@]}"; do
+		local _genome_arr=(); local _n
+		IFS=', ' read -r -a _genome_arr <<< "$reference_genome"
+		if [ ${#_genome_arr[@]} -eq 0 ]; then _genome_arr=("$reference_genome"); fi
+		_n=${#_annot_arr[@]}
+		if [ ${#_genome_arr[@]} -gt "$_n" ]; then _n=${#_genome_arr[@]}; fi
+		for (( _i=0; _i<_n; _i++ )); do
 			unit_ini+=("miarma$_i.ini")
 			unit_out+=("$output_folder/$name/miARma_out$_i")
-			unit_fasta+=("$reference_genome")
-			unit_gtf+=("${_annot_arr[$_i]}")
+			if [ ${#_genome_arr[@]} -eq 1 ]; then unit_fasta+=("${_genome_arr[0]}"); else unit_fasta+=("${_genome_arr[$_i]}"); fi
+			if [ ${#_annot_arr[@]} -eq 1 ]; then unit_gtf+=("${_annot_arr[0]}"); else unit_gtf+=("${_annot_arr[$_i]}"); fi
 			unit_reads+=("$seqs_location")
 			unit_ri+=("$reference_genome_index")
 			unit_label+=("")
 		done
 	fi
+}
+# One annotation entry per alignment unit: a single annotation is broadcast across
+# every genome, several annotations are paired with the genomes in the order given.
+# GTF-style ("key value";) vs GFF3-style (key=value) attributes in column 9, decided by
+# content and not by file extension. Mirrors the is_gff3 test in R_process_reanalyzer_GSE.R.
+detect_annot_style() {
+	local _f="$1"
+	if [ -z "$_f" ] || [ ! -f "$_f" ]; then echo "gtf"; return 0; fi
+	if zcat -f "$_f" 2>/dev/null | awk -F'\t' '!/^#/ && NF>=9 {print $9; n++} n>=100 {exit}' | grep -qF '"'; then
+		echo "gtf"
+	else
+		echo "gff3"
+	fi
+}
+expand_annotations_per_unit() {
+	local _a=(); local _g=(); local _n; local _i
+	IFS=', ' read -r -a _a <<< "$annotation"
+	if [ ${#_a[@]} -eq 0 ]; then _a=(""); fi
+	array=()
+	if [ ! -z "$reference_genome_groups" ]; then
+		array=("${_a[0]}")
+		return 0
+	fi
+	IFS=', ' read -r -a _g <<< "$reference_genome"
+	if [ ${#_g[@]} -eq 0 ]; then _g=("$reference_genome"); fi
+	_n=${#_a[@]}
+	if [ ${#_g[@]} -gt "$_n" ]; then _n=${#_g[@]}; fi
+	for (( _i=0; _i<_n; _i++ )); do
+		if [ ${#_a[@]} -eq 1 ]; then array+=("${_a[0]}"); else array+=("${_a[$_i]}"); fi
+	done
 }
 # Validate -Es/end_step and its ordering against -Dm/debug_step (resume point).
 if [[ -n "$end_step" && "$end_step" != "none" && "$end_step" != "all" ]]; then
@@ -703,15 +738,21 @@ mkdir -p $output_folder/$name/indexes
 declare -a files_to_decompress=()
 declare -a decompressed_outputs=()
 
-if [[ "$reference_genome" == *.gz ]]; then
-	decompressed_genome="$output_folder/$name/indexes/$(basename ${reference_genome%.gz})"
-	if [ ! -f "$decompressed_genome" ]; then
-		files_to_decompress+=("$reference_genome")
-		decompressed_outputs+=("$decompressed_genome")
-	else
-		echo -e "\nDecompressed reference genome already exists: $decompressed_genome\n"
+IFS=', ' read -r -a _genome_array <<< "$reference_genome"
+for _ri in "${!_genome_array[@]}"; do
+	if [[ "${_genome_array[$_ri]}" == *.gz ]]; then
+		_decompressed_genome="$output_folder/$name/indexes/$(basename ${_genome_array[$_ri]%.gz})"
+		if [ ! -f "$_decompressed_genome" ]; then
+			files_to_decompress+=("${_genome_array[$_ri]}")
+			decompressed_outputs+=("$_decompressed_genome")
+		else
+			echo -e "\nDecompressed reference genome already exists: $_decompressed_genome\n"
+		fi
+		_genome_array[$_ri]="$_decompressed_genome"
 	fi
-	reference_genome="$decompressed_genome"
+done
+if [ ${#_genome_array[@]} -gt 0 ]; then
+	reference_genome=$(IFS=','; echo "${_genome_array[*]}")
 fi
 
 for _gi in "${!genome_group_fastas[@]}"; do
@@ -1351,7 +1392,7 @@ _log_step "Step_3a_Prepare" "start"
 		fi
 
 	### Prepare the ini file:
-		IFS=', ' read -r -a array <<< "$annotation"
+		expand_annotations_per_unit
 		IFS=', ' read -r -a array2 <<< "$optionsFeatureCounts_seq"
 		IFS=', ' read -r -a array3 <<< "$optionsFeatureCounts_feat"
 		# In kallisto mode annotation is optional; ensure loop runs at least once
@@ -1359,6 +1400,19 @@ _log_step "Step_3a_Prepare" "start"
 			array=("")
 		fi
 		build_alignment_units
+		if [ -z "$reference_genome_groups" ]; then
+			mkdir -p $output_folder/$name/reads_study_info
+			ga_assignment_file=$output_folder/$name/reads_study_info/genome_annotation_assignment.tsv
+			echo -e "analysis\treference_genome\tannotation\tmiARma_output\tfinal_results" > $ga_assignment_file
+			for _ai in "${!unit_ini[@]}"; do
+				echo -e "$_ai\t${unit_fasta[$_ai]}\t${unit_gtf[$_ai]}\t$(basename ${unit_out[$_ai]})\tfinal_results_reanalysis$_ai" >> $ga_assignment_file
+			done
+			if [ ${#unit_ini[@]} -gt 1 ]; then
+				echo -e "\nIndependent analyses to be produced (also saved in $ga_assignment_file):"
+				column -t -s$'\t' $ga_assignment_file 2>/dev/null || cat $ga_assignment_file
+				echo ""
+			fi
+		fi
 		for index in "${!unit_ini[@]}"; do
 			cd $output_folder/$name
 			cp $CURRENT_DIR/external_software/miARma-seq/bakk_miARma1.7.ini ${unit_ini[index]}
@@ -1421,16 +1475,16 @@ _log_step "Step_3a_Prepare" "start"
 				fi
 			fi
 			if [ ! -z "$optionsFeatureCounts_seq" ]; then
-				sed -i "s,seqid=gene_name,seqid=${array2[fc_opt_index]},g" ${unit_ini[index]}
+				sed -i "s,seqid=gene_name,seqid=${array2[fc_opt_index]:-${array2[0]}},g" ${unit_ini[index]}
 			fi
 			if [ ! -z "$optionsFeatureCounts_feat" ]; then
-				sed -i "s,featuretype=exon,featuretype=${array3[fc_opt_index]},g" ${unit_ini[index]}
+				sed -i "s,featuretype=exon,featuretype=${array3[fc_opt_index]:-${array3[0]}},g" ${unit_ini[index]}
 			fi
 
 			# ── Validate featureCounts parameters against annotation file ──
 			mkdir -p $TMPDIR
-			fc_feat_val="${array3[fc_opt_index]:-exon}"
-			fc_seq_val="${array2[fc_opt_index]:-gene_name}"
+			fc_feat_val="${array3[fc_opt_index]:-${array3[0]:-exon}}"
+			fc_seq_val="${array2[fc_opt_index]:-${array2[0]:-gene_name}}"
 			if [ -f "$gff" ]; then
 				# Check feature type (-t) exists in column 3
 				available_feats=$(zcat -f "$gff" | awk -F'\t' '!/^#/ && NF>=9 {print $3}' | sort -u | tr '\n' ', ' | sed 's/,$//')
@@ -1539,6 +1593,10 @@ _log_step "Step_3b_miARma" "start"
 		fi
 		if [ "$qc_raw_reads" == "no" ]; then
 			mkdir -p ${unit_out[index]}/Pre_fastqc_results/_skip_
+		fi
+		export RGSE_ANNOT_STYLE=$(detect_annot_style "${unit_gtf[index]}")
+		if [ "$RGSE_ANNOT_STYLE" != "gtf" ]; then
+			echo -e "\nAnnotation $(basename ${unit_gtf[index]}) uses GFF3-style attributes (key=value): 'qualimap rnaseq' will be skipped for this analysis (it requires GTF-style attributes). Alignment, featureCounts quantification and every downstream step are unaffected.\n"
 		fi
 		$miarma_path/miARma ${unit_ini[index]}
 		miarma_exit=$?
@@ -1676,7 +1734,7 @@ if run_step step4; then
 		organism=$(cat $output_folder/$name/reads_study_info/organism.txt | sed 's, ,_,g;s,_+,_,g')
 	fi
 	if [ -z "${!array[@]}" ]; then
-		IFS=', ' read -r -a array <<< "$annotation"
+		expand_annotations_per_unit
 		# In kallisto mode annotation is optional; ensure loop runs at least once
 		if [[ "$aligner" == "kallisto" && ${#array[@]} -eq 0 ]]; then
 			array=("")
@@ -1732,8 +1790,8 @@ _log_step "Step_4_R_Process" "start"
 				fi
 			fi
 		fi
-  			echo -e "R_process_reanalyzer_GSE.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index $genes ${array2[index]} $organism $target $differential_expr_soft $batch_format $covariables $covariables_format $deconvolution $differential_expr_comparisons $perform_differential_analyses $perform_volcano_venn $pattern_to_remove $annotation_file $fc_seq_key $fc_feat_type $sc_count_matrix $sc_phenotype $bulk_expression_matrix\n\n" > $output_folder/$name/R_process_reanalyzer.log
-    		R_process_reanalyzer_GSE.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index $genes ${array2[index]} $organism $target $differential_expr_soft $batch_format $covariables $covariables_format $deconvolution $differential_expr_comparisons $perform_differential_analyses $perform_volcano_venn $pattern_to_remove $annotation_file $fc_seq_key $fc_feat_type $sc_count_matrix $sc_phenotype $bulk_expression_matrix | tee -a $output_folder/$name/R_process_reanalyzer.log
+  			echo -e "R_process_reanalyzer_GSE.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index $genes ${array2[index]:-${array2[0]}} $organism $target $differential_expr_soft $batch_format $covariables $covariables_format $deconvolution $differential_expr_comparisons $perform_differential_analyses $perform_volcano_venn $pattern_to_remove $annotation_file $fc_seq_key $fc_feat_type $sc_count_matrix $sc_phenotype $bulk_expression_matrix\n\n" > $output_folder/$name/R_process_reanalyzer.log
+    		R_process_reanalyzer_GSE.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index $genes ${array2[index]:-${array2[0]}} $organism $target $differential_expr_soft $batch_format $covariables $covariables_format $deconvolution $differential_expr_comparisons $perform_differential_analyses $perform_volcano_venn $pattern_to_remove $annotation_file $fc_seq_key $fc_feat_type $sc_count_matrix $sc_phenotype $bulk_expression_matrix | tee -a $output_folder/$name/R_process_reanalyzer.log
 		r_process_exit=${PIPESTATUS[0]}
 		if [ $r_process_exit -ne 0 ] || [ ! -d "$output_folder/$name/final_results_reanalysis$index" ] || [ ! -f "$output_folder/$name/final_results_reanalysis$index/Raw_counts_genes.txt" ]; then
 			echo -e "\n\033[1;31mERROR:\033[0m R_process_reanalyzer_GSE.R failed (exit code $r_process_exit) and did not produce counts in $output_folder/$name/final_results_reanalysis$index." >&2
@@ -1794,7 +1852,7 @@ if run_step step4b; then
 		organism=$(cat $output_folder/$name/reads_study_info/organism.txt | sed 's, ,_,g;s,_+,_,g')
 	fi
 	if [ -z "${!array[@]}" ]; then
-		IFS=', ' read -r -a array <<< "$annotation"
+		expand_annotations_per_unit
 		# In kallisto mode annotation is optional; ensure loop runs at least once
 		if [[ "$aligner" == "kallisto" && ${#array[@]} -eq 0 ]]; then
 			array=("")
@@ -1901,7 +1959,7 @@ if run_step step6; then
 		fi
 	fi
 	if [ -z "${!array[@]}" ]; then
-		IFS=', ' read -r -a array <<< "$annotation"
+		expand_annotations_per_unit
 		# In kallisto mode annotation is optional; ensure loop runs at least once
 		if [[ "$aligner" == "kallisto" && ${#array[@]} -eq 0 ]]; then
 			array=("")
@@ -2411,7 +2469,7 @@ _log_step "Step_9_Cleanup" "start"
 
 	# Remove decompressed reference files from the indexes subfolder
 	if [ -d "$output_folder/$name/indexes" ]; then
-		for _decomp_file in $(find $output_folder/$name/indexes -maxdepth 1 -type f \( -name '*.fa' -o -name '*.fasta' -o -name '*.gtf' -o -name '*.gff' \) 2>/dev/null); do
+		for _decomp_file in $(find $output_folder/$name/indexes -maxdepth 1 -type f \( -name '*.fa' -o -name '*.fasta' -o -name '*.gtf' -o -name '*.gff' -o -name '*.gff3' \) 2>/dev/null); do
 			rm -f "$_decomp_file"
 		done
 	fi

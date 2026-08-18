@@ -25,10 +25,10 @@ for argument in $options; do
 	        -TMP | -TMPDIR # Directory to export the environmental variable TMPDIR (by default or if left empty an internal folder of the output directory is used, or please enter 'system' to use system's default, or an absolute pathway that will be created if it does not exist)
 
 	        #### Reference and databases:
-	        -r | -reference_genome # Reference genome to be used (.fasta file or .gz, absolute pathway). Optional if '-rG' is used, since each genome group brings its own genome (the first group's genome is then used as default for genome-scoped steps outside alignment, such as the IGV app)
+	        -r | -reference_genome # Reference genome to be used (.fasta file or .gz, absolute pathway). You can provide a comma-separated list of genomes, and one fully independent analysis (alignment, quantification, DGE and report) will be produced per genome. In that case '-a' must be either a single annotation, which is then used to quantify every genome, or exactly one annotation per genome, paired in the order given (first genome with first annotation, second with second, and so on). Several genomes are incompatible with '-ri' and with '-rG'. Optional if '-rG' is used
 	        -ri | -reference_genome_index # If the reference genome to be used already has an index that would like to reuse, please provide full pathway here (by default the provided genome is indexed)
 	        -rG | -reference_genome_groups # Align different subsets of samples to different reference genomes, then quantify them ALL with the single shared annotation given in '-a', so that one merged count matrix and one differential expression analysis are produced. Provide a semicolon-separated list of 'label:regex:fasta' triplets, e.g. 'hostA:^(A|B|C)_:/ref/genomeA.fa;hostB:^(D|E|F)_:/ref/genomeB.fa'. The regex is matched against the sample names (file names in the reads folder without the _1/_2.fastq.gz suffix). Every sample must match exactly one group (samples matching none, or more than one, are an error). Requires a single annotation in '-a' and is incompatible with '-ri' and with the kallisto aligner. Intended for variant-personalized references or a common assembly plus sample-specific extra contigs: the shared annotation MUST be coordinate-valid on every genome (this is verified before aligning), otherwise the resulting counts are not comparable
-	        -a | -annotation # Reference annotation to be used (.gtf file, absolute pathway). If hisat2 is used, a gff file (make sure format is '.gff' and not '.gff3') is accepted (some QC steps like 'qualimap rnaseqqc' may be skipped though). You can provide a comma-separated list of the pathways to different annotation, and multiple/independent quantification/outputs from the same alignments will be generated.
+	        -a | -annotation # Reference annotation to be used (absolute pathway). GTF, GFF and GFF3 are all accepted, and the format is detected from the content of the file (column 9) and not from its extension, so the file name does not matter. Two practical consequences. First, featureCounts is told which fields to read through '-t'/-optionsFeatureCounts_feat (feature type, column 3, e.g. 'exon' in GTF and often 'exon' or 'CDS' in GFF3) and '-g'/-optionsFeatureCounts_seq (attribute in column 9, e.g. 'gene_name' or 'gene_id' in GTF, and typically 'ID', 'Name', 'gene_id' or 'Parent' in GFF3), so please set both to names that exist in YOUR file; they are checked before aligning and the run stops listing the values available in the file if they do not match. Second, 'qualimap rnaseqqc' needs GTF-style attributes (key \"value\"), so it is run for GTF and automatically skipped, with a message, for GFF3-style annotations (key=value); alignment, quantification and every downstream step are unaffected. You can provide a comma-separated list of the pathways to different annotation, and one fully independent analysis (quantification, DGE and report) will be generated per annotation. Note that the aligner index is built per annotation, so the reads are aligned once per annotation rather than requantified from a single alignment. See '-r', which accepts a comma-separated list of genomes and pairs them with these annotations
 	        -t | -transcripts # Reference transcripts to be used (.fasta cDNA file, absolute pathway, only used if '-s' argument not provided so salmon prediction of strandness is required)
 	        -Dk | -kraken2_databases # Comma-separated list of Kraken2 database folders (e.g. '/path/to/core_nt,/path/to/gtdb'). Any input here activates the kraken2-based decontamination step. All DB+confidence combinations will be run
 	        -Kc | -kraken2_confidence # Comma-separated confidence scores for Kraken2 classification (default '0', e.g. '0,0.20,0.50'). Each score is run for each database
@@ -84,7 +84,7 @@ for argument in $options; do
 	        -Of | -options_featureCounts_feat # The feature type to use to count in featureCounts (default 'exon')
 	        -Os | -options_featureCounts_seq # The seqid type to use to count in featureCounts (default 'gene_name')
 	        -A | -aligner # Aligner software to use ('hisat2' or 'star', by default)
-	        -Des | -differential_expr_software # Software to be used in the differential expression analyses ('edgeR' by default, or 'DESeq2')
+	        -Des | -differential_expr_software # Software for the differential expression analyses: 'edgeR' (default) or 'DESeq2'. Both engines are fed exactly the same filtered and normalised count matrix, the same experimental design and the same comparisons, and both write the same files (DGE_analysis_comp<N>.txt, volcano plots, and the objects consumed by the report), so functional enrichment, Venn diagrams, network analyses and the report behave identically either way. edgeR uses exactTest when there are no covariables and glmQLFTest when '-c' is provided; DESeq2 uses the negative-binomial Wald test on the design '~ condition' (or '~ covariable + condition' when '-c' is provided). Genes that DESeq2 removes by independent filtering are reported with PValue and FDR of 1 rather than NA, so that the downstream significance filters treat them as non-significant
 	        -fp | -fastp_mode # Whether to perform quality filtering on the raw reads by fastp ('yes' or 'no', by default)
 	        -fpa | -fastp_adapter # Whether to perform adapter trimming on the raw reads by fastp ('yes' or 'no', by default, to perform automatic trimming, or a path to a fasta file to perform trimming of its sequences)
 	        -fpt | -fastp_trimming # Whether to trim the raw reads by fastp ('none' by default, if two numbers separated by comma, the indicated number of bases will be trimmed from the front and tail, respectively)
@@ -348,6 +348,9 @@ if [ ! -z "$reference_genome_groups" ]; then
 	if [ ${#genome_group_labels[@]} -lt 1 ]; then
 		echo "Error: no valid genome group could be parsed from -rG: '$reference_genome_groups'"; exit 1
 	fi
+	if [ $(echo "$reference_genome" | awk -F',' '{print NF}') -gt 1 ]; then
+		echo "Error: -rG/-reference_genome_groups already gives one genome per group, so -r must be a single genome (it is only the default for genome-scoped steps outside alignment). You provided: $reference_genome"; exit 1
+	fi
 	if [ -z "$reference_genome" ]; then
 		reference_genome="${genome_group_fastas[0]}"
 		echo -e "\nNo -r provided: using the genome of group '${genome_group_labels[0]}' ($reference_genome) as the default reference for genome-scoped steps outside alignment (e.g. the IGV app). Every sample is still aligned to the genome of its own group.\n"
@@ -385,6 +388,38 @@ if [ -z "$number_parallel" ]; then
 fi
 echo -e "\nnumber_parallel=$number_parallel\n"
 echo "Please make sure that number_parallel above is a number lower than the total number of samples/sequences that are going to be analyzed in the run..."
+if [ -z "$reference_genome_groups" ] && [ ! -z "$reference_genome" ]; then
+	IFS=', ' read -r -a _rg_arr <<< "$reference_genome"
+	for _rg in "${_rg_arr[@]}"; do
+		if [ ! -f "$_rg" ]; then
+			echo "Error: the reference genome '$_rg' (-r) does not exist or is not a file. Provide a single genome, or a comma-separated list of genomes to obtain one independent analysis per genome."; exit 1
+		fi
+	done
+	if [ ${#_rg_arr[@]} -gt 1 ]; then
+		IFS=', ' read -r -a _an_arr <<< "$annotation"
+		if [ ! -z "$reference_genome_index" ]; then
+			echo "Error: -ri/-reference_genome_index cannot be combined with several genomes in -r, because one pre-built index cannot serve more than one genome. Please drop -ri."; exit 1
+		fi
+		if [ ${#_an_arr[@]} -gt 1 ] && [ ${#_an_arr[@]} -ne ${#_rg_arr[@]} ]; then
+			echo "Error: -r has ${#_rg_arr[@]} genomes and -a has ${#_an_arr[@]} annotations. Provide either a single annotation (used to quantify every genome) or exactly one annotation per genome (paired in the order given)."; exit 1
+		fi
+		_seen_bases=""
+		for _rg in "${_rg_arr[@]}"; do
+			_rg_base=$(basename "${_rg%.gz}")
+			case " $_seen_bases " in
+				*" $_rg_base "*)
+					echo "Error: two genomes given in -r share the file name '$_rg_base'. The aligner index and the decompressed copy are both named after it, so the two analyses would silently share one index. Please rename one of the genomes."; exit 1 ;;
+			esac
+			_seen_bases="$_seen_bases $_rg_base"
+		done
+		echo -e "\n${#_rg_arr[@]} reference genomes provided in -r: one independent analysis (alignment, quantification, DGE and report) will be produced per genome."
+		for _i in "${!_rg_arr[@]}"; do
+			if [ ${#_an_arr[@]} -eq 1 ]; then _pair_annot="${_an_arr[0]}"; else _pair_annot="${_an_arr[$_i]}"; fi
+			echo "  analysis $_i: ${_rg_arr[$_i]} quantified with ${_pair_annot}"
+		done
+		echo ""
+	fi
+fi
 echo -e "\nreference_genome=$reference_genome\n"
 echo -e "\nannotation=$annotation\n"
 if [ -z "$transcripts" ] && [ -z "$strand" ]; then
@@ -516,6 +551,10 @@ fi
 if [ -z "$differential_expr_soft" ]; then
 	differential_expr_soft="edgeR"
 fi
+if [ "$differential_expr_soft" != "edgeR" ] && [ "$differential_expr_soft" != "DESeq2" ]; then
+	echo "Error: -Des/-differential_expr_software must be either 'edgeR' or 'DESeq2'. You provided: $differential_expr_soft"; exit 1
+fi
+echo -e "\ndifferential_expr_soft=$differential_expr_soft\n"
 if [ -z "$differential_expr_comparisons" ]; then
 	differential_expr_comparisons="no"
 fi

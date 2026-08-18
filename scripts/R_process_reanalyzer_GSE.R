@@ -361,6 +361,7 @@ normalize_sample_id <- function(x) {
 
 ###### Get edgeR object and normalized counts:
   suppressMessages(library(edgeR,quiet = T,warn.conflicts = F))  
+  if (diff_soft == "DESeq2"){ suppressMessages(library(DESeq2,quiet = T,warn.conflicts = F)) }
   edgeR_object <- DGEList(counts=gene_counts[,grep("Gene_ID|Length",colnames(gene_counts),invert=T)],
                    group=pheno$condition,
                    genes=gene_counts[,c(grep("Gene_ID",colnames(gene_counts)),grep("Length",colnames(gene_counts)))])
@@ -867,6 +868,46 @@ normalize_sample_id <- function(x) {
     return(top1)
   }
 
+  # DESeq2 counterpart of DGE(): same inputs, same table layout, so every downstream
+  # consumer (Volcano, Venn, enrichment, report) is agnostic to the engine used.
+  DESeq2_compare <- function(comp, object, covariab="none", covariab_format="num", myFDR=0.05){
+    cond_num <- sub("__","",comp[1]); cond_den <- sub("__","",comp[2])
+    counts_mat <- as.matrix(object$counts)
+    counts_mat <- round(counts_mat); mode(counts_mat) <- "integer"
+    coldata <- data.frame(condition=factor(sub("__","",as.character(object$samples$group))),
+                          row.names=colnames(counts_mat))
+    if (covariab != "none"){
+      if (covariab_format == "fact"){
+        coldata$covariable <- as.factor(unlist(strsplit(as.character(covariab),",")))
+      } else {
+        coldata$covariable <- as.numeric(unlist(strsplit(as.character(covariab),",")))
+      }
+      dds <- DESeqDataSetFromMatrix(countData=counts_mat, colData=coldata, design=~ covariable + condition)
+    } else {
+      dds <- DESeqDataSetFromMatrix(countData=counts_mat, colData=coldata, design=~ condition)
+    }
+    dds <- DESeq(dds, quiet=TRUE)
+    res <- as.data.frame(results(dds, contrast=c("condition", cond_num, cond_den)))
+    tab <- data.frame(Gene_ID = object$genes$Gene_ID,
+                      Length  = object$genes$Length,
+                      logFC   = res$log2FoldChange,
+                      logCPM  = log2(res$baseMean + 1),
+                      PValue  = res$pvalue,
+                      FDR     = res$padj)
+    rownames(tab) <- rownames(counts_mat)
+    # DESeq2 returns NA for independently-filtered genes; edgeR never does, and the
+    # downstream filters compare with < / <= , so carry them as non-significant.
+    tab$PValue[is.na(tab$PValue)] <- 1
+    tab$FDR[is.na(tab$FDR)] <- 1
+    tab <- tab[order(tab$PValue),]
+    cat(paste0("DESeq2: ", cond_num, " vs ", cond_den, " (positive log2FC = higher in ", cond_num, ")\n"))
+    cat(paste0("  genes tested: ", nrow(tab), " | FDR<=", myFDR, ": ", sum(tab$FDR <= myFDR, na.rm=TRUE),
+               " (up: ", sum(tab$FDR <= myFDR & tab$logFC > 0, na.rm=TRUE),
+               ", down: ", sum(tab$FDR <= myFDR & tab$logFC < 0, na.rm=TRUE), ")\n"))
+    return(list(table = tab))
+  }
+
+
 
   ## Create targets:
     x <- edgeR_object
@@ -1053,12 +1094,20 @@ normalize_sample_id <- function(x) {
             FDR = NA
           )
           rownames(manual_table) <- manual_table$Gene_ID
-          edgeR_results <- list(table = manual_table)
-          colnames(edgeR_results$table)[3] <- paste0("logFC",paste(sub("__","",list_combinations[[i]]),collapse = "__VS__"))
+          dge_results <- list(table = manual_table)
+          colnames(dge_results$table)[3] <- paste0("logFC",paste(sub("__","",list_combinations[[i]]),collapse = "__VS__"))
         } else {
-          if(covariab == "none"){
-            edgeR_results <- DGE(comp=list_combinations[[i]],object=edgeR_object_norm_temp_to_process)
-            colnames(edgeR_results$table)[3] <- paste0(colnames(edgeR_results$table)[3],paste(sub("__","",list_combinations[[i]]),collapse = "__VS__"))
+          if (diff_soft == "DESeq2"){
+            dge_results <- DESeq2_compare(comp=list_combinations[[i]],object=edgeR_object_norm_temp_to_process,
+                                          covariab=covariab, covariab_format=covariab_format)
+            colnames(dge_results$table)[3] <- paste0(colnames(dge_results$table)[3],paste(sub("__","",list_combinations[[i]]),collapse = "__VS__"))
+            if (venn_volcano!="no"){
+              myLabel1=gsub("^_","",gsub("_+","_",gsub("[^[:alnum:]_]+", "_", paste(list_combinations[[i]], collapse = '_vs_'))))
+              Volcano(dge_results,paste(output_dir,"/DGE/Volcano_plot_",myLabel1,".pdf", sep=""),myLabel1)
+            }
+          } else if(covariab == "none"){
+            dge_results <- DGE(comp=list_combinations[[i]],object=edgeR_object_norm_temp_to_process)
+            colnames(dge_results$table)[3] <- paste0(colnames(dge_results$table)[3],paste(sub("__","",list_combinations[[i]]),collapse = "__VS__"))
           } else {
             fit <- glmQLFit(edgeR_object_norm_temp_to_process, design, robust=TRUE)
             contrast <- rep(0,dim(design)[2])
@@ -1066,22 +1115,22 @@ normalize_sample_id <- function(x) {
             if(length(idxs_design)!=2){cat(paste0("\n\nSomething is WRONG as one of your contrasts has been required to compare ",length(idxs_design)," conditions. Probably conflicting naming of biological conditions...\n\n"));stop("Exiting, please review the naming of the conditions...")}
             contrast[idxs_design] <- c(-1,1)
             qlf <- glmQLFTest(fit,contrast=contrast)
-            edgeR_results <- topTags(qlf,n=nrow(qlf),adjust.method="BH",sort.by="PValue")
+            dge_results <- topTags(qlf,n=nrow(qlf),adjust.method="BH",sort.by="PValue")
             print(summary(decideTests(qlf)))
-            print(nrow(edgeR_results$table[edgeR_results$table$FDR<=0.05 & abs(edgeR_results$table$logFC)>= 0,]))
+            print(nrow(dge_results$table[dge_results$table$FDR<=0.05 & abs(dge_results$table$logFC)>= 0,]))
             print(list_combinations[[i]]); print("Top 10 results (each sense):")
-            print(as.data.frame(edgeR_results)[order(as.data.frame(edgeR_results)$logFC)[c(as.numeric(dim(edgeR_results)[1]):as.numeric(dim(edgeR_results)[1]-10),1:10)],3:6])
-            colnames(edgeR_results$table)[3] <- paste0(colnames(edgeR_results$table)[3],paste(sub("__","",list_combinations[[i]]),collapse = "__VS__"))
+            print(as.data.frame(dge_results)[order(as.data.frame(dge_results)$logFC)[c(as.numeric(dim(dge_results)[1]):as.numeric(dim(dge_results)[1]-10),1:10)],3:6])
+            colnames(dge_results$table)[3] <- paste0(colnames(dge_results$table)[3],paste(sub("__","",list_combinations[[i]]),collapse = "__VS__"))
             if (venn_volcano!="no"){
               myLabel1=paste(list_combinations[[i]], collapse = '_vs_')
               myLabel1=gsub("^_","",gsub("_+","_",gsub("[^[:alnum:]_]+", "_", myLabel1)))
-              Volcano(edgeR_results,paste(output_dir,"/DGE/Volcano_plot_",myLabel1,".pdf", sep=""),myLabel1)
+              Volcano(dge_results,paste(output_dir,"/DGE/Volcano_plot_",myLabel1,".pdf", sep=""),myLabel1)
             }
           }
         }
         conflicts <- intersect(ls(envir = environment()), ls(envir = .GlobalEnv))
         suppressWarnings(list2env(as.list(environment()), envir = .GlobalEnv)); rgse_save_env(paste0(output_dir,"/DGE/DGE_analysis_comp",i+existing,".qs2"))
-        write.table(edgeR_results$table,
+        write.table(dge_results$table,
                 file=paste0(output_dir,"/DGE/DGE_analysis_comp",i+existing,".txt"),quote = F,row.names = F, col.names = T,sep = "\t")
       }
     }
@@ -1701,83 +1750,6 @@ conflicts <- intersect(ls(envir = environment()), ls(envir = .GlobalEnv))
 cat("\nSaved R global environment in 'QC_and_others/globalenvir.qs2'")
 suppressWarnings(list2env(as.list(environment()), envir = .GlobalEnv)); rgse_save_env(paste0(output_dir,"/QC_and_others/globalenvir.qs2"))
 
-###### WIP add DESeq2 as a full alternative to edgeR, for now, generate and provide/write independently the counts if the user ask for it:
-if (diff_soft=="DESeq2"){
-  suppressMessages(library(DESeq2,quiet = T,warn.conflicts = F))
-  sampleFiles <- grep("Gene_ID|Length",colnames(gene_counts),invert=T)
-  sampleCondition <- pheno$condition
-  sampleInf <- paste0(d, "_rep", ave(pheno$condition, pheno$condition, FUN = seq_along))
-  sampleTable <- data.frame(sampleName = sampleFiles,
-                            condition = sampleCondition,
-                            infection = sampleInf)
-  sampleTable_2 <- sampleTable[,-1]
-  rownames(sampleTable_2) <- sampleTable$sampleName
-  sampleTable_2
-  
-  a <- gene_counts[,grep("Gene_ID|Length",colnames(gene_counts),invert=T)]  
-  rownames(a) <- gene_counts[,"Gene_ID"]
-  filter_for_deseq2 <- function(filter="standard",data,min_group=3){
-    if(filter == "standard"){
-      keep <- rowSums(a>1) >= min_group
-      data <- data[keep,]      
-    }
-    else if(filter == "bin"){
-      keep <- rowSums(a)>0
-      data <- data[keep,]      
-    }
-    else{
-      stop("At the moment only bin/standard are supported")
-    }
-    return(data)
-  }
-  b <- filter_for_deseq2(filter=filter_option,a)
-  deseq2_object <- DESeqDataSetFromMatrix(countData = b,
-                                   colData = sampleTable_2,
-                                   design = ~ infection + condition)
-  deseq2_object
-
-  # Normalization:
-  deseq2_object <- estimateSizeFactors(deseq2_object)
-  deseq2_object_counts <- counts(deseq2_object, normalized=TRUE) # These are the normalized counts
-  dim(deseq2_object_counts) # 
-  dim(a) # 
-  
-  # Differential DESeq analysis:
-  deseq2_object <- DESeq(deseq2_object)
-  if (restrict_comparisons != "no") {
-    # Use the user-specified explicit comparisons (same parsing as edgeR path)
-    individual_comparisons_deseq2 <- unlist(strsplit(restrict_comparisons, ","))
-    list_combinations_deseq2 <- lapply(individual_comparisons_deseq2, function(x) {
-      if (grepl("//", x, fixed = TRUE)) {
-        unlist(strsplit(x, "//", fixed = TRUE))
-      } else if (grepl("vs", x, fixed = TRUE)) {
-        unlist(strsplit(x, "vs", fixed = TRUE))
-      } else {
-        warning(paste0("Could not parse comparison: '", x, "'. Skipping...")); return(NULL)
-      }
-    })
-    list_combinations_deseq2 <- list_combinations_deseq2[!sapply(list_combinations_deseq2, is.null)]
-    cat(paste0("DESeq2: Using ", length(list_combinations_deseq2), " explicit comparisons provided by user.\n"))
-    for (i in seq_along(list_combinations_deseq2)) {
-      cond_num <- list_combinations_deseq2[[i]][1]
-      cond_den <- list_combinations_deseq2[[i]][2]
-      res_deseq2_object <- results(deseq2_object, contrast = c("condition", cond_num, cond_den))
-      table <- as.data.frame(res_deseq2_object)
-      table$Gene_ID <- rownames(table)
-      write.table(table,
-              file = paste0(output_dir, "/DGE/DGE_analysis_DESEQ2_comp", cond_num, "vs", cond_den, ".txt"),
-              quote = F, row.names = F, col.names = T, sep = "\t")
-    }
-  } else {
-    for (i in 1:dim(combn(unique(d),2))[2]){
-      res_deseq2_object <- results(deseq2_object,contrast=c("condition",combn(unique(d),2)[,i][1],combn(unique(d),2)[,i][2]))
-      table <- as.data.frame(res_deseq2_object)
-      table$Gene_ID <- rownames(table)
-      write.table(table,
-              file=paste0(output_dir,"/DGE/DGE_analysis_DESEQ2_comp",combn(unique(d),2)[,i][1],"vs",combn(unique(d),2)[,i][2],".txt"),quote = F,row.names = F, col.names = T,sep = "\t")
-    }
-  }
-}
 # print("ALL DONE")
 
 # print(paste0("Current date: ",date()))

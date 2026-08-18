@@ -18,7 +18,10 @@ genes: "none"                          # Genes to highlight in plots (comma-sepa
 TMPDIR_arg: ""                         # TMPDIR directory ('system' for system default, or an absolute path)
 
 # === Reference and databases ===
-reference_genome: ""                   # Reference genome (.fasta or .gz, absolute path)
+reference_genome: ""                   # Reference genome (.fasta or .gz, absolute path). Comma-separated for several genomes:
+                                       # one fully independent analysis is produced per genome. 'annotation' below must then be
+                                       # either a single annotation (used to quantify every genome) or one per genome, paired in
+                                       # order. Incompatible with reference_genome_index and reference_genome_groups
 reference_genome_index: ""             # Pre-built genome index (absolute path)
 reference_genome_groups: ""            # Align sample subsets to different genomes, quantify them all with the single
                                        # annotation above and merge into one count matrix. Semicolon-separated
