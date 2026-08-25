@@ -30,19 +30,6 @@ PSEUDOCOUNT <- 1
 PSEUDO_TAG  <- paste0("log2_", PSEUDOCOUNT)
 expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
 
-normalize_sample_id <- function(x) {
-  x <- basename(as.character(x))
-  x <- gsub("_categ(_2)?$", "", x)
-  x <- gsub("_hisat2.*|_HISAT2.*|_star.*|_STAR.*", "", x)
-  x <- gsub("_flagstat.*|_stats.*", "", x)
-  x <- gsub("_fastqc.*", "", x)
-  x <- gsub("\\.bam$", "", x)
-  x <- gsub("\\.(fastq|fq)(\\.gz)?$", "", x)
-  x <- gsub("_[12](\\.(fastq|fq)(\\.gz)?)?$", "", x)
-  x <- gsub("_[12]$", "", x)
-  x
-}
-
 ###### Load read counts, format, filter, start differential expression analyses, get normalized counts, save...:
   cat("\nProcessing counts and getting figures...\n")
   cat(paste0(input_dir,". Current date: ",date()))
@@ -102,7 +89,7 @@ normalize_sample_id <- function(x) {
     cat("\nReads loaded...\n")
     b$Length[is.na(b$Length)] <- 0
     gene_counts <- Reduce(merge, a)
-    colnames(gene_counts)[2:dim(gene_counts)[2]] <- gsub(".*_results/|_readcount\\.tab$|_nat.*|_hisat2_readcount\\.tab$|_star_readcount\\.tab$", "", colnames(gene_counts)[2:dim(gene_counts)[2]])
+    colnames(gene_counts)[2:dim(gene_counts)[2]] <- gsub(".*_results/|_readcount\\.tab$|_hisat2_readcount\\.tab$|_star_readcount\\.tab$", "", colnames(gene_counts)[2:dim(gene_counts)[2]])
     gene_counts <- as.data.frame(merge(gene_counts, b))
   } else {
     stop(paste0("No readcount results directory found in ", input_dir))
@@ -114,14 +101,17 @@ normalize_sample_id <- function(x) {
   gene_counts$Gene_ID <- stringr::str_to_title(rownames(gene_counts))
   colnames(gene_counts) <- basename(colnames(gene_counts))
 
-  # Clean sample column names: remove _STAR.*, _hisat2.*, .fastq.gz, _1/_2 endings
+  # Clean sample column names: remove _STAR.*, _hisat2.*, .fastq.gz. These are per-sample
+  # artifacts, so no mate suffix is stripped: a trailing _1/_2 here is part of the sample name.
   sample_cols <- setdiff(colnames(gene_counts), c("Geneid", "Gene_ID", "Length"))
-  clean_cols <- normalize_sample_id(sample_cols)
-  clean_cols <- make.unique(clean_cols, sep = "_")
+  clean_cols <- rgse_resolve_collisions(rgse_sample_id(sample_cols), sample_cols, "count column names")
   colnames(gene_counts)[match(sample_cols, colnames(gene_counts))] <- clean_cols
   # Reorder so gene_counts columns follow the order of GSMXXXXXXX, or alfanumeric if GSM not present in the colnames:
   if (length(grep("_GSM[0-9]",colnames(gene_counts)))==0){
-    gene_counts <- gene_counts[,c(gtools::mixedorder(grep("Length|Gene_ID",colnames(gene_counts),invert=T)),grep("Length|Gene_ID",colnames(gene_counts)))]
+    # order() and not mixedorder(): samples_info.txt (and the design files pasted alongside
+    # it) are built from `ls` of the reads folder, so plain collation is the contract here.
+    smp <- grep("Length|Gene_ID",colnames(gene_counts),invert=T); meta <- grep("Length|Gene_ID",colnames(gene_counts))
+    gene_counts <- gene_counts[,c(smp[order(colnames(gene_counts)[smp])],meta)]
   } else {
     idx <- colnames(gene_counts)[unlist(lapply(strsplit(colnames(gene_counts),"_|__"),function(x){any(startsWith(x,"GSM"))}))]
     gene_counts <- gene_counts[,c(idx[gtools::mixedorder(unlist(lapply(strsplit(idx[unlist(lapply(strsplit(idx,"_|__"),function(x){any(startsWith(x,"GSM"))}))],"_+"),function(x){grep("^GSM",x,val=T)})))],"Gene_ID","Length")]
@@ -269,6 +259,38 @@ normalize_sample_id <- function(x) {
     pheno <- pheno[order(pheno$sample),]
     # Should be redundant because done above, but make suer to order also gene_counts if this has not been a download from database but local analyses with raw_data (and then not SRR or GSM in sample name):
     gene_counts <- gene_counts[,c(order(colnames(gene_counts)[grep("Gene_ID|Length",colnames(gene_counts),invert=T)]),grep("Gene_ID|Length",colnames(gene_counts)))]
+  }
+
+  # design_possible_full_*.txt is written row-aligned to samples_info.txt and is later consumed
+  # positionally against the count columns, so both must be in the same order. `ls` (which builds
+  # samples_info.txt) and R's order() can collate differently, which would silently assign the
+  # wrong group to every sample, so realign by name whenever the two can be matched one-to-one:
+  si <- tryCatch(read.table(paste0(path,"/reads_study_info/samples_info.txt"),head=F,stringsAsFactors=F),
+                 error=function(e) NULL)
+  if (!is.null(si)){
+    smp <- grep("Gene_ID|Length",colnames(gene_counts),invert=T); meta <- grep("Gene_ID|Length",colnames(gene_counts))
+    cn <- colnames(gene_counts)[smp]
+    # The reads are named after column 1 for local runs and after column 2 for GEO/SRA downloads:
+    si_id <- NULL
+    for (k in intersect(c("V1","V2"),colnames(si))){
+      cand <- rgse_sample_id(as.character(si[[k]]))
+      if (length(cand)==length(cn) && !anyDuplicated(cand) && all(cand %in% cn)){ si_id <- cand; break }
+    }
+    if (is.null(si_id)){
+      cat("\nNote: samples_info.txt entries could not be matched one-to-one to the count column names, so the column order set above is kept.\n")
+    } else if (!identical(si_id,cn)){
+      cat("\nRealigning count columns to the samples_info.txt row order that the design files follow:\n  counts:       ",
+          paste(cn,collapse=", "),"\n  samples_info: ",paste(si_id,collapse=", "),"\n",sep="")
+      gene_counts <- gene_counts[,c(smp[match(si_id,cn)],meta)]
+      ph <- as.character(pheno$sample)
+      if (setequal(rgse_sample_id(ph),si_id) && !anyDuplicated(ph)){
+        pheno <- pheno[match(si_id,rgse_sample_id(ph)),]
+      } else {
+        stop("Could not realign the phenotypic data to samples_info.txt: the sample names in 'pheno' (",
+             paste(ph,collapse=", "),") do not match the count columns (",
+             paste(si_id,collapse=", "),"). Refusing to continue with a possibly wrong group assignment.")
+      }
+    }
   }
 
   layout <- read.table(list.files(pattern = "library_layout_info.txt", recursive = TRUE, full.names=T, path=path)[1])$V1
@@ -692,7 +714,9 @@ normalize_sample_id <- function(x) {
                   lab_title <- read.table(list.files(pattern = "study_title.txt$", recursive = TRUE, full.names=T, path=path)[1])$V1
                  })
         print(paste0("Title of the project is ", lab_title))
-        df$sample <- gsub("_t|m_Rep|_seq|_KO|_WT","",df$sample)
+        # Shorten the x-axis labels, dropping only whole "_"-delimited tokens: the previous
+        # unanchored pattern also ate the "_t" inside names such as YP0_1_treated.
+        df$sample <- gsub("_(t|Rep|seq|KO|WT)(?=_|$)","",as.character(df$sample),perl=TRUE)
         suppressMessages(library(ggpubr,quiet = T,warn.conflicts = F))
         suppressMessages(library(plotly,quiet = T,warn.conflicts = F))
         suppressMessages(library(dplyr,quiet = T,warn.conflicts = F))
@@ -919,7 +943,10 @@ normalize_sample_id <- function(x) {
         targets <- read.table(file = paste0(path,"/reads_study_info/samples_info.txt"),header = F,stringsAsFactors=F)        
     }
     colnames(targets) <- c("Filename","Name","Type")
-    targets$Filename <- gsub("_t|m_Rep|_seq|_KO|_WT","",paste(unique(targets$Filename,targets$Name),sep="_"))    
+    # Kept verbatim: Filename is only used for the GSM/SRR reordering below (unaffected by any
+    # token trimming) before being overwritten by Name, and the trimming that used to happen here
+    # was unanchored, so it truncated any sample name containing "_t", "_seq", "_KO" or "_WT".
+    targets$Filename <- as.character(targets$Filename)
     # Again, reorder based on GSM/SRR, if any:
     if (length(grep("_GSM[0-9]",targets$Filename))!=0){
       idx <- targets$Filename[unlist(lapply(strsplit(targets$Filename,"_+"),function(x){any(startsWith(x,"GSM"))}))]
@@ -1651,8 +1678,10 @@ tryCatch({
         # Pheno sample names (e.g. "GSM3030679_SRR6807520_condition") don't normalize
         # to the same root as expression column names (e.g. "GSM3030679_1.fastq.gz_STAR.bam"
         # -> "GSM3030679"), so we also extract the leading GSM/SRR accession.
-        comp_roots <- unique(c(normalize_sample_id(comp_samples),
-                               normalize_sample_id(comp_samples_stripped)))
+        comp_roots <- unique(c(rgse_sample_id(comp_samples),
+                               rgse_sample_id(comp_samples, mate_suffix = TRUE),
+                               rgse_sample_id(comp_samples_stripped),
+                               rgse_sample_id(comp_samples_stripped, mate_suffix = TRUE)))
         # Extract GSM/SRR accession prefixes (e.g. "GSM3030679" from "GSM3030679_SRR6807520_cond")
         gsm_ids <- unique(na.omit(stringr::str_extract(comp_samples, "GSM\\d+")))
         srr_ids <- unique(na.omit(stringr::str_extract(comp_samples, "SRR\\d+")))
@@ -1666,13 +1695,13 @@ tryCatch({
             cpm_keep <- rep(TRUE, ncol(cpm_categ))
         } else {
             rpkm_cols <- colnames(rpkm_categ)
-            rpkm_keep <- rpkm_cols == "Gene_ID" | normalize_sample_id(rpkm_cols) %in% comp_roots
+            rpkm_keep <- rpkm_cols == "Gene_ID" | rgse_sample_id(rpkm_cols) %in% comp_roots | rgse_sample_id(rpkm_cols, mate_suffix = TRUE) %in% comp_roots
 
             tpm_cols <- colnames(tpm_categ)
-            tpm_keep <- tpm_cols == "Gene_ID" | normalize_sample_id(tpm_cols) %in% comp_roots
+            tpm_keep <- tpm_cols == "Gene_ID" | rgse_sample_id(tpm_cols) %in% comp_roots | rgse_sample_id(tpm_cols, mate_suffix = TRUE) %in% comp_roots
 
             cpm_cols <- colnames(cpm_categ)
-            cpm_keep <- cpm_cols == "Gene_ID" | normalize_sample_id(cpm_cols) %in% comp_roots
+            cpm_keep <- cpm_cols == "Gene_ID" | rgse_sample_id(cpm_cols) %in% comp_roots | rgse_sample_id(cpm_cols, mate_suffix = TRUE) %in% comp_roots
         }
 
         rpkm_categ_sub <- rpkm_categ[, rpkm_keep, drop = FALSE]

@@ -2937,7 +2937,6 @@ sub hisat2{
 	      							  parallel --halt-on-error 2 --verbose --joblog ${projectdir}/hisat2_log_parallel.txt -j $parallelnumber \\
 	      							  'set -o pipefail; hisat2 -q -t --seed 123 $hisatpardef -x $hisat2idx_final \\
 	      							    -U \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \\
-	      							    -U \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \\
 	      							    --met-file {}.metrics $unaligned_cmd_se \\
 	      							    --new-summary --summary-file {}_hisat2.log \\
 	      							  $samtools_pipeline_se && \\

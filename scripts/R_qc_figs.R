@@ -2,6 +2,9 @@
 .rgse_scripts_dir <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[1])))
 source(file.path(.rgse_scripts_dir, "R_qs_helpers.R"))
 rgse_load_env(file.path(commandArgs(trailingOnly=TRUE)[3],"QC_and_others/globalenvir.qs2"))
+# globalenvir.qs2 carries the whole saved environment, helper functions included, so re-source
+# them afterwards to make sure the definitions on disk win over any stale copy in the dump:
+source(file.path(.rgse_scripts_dir, "R_qs_helpers.R"))
 
 args = commandArgs(trailingOnly=TRUE)
 path <- args[1]
@@ -35,20 +38,6 @@ suppressMessages(library("ggpubr",quiet = T,warn.conflicts = F))
 suppressMessages(library("ggpmisc",quiet = T,warn.conflicts = F))
 suppressMessages(library("dplyr",quiet = T,warn.conflicts = F))
 suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
-
-### Normalize sample IDs across tools (BAM, flagstat, fastqc, edgeR colnames):
-normalize_sample_id <- function(x) {
-  x <- basename(as.character(x))
-  x <- gsub("_categ(_2)?$", "", x)
-  x <- gsub("_hisat2.*|_HISAT2.*|_star.*|_STAR.*", "", x)
-  x <- gsub("_flagstat.*|_stats.*", "", x)
-  x <- gsub("_fastqc.*", "", x)
-  x <- gsub("\\.bam$", "", x)
-  x <- gsub("\\.(fastq|fq)(\\.gz)?$", "", x)
-  x <- gsub("_[12](\\.(fastq|fq)(\\.gz)?)?$", "", x)
-  x <- gsub("_[12]$", "", x)
-  x
-}
 
 ### Prepare counts:
   lcpm_prefilter <- cpm(edgeR_object_prefilter, log=TRUE)  # This is log2 and normalized due to the argument normalized.lib.sizes=TRUE by default in cpm...
@@ -134,7 +123,7 @@ normalize_sample_id <- function(x) {
   contrast2 <- unique(t(combn(unique(names(contrast)),2))[apply(t(combn(unique(names(contrast)),2)),1,function(x){colorspace::contrast_ratio(x[1],col2=x[2])}) > 4])
   levels(col.group) <- sample(contrast2, nlevels(col.group)); col.group <- as.character(col.group)
   # Name the color vector by normalized sample name for correct mapping after reordering (e.g. corrplot AOE)
-  sample_names_for_col <- normalize_sample_id(colnames(x$counts))
+  sample_names_for_col <- rgse_resolve_collisions(rgse_sample_id(colnames(x$counts)), colnames(x$counts), "count column names")
   names(col.group) <- sample_names_for_col
 
 ### QC figures:
@@ -142,8 +131,8 @@ normalize_sample_id <- function(x) {
   dir.create(tables_dir, recursive = TRUE, showWarnings = FALSE)
   tryCatch({
     clean_targets <- as.data.frame(targets)
-    if (!is.null(clean_targets$Filename)) clean_targets$Filename <- normalize_sample_id(clean_targets$Filename)
-    if (!is.null(clean_targets$Name)) clean_targets$Name <- normalize_sample_id(clean_targets$Name)
+    if (!is.null(clean_targets$Filename)) clean_targets$Filename <- rgse_sample_id(clean_targets$Filename)
+    if (!is.null(clean_targets$Name)) clean_targets$Name <- rgse_sample_id(clean_targets$Name)
     write.table(clean_targets, file = file.path(tables_dir, "00_sample_targets.tsv"), sep = "\t", quote = FALSE, row.names = FALSE)
   }, error = function(e) NULL)
 
@@ -256,8 +245,8 @@ normalize_sample_id <- function(x) {
   ### 3. Library size and read counts figures:
   cat("\n[4/12] Library size barplots\n")
   open_section_pdf("03_library_size")
-  sample_labels <- normalize_sample_id(if (!is.null(targets$Name)) targets$Name else targets$Filename)
-  sample_names <- normalize_sample_id(if (!is.null(targets$Filename)) targets$Filename else colnames(x$counts))
+  sample_labels <- rgse_sample_id(if (!is.null(targets$Name)) targets$Name else targets$Filename)
+  sample_names <- rgse_sample_id(if (!is.null(targets$Filename)) targets$Filename else colnames(x$counts))
 
   par(mfrow=c(1,1))
   par(mar = c(10, 5, 4, 2))
@@ -328,10 +317,12 @@ normalize_sample_id <- function(x) {
       }
       reads <- c(reads, val)
     }
-    bam_reads_2 <- data.frame(Samples=normalize_sample_id(basename(files)),reads=as.numeric(reads))
-    # Filter to only samples present in the edgeR object (avoids stale/extra flagstat files)
-    edger_samples <- normalize_sample_id(colnames(x$counts))
-    bam_reads_2 <- bam_reads_2[bam_reads_2$Samples %in% edger_samples, , drop = FALSE]
+    bam_reads_2 <- data.frame(Samples=rgse_sample_id(basename(files)),reads=as.numeric(reads))
+    # Keep only the samples present in the edgeR object (avoids stale/extra flagstat files), in the
+    # same order as its columns, so every table and barplot below lists the samples identically:
+    edger_samples <- sample_names_for_col
+    bam_reads_2 <- bam_reads_2[match(edger_samples, bam_reads_2$Samples), , drop = FALSE]
+    bam_reads_2 <- bam_reads_2[!is.na(bam_reads_2$Samples), , drop = FALSE]
     # Match colors by normalized sample name
     bam_reads_2$color <- col.group[match(bam_reads_2$Samples, names(col.group))]
   
@@ -355,10 +346,12 @@ normalize_sample_id <- function(x) {
     for (f in files){reads <- c(reads,read.delim(unz(f, file.path(sub(".zip","",(basename(f))),"fastqc_data.txt")))[6,2])}
     
     ## Barplot 2 no. of reads
+    fastq_reads_2 <- NULL # Not exists(): globalenvir.qs2 may carry a stale one from a previous run
     if(length(files)!=0){ # Control that sometimes if these are repeated runs, fastqc is not going to be executed    
-      fastq_reads_2 <- data.frame(Samples=normalize_sample_id(basename(files)),reads=as.numeric(reads))
-      # Filter to only samples present in the edgeR object
-      fastq_reads_2 <- fastq_reads_2[fastq_reads_2$Samples %in% edger_samples, , drop = FALSE]
+      fastq_reads_2 <- data.frame(Samples=rgse_sample_id(basename(files), mate_suffix = TRUE),reads=as.numeric(reads))
+      # Keep only the samples present in the edgeR object, in its column order:
+      fastq_reads_2 <- fastq_reads_2[match(edger_samples, fastq_reads_2$Samples), , drop = FALSE]
+      fastq_reads_2 <- fastq_reads_2[!is.na(fastq_reads_2$Samples), , drop = FALSE]
       fastq_reads_2$color <- col.group[match(fastq_reads_2$Samples, names(col.group))]
           
       cat("\nOrdering and number of fastq reads...\n"); print(fastq_reads_2)
@@ -371,8 +364,8 @@ normalize_sample_id <- function(x) {
         color = "color",
         stat = "identity"
       ) + theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))
-      perc <- c()
-      for (i in 1:nrow(fastq_reads_2)){perc<-c(perc,round(bam_reads_2$reads[i]*100/fastq_reads_2$reads[i],2))}
+      # Paired by sample name, not by row position: the two tables are listed independently
+      perc <- round(bam_reads_2$reads[match(fastq_reads_2$Samples, bam_reads_2$Samples)] * 100 / fastq_reads_2$reads, 2)
       print(bar_plot + 
         geom_text(aes(label = paste0(format(reads, big.mark=","), "\n(bam/fastq: ", perc, " %)")), 
                   angle = 45, hjust = 0, nudge_y = max(bam_reads_2$reads) * 0.02, color = "black", size = 3) +
@@ -382,9 +375,15 @@ normalize_sample_id <- function(x) {
         theme(legend.position = "none")) + scale_color_identity() + scale_fill_identity()      
     }    
     
-    reads_info <- fastq_reads_2[,1:2]
-    reads_info$library_size <- x$samples$lib.size
-    # Write the read numbers if there's need of rerunning or subsampling:
+    # Write the read numbers if there's need of rerunning or subsampling. The library sizes are
+    # looked up by sample name, as the read counts are listed from the QC files independently:
+    if (!is.null(fastq_reads_2) && nrow(fastq_reads_2) > 0){
+      reads_info <- fastq_reads_2[,1:2]
+    } else {
+      cat("\nNo FASTQC results found for this run, reporting the BAM read counts in reads_numbers.txt instead of the raw ones...\n")
+      reads_info <- bam_reads_2[,1:2]
+    }
+    reads_info$library_size <- unname(setNames(x$samples$lib.size, sample_names_for_col)[reads_info$Samples])
     write.table(reads_info,file=paste0(output_dir,"/QC_and_others/reads_numbers.txt"),col.names = T,row.names = F,quote = F,sep="\t")
   }
 
@@ -480,8 +479,11 @@ normalize_sample_id <- function(x) {
 
       if (!is.null(kallisto_stats) && nrow(kallisto_stats) > 0) {
         # Filter to only samples present in the edgeR object
-        edger_samples <- colnames(x$counts)
-        kallisto_stats <- kallisto_stats[kallisto_stats$Sample %in% edger_samples, , drop = FALSE]
+        # Normalize both sides: R_process_reanalyzer_GSE.R normalizes the count colnames, while
+        # kallisto_stats$Sample is the raw run directory name
+        kallisto_stats$Sample <- rgse_sample_id(kallisto_stats$Sample)
+        kallisto_stats <- kallisto_stats[match(sample_names_for_col, kallisto_stats$Sample), , drop = FALSE]
+        kallisto_stats <- kallisto_stats[!is.na(kallisto_stats$Sample), , drop = FALSE]
 
         if (nrow(kallisto_stats) > 0) {
           kallisto_stats$color <- col.group[match(kallisto_stats$Sample, names(col.group))]
@@ -528,7 +530,7 @@ normalize_sample_id <- function(x) {
           reads_info <- data.frame(
             Samples = kallisto_stats$Sample,
             reads = kallisto_stats$n_processed,
-            library_size = x$samples$lib.size
+            library_size = unname(setNames(x$samples$lib.size, sample_names_for_col)[kallisto_stats$Sample])
           )
           write.table(reads_info, file = paste0(output_dir, "/QC_and_others/reads_numbers.txt"),
                       col.names = TRUE, row.names = FALSE, quote = FALSE, sep = "\t")
@@ -545,7 +547,7 @@ normalize_sample_id <- function(x) {
   ### 4. Corrplot no log
   cat("\n[5/12] Correlation plots (all genes)\n")
   open_section_pdf("05_correlation")
-  tmp <- lcpm_no_log; colnames(tmp) <- normalize_sample_id(colnames(tmp))
+  tmp <- lcpm_no_log; colnames(tmp) <- rgse_sample_id(colnames(tmp))
   # Adjust margins to prevent title cropping
   par(mar=c(2, 2, 4, 3))
   cor_sp <- cor(tmp, method="spearman")
@@ -623,7 +625,7 @@ normalize_sample_id <- function(x) {
   rsd <- rowSds(as.matrix(x))
   sel <- order(rsd, decreasing=TRUE)[1:250]
   
-  heatmap(na.omit(as.matrix(x[sel,])),margins=c(10,8),main="Heatmap 250 most diff entities raw counts",cexRow=0.01,cexCol=0.5,labCol=normalize_sample_id(rownames(x$samples)))
+  heatmap(na.omit(as.matrix(x[sel,])),margins=c(10,8),main="Heatmap 250 most diff entities raw counts",cexRow=0.01,cexCol=0.5,labCol=rgse_sample_id(rownames(x$samples)))
 
   tryCatch({
     top250_df <- data.frame(Gene = rownames(x)[sel], StandardDev = rsd[sel])
@@ -635,7 +637,7 @@ normalize_sample_id <- function(x) {
   open_section_pdf("09_dendrograms")
   par(mfrow=c(1,1), mar=c(8, 4, 4, 2),col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
   pr.hc.c <- hclust(na.omit(dist(t(cpm(x2$counts,log=F)),method = "euclidean")))
-  pr.hc.c$labels <- normalize_sample_id(pr.hc.c$labels)
+  pr.hc.c$labels <- rgse_sample_id(pr.hc.c$labels)
   plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of normalized counts all genes from samples of ", label, sep=""), cex=0.5)
   
   ### 8.2. Dendogram cluster raw norm colored
@@ -647,7 +649,7 @@ normalize_sample_id <- function(x) {
   ### 8.3. Dendogram cluster raw norm log
   par(mfrow=c(1,1), mar=c(8, 4, 4, 2),col.main="royalblue4", col.lab="royalblue4", col.axis="royalblue4", bg="white", fg="royalblue4", font=2, cex.axis=0.6, cex.main=0.8)
   pr.hc.c <- hclust(na.omit(dist(t(cpm(x2$counts,log=T)),method = "euclidean")))
-  pr.hc.c$labels <- normalize_sample_id(pr.hc.c$labels)
+  pr.hc.c$labels <- rgse_sample_id(pr.hc.c$labels)
   plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of log2 normalized counts all genes from samples of ", label, sep=""), cex=0.5)
   
   ### 8.4. Dendogram cluster raw norm log colored
@@ -658,7 +660,7 @@ normalize_sample_id <- function(x) {
 
   tryCatch({
     dist_mat <- as.matrix(dist(t(cpm(x2$counts, log = TRUE)), method = "euclidean"))
-    colnames(dist_mat) <- normalize_sample_id(colnames(dist_mat))
+    colnames(dist_mat) <- rgse_sample_id(colnames(dist_mat))
     rownames(dist_mat) <- colnames(dist_mat)
     write.table(dist_mat, file = file.path(tables_dir, "09_dendrogram_distances.tsv"), sep = "\t", quote = FALSE)
   }, error = function(e) NULL)
@@ -673,7 +675,7 @@ normalize_sample_id <- function(x) {
     gene_names_vec <- rownames(countFrac)
     sample_names_vec <- colnames(countFrac)
     # Clean sample names for display
-    sample_names_clean <- normalize_sample_id(sample_names_vec)
+    sample_names_clean <- rgse_sample_id(sample_names_vec)
 
     # Build long-format data frame (base R, no tibble)
     df_long <- data.frame(
@@ -759,7 +761,7 @@ normalize_sample_id <- function(x) {
 
     # Clean column names
     top_clean <- top_signal
-    colnames(top_clean) <- normalize_sample_id(colnames(top_clean))
+    colnames(top_clean) <- rgse_sample_id(colnames(top_clean))
 
     ## Spearman corrplot - top genes
     par(mar = c(2, 2, 4, 3))
@@ -801,7 +803,7 @@ normalize_sample_id <- function(x) {
     if (ncol(top_signal) > 2) {
       d_top <- as.dist(1 - cor(top_signal, use = "complete.obs"))
       hc_top <- hclust(d_top, method = "ward.D2")
-      hc_top$labels <- normalize_sample_id(hc_top$labels)
+      hc_top$labels <- rgse_sample_id(hc_top$labels)
 
       # Base R dendrogram
       par(mfrow = c(1, 1), mar = c(8, 4, 4, 2),
