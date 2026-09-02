@@ -54,6 +54,21 @@ This is only valid because every group is quantified with the **same annotation*
 
 Two caveats. Genome groups require a single annotation and are incompatible with `-ri` and with the kallisto aligner. And if the genome group turns out to be perfectly confounded with the experimental design (no condition present in more than one group), the pipeline warns: in that situation the merged differential expression cannot separate the biological effect from the reference/mapping effect, and only within-group comparisons are interpretable.
 
+### Human orthologs and regulatory context from ENCODE
+
+Three optional steps run after the DEG tables are annotated, and are off by default.
+
+`-faa`/`proteome_faa` takes the protein FASTA of the analysed organism. `-od`/`ortho_detection` then detects the **human orthologs** of those proteins, taking one of the values of the `ortho_detection` parameter of `orthologr::orthologs()`: `DIAMOND_RBH`, `DIAMOND_BH`, `RBH` or `BH` (`no` by default). The DIAMOND methods are the practical choice on a whole proteome; `RBH`/`BH` are the same logic on BLAST+ and are much slower. The human reference proteome is downloaded once from UniProt unless `-odH`/`ortho_human_proteome` points at one. This step is skipped when the organism already is *Homo sapiens*.
+
+`-enc`/`encode_regulatory` then looks the DEGs of each comparison up in [ENCODE](https://www.encodeproject.org): the ENCODE-rE2G element-gene links give each gene its candidate **regulatory regions** (promoter/enhancer class, distance to TSS, score), ENCODE TF ChIP-seq gives the **transcription factors** with a peak in those regions, and further assays over the same regions (DNase-seq, ATAC-seq, histone ChIP-seq) are recorded alongside. When the organism is not human the DEGs are translated through the orthologs above first, so `-enc` needs `-od` in that case. Each TF is finally checked against the differential expression table of the same comparison, so a TF whose own encoding gene (or its ortholog) is itself a DEG is flagged in the `TF_is_DEG` column.
+
+```
+-faa /ref/proteins.faa -od DIAMOND_RBH -enc yes \
+-enca "--genes-per-sense 25 --biosample liver"
+```
+
+Pick a biosample close to your tissue: `encode_regulatory.py --list-biosamples` prints the ENCODE rE2G biosamples available. One HTTP round trip per genomic region dominates the runtime, so the number of regions is capped (`--max-regions`) and every region is cached, meaning a re-run only fetches what is new. Results land in `<results>/orthologs_human/` and `<results>/DGE/encode/`, and get their own section in the final report.
+
 An updated version of [miARma-seq](https://github.com/eandresleon/miARma-seq) has been included in reanalyzerGSE [here](https://github.com/BioinfoIPBLN/reanalyzerGSE/tree/main/external_software/miARma-seq).
 
 Please refer to the help ('-h') or contact us for any further clarification.
@@ -61,7 +76,7 @@ Please refer to the help ('-h') or contact us for any further clarification.
 ## Output
 Everything is written into `OUTPUT_FOLDER/PROJECT_NAME/`. Two places cover most needs:
 
-* **`final_report.html`**, at the top level of the project folder, is the entry point to the run. It is an HTML report linking to the sample and design summary, the count matrices, the DEG tables and volcano plots, the functional enrichment report, the QC PDFs and the MultiQC/Qualimap reports, the pipeline timing and Gantt chart, and the objects for interactive exploration. It uses relative links, so keep it inside the project folder (move or archive the whole folder if you need to share it).
+* **`final_report.html`**, at the top level of the project folder, is the entry point to the run. It is an HTML report linking to the sample and design summary, the per-sample alignment summary, the count matrices, the DEG tables and volcano plots, the functional enrichment report, the QC PDFs and the MultiQC/Qualimap reports, the pipeline timing and Gantt chart, and the objects for interactive exploration. It uses relative links, so keep it inside the project folder (move or archive the whole folder if you need to share it).
 * **`final_results_reanalysis0_<OUTPUT_FOLDER_NAME>/`** is the results folder itself, holding the count matrices plus `QC_and_others/` (QC PDF and the tables behind every figure) and `DGE/` (differential expression, functional enrichment and network analyses).
 
 Microarray and single-cell studies follow a shorter route that stops after a template script, so they produce a smaller `final_results_reanalysis/` and no `final_report.html`.

@@ -6,7 +6,6 @@ cores=$4
 compression_level=${5:-6}
 
 total_lines=$(cat $1 | wc -l)
-#echo -e "\nProcessing and downloading with fasterq-dump $total_lines files\n"
 echo -e "\nProcessing and downloading with fastq-dl $total_lines files\n"
 
 # Make sure cores get distributed:
@@ -23,8 +22,6 @@ echo -e "\nUsing parallel blocks of $number_parallel files with $cores_parallel 
 
 # Processing:
 cd $dest
-# https://www.biostars.org/p/359441/
-# parallel --verbose --joblog $dest/../download_sra_fq_log_parallel.txt -j $number_parallel download_sra_fq0.sh {} $cores_parallel $compression_level ::: $(cat $file)
 
 parallel --halt-on-error 2 --verbose --joblog $dest/../download_sra_fq_log_parallel.txt -j $number_parallel fastq-dl --accession {} --cpus $cores_parallel --silent --force --max-attempts 10 --gzip-level $compression_level ::: $(cat $file)
 

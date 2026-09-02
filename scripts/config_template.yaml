@@ -93,6 +93,56 @@ literature_args: "--genes-per-sense 5 --papers-per-gene 5"   # Args passed to li
                                        #   --papers-per-gene N   most recent linked papers kept per gene (default 5)
                                        #   --email ADDRESS       contact address sent to NCBI with each request
 
+# === Human orthologs and ENCODE regulatory context ===
+proteome_faa: ""                       # Protein FASTA (.faa or .faa.gz, absolute path) of the analysed organism.
+                                       # Required by ortho_detection below. The identifiers must be the ones the
+                                       # annotation carries in its 'protein_id' attributes, or the headers must carry
+                                       # a gene identifier ('GN=', 'gene_symbol:', 'gene=' or '[gene=...]').
+ortho_detection: "no"                  # Detect the HUMAN orthologs of this organism's proteins. Passed to the
+                                       # 'ortho_detection' parameter of orthologr::orthologs(): 'no' (off),
+                                       # 'DIAMOND_RBH', 'DIAMOND_BH', 'RBH' or 'BH'.
+                                       #   DIAMOND_RBH / DIAMOND_BH  DIAMOND, recommended (minutes on a proteome)
+                                       #   RBH / BH                  BLAST+, same logic but far slower
+                                       # Skipped, with a note, when the organism already is Homo sapiens.
+                                       # Results in <results>/orthologs_human/ (orthologs_human.tsv, gene_to_human.tsv).
+ortho_human_proteome: ""               # Human reference proteome to detect the orthologs against. Empty = download and
+                                       # cache the UniProt human reference proteome (UP000005640, reviewed). Whatever is
+                                       # used must carry gene symbols in its headers, since ENCODE keys on HGNC symbols.
+ortho_detection_args: "--sensitivity-mode fast"   # Args passed to ortho_human.py:
+                                       #   --eval 1E-5                 e-value threshold
+                                       #   --sensitivity-mode MODE     DIAMOND sensitivity (fast, mid-sensitive,
+                                       #                               sensitive, more-sensitive, very-sensitive,
+                                       #                               ultra-sensitive)
+                                       #   --min-identity N            drop pairs below N% identity
+                                       #   --force                     re-run instead of reusing cached pairs
+                                       #   --keep-work                 keep the BLAST/DIAMOND databases
+
+encode_regulatory: "no"                # Look the DEGs up in ENCODE ('yes' or 'no'). Per comparison, the strongest DEGs
+                                       # (or their human orthologs when the organism is not human, which then requires
+                                       # ortho_detection above) are queried against the ENCODE-rE2G element-gene links
+                                       # for their candidate regulatory regions, and against ENCODE TF ChIP-seq for the
+                                       # transcription factors binding those regions. A TF whose own encoding gene (or
+                                       # its ortholog) is itself a DEG in the same comparison is flagged in the
+                                       # TF_is_DEG column. Needs outbound access to www.encodeproject.org.
+                                       # Results in <results>/DGE/encode/ plus a report section.
+encode_args: "--genes-per-sense 25 --biosample K562"   # Args passed to encode_regulatory.py:
+                                       #   --biosample TERM[,TERM]     ENCODE biosample term name(s) whose rE2G
+                                       #                               predictions to use; pick one close to your
+                                       #                               tissue. Run with --list-biosamples to see them
+                                       #   --re2g-accession ENCSR...   use these annotations instead of --biosample
+                                       #   --re2g-file ENCFF...        a specific thresholded element-gene links file
+                                       #   --genes-per-sense N         top N DEGs per direction, ranked by FDR
+                                       #   --fdr F                     FDR cutoff for calling a gene a DEG (0.05)
+                                       #   --max-elements-per-gene N   highest-scoring elements kept per gene (10)
+                                       #   --max-regions N             hard cap on ENCODE region searches (1500).
+                                       #                               One HTTP round trip per region dominates the
+                                       #                               runtime, so raise it deliberately; results are
+                                       #                               cached, so a re-run only fetches what is new
+                                       #   --extra-assays "..."        other assay titles recorded over the same
+                                       #                               regions (default DNase-seq,ATAC-seq,Histone
+                                       #                               ChIP-seq; empty string for TF ChIP-seq only)
+                                       #   --pause S                   seconds between region searches (0.34)
+
 # === Processing parameters ===
 strand: ""                             # Strandness ('yes', 'no', 'reverse'; predicted by salmon if empty)
 filter: "standard"                     # Gene count threshold ('bin', 'filterbyexpr', 'standard' or 'standard,X' to set min_group, or a numeric value for absolute raw count threshold per group)
@@ -139,7 +189,12 @@ save_unaligned: "no"                   # Save unaligned reads from hisat2/STAR t
                                        # Empty them to run the aligner with no extra arguments.
 hisat2_extra_args: "--very-sensitive"  # e.g. "--very-sensitive --no-mixed --no-discordant --maxins 800"
 star_extra_args: ""                    # e.g. "--outSAMmultNmax 1 --alignIntronMax 100000"
-kallisto_extra_args: ""                # e.g. "--bias"
+kallisto_extra_args: "--pseudobam"     # writes a per-sample pseudoalignments.bam of the
+                                       # transcriptome pseudoalignments next to the abundance
+                                       # tables. Nothing downstream reads it, it is there to
+                                       # inspect. Other options: "--bias", "--fusion",
+                                       # "--genomebam --gtf FILE" (genome coordinates, needs a
+                                       # GTF). Empty to write no BAM at all
 
 # === Count-level options (quantification) ===
 featureCounts_extra_args: "-M -O -C -B" # Extra arguments to pass to featureCounts (default '-M -O -C -B').

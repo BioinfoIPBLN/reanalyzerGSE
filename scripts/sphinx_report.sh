@@ -330,6 +330,102 @@ for aif in "$path/$final_dir_name/DGE/"DGE_analysis_comp*.ai_insight.md; do
 done
 
 
+######### Alignment summary section (scripts/show_alignment_stats.py wrote
+######### reads_study_info/alignment_summary.tsv at the end of step 3b, the same table it
+######### printed to the terminal). Stays empty when no aligner log was parsed.
+align_tsv="$path/reads_study_info/alignment_summary.tsv"
+align_section_rst=""
+if [ -s "$align_tsv" ]; then
+	align_aligner=""
+	for _ad in "$path/miARma_out0"/*_results; do
+		case "$(basename "$_ad")" in
+			hisat2_results) align_aligner="HISAT2" ;;
+			star_results) align_aligner="STAR" ;;
+			kallisto_results) align_aligner="Kallisto" ;;
+		esac
+	done
+	align_tmp=$(mktemp)
+	{
+		printf '\n\nAlignment summary per sample\n'
+		printf -- '------------------------------------------------------------------------------------\n'
+		python3 - "$align_tsv" "$align_aligner" "$final_dir_name" <<'ALIGNPY'
+import csv, sys
+
+tsv, aligner, final_dir = sys.argv[1], sys.argv[2], sys.argv[3]
+rows = list(csv.DictReader(open(tsv), delimiter="\t"))
+total = next((r for r in rows if r["Sample"] == "TOTAL_MEAN"), None)
+rows = [r for r in rows if r["Sample"] != "TOTAL_MEAN"]
+if not rows:
+    sys.exit(0)
+
+
+def num(v):
+    try:
+        return f"{int(float(v)):,}"
+    except (TypeError, ValueError):
+        return v or "-"
+
+
+def pct(v):
+    try:
+        return f"{float(v):.2f}%"
+    except (TypeError, ValueError):
+        return v or "-"
+
+
+def rate(r):
+    try:
+        return float(r["Overall_Rate_Pct"])
+    except (TypeError, ValueError):
+        return -1.0
+
+
+who = f" by {aligner}" if aligner else ""
+print(f"Reads aligned{who} for each of the {len(rows)} sample(s). 'Uniquely mapped' and "
+      f"'multi-mapped' are given both as counts and as a percentage of that sample's input reads; "
+      f"the overall rate is the two added together. This is the same table printed to the terminal "
+      f"at the end of the alignment step.")
+
+print("\n.. list-table:: Alignment summary")
+print("   :header-rows: 1")
+print("   :widths: 24 14 20 20 12\n")
+hdr = ["Sample", "Input reads", "Uniquely mapped", "Multi-mapped", "Overall rate"]
+print("   * - " + hdr[0])
+for c in hdr[1:]:
+    print("     - " + c)
+for r in sorted(rows, key=lambda x: x["Sample"]):
+    print("   * - " + r["Sample"])
+    for c in (num(r["Total_Reads"]),
+              f'{num(r["Uniquely_Mapped_Reads"])} ({pct(r["Uniquely_Mapped_Pct"])})',
+              f'{num(r["Multi_Mapped_Reads"])} ({pct(r["Multi_Mapped_Pct"])})',
+              pct(r["Overall_Rate_Pct"])):
+        print("     - " + c)
+
+if total:
+    print(f'\n**All samples together**: {num(total["Total_Reads"])} input reads, '
+          f'{num(total["Uniquely_Mapped_Reads"])} uniquely mapped ({pct(total["Uniquely_Mapped_Pct"])}), '
+          f'{num(total["Multi_Mapped_Reads"])} multi-mapped ({pct(total["Multi_Mapped_Pct"])}), '
+          f'mean overall rate {pct(total["Overall_Rate_Pct"])}.')
+
+low = [r["Sample"] for r in rows if 0 <= rate(r) < 40]
+mid = [r["Sample"] for r in rows if 40 <= rate(r) < 70]
+if low:
+    print(f'\n.. warning::\n\n   Overall alignment rate below 40% in: {", ".join(sorted(low))}. '
+          f'That usually points at the wrong reference genome, residual adapters or rRNA/contaminant '
+          f'content rather than at the aligner settings.')
+elif mid:
+    print(f'\n.. note::\n\n   Overall alignment rate between 40% and 70% in: {", ".join(sorted(mid))}. '
+          f'Worth a look at the corresponding QC report.')
+
+print(f"\nFull table: :download:`alignment_summary.tsv <../reads_study_info/alignment_summary.tsv>`.")
+ALIGNPY
+		printf '\n.. index:: Alignment\n'
+	} > "$align_tmp"
+	align_section_rst=$(cat "$align_tmp")
+	rm -f "$align_tmp"
+fi
+
+
 ######### Optional bibliographic context section (scripts/lit_gather.py wrote
 ######### literature/status.json plus per-comparison tables when -lit was enabled).
 ######### Stays empty when the option was off or nothing usable was gathered.
@@ -385,6 +481,97 @@ PYEOF
 		} > "$lit_tmp"
 		lit_section_rst=$(cat "$lit_tmp")
 		rm -f "$lit_tmp"
+	fi
+fi
+
+
+######### Optional ENCODE regulatory context section (scripts/encode_regulatory.py wrote
+######### encode/status.json plus per-comparison tables when -enc was enabled). Stays empty
+######### when the option was off or nothing usable was gathered.
+enc_dir="$path/$final_dir_name/DGE/encode"
+ortho_dir="$path/$final_dir_name/orthologs_human"
+enc_section_rst=""
+if [ -f "$enc_dir/status.json" ]; then
+	enc_comps=$(python3 -c "import json,sys; print(' '.join(json.load(open(sys.argv[1]))['usable_comparisons']))" \
+		"$enc_dir/status.json" 2>/dev/null)
+	if [ -n "$enc_comps" ]; then
+		enc_tmp=$(mktemp)
+		{
+			printf '\n\nRegulatory context from ENCODE\n'
+			printf -- '------------------------------------------------------------------------------------\n'
+			python3 - "$enc_dir/status.json" "$ortho_dir/status.json" "$final_dir_name" <<'ENCPY1'
+import json, os, sys
+st = json.load(open(sys.argv[1]))
+ortho_path, final_dir = sys.argv[2], sys.argv[3]
+bios = ", ".join(f"{b['biosample'] or b['accession']} ({b['accession']})" for b in st.get("biosamples", []))
+print(f"For each comparison, the strongest {st.get('genes_per_sense', 25)} differentially expressed gene(s) "
+      f"in each direction (FDR < {st.get('fdr', 0.05)}) were looked up in ENCODE. Their candidate regulatory "
+      f"elements come from the ENCODE-rE2G element-gene links of {bios or 'the requested biosample(s)'}, keeping "
+      f"the {st.get('max_elements_per_gene', 10)} highest-scoring element(s) per gene, and the transcription "
+      f"factors were taken from the ENCODE TF ChIP-seq experiments with a peak in those elements.")
+extra = st.get("extra_assays") or []
+if extra:
+    print(f"\nThe following further ENCODE assays over the same regions were also recorded: {', '.join(extra)}.")
+if not st.get("is_human"):
+    line = (f"\nThe organism is {st.get('organism', '?')}, so every gene was first translated to its human "
+            f"ortholog.")
+    if os.path.isfile(ortho_path):
+        o = json.load(open(ortho_path))
+        line += (f" Ortholog detection used {o.get('method', '?')} between the {o.get('query_proteins', '?')} "
+                 f"protein(s) of the provided proteome and the {o.get('human_proteins', '?')} human reference "
+                 f"protein(s), yielding {o.get('pairs', '?')} pair(s) and {o.get('genes_with_ortholog', '?')} "
+                 f"gene identifier(s) with a human symbol.")
+        line += (f" Full mapping: :download:`gene_to_human.tsv <../{final_dir}/orthologs_human/gene_to_human.tsv>` "
+                 f"and :download:`orthologs_human.tsv <../{final_dir}/orthologs_human/orthologs_human.tsv>`.")
+    print(line)
+print(f"\n{st.get('regions_queried', 0)} distinct genomic region(s) were queried."
+      + (" The region list was capped, so only the highest-scoring elements were used;"
+         " raise --max-regions in 'encode_args' to widen it." if st.get("regions_truncated") else "")
+      + (f" {st['regions_failed']} region(s) could not be fetched and are listed in"
+         f" :download:`failed_regions.tsv <../{final_dir}/DGE/encode/failed_regions.tsv>`;"
+         " re-running retries only those." if st.get("regions_failed") else ""))
+ENCPY1
+			for enc_c in $enc_comps; do
+				python3 - "$enc_dir/$enc_c/tf_summary.tsv" "$enc_c" "$enc_dir/status.json" "$final_dir_name" <<'ENCPY2'
+import csv, json, os, sys
+tsv, comp, statusf, final_dir = sys.argv[1:5]
+st = {c["comparison"]: c for c in json.load(open(statusf))["comparisons"]}.get(comp, {})
+contrast = (st.get("contrast") or "").replace("__VS__", " vs ").strip("_ ")
+title = comp + (f" ({contrast})" if contrast else "")
+rows = list(csv.DictReader(open(tsv), delimiter="\t"))
+top = rows[:25]
+print(f"\n.. list-table:: {title}")
+print("   :header-rows: 1")
+print("   :widths: 14 8 8 8 8 10 20\n")
+hdr = ["TF", "Targets", "At promoter", "Elements", "TF is DEG", "TF logFC", "TF FDR"]
+print("   * - " + hdr[0])
+for c in hdr[1:]:
+    print("     - " + c)
+for r in top:
+    print("   * - " + r["TF"])
+    for c in (r["n_target_genes"], r["n_at_promoter"], r["n_elements"],
+              r["TF_is_DEG"], r["TF_logFC"] or "-", r["TF_FDR"] or "-"):
+        print("     - " + str(c))
+print(f"\n{st.get('genes_with_elements', 0)} gene(s) of this comparison have predicted regulatory element(s), "
+      f"spanning {st.get('elements', 0)} element(s) and {st.get('tfs', 0)} distinct transcription factor(s), "
+      f"{st.get('tf_is_deg', 0)} of which are themselves differentially expressed here"
+      + (f" (top {len(top)} of {len(rows)} shown)." if len(rows) > len(top) else "."))
+base = f"../{final_dir}/DGE/encode/{comp}"
+links = [f":download:`elements.tsv <{base}/elements.tsv>`",
+         f":download:`tfs.tsv <{base}/tfs.tsv>`",
+         f":download:`tf_summary.tsv <{base}/tf_summary.tsv>`"]
+if os.path.isfile(os.path.join(os.path.dirname(tsv), "assays.tsv")):
+    links.append(f":download:`assays.tsv <{base}/assays.tsv>`")
+print("\nTables: " + ", ".join(links) + ".")
+ENCPY2
+			done
+			if [ -f "$enc_dir/unmapped.tsv" ]; then
+				printf '\nSome differentially expressed genes could not be translated to a human gene symbol and were skipped; they are listed in :download:`unmapped.tsv <../%s/DGE/encode/unmapped.tsv>`.\n' "$final_dir_name"
+			fi
+			printf '\n.. index:: ENCODE\n'
+		} > "$enc_tmp"
+		enc_section_rst=$(cat "$enc_tmp")
+		rm -f "$enc_tmp"
 	fi
 fi
 
@@ -497,6 +684,7 @@ $strand_inc
 $ai_design_rst
 .. index:: Layout
 
+$align_section_rst
 
 
 Counts
@@ -644,6 +832,7 @@ Load the following object into the app: :download:\`deResults.qs2 <../$final_dir
 .. index:: exploreLocalDE
 "; fi)
 $lit_section_rst
+$enc_section_rst
 " > index.rst
 
 ######### Build

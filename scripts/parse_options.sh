@@ -78,6 +78,14 @@ for argument in $options; do
 	        -lit | -literature # Whether to gather bibliographic context for the top DEGs of each comparison ('yes' or 'no', by default). Queries NCBI Gene and PubMed (E-utilities) for the strongest genes in each direction, saving the curated RefSeq summary and the most recent linked papers into a 'literature' folder and a section of the report. Requires outbound access to eutils.ncbi.nlm.nih.gov, and gene identifiers that NCBI recognises for the organism (custom assembly identifiers will not resolve). Set NCBI_API_KEY in the environment to raise the rate limit from 3 to 10 requests/s
 	        -lita | -literature_args # Args passed verbatim to scripts/lit_gather.py (default '--genes-per-sense 5 --papers-per-gene 5'). Options: '--genes-per-sense N' (top N genes per direction, ranked by FDR), '--papers-per-gene N' (most recent linked papers to keep per gene), '--email ADDRESS' (contact address sent to NCBI)
 
+	        #### Human orthologs and ENCODE regulatory context (optional):
+	        -faa | -proteome_faa # Protein FASTA (.faa or .faa.gz, absolute pathway) of the analysed organism. Required to detect human orthologs with '-od', and used to link the DEGs to their proteins. The protein identifiers must be the ones the annotation carries in its 'protein_id' attributes, or the headers must carry a gene identifier ('GN=', 'gene_symbol:', 'gene=' or '[gene=]')
+	        -od | -ortho_detection # Ortholog detection method for finding the HUMAN orthologs of the analysed organism's proteins, passed to the 'ortho_detection' parameter of orthologr::orthologs(): 'no' (default, off), 'DIAMOND_RBH', 'DIAMOND_BH', 'RBH' or 'BH'. Any value other than 'no' activates the step, which requires '-faa'. Skipped with a note when the organism already is Homo sapiens. The DIAMOND_* methods use DIAMOND and are the practical choice on a whole proteome; RBH/BH are the same logic on BLAST+ and are much slower. Results land in <results>/orthologs_human/
+	        -odH | -ortho_human_proteome # Human reference proteome to detect the orthologs against (.faa or .faa.gz, absolute pathway). If left empty the UniProt human reference proteome (UP000005640, reviewed) is downloaded once and cached. A proteome whose headers carry gene symbols is required, since the ENCODE lookup keys on HGNC symbols
+	        -oda | -ortho_detection_args # Args passed verbatim to scripts/ortho_human.py (default '--sensitivity-mode fast'). Options: '--eval 1E-5', '--sensitivity-mode fast|mid-sensitive|sensitive|more-sensitive|very-sensitive|ultra-sensitive', '--min-identity N' (drop pairs below N% identity), '--force' (re-run the search instead of reusing cached pairs), '--keep-work' (keep the BLAST/DIAMOND databases)
+	        -enc | -encode_regulatory # Whether to look the DEGs up in ENCODE ('yes' or 'no', by default). For each comparison the strongest DEGs (or their human orthologs when the organism is not human, which then requires '-od') are queried against the ENCODE-rE2G element-gene links to list their candidate regulatory regions, and against ENCODE TF ChIP-seq to list the transcription factors binding those regions. A TF whose own encoding gene (or its ortholog) is itself a DEG in the same comparison is flagged in the TF_is_DEG column. Needs outbound access to www.encodeproject.org. Results land in <results>/DGE/encode/
+	        -enca | -encode_args # Args passed verbatim to scripts/encode_regulatory.py (default '--genes-per-sense 25 --biosample K562'). Options: '--biosample TERM[,TERM]' (ENCODE biosample term name(s) whose rE2G predictions to use), '--re2g-accession ENCSRxxxxxx[,...]' (use these annotations instead), '--re2g-file ENCFFxxxxxx', '--genes-per-sense N' (top N DEGs per direction, ranked by FDR), '--fdr F', '--max-elements-per-gene N', '--max-regions N' (hard cap on the ENCODE region searches, which dominate the runtime), '--extra-assays \"DNase-seq,ATAC-seq,Histone ChIP-seq\"' (empty string for TF ChIP-seq only), '--pause S', '--list-biosamples' (print the rE2G biosamples available and exit)
+
 	        #### Processing parameters:
 	        -s | -strand # Strandness of the library ('yes, 'no', 'reverse'). If not provided and '-t' used, this would be predicted by salmon. Please use this parameter if prediction not correct, see explanations in for example in bit.ly/strandness0 and bit.ly/strandness
 	        -f | -filter # Threshold of gene counts to use ('bin' to capture the lower expressed genes, 'filterbyexpr' to use the edgeR solution, 'standard' by default (can be customized via 'standard,X', e.g. 'standard,5', defaults to 3), or a numeric value for an absolute raw count threshold applied per group). Please provide a comma separated list with the filters to use at each quantification if multiple annotation are provided
@@ -111,20 +119,20 @@ for argument in $options; do
 	        -Fex | -bam_exclude_flags # samtools -F flags to exclude, e.g. '4' (unmapped), '256' (secondary), '2308' (combined)
 	        -Freq | -bam_require_flags # samtools -f flags to require. Suggestion: use '2' for Paired-End (proper pair), leave empty or '4' for Single-End.
 	        -Fdup | -bam_dedup # Duplicate removal: 'no' (default), 'samtools' (markdup -r), 'picard' (REMOVE_DUPLICATES), 'picard_optical' (REMOVE_SEQUENCING_DUPLICATES)
-	        -Fcust | -bam_custom_filter # Custom shell command to pipe SAM text through post-alignment (e.g. "grep -E '^@|\\<NM:i:0\\>'" for perfect matches). Must preserve header lines (^@).
+	        -Fcust | -bam_custom_filter # Custom shell command to pipe SAM text through post-alignment (e.g. \"grep -E '^@|\\<NM:i:0\\>'\" for perfect matches). Must preserve header lines (^@).
 	        -bN | -bam_normalization # Normalization method using deeptool's bamCoverage. Choices: RPKM, CPM, BPM, RPGC, None. ('BPM' by default)
 	        -Su | -save_unaligned # Save unaligned reads from hisat2/STAR ('no' by default, or 'yes'). When enabled, reads that did not align to the reference genome are written to compressed fastq files alongside the BAM files
 	        -Ah | -hisat2_extra_args # Extra arguments appended verbatim to the hisat2 command line (e.g. '--very-sensitive --no-mixed --no-discordant'). Only used when '-A hisat2'
 	        -As | -star_extra_args # Extra arguments appended verbatim to the STAR command line (e.g. '--outSAMmultNmax 1 --alignIntronMax 100000'). Only used when '-A star'
-	        -Ak | -kallisto_extra_args # Extra arguments appended verbatim to the kallisto command line (e.g. '--bias'). Only used when '-A kallisto'
+	        -Ak | -kallisto_extra_args # Extra arguments appended verbatim to the kallisto command line ('--pseudobam' in the config template, which writes a per-sample 'pseudoalignments.bam' of the transcriptome pseudoalignments next to the abundance tables; nothing downstream consumes it, it is there to inspect). Other options: '--bias', '--fusion', '--genomebam --gtf FILE' (BAM projected to genome coordinates, needs a GTF). Leave empty to write no BAM. Only used when '-A kallisto'
 
 	        #### Count-level options (quantification):
 	        -Ofc | -featureCounts_extra_args # Extra arguments to pass to featureCounts (default '-M -O -C -B'). These are appended to the automatically built featureCounts command line after strand, feature type, seqid, threads, and MAPQ options.
-	        -Fgene | -counts_custom_gene_filter # Shell command to filter gene rows from count tables before R processing (e.g. "grep -v als" to remove genes starting with 'als'). Applied to featureCounts .tab and Kallisto abundance.tsv files. Header is always preserved.
+	        -Fgene | -counts_custom_gene_filter # Shell command to filter gene rows from count tables before R processing (e.g. \"grep -v als\" to remove genes starting with 'als'). Applied to featureCounts .tab and Kallisto abundance.tsv files. Header is always preserved.
 
 	        #### Performance:
-	        -regex | -input_filter_regex # Regex to keep only matching input files in local mode, removing the rest (e.g. "Sample_A|Sample_B")
-	        -regexExclude | -input_filter_regex_exclude # Regex to exclude matching input files in local mode, keeping the rest (e.g. "Sample_Bad|Sample_Outlier")
+	        -regex | -input_filter_regex # Regex to keep only matching input files in local mode, removing the rest (e.g. \"Sample_A|Sample_B\")
+	        -regexExclude | -input_filter_regex_exclude # Regex to exclude matching input files in local mode, keeping the rest (e.g. \"Sample_Bad|Sample_Outlier\")
 	        -Ar | -alignment_removal # Fasta file to map against and remove aligned reads (e.g. host genome)
 	        -p | -cores # Number of cores
 	        -cR | -cores_reads_to_subsample # Cores to use in subsampling by seqtk (10 by default)
@@ -251,6 +259,12 @@ for argument in $options; do
 		-sO | -splicing_option) splicing_option=${arguments[index]} ;;
 		-lit | -literature) literature=${arguments[index]} ;;
 		-lita | -literature_args) literature_args=${arguments[index]} ;;
+		-faa | -proteome_faa) proteome_faa=${arguments[index]} ;;
+		-od | -ortho_detection) ortho_detection=${arguments[index]} ;;
+		-odH | -ortho_human_proteome) ortho_human_proteome=${arguments[index]} ;;
+		-oda | -ortho_detection_args) ortho_detection_args=${arguments[index]} ;;
+		-enc | -encode_regulatory) encode_regulatory=${arguments[index]} ;;
+		-enca | -encode_args) encode_args=${arguments[index]} ;;
 		-Lep | -llm_endpoint) llm_endpoint=${arguments[index]} ;;
 		-Lm | -llm_model) llm_model=${arguments[index]} ;;
 		-Lk | -llm_api_key) llm_api_key=${arguments[index]} ;;
@@ -662,6 +676,41 @@ fi
 if [ -z "$literature_args" ]; then
 	literature_args="--genes-per-sense 5 --papers-per-gene 5"
 fi
+if [ -z "$proteome_faa" ]; then
+	proteome_faa=""
+fi
+if [ -z "$ortho_detection" ]; then
+	ortho_detection="no"
+fi
+if [ -z "$ortho_human_proteome" ]; then
+	ortho_human_proteome=""
+fi
+if [ -z "$ortho_detection_args" ]; then
+	ortho_detection_args="--sensitivity-mode fast"
+fi
+if [ -z "$encode_regulatory" ]; then
+	encode_regulatory="no"
+fi
+if [ -z "$encode_args" ]; then
+	encode_args="--genes-per-sense 25 --biosample K562"
+fi
+if [ "$ortho_detection" != "no" ]; then
+	case "$ortho_detection" in
+		DIAMOND_RBH|DIAMOND_BH|RBH|BH) : ;;
+		*) echo "Error: -od/-ortho_detection must be 'no' or one of 'DIAMOND_RBH', 'DIAMOND_BH', 'RBH', 'BH'. You provided: $ortho_detection"; exit 1 ;;
+	esac
+	if [ -z "$proteome_faa" ]; then
+		echo "Error: -od/-ortho_detection '$ortho_detection' needs a protein FASTA of the analysed organism in -faa/-proteome_faa."; exit 1
+	fi
+	if [ ! -f "$proteome_faa" ]; then
+		echo "Error: the protein FASTA given in -faa/-proteome_faa does not exist: $proteome_faa"; exit 1
+	fi
+	if [ ! -z "$ortho_human_proteome" ] && [ ! -f "$ortho_human_proteome" ]; then
+		echo "Error: the human proteome given in -odH/-ortho_human_proteome does not exist: $ortho_human_proteome"; exit 1
+	fi
+	echo -e "\northo_detection=$ortho_detection (proteome: $proteome_faa, args: $ortho_detection_args)\n"
+fi
+if [ "$encode_regulatory" != "no" ]; then echo -e "\nencode_regulatory=$encode_regulatory (args: $encode_args)\n"; fi
 if [ -z "$rrna_qc_databases" ]; then
 	rrna_qc_databases=""
 fi
@@ -805,8 +854,8 @@ if [ ! -z "$sortmerna_databases" ]; then
 		echo -e "\nGood, apparently the required database for decontamination based on rRNA removal have been found in "$sortmerna_databases"\n"
 	else
 		echo -e "\The databases for sortmerna have to be downloaded. The software will exit until the following steps are performed. Please note 'wget' may not complete the download and then uncompressing would give errors. You would need to remove any incomplete file and restart download"
-		echo -e "The databases have to be downloaded by the user executing: mkdir -p $(dirname $sortmerna_databases) && cd $(dirname $sortmerna_databases) && wget https://github.com/biocore/sortmerna/releases/download/v4.3.4/database.tar.gz && tar xzf database.tar.gz && rm database.tar.gz"
-		echo -e "Please note that multiple databases are downloaded. Please choose one (e.g. smr_v4.3_sensitive_db.fasta) and remove the rest"
+		echo -e "The databases have to be downloaded by the user executing: mkdir -p $(dirname $sortmerna_databases) && cd $(dirname $sortmerna_databases) && wget https://github.com/sortmerna/sortmerna/releases/download/v7.0.0/smr_v4.3_sensitive_db.fasta.gz && gunzip smr_v4.3_sensitive_db.fasta.gz"
+		echo -e "That is the sensitive database. The same release also offers smr_v4.3_default_db, smr_v4.3_fast_db and smr_v4.3_sensitive_db_rfam_seeds if you prefer one of those"
 		exit 1
 	fi
 fi

@@ -986,14 +986,15 @@ _log_step "Step_2_Decontamination" "end"
 	if [ ! -z "$sortmerna_databases" ]; then
 		echo -e "\n\nSTEP 2: Decontamination starting with sortmerna...\nCurrent date/time: $(date)\n\n"
 _log_step "Step_2_Decontamination" "start"
-		mkdir -p $seqs_location\_sortmerna $output_folder/$name/indexes/$(basename $sortmerna_databases)_sortmerna_index
+		sortmerna_idx_dir=$output_folder/$name/indexes/$(basename $sortmerna_databases)_sortmerna7_index
+		mkdir -p $seqs_location\_sortmerna $sortmerna_idx_dir
 		cd $seqs_location\_sortmerna
 
 		### Build index before parallel execution (uses all cores, done once)
-		if [ ! -d "$output_folder/$name/indexes/$(basename $sortmerna_databases)_sortmerna_index/idx" ]; then
+		if [ ! -d "$sortmerna_idx_dir/idx" ]; then
 			echo "Indexing the provided $sortmerna_databases ..."
-			sortmerna --index 1 --ref $sortmerna_databases \
-				--workdir $output_folder/$name/indexes/$(basename $sortmerna_databases)_sortmerna_index \
+			sortmerna --task 5 --ref $sortmerna_databases \
+				--workdir $sortmerna_idx_dir \
 				--threads $cores &>> $output_folder/$name/indexes/sortmerna_index.log
 		fi
 
@@ -1004,7 +1005,7 @@ _log_step "Step_2_Decontamination" "start"
 		if [ $cores_sortmerna -lt 1 ]; then cores_sortmerna=1; fi
 
 		layout_sortmerna=$(find $output_folder/$name -name library_layout_info.txt 2>/dev/null | head -1 | xargs cat 2>/dev/null | head -n1 | tr -d ' \r\n')
-		sortmerna_idx=$output_folder/$name/indexes/$(basename $sortmerna_databases)_sortmerna_index/idx
+		sortmerna_idx=$sortmerna_idx_dir/idx
 		sortmerna_out=$seqs_location\_sortmerna
 
 		echo -e "\nExecuting sortmerna in parallel and fastqc of the new reads...\n"
@@ -1021,7 +1022,7 @@ _log_step "Step_2_Decontamination" "start"
 					--reads $seqs_location/{}_1.fastq.gz \
 					--reads $seqs_location/{}_2.fastq.gz \
 					--workdir $sortmerna_out/{}_sortmerna_workdir \
-					--fastx --threads $cores_sortmerna --out2 --index 0 \
+					--fastx --threads $cores_sortmerna --out2 --index 0 --zip-out 1 \
 					--aligned $sortmerna_out/{}_rRNA \
 					--other $sortmerna_out/{}_no_rRNA \
 					-v &>> $sortmerna_out/{}_out.log"
@@ -1036,7 +1037,7 @@ _log_step "Step_2_Decontamination" "start"
 					--ref $sortmerna_databases \
 					--reads $seqs_location/{} \
 					--workdir $sortmerna_out/{}_sortmerna_workdir \
-					--fastx --threads $cores_sortmerna --index 0 \
+					--fastx --threads $cores_sortmerna --index 0 --zip-out 1 \
 					--aligned $sortmerna_out/{}_rRNA \
 					--other $sortmerna_out/{}_no_rRNA \
 					-v &>> $sortmerna_out/{}_out.log"
@@ -1210,12 +1211,12 @@ _log_step "Step_3a_Prepare" "start"
 		if [ -z "$strand" ]; then
 			echo -e "\nLooking for indexes or indexing transcripts in $transcripts...\n"
 			mkdir -p $output_folder/$name/indexes
-			salmon_idx=$CURRENT_DIR/indexes/${organism}_salmon_idx
+			salmon_idx=$CURRENT_DIR/indexes/${organism}_salmon2_idx
 			if [ ! -d "$salmon_idx" ]; then
-				if [ ! -d "$output_folder/$name/indexes/${organism}_salmon_idx" ]; then
-					salmon index -p $cores -t $transcripts -i $output_folder/$name/indexes/${organism}_salmon_idx --tmpdir $TMPDIR &> $output_folder/$name/indexes/${organism}_salmon_idx.log
+				if [ ! -d "$output_folder/$name/indexes/${organism}_salmon2_idx" ]; then
+					salmon index -p $cores -t $transcripts -i $output_folder/$name/indexes/${organism}_salmon2_idx --tmpdir $TMPDIR &> $output_folder/$name/indexes/${organism}_salmon2_idx.log
 				fi
-				salmon_idx=$output_folder/$name/indexes/${organism}_salmon_idx
+				salmon_idx=$output_folder/$name/indexes/${organism}_salmon2_idx
 			fi
 
 			mkdir -p $output_folder/$name/strand_prediction/salmon_out
@@ -2344,6 +2345,63 @@ _log_step "Step_7_Annotation" "start"
 				cut -f1 "$file" | parallel --halt-on-error 2 -j $((cores*3)) "gene={}; foldchange=\$(grep -i \"\$gene\" \"$file\" | cut -f3 | sed -n 's/\(.*[.,][0-9]\{2\}\).*/\1/p'); \
 															grep -i \"=\$gene\" \"$annotation_file\" | head -1 | awk -v id=\"\$gene\" -v fc=\"\$foldchange\" '{ print \$1\"\\t\"\$4\"\\t\"\$5\"\\t\"id\"_\"fc\"\\t.\t\"\$7 }' >> \"$file.bed\""
 			done
+		fi
+
+		### Human orthologs of the analysed organism's proteins:
+		ortho_out="$output_folder/$name/final_results_reanalysis$index/orthologs_human"
+		ortho_log="$output_folder/$name/final_results_reanalysis$index/ortho_human.log"
+		ortho_map="$ortho_out/gene_to_human.tsv"
+		organism_is_human="no"
+		if [[ "$organism" == "Homo_sapiens" || "$organism" == "Homo sapiens" ]]; then organism_is_human="yes"; fi
+		if [ "$ortho_detection" != "no" ] && [ ! -z "$proteome_faa" ] && command -v ortho_human.py >/dev/null 2>&1; then
+			if [ "$organism_is_human" == "yes" ]; then
+				[ "$index" = 0 ] && echo -e "\nNOTE: the organism is Homo sapiens, so human ortholog detection ('-od $ortho_detection') is unnecessary and is skipped."
+			else
+				echo -e "\nDetecting the human orthologs with $ortho_detection (organism: $organism)..."
+				ortho_extra=()
+				[ ! -z "$ortho_human_proteome" ] && ortho_extra+=(--human-faa "$ortho_human_proteome")
+				ortho_human.py --faa "$proteome_faa" --method "$ortho_detection" \
+					--out-dir "$ortho_out" \
+					--cache-dir "$output_folder/$name/reads_study_info/orthologs_cache" \
+					--organism "$organism" \
+					--annotation "${array[index]}" \
+					--gene-attribute "$optionsFeatureCounts_seq" \
+					--cores "$cores" \
+					"${ortho_extra[@]}" $ortho_detection_args > "$ortho_log" 2>&1
+				ortho_rc=$?
+				case $ortho_rc in
+					0) echo "Human orthologs saved under $ortho_out" ;;
+					3) echo "No usable human ortholog was found. See $ortho_log" ;;
+					4) echo "Ortholog detection could not run (missing binary, missing orthologr R package, or the human proteome could not be obtained). See $ortho_log" ;;
+					5) echo "The protein FASTA in -faa could not be parsed. See $ortho_log" ;;
+					*) echo "Ortholog detection failed (exit $ortho_rc); see $ortho_log" ;;
+				esac
+			fi
+		fi
+
+		### ENCODE regulatory regions and TF binding sites for the DEGs:
+		enc_dge_dir="$output_folder/$name/final_results_reanalysis$index/DGE"
+		enc_out="$enc_dge_dir/encode"
+		enc_log="$enc_dge_dir/encode_regulatory.log"
+		if [ "$encode_regulatory" != "no" ] && [ -d "$enc_dge_dir" ] && command -v encode_regulatory.py >/dev/null 2>&1; then
+			if [ "$organism_is_human" != "yes" ] && [ ! -f "$ortho_map" ]; then
+				echo -e "\nWARNING: 'encode_regulatory' is on, but the organism is not human and no human ortholog mapping is available, so the DEGs cannot be translated to the HGNC symbols ENCODE keys on. Please enable '-od/-ortho_detection' together with '-faa/-proteome_faa'. Skipping the ENCODE lookup."
+			else
+				echo -e "\nLooking the DEGs up in ENCODE (organism: $organism)..."
+				enc_extra=()
+				[ -f "$ortho_map" ] && enc_extra+=(--orthologs-tsv "$ortho_map")
+				encode_regulatory.py --dge-dir "$enc_dge_dir" --out-dir "$enc_out" \
+					--organism "$organism" \
+					--cache-dir "$output_folder/$name/reads_study_info/encode_cache" \
+					"${enc_extra[@]}" $encode_args > "$enc_log" 2>&1
+				enc_rc=$?
+				case $enc_rc in
+					0) echo "ENCODE regulatory context saved under $enc_out" ;;
+					3) echo "No usable ENCODE context: no significant genes, none translated to a human symbol, or no predicted element in the chosen biosample(s). See $enc_log" ;;
+					4) echo "ENCODE unreachable, or no rE2G annotation could be resolved for the requested biosample(s). See $enc_log" ;;
+					*) echo "The ENCODE lookup failed (exit $enc_rc); see $enc_log" ;;
+				esac
+			fi
 		fi
 
 		### Bibliographic context for the top DEGs:

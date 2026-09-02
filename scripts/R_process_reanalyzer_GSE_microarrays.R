@@ -283,7 +283,6 @@ print(genes)
 # suppressMessages(library(GEOquery,quiet = T,warn.conflicts = F))
 suppressMessages(library(limma,quiet = T,warn.conflicts = F))
 suppressMessages(library(umap,quiet = T,warn.conflicts = F))
-suppressMessages(library(maptools,quiet = T,warn.conflicts = F))
 
 pdf(paste0(path,"/final_results_reanalysis/QC_and_others/QC_box_whisker_plot.pdf"))
 par(mar=c(7,4,2,1))
@@ -304,7 +303,7 @@ ex <- GSEXXXXX_agg[!duplicated(GSEXXXXX_agg), ]  # remove duplicates
 ump <- umap(t(ex), n_neighbors = 3, random_state = 123)
 plot(ump$layout, main="UMAP plot, nbrs=3", xlab="", ylab="", pch=20, cex=1.5)
 # point labels without overlaps
-pointLabel(ump$layout, labels = rownames(ump$layout), method="SANN", cex=0.6)
+car::pointLabel(ump$layout, labels = rownames(ump$layout), method="SANN", cex=0.6)
 dev.off()
 
 

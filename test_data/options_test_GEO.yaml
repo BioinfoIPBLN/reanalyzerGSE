@@ -135,7 +135,12 @@ save_unaligned: "no"                   # Save unaligned reads from hisat2/STAR t
                                        # Empty them to run the aligner with no extra arguments.
 hisat2_extra_args: "--very-sensitive"  # e.g. "--very-sensitive --no-mixed --no-discordant --maxins 800"
 star_extra_args: ""                    # e.g. "--outSAMmultNmax 1 --alignIntronMax 100000"
-kallisto_extra_args: ""                # e.g. "--bias"
+kallisto_extra_args: "--pseudobam"     # writes a per-sample pseudoalignments.bam of the
+                                       # transcriptome pseudoalignments next to the abundance
+                                       # tables. Nothing downstream reads it, it is there to
+                                       # inspect. Other options: "--bias", "--fusion",
+                                       # "--genomebam --gtf FILE" (genome coordinates, needs a
+                                       # GTF). Empty to write no BAM at all
 
 # === Count-level options (quantification) ===
 featureCounts_extra_args: "-M -O -C -B" # Extra arguments to pass to featureCounts (default '-M -O -C -B').

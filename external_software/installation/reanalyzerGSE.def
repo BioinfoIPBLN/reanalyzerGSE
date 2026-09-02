@@ -1,5 +1,5 @@
 Bootstrap: docker
-From: ubuntu:24.04
+From: ubuntu:26.04
 
 %post
     # --------------------------------------------------------------------------
@@ -27,9 +27,9 @@ From: ubuntu:24.04
       libopenblas-dev liblapack-dev libcairo2-dev libncurses5-dev libgit2-dev \
       libbz2-dev liblzma-dev libtbb12 libdeflate0 libdeflate-dev libisal2 libisal-dev \
       libhdf5-dev libgl1-mesa-dev libglu1-mesa libnode-dev gsfonts libglpk-dev \
-      python3-dev python3-pip python3-venv python3-setuptools python-is-python3 picard-tools \
+      python3.13 python3.13-dev python3.13-venv python3-setuptools python-is-python3 picard-tools \
       cython3 libpoppler-cpp-dev poppler-data \
-      fastqc pigz parallel zip unzip bzip2 expat file jq \
+      fastqc pigz parallel zip unzip bzip2 xz-utils expat file jq \
       default-jre-headless \
     && locale-gen en_US.UTF-8 \
     && update-locale LANG=en_US.UTF-8
@@ -41,14 +41,16 @@ From: ubuntu:24.04
     mkdir -p /bin_external/lib
     cd $TMPDIR && rm -rf *
 
-    # SRAToolkit
-    curl -fsSL --retry 10 https://ftp-trace.ncbi.nlm.nih.gov/sra/sdk/current/sratoolkit.current-ubuntu64.tar.gz -o sratoolkit.tar.gz
-    tar xzf sratoolkit.tar.gz
-    find sratoolkit*/bin -type f -exec mv {} /bin_external/ \;
+    # sracha (Rust sra-tools; used by fastq-dl for the SRA provider)
+    curl -fsSL --retry 10 https://github.com/rnabioco/sracha-rs/releases/download/v0.6.0/sracha-0.6.0-x86_64-unknown-linux-musl-v2.tar.gz -o sracha.tar.gz
+    mkdir -p sracha_dl && tar xzf sracha.tar.gz -C sracha_dl
+    find sracha_dl -type f -name sracha -exec mv {} /bin_external/ \;
+    chmod a+x /bin_external/sracha
+    rm -rf sracha_dl sracha.tar.gz
     
     # Samtools
-    curl -fsSL --retry 10 https://github.com/samtools/samtools/releases/download/1.23/samtools-1.23.tar.bz2 -o samtools.tar.bz2
-    tar xf samtools.tar.bz2 && cd samtools-1.23
+    curl -fsSL --retry 10 https://github.com/samtools/samtools/releases/download/1.24/samtools-1.24.tar.bz2 -o samtools.tar.bz2
+    tar xf samtools.tar.bz2 && cd samtools-1.24
     ./configure -q --without-curses --prefix=$PWD/bin && make -s && make -s install
     mv bin/bin/* /bin_external/
     cd $TMPDIR
@@ -65,15 +67,17 @@ From: ubuntu:24.04
     tar xzf taxonkit.tar.gz && mv taxonkit /bin_external/
     
     # Sortmerna
-    curl -fsSL --retry 10 https://github.com/sortmerna/sortmerna/releases/download/v4.3.7/sortmerna-4.3.7-Linux.tar.gz -o sortmerna.tar.gz
+    curl -fsSL --retry 10 https://github.com/sortmerna/sortmerna/releases/download/v7.0.0/sortmerna-7.0.0-Linux.tar.gz -o sortmerna.tar.gz
     tar xzf sortmerna.tar.gz && mv sortmerna*/bin/* /bin_external/
     
     # Salmon
-    curl -fsSL --retry 10 https://github.com/COMBINE-lab/salmon/releases/download/v1.10.0/salmon-1.10.0_linux_x86_64.tar.gz -o salmon.tar.gz
-    tar xzf salmon.tar.gz && mv salmon*/bin/* /bin_external/
+    curl -fsSL --retry 10 https://github.com/COMBINE-lab/salmon/releases/download/v2.7.0/salmon-cli-x86_64-unknown-linux-gnu.tar.xz -o salmon.tar.xz
+    mkdir -p salmon_dl && tar xf salmon.tar.xz -C salmon_dl
+    mv salmon_dl/salmon /bin_external/ && chmod a+x /bin_external/salmon
+    rm -rf salmon_dl salmon.tar.xz
     
     # Kallisto
-    curl -fsSL --retry 10 https://github.com/pachterlab/kallisto/releases/download/v0.51.1/kallisto_linux-v0.51.1.tar.gz -o kallisto.tar.gz
+    curl -fsSL --retry 10 https://github.com/pachterlab/kallisto/releases/download/v0.52.0/kallisto_linux-v0.52.0.tar.gz -o kallisto.tar.gz
     tar xzf kallisto.tar.gz && mv kallisto/kallisto /bin_external/
     
     # STAR
@@ -108,8 +112,20 @@ From: ubuntu:24.04
     curl -fsSL --retry 10 https://github.com/BenLangmead/bowtie2/releases/download/v2.5.5/bowtie2-2.5.5-linux-x86_64.zip -o bowtie2.zip
     unzip -qqo bowtie2.zip && mv bowtie2*/bowtie* /bin_external/
 
+    # DIAMOND (ortholog detection, orthologr DIAMOND_RBH/DIAMOND_BH)
+    curl -fsSL --retry 10 https://github.com/bbuchfink/diamond/releases/download/v2.2.5/diamond-linux64.tar.gz -o diamond.tar.gz
+    tar xzf diamond.tar.gz && mv diamond /bin_external/
+
+    # BLAST+ (orthologr RBH/BH)
+    curl -fsSL --retry 10 https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/ncbi-blast-2.17.0+-x64-linux.tar.gz -o blast.tar.gz
+    tar xzf blast.tar.gz
+    for b in blastp blastn tblastn makeblastdb blastdbcmd blast_formatter; do
+      mv ncbi-blast-2.17.0+/bin/$b /bin_external/ || true
+    done
+    rm -rf ncbi-blast-2.17.0+
+
     # --------------------------------------------------------------------------
-    # 3. Python Environment (Python 3.12)
+    # 3. Python Environment (Python 3.14)
     # --------------------------------------------------------------------------
     
     cat <<EOF > $APPTAINER_TMPDIR/requirements.txt
@@ -144,75 +160,84 @@ markupsafe==3.0.3
 pypdf
 EOF
 
-    # Ubuntu 24.04 enforces PEP 668. We use --break-system-packages
+    # Ubuntu 26.04 enforces PEP 668. We use --break-system-packages
     # because we are modifying the container's system python intentionally.
    
     apt-get remove -qy python3-numpy python3-scipy python3-matplotlib python3-pandas 2>/dev/null || true
-    pip3 install --no-cache-dir --break-system-packages torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-    pip3 install --no-cache-dir --break-system-packages --ignore-installed -r $APPTAINER_TMPDIR/requirements.txt
+
+    # /bin_external is ahead of /usr/bin in %environment, so the pipeline's 'python3' is 3.13
+    # while the OS keeps 3.14 for apt and its own tooling
+    python3.13 -m ensurepip --upgrade
+    ln -sf /usr/bin/python3.13 /bin_external/python3
+    ln -sf /usr/bin/python3.13 /bin_external/python
+
+    python3.13 -m pip install --no-cache-dir --break-system-packages torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+    python3.13 -m pip install --no-cache-dir --break-system-packages --ignore-installed -r $APPTAINER_TMPDIR/requirements.txt
 
     # --------------------------------------------------------------------------
-    # 4. R Packages (Ubuntu 24.04 / Noble)
+    # 4. R Packages (Ubuntu 26.04 / Resolute)
     # --------------------------------------------------------------------------
     # Installing R, pinned to 4.6.1 (the cran40 repo retains old versions, so this
     # exact-version pin is reproducible and won't drift when R 4.6.2/4.7 are released)
     wget -qO- https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc | tee -a /etc/apt/trusted.gpg.d/cran_ubuntu_key.asc
     add-apt-repository -y "deb https://cloud.r-project.org/bin/linux/ubuntu $(lsb_release -cs)-cran40/"
     apt-get update -qq && apt-get install -qy --no-install-recommends \
-      r-base-core=4.6.1-1.2404.1 r-base-dev=4.6.1-1.2404.1 r-base=4.6.1-1.2404.1 pandoc
+      r-base-core=4.6.1-1.2604.1 r-base-dev=4.6.1-1.2604.1 r-base=4.6.1-1.2604.1 pandoc
     
     cat <<EOF > $APPTAINER_TMPDIR/install_r.R
 install.packages("pak", quiet = T)
 library(pak); options(pak.timeout = 1200); pak_cleanup(force = TRUE)
 
 pkgs <- c(
-  "abind", "annotate", "AnnotationDbi", "AnnotationFilter", "AnnotationHub", "ape", "aplot", "arules", "askpass", "ASpli", 
-  "assorthead", "backports", "base64enc", "beachmat", "BH", "Biobase", "BiocBaseUtils", "BiocFileCache", "BiocGenerics", "BiocIO", 
-  "BiocManager", "BiocParallel", "BiocSingular", "BiocStyle", "BiocVersion", "biomaRt", "Biostrings", "biovizBase", "bit", "bit64", 
-  "bitops", "blob", "bookdown", "brew", "brio", "broom", "BSgenome", "bslib", "cachem", "callr", 
-  "car", "carData", "caTools", "cellranger", "checkmate", "chron", "cigarillo", "circlize", "cli", "clipr", 
-  "clue", "clusterProfiler", "colorspace", "commonmark", "ComplexHeatmap", "confintr", "conflicted", "corpcor", "corrplot", "cowplot", 
-  "cpp11", "crayon", "credentials", "crosstalk", "curl", "data.table", "DBI", "dbplyr", "DelayedArray", "deldir", 
-  "dendextend", "DEoptimR", "Deriv", "desc", "DESeq2", "devtools", "DEXSeq", "dichromat", "diffobj", "digest", 
-  "dir.expiry", "dirmult", "doBy", "doParallel", "doSNOW", "DOSE", "dotCall64", "downlit", "dplyr", "dqrng", "DT", 
-  "dtplyr", "dynamicTreeCut", "DynDoc", "e1071", "edgeR", "ellipse", "ellipsis", "emmeans", "EnhancedVolcano", "enrichplot", "enrichR",
-  "ensembldb", "estimability", "europepmc", "evaluate", "expm", "FactoMineR", "fansi", "farver", "fastcluster", "fastDummies", "fastmap", 
-  "fastmatch", "fgsea", "filelock", "fitdistrplus", "flashClust", "FNN", "fontawesome", "fontBitstreamVera", "fontLiberation", "fontquiver", 
-  "forcats", "foreach", "forecast", "formatR", "Formula", "fracdiff", "fs", "futile.logger", "futile.options", "future", 
-  "future.apply", "gargle", "gdtools", "genefilter", "geneplotter", "generics", "GenomeInfoDb", "GenomeInfoDbData", "GenomicAlignments", "GenomicFeatures", 
-  "GenomicRanges", "GEOquery", "gert", "GetoptLong", "ggdendro", "ggforce", "ggfortify", "ggfun", "ggiraph", "ggnewscale", 
-  "ggplot2", "ggplotify", "ggarchery", "ggpmisc", "ggpp", "ggpubr", "ggraph", "ggrepel", "ggridges", "ggsci", "ggsignif", 
-  "ggtangle", "ggtree", "ggupset", "gh", "gitcreds", "GlobalOptions", "globals", "glue", "GO.db", "gontr", "goftest", "googledrive",
-  "googlesheets4", "GOSemSim", "gplots", "graph", "graphite", "graphlayouts", "gridExtra", "gridGraphics", "GSEABase", "gson", 
-  "GSVA", "gtable", "gtools", "gsubfn", "Gviz", "h5mread", "harmony", "hash", "haven", "HDF5Array", 
-  "here", "hexbin", "highr", "Hmisc", "hms", "htmlTable", "htmltools", "htmlwidgets", "httpuv", "httr", 
-  "httr2", "hwriter", "ica", "ids", "igraph", "igvShiny", "impute", "ini", "interp", "IRanges", 
-  "irlba", "isoband", "IsoformSwitchAnalyzeR", "iterators", "jpeg", "jquerylib", "jsonlite", "KEGGgraph", "KEGGREST", "kernlab", 
-  "knitr", "labeling", "lambda.r", "later", "latticeExtra", "lazyeval", "leaps", "lifecycle", "limma", "limSolve", 
-  "listenv", "lme4", "lmodel2", "lmtest", "locfdr", "locfit", "lpSolve", "lsa", "lubridate", "magick", 
-  "magrittr", "matrixcalc", "MatrixGenerics", "MatrixModels", "matrixStats", "MCL", "memoise", "memuse", "Mfuzz", "microbenchmark", "network", 
-  "mime", "miniUI", "minpack.lm", "minqa", "mixtools", "modelr", "multcomp", "multcompView", "mvtnorm", "nloptr", 
-  "NormqPCR", "numDeriv", "openssl", "org.Hs.eg.db", "org.Mm.eg.db", "otel", "pandoc", "parallelly", "patchwork", "pathview", 
-  "pbapply", "pbkrtest", "pbmcapply", "pdftools", "pfamAnalyzeR", "pillar", "pkgbuild", "pkgconfig", "pkgdown", "pkgload", 
-  "plotly", "plotrix", "plyr", "png", "polyclip", "polynom", "praise", "preprocessCore", "prettyunits", "processx", 
-  "profvis", "progress", "progressr", "promises", "proto", "ProtGenerics", "proxy", "PRROC", "ps", "purrr", 
-  "pwalign", "qpdf", "qpcR", "qs2", "quadprog", "quantreg", "qvalue", "R.methodsS3", "R.oo", "R.utils", 
-  "R6", "ragg", "randomcoloR", "RANN", "rappdirs", "rbibutils", "rcmdcheck", "RColorBrewer", "RcppAnnoy", "RcppArmadillo", 
-  "RcppEigen", "RcppHNSW", "RcppParallel", "RcppProgress", "RcppTOML", "RCurl", "Rdpack", "readr", "ReadqPCR", "readxl", 
-  "ReactomePA", "reactome.db", "reformulas", "rematch", "rematch2", "remotes", "rentrez", "reprex", "reshape2", "restfulr", 
-  "reticulate", "rgl", "Rgraphviz", "rhdf5", "rhdf5filters", "Rhdf5lib", "RhpcBLASctl", "Rhtslib", "rjson", "rlang", 
-  "rmarkdown", "robustbase", "ROCR", "roxygen2", "rprojroot", "Rsamtools", "RSpectra", "RSQLite", "rstatix", "rstudioapi", 
-  "rsvd", "Rtsne", "rtracklayer", "rversions", "rvest", "S4Arrays", "sandwich", "saseR", "sass", "satuRn", 
-  "ScaledMatrix", "scales", "scattermore", "scatterpie", "scatterplot3d", "sctransform", "segmented", "selectr", "Seqinfo", "sessioninfo", 
-  "Seurat", "SeuratObject", "shape", "shiny", "shinyjs", "SingleCellExperiment", "sitmo", "snow", "SnowballC", "sourcetools", 
-  "sp", "spam", "SparseArray", "sparseMatrixStats", "SparseM", "SpatialExperiment", "spatstat.data", "spatstat.explore", "spatstat.geom", "spatstat.random", 
-  "spatstat.sparse", "spatstat.univar", "spatstat.utils", "splus2R", "sqldf", "statmod", "STRINGdb", "stringfish", "stringi", "stringr", 
-  "SummarizedExperiment", "sva", "sys", "systemfonts", "tensor", "testthat", "textshape", "textshaping", "TH.data", "tibble", "tidydr", 
-  "tidygraph", "tidyr", "tidyselect", "tidytree", "tidyverse", "timechange", "timeDate", "tinytex", "tkWidgets", "treeio", 
-  "tweenr", "txdbmaker", "tximeta", "tximport", "tzdb", "UCSC.utils", "umap", "UpSetR", "urca", "urlchecker", 
-  "usethis", "utf8", "uuid", "uwot", "V8", "VariantAnnotation", "vctrs", "VennDiagram", "viridis", "viridisLite", 
-  "vroom", "waldo", "WGCNA", "whisker", "widgetTools", "withr", "writexl", "xfun", "XML", "xml2", 
-  "xopen", "xtable", "xts", "XVector", "yaml", "yulab.utils", "zip", "zoo"
+  "abind", "affy", "annotate", "AnnotationDbi", "AnnotationFilter", "AnnotationHub", "ape", "aplot", "arules", "askpass",
+  "ASpli", "assorthead", "autoGO", "backports", "base64enc", "beachmat", "BH", "Biobase", "BiocBaseUtils", "BiocFileCache",
+  "BiocGenerics", "BiocIO", "BiocManager", "BiocParallel", "BiocSingular", "BiocStyle", "BiocVersion", "biomaRt", "Biostrings", "biovizBase",
+  "bit", "bit64", "bitops", "blob", "bookdown", "brew", "brio", "broom", "BSgenome", "bslib",
+  "cachem", "callr", "car", "carData", "caTools", "cellranger", "checkmate", "chron", "cigarillo", "circlize",
+  "cli", "clipr", "clue", "clusterProfiler", "colorspace", "commonmark", "ComplexHeatmap", "confintr", "conflicted", "corpcor",
+  "corrplot", "cowplot", "cpp11", "crayon", "credentials", "crosstalk", "curl", "data.table", "DBI", "dbplyr",
+  "DelayedArray", "deldir", "dendextend", "DEoptimR", "Deriv", "desc", "DESeq2", "devtools", "DEXSeq", "dichromat",
+  "diffobj", "digest", "dir.expiry", "dirmult", "doBy", "docopt", "doParallel", "DOSE", "doSNOW", "dotCall64",
+  "downlit", "dplyr", "dqrng", "DT", "dtplyr", "dynamicTreeCut", "DynDoc", "e1071", "edgeR", "ellipse",
+  "ellipsis", "emmeans", "EnhancedVolcano", "enrichplot", "enrichR", "ensembldb", "estimability", "europepmc", "evaluate", "expm",
+  "FactoMineR", "fansi", "farver", "fastcluster", "fastDummies", "fastmap", "fastmatch", "fgsea", "filelock", "fitdistrplus",
+  "flashClust", "FNN", "fontawesome", "fontBitstreamVera", "fontLiberation", "fontquiver", "forcats", "foreach", "forecast", "formatR",
+  "Formula", "fracdiff", "fs", "funr", "futile.logger", "futile.options", "future", "future.apply", "gargle", "gdtools",
+  "genefilter", "geneplotter", "generics", "GenomeInfoDb", "GenomeInfoDbData", "GenomicAlignments", "GenomicFeatures", "GenomicRanges", "GEOquery", "gert",
+  "GetoptLong", "ggarchery", "ggdendro", "ggforce", "ggfortify", "ggfun", "ggiraph", "ggnewscale", "ggplot2", "ggplotify",
+  "ggpmisc", "ggpp", "ggpubr", "ggraph", "ggrepel", "ggridges", "ggsci", "ggsignif", "ggtangle", "ggtree",
+  "ggupset", "gh", "gitcreds", "GlobalOptions", "globals", "glue", "GO.db", "goftest", "gontr", "googledrive",
+  "googlesheets4", "GOSemSim", "gplots", "graph", "graphite", "graphlayouts", "gridExtra", "gridGraphics", "GSEABase", "gson",
+  "gsubfn", "GSVA", "gtable", "gtools", "Gviz", "h5mread", "harmony", "hash", "haven", "HDF5Array",
+  "here", "hexbin", "highr", "Hmisc", "hms", "htmlTable", "htmltools", "htmlwidgets", "httpuv", "httr",
+  "httr2", "hwriter", "ica", "ids", "igraph", "igvShiny", "impute", "ini", "interp", "IRanges",
+  "irlba", "isoband", "IsoformSwitchAnalyzeR", "iterators", "jpeg", "jquerylib", "jsonlite", "KEGGgraph", "KEGGREST", "kernlab",
+  "knitr", "labeling", "lambda.r", "later", "latticeExtra", "lazyeval", "leaps", "lifecycle", "limma", "limSolve",
+  "listenv", "lme4", "lmodel2", "lmtest", "locfdr", "locfit", "lpSolve", "lsa", "lubridate", "magick",
+  "magrittr", "matrixcalc", "MatrixGenerics", "MatrixModels", "matrixStats", "MCL", "memoise", "memuse", "Mfuzz", "microbenchmark",
+  "mime", "miniUI", "minpack.lm", "minqa", "mixtools", "modelr", "msigdbr", "multcomp", "multcompView", "mvtnorm",
+  "network", "nloptr", "NormqPCR", "numDeriv", "openssl", "openxlsx", "org.Hs.eg.db", "org.Mm.eg.db", "org.Rn.eg.db", "otel",
+  "pandoc", "parallelly", "patchwork", "pathview", "pbapply", "pbkrtest", "pbmcapply", "pdftools", "pfamAnalyzeR", "pillar",
+  "pkgbuild", "pkgconfig", "pkgdown", "pkgload", "plotly", "plotrix", "plyr", "png", "polyclip", "polynom",
+  "praise", "preprocessCore", "prettyunits", "processx", "profvis", "progress", "progressr", "promises", "ProtGenerics", "proto",
+  "proxy", "PRROC", "ps", "purrr", "pwalign", "qlcMatrix", "qpcR", "qpdf", "qs2", "quadprog",
+  "quantreg", "qvalue", "R.methodsS3", "R.oo", "R.utils", "R6", "ragg", "randomcoloR", "RANN", "rappdirs",
+  "rbibutils", "rbioapi", "rcmdcheck", "RColorBrewer", "RcppAnnoy", "RcppArmadillo", "RcppEigen", "RcppHNSW", "RcppParallel", "RcppProgress",
+  "RcppThread", "RcppTOML", "RCurl", "Rdpack", "reactome.db", "ReactomePA", "ReadqPCR", "readr", "readxl", "reformulas",
+  "rematch", "rematch2", "remotes", "rentrez", "reprex", "reshape2", "restfulr", "reticulate", "rgl", "Rgraphviz",
+  "rhdf5", "rhdf5filters", "Rhdf5lib", "RhpcBLASctl", "Rhtslib", "rjson", "rlang", "rmarkdown", "robustbase", "ROCR",
+  "roxygen2", "rprojroot", "rrvgo", "Rsamtools", "RSpectra", "RSQLite", "rstatix", "rstudioapi", "rsvd", "rtracklayer",
+  "Rtsne", "rversions", "rvest", "S4Arrays", "sandwich", "saseR", "sass", "satuRn", "ScaledMatrix", "scales",
+  "scattermore", "scatterpie", "scatterplot3d", "scRecover", "sctransform", "segmented", "selectr", "Seqinfo", "sessioninfo", "Seurat",
+  "SeuratObject", "shape", "shiny", "shinyjs", "SingleCellExperiment", "sitmo", "snow", "SnowballC", "sourcetools", "sp",
+  "spam", "SparseArray", "SparseM", "sparseMatrixStats", "sparsesvd", "SpatialExperiment", "spatstat.data", "spatstat.explore", "spatstat.geom", "spatstat.random",
+  "spatstat.sparse", "spatstat.univar", "spatstat.utils", "splus2R", "sqldf", "statmod", "STRINGdb", "stringfish", "stringi", "stringr",
+  "SummarizedExperiment", "sva", "sys", "systemfonts", "tensor", "testthat", "textshape", "textshaping", "TH.data", "tibble",
+  "tidydr", "tidygraph", "tidyr", "tidyselect", "tidytree", "tidyverse", "timechange", "timeDate", "tinytex", "tkWidgets",
+  "treeio", "tweenr", "txdbmaker", "tximeta", "tximport", "tzdb", "UCSC.utils", "umap", "UpSetR", "urca",
+  "urlchecker", "usethis", "utf8", "uuid", "uwot", "V8", "VariantAnnotation", "vctrs", "VennDiagram", "viridis",
+  "viridisLite", "vroom", "waldo", "WGCNA", "whisker", "widgetTools", "withr", "writexl", "xfun", "XML",
+  "xml2", "xopen", "xtable", "xts", "XVector", "yaml", "yulab.utils", "zip", "zoo"
 )
 
 # Function to install and properly handle dependencies
@@ -507,29 +532,18 @@ remotes::install_github("bnprks/BPCells/r", ref = "v0.3.1")
 
 cat("\n\n\n\n\nBLOCK 3 R packages installed!\n\n\n\n\n")
 
-# Extra packages: build deps + imguR + Bioc/CRAN packages used by
-# microarray, deconvolution and enrichment paths
-install_pkgs_batched(c("sparsesvd", "docopt","RcppThread","qlcMatrix"))
-
-pkg_install("url::https://cran.r-project.org/src/contrib/Archive/imguR/imguR_1.0.3.tar.gz",dependencies=F, ask = F)
-
-BiocManager::install(c(
-  "affy",
-  "funr",
-  "scRecover",
-  "msigdbr",
-  "rrvgo",
-  "openxlsx",
-  "rbioapi",
-  "org.Rn.eg.db"
-), update = FALSE, ask = FALSE)
-
+# Packages archived on CRAN, pinned to their last released version
 pak::pkg_install(c(
+       "url::https://cran.r-project.org/src/contrib/Archive/imguR/imguR_1.0.3.tar.gz",
        "url::https://cran.r-project.org/src/contrib/Archive/preseqR/preseqR_4.0.0.tar.gz",
-       "url::https://cran.r-project.org/src/contrib/Archive/CDSeq/CDSeq_1.0.8.tar.gz",
-       "url::https://cran.r-project.org/src/contrib/Archive/autoGO/autoGO_1.0.1.tar.gz"), dependencies = FALSE, ask = FALSE)
+       "url::https://cran.r-project.org/src/contrib/Archive/CDSeq/CDSeq_1.0.8.tar.gz"), dependencies = FALSE, ask = FALSE)
 
 cat("\n\n\n\n\nBLOCK 4 R packages installed!\n\n\n\n\n")
+
+# orthologr + metablastr: ortholog detection between two proteomes (ortho_detection option)
+pak::pkg_install(c("github::drostlab/metablastr", "github::drostlab/orthologr"), ask = FALSE)
+
+cat("\n\n\n\n\nBLOCK 5 R packages installed!\n\n\n\n\n")
 
 unlink(list.files(path = .libPaths(), pattern = "^src$",
                   recursive = TRUE, full.names = TRUE, include.dirs = TRUE), 
@@ -538,41 +552,6 @@ pak_cleanup(force = TRUE)
 EOF
 
     Rscript $APPTAINER_TMPDIR/install_r.R
-
-    # --------------------------------------------------------------------------
-    # 4b. R packages needing source patching (maptools, archived on CRAN)
-    # --------------------------------------------------------------------------
-    mkdir -p ~/.R
-    MAKEVARS_FILE=~/.R/Makevars
-
-    # Ensure the format-security flag is ignored to prevent compilation errors
-    if [ ! -f "$MAKEVARS_FILE" ]; then
-        touch "$MAKEVARS_FILE"
-    fi
-
-    if ! grep -q "Wno-error=format-security" "$MAKEVARS_FILE"; then
-        echo "CFLAGS += -Wno-error=format-security" >> "$MAKEVARS_FILE"
-    fi
-
-    cd $TMPDIR
-    wget -qO maptools_1.1-8.tar.gz https://cran.r-project.org/src/contrib/Archive/maptools/maptools_1.1-8.tar.gz
-
-    tar -xzf maptools_1.1-8.tar.gz
-
-    # Replace R-specific Calloc/Free with standard C calloc/free
-    sed -i 's/Calloc(pol.lines, PLOT_POINT)/calloc(pol.lines, sizeof(PLOT_POINT))/g' maptools/src/pip.c
-    sed -i 's/Free(pol.p)/free(pol.p)/g' maptools/src/pip.c
-
-    # Inject stdlib.h for standard C memory functions at the top of the file
-    sed -i '1i #include <stdlib.h>' maptools/src/pip.c
-
-    rm -f maptools/MD5
-
-    tar -czf maptools_1.1-8_patched.tar.gz maptools
-
-    R CMD INSTALL maptools_1.1-8_patched.tar.gz
-
-    rm -rf maptools maptools_1.1-8.tar.gz maptools_1.1-8_patched.tar.gz
 
     # --------------------------------------------------------------------------
     # 5. Perl
