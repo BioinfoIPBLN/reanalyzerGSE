@@ -27,7 +27,7 @@ path-include=/usr/share/locale/en*
 DPKGCFG
 
     # Update and Install Dependencies
-    apt-get update -qq && \
+    apt-get update -qq
     apt-get install -qy --no-install-recommends \
       wget curl ca-certificates gnupg2 dirmngr locales \
       procps git build-essential \
@@ -42,9 +42,9 @@ DPKGCFG
       python3-dev python3-pip python3-venv python3-setuptools python-is-python3 picard-tools \
       cython3 libpoppler-cpp-dev poppler-data \
       fastqc pigz parallel zip unzip bzip2 xz-utils expat file jq \
-      default-jre-headless \
-    && locale-gen en_US.UTF-8 \
-    && update-locale LANG=en_US.UTF-8
+      default-jre-headless
+    locale-gen en_US.UTF-8
+    update-locale LANG=en_US.UTF-8
 
 
     # Link picard-tools to picard if installed via apt
@@ -55,15 +55,19 @@ DPKGCFG
 
     # sracha (Rust sra-tools; used by fastq-dl for the SRA provider)
     curl -fsSL --retry 10 https://github.com/rnabioco/sracha-rs/releases/download/v0.6.0/sracha-0.6.0-x86_64-unknown-linux-musl-v2.tar.gz -o sracha.tar.gz
-    mkdir -p sracha_dl && tar xzf sracha.tar.gz -C sracha_dl
+    mkdir -p sracha_dl
+    tar xzf sracha.tar.gz -C sracha_dl
     find sracha_dl -type f -name sracha -exec mv {} /bin_external/ \;
     chmod a+x /bin_external/sracha
     rm -rf sracha_dl sracha.tar.gz
     
     # Samtools
     curl -fsSL --retry 10 https://github.com/samtools/samtools/releases/download/1.24/samtools-1.24.tar.bz2 -o samtools.tar.bz2
-    tar xf samtools.tar.bz2 && cd samtools-1.24
-    ./configure -q --without-curses --prefix=$PWD/bin && make -s && make -s install
+    tar xf samtools.tar.bz2
+    cd samtools-1.24
+    ./configure -q --without-curses --prefix=$PWD/bin
+    make -s
+    make -s install
     mv bin/bin/* /bin_external/
     cd $TMPDIR
 
@@ -72,33 +76,42 @@ DPKGCFG
     mv /root/edirect /bin_external/edirect
     
     # Fastp
-    curl -fsSL --retry 10 http://opengene.org/fastp/fastp -o fastp && chmod a+x ./fastp && mv ./fastp /bin_external/
+    curl -fsSL --retry 10 http://opengene.org/fastp/fastp -o fastp
+    chmod a+x ./fastp
+    mv ./fastp /bin_external/
     
     # Taxonkit
     curl -fsSL --retry 10 https://github.com/shenwei356/taxonkit/releases/download/v0.20.0/taxonkit_linux_amd64.tar.gz -o taxonkit.tar.gz
-    tar xzf taxonkit.tar.gz && mv taxonkit /bin_external/
+    tar xzf taxonkit.tar.gz
+    mv taxonkit /bin_external/
     
     # Sortmerna
     curl -fsSL --retry 10 https://github.com/sortmerna/sortmerna/releases/download/v7.0.0/sortmerna-7.0.0-Linux.tar.gz -o sortmerna.tar.gz
-    tar xzf sortmerna.tar.gz && mv sortmerna*/bin/* /bin_external/
+    tar xzf sortmerna.tar.gz
+    mv sortmerna*/bin/* /bin_external/
     
     # Salmon
     curl -fsSL --retry 10 https://github.com/COMBINE-lab/salmon/releases/download/v2.7.0/salmon-cli-x86_64-unknown-linux-gnu.tar.xz -o salmon.tar.xz
-    mkdir -p salmon_dl && tar xf salmon.tar.xz -C salmon_dl
-    mv salmon_dl/salmon /bin_external/ && chmod a+x /bin_external/salmon
+    mkdir -p salmon_dl
+    tar xf salmon.tar.xz -C salmon_dl --strip-components=1
+    mv salmon_dl/salmon /bin_external/
+    chmod a+x /bin_external/salmon
     rm -rf salmon_dl salmon.tar.xz
     
     # Kallisto
     curl -fsSL --retry 10 https://github.com/pachterlab/kallisto/releases/download/v0.52.0/kallisto_linux-v0.52.0.tar.gz -o kallisto.tar.gz
-    tar xzf kallisto.tar.gz && mv kallisto/kallisto /bin_external/
+    tar xzf kallisto.tar.gz
+    mv kallisto/kallisto /bin_external/
     
     # STAR
     curl -fsSL --retry 10 https://github.com/alexdobin/STAR/releases/download/2.7.11b/STAR_2.7.11b.zip -o STAR.zip
-    unzip -qqo STAR.zip && mv STAR*/Linux_x86_64_static/* /bin_external/
+    unzip -qqo STAR.zip
+    mv STAR*/Linux_x86_64_static/* /bin_external/
     
     # Subread
     curl -fsSL --retry 10 https://sourceforge.net/projects/subread/files/subread-2.1.1/subread-2.1.1-Linux-x86_64.tar.gz/download -o subread.tar.gz
-    tar -xzf subread.tar.gz && mv subread*/bin/* /bin_external/
+    tar -xzf subread.tar.gz
+    mv subread*/bin/* /bin_external/
     
     # Qualimap
     curl -fsSL --retry 10 https://bitbucket.org/kokonech/qualimap/downloads/qualimap_v2.3.zip -o qualimap.zip
@@ -110,29 +123,42 @@ DPKGCFG
 
     # Compiling seqk and hisat2
     curl -fsSL --retry 10 https://codeload.github.com/lh3/seqtk/tar.gz/refs/heads/master -o seqtk.tar.gz
-    mkdir -p seqtk && tar xzf seqtk.tar.gz -C seqtk --strip-components=1
-    cd seqtk && make -s && mv seqtk /bin_external/ && cd ..
+    mkdir -p seqtk
+    tar xzf seqtk.tar.gz -C seqtk --strip-components=1
+    cd seqtk
+    make -s
+    mv seqtk /bin_external/
+    cd ..
     curl -fsSL --retry 10 https://codeload.github.com/DaehwanKimLab/hisat2/tar.gz/refs/heads/master -o hisat2.tar.gz
-    mkdir -p hisat2 && tar xzf hisat2.tar.gz -C hisat2 --strip-components=1
-    cd hisat2 && make -s && mv hisat2* /bin_external/ && cd ..
+    mkdir -p hisat2
+    tar xzf hisat2.tar.gz -C hisat2 --strip-components=1
+    cd hisat2
+    make -s
+    mv hisat2* /bin_external/
+    cd ..
     
     # Kraken2
     curl -fsSL --retry 10 https://codeload.github.com/DerrickWood/kraken2/tar.gz/refs/heads/master -o kraken2.tar.gz
-    mkdir -p kraken2 && tar xzf kraken2.tar.gz -C kraken2 --strip-components=1
+    mkdir -p kraken2
+    tar xzf kraken2.tar.gz -C kraken2 --strip-components=1
     mkdir -p kraken2/bin
     ./kraken2/install_kraken2.sh $PWD/kraken2/bin
     mv kraken2/bin/* /bin_external/
     curl -fsSL --retry 10 https://codeload.github.com/jenniferlu717/KrakenTools/tar.gz/refs/heads/master -o krakentools.tar.gz
-    mkdir -p KrakenTools && tar xzf krakentools.tar.gz -C KrakenTools --strip-components=1
-    chmod +x KrakenTools/* && mv KrakenTools/* /bin_external/
+    mkdir -p KrakenTools
+    tar xzf krakentools.tar.gz -C KrakenTools --strip-components=1
+    chmod +x KrakenTools/*
+    mv KrakenTools/* /bin_external/
 
     # Bowtie2
     curl -fsSL --retry 10 https://github.com/BenLangmead/bowtie2/releases/download/v2.5.5/bowtie2-2.5.5-linux-x86_64.zip -o bowtie2.zip
-    unzip -qqo bowtie2.zip && mv bowtie2*/bowtie* /bin_external/
+    unzip -qqo bowtie2.zip
+    mv bowtie2*/bowtie* /bin_external/
 
     # DIAMOND (ortholog detection, orthologr DIAMOND_RBH/DIAMOND_BH)
     curl -fsSL --retry 10 https://github.com/bbuchfink/diamond/releases/download/v2.2.5/diamond-linux64.tar.gz -o diamond.tar.gz
-    tar xzf diamond.tar.gz && mv diamond /bin_external/
+    tar xzf diamond.tar.gz
+    mv diamond /bin_external/
 
     # BLAST+ (orthologr RBH/BH)
     curl -fsSL --retry 10 https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/ncbi-blast-2.17.0+-x64-linux.tar.gz -o blast.tar.gz
@@ -190,7 +216,8 @@ EOF
     # exact-version pin is reproducible and won't drift when R 4.6.2/4.7 are released)
     wget -qO /etc/apt/trusted.gpg.d/cran_ubuntu_key.asc https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc
     echo "deb https://cloud.r-project.org/bin/linux/ubuntu noble-cran40/" > /etc/apt/sources.list.d/cran40.list
-    apt-get update -qq && apt-get install -qy --no-install-recommends \
+    apt-get update -qq
+    apt-get install -qy --no-install-recommends \
       r-base-core=4.6.1-1.2404.1 r-base-dev=4.6.1-1.2404.1 r-base=4.6.1-1.2404.1 \
       r-recommended=4.6.1-1.2404.1 pandoc
     
@@ -583,7 +610,8 @@ EOF
     # 6. Pipeline Installation & Cleanup
     # --------------------------------------------------------------------------
     curl -fsSL --retry 10 https://codeload.github.com/BioinfoIPBLN/reanalyzerGSE/tar.gz/refs/heads/main -o pipeline.tar.gz
-    mkdir -p /reanalyzerGSE && tar xzf pipeline.tar.gz -C /reanalyzerGSE --strip-components=1
+    mkdir -p /reanalyzerGSE
+    tar xzf pipeline.tar.gz -C /reanalyzerGSE --strip-components=1
     rm -f pipeline.tar.gz
     chmod +x /reanalyzerGSE/reanalyzerGSE.sh
     chmod +x /reanalyzerGSE/scripts/*
@@ -604,6 +632,8 @@ EOF
     rm -rf /usr/lib/R/library/*/doc
     rm -rf /usr/lib/R/library/*/html
     rm -rf /usr/lib/R/doc /usr/share/R/doc 2>/dev/null || true
+    rm -rf /usr/local/lib/R/site-library/BH
+    find /usr/local/lib/R/site-library -name "*.a" -delete 2>/dev/null || true
 
     # Remove Python cache and bundled test suites
     find /usr/lib/python3* -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null || true
@@ -628,7 +658,8 @@ EOF
       libisal-dev libjpeg-dev liblapack-dev liblzma-dev libmagickcore-dev libmagick++-dev \
       libmagickwand-dev libncurses-dev libnode-dev libopenblas-dev libpng-dev \
       libpoppler-cpp-dev libssl-dev libtiff5-dev libtiff-dev libxml2-dev python3-dev r-base-dev \
-      zlib1g-dev
+      zlib1g-dev \
+      texlive mupdf-tools dvisvgm lmodern tex-gyre fonts-texgyre-math tipa
 
     apt-get autoremove -qy --purge
     apt-get clean
