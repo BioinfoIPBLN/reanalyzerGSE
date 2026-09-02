@@ -941,16 +941,13 @@ _log_step "Step_2_Decontamination" "start"
 		done
 
 		echo -e "Please check the files *_report.txt, kraken2_log_out.txt and kraken2_log_warnings_errors.txt"
-		echo -e "Processing recentrifuge reports and extracting reads..."
+		echo -e "Extracting reads..."
 
-		# Recentrifuge for all output files
+		# Taxdump used for read extraction below
 		first_db=$(basename ${k2_db_array[0]})
 		taxdump_dir=""
 		if [[ -d "${k2_db_array[0]}/taxdump" ]]; then
 			taxdump_dir="${k2_db_array[0]}/taxdump"
-		fi
-		if [ ! -z "$taxdump_dir" ]; then
-			for f in $(ls | egrep "k2_.*\.gz$" 2>/dev/null); do rcf -n $taxdump_dir -k $f -o $f.recentrifuge_contamination_report.html -e CSV &>> rcf_log_out.txt; done
 		fi
 
 		# Extract reads for the organism (use first DB for taxdump if available)
@@ -961,7 +958,7 @@ _log_step "Step_2_Decontamination" "start"
 			taxon_name=$(taxonkit list --ids $taxonid -n -r --data-dir $taxdump_dir | grep $taxonid)
 			echo -e "\nOrganism provided: $organism"; echo -e "\nOrganism provided (taxonid): $taxonid"; echo $taxon_name
 			echo -e "\nIf not correct, please rerun and double check that you have provided it explicitly in the prompt... kraken2 output will be filtered to retain that taxa and below"
-			echo -e "\nCheck out the logs in the files rcf_log_out.txt and extract_kraken2_log_out.txt"
+			echo -e "\nCheck out the log in the file extract_kraken2_log_out.txt"
 
 			mkdir -p $seqs_location\_k2
 			# Use first confidence score + first DB for read extraction

@@ -1,11 +1,12 @@
 Bootstrap: docker
-From: ubuntu:26.04
+From: ubuntu:24.04
 
 %post
     # --------------------------------------------------------------------------
     # 1. System Setup & Dependencies
     # --------------------------------------------------------------------------
     export DEBIAN_FRONTEND=noninteractive
+    export GIT_TERMINAL_PROMPT=0
     export LC_ALL=en_US.UTF-8
     export LANG=en_US.UTF-8
     export APPTAINER_CACHEDIR=$APPTAINER_TMPDIR/cache
@@ -14,20 +15,31 @@ From: ubuntu:26.04
     rm -rf $APPTAINER_TMPDIR/cache/*; rm -rf $APPTAINER_TMPDIR/build/*
     
 
+    cat <<'DPKGCFG' > /etc/dpkg/dpkg.cfg.d/01_nodoc
+path-exclude=/usr/share/doc/*
+path-include=/usr/share/doc/*/copyright
+path-exclude=/usr/share/man/*
+path-exclude=/usr/share/info/*
+path-exclude=/usr/share/groff/*
+path-exclude=/usr/share/lintian/*
+path-exclude=/usr/share/locale/*
+path-include=/usr/share/locale/en*
+DPKGCFG
+
     # Update and Install Dependencies
     apt-get update -qq && \
     apt-get install -qy --no-install-recommends \
       wget curl ca-certificates gnupg2 dirmngr locales \
-      software-properties-common procps git git-all build-essential \
+      procps git build-essential \
       gcc g++ gfortran make cmake bc \
       libcurl4-openssl-dev libssl-dev libxml2-dev libxml2 zlib1g-dev \
       libfontconfig1-dev libharfbuzz-dev libfribidi-dev \
       libfreetype6-dev libpng-dev libpng-tools libpng16-16 libtiff-dev libtiff5-dev libjpeg-dev \
-      libmagick++-dev libmagickwand-dev libmagickcore-dev imagemagick libglu1-mesa-dev texlive \
+      libmagick++-dev libmagickwand-dev libmagickcore-dev imagemagick libglu1-mesa-dev \
       libopenblas-dev liblapack-dev libcairo2-dev libncurses5-dev libgit2-dev \
       libbz2-dev liblzma-dev libtbb12 libdeflate0 libdeflate-dev libisal2 libisal-dev \
       libhdf5-dev libgl1-mesa-dev libglu1-mesa libnode-dev gsfonts libglpk-dev \
-      python3.13 python3.13-dev python3.13-venv python3-setuptools python-is-python3 picard-tools \
+      python3-dev python3-pip python3-venv python3-setuptools python-is-python3 picard-tools \
       cython3 libpoppler-cpp-dev poppler-data \
       fastqc pigz parallel zip unzip bzip2 xz-utils expat file jq \
       default-jre-headless \
@@ -97,15 +109,21 @@ From: ubuntu:26.04
     mv qualimap_v2.3/lib/* /bin_external/lib/
 
     # Compiling seqk and hisat2
-    git clone -q https://github.com/lh3/seqtk.git && cd seqtk && make -s && mv seqtk /bin_external/ && cd ..
-    git clone -q https://github.com/DaehwanKimLab/hisat2.git && cd hisat2 && make -s && mv hisat2* /bin_external/ && cd ..
+    curl -fsSL --retry 10 https://codeload.github.com/lh3/seqtk/tar.gz/refs/heads/master -o seqtk.tar.gz
+    mkdir -p seqtk && tar xzf seqtk.tar.gz -C seqtk --strip-components=1
+    cd seqtk && make -s && mv seqtk /bin_external/ && cd ..
+    curl -fsSL --retry 10 https://codeload.github.com/DaehwanKimLab/hisat2/tar.gz/refs/heads/master -o hisat2.tar.gz
+    mkdir -p hisat2 && tar xzf hisat2.tar.gz -C hisat2 --strip-components=1
+    cd hisat2 && make -s && mv hisat2* /bin_external/ && cd ..
     
     # Kraken2
-    git clone -q https://github.com/DerrickWood/kraken2
+    curl -fsSL --retry 10 https://codeload.github.com/DerrickWood/kraken2/tar.gz/refs/heads/master -o kraken2.tar.gz
+    mkdir -p kraken2 && tar xzf kraken2.tar.gz -C kraken2 --strip-components=1
     mkdir -p kraken2/bin
     ./kraken2/install_kraken2.sh $PWD/kraken2/bin
     mv kraken2/bin/* /bin_external/
-    git clone -q https://github.com/jenniferlu717/KrakenTools
+    curl -fsSL --retry 10 https://codeload.github.com/jenniferlu717/KrakenTools/tar.gz/refs/heads/master -o krakentools.tar.gz
+    mkdir -p KrakenTools && tar xzf krakentools.tar.gz -C KrakenTools --strip-components=1
     chmod +x KrakenTools/* && mv KrakenTools/* /bin_external/
 
     # Bowtie2
@@ -125,7 +143,7 @@ From: ubuntu:26.04
     rm -rf ncbi-blast-2.17.0+
 
     # --------------------------------------------------------------------------
-    # 3. Python Environment (Python 3.14)
+    # 3. Python Environment (Python 3.12)
     # --------------------------------------------------------------------------
     
     cat <<EOF > $APPTAINER_TMPDIR/requirements.txt
@@ -136,7 +154,6 @@ matplotlib==3.10.8
 networkx==3.6.1
 statsmodels==0.14.6
 sympy==1.14.0
-biopython==1.84
 pysam==0.23.3
 deepTools==3.5.6
 multiqc==1.33
@@ -154,35 +171,28 @@ jq==1.11.0
 plotly==6.5.2
 kaleido==0.2.1
 click==8.3.1
-recentrifuge==2.1.1
 markdown==3.10.2
 markupsafe==3.0.3
 pypdf
 EOF
 
-    # Ubuntu 26.04 enforces PEP 668. We use --break-system-packages
+    # Ubuntu 24.04 enforces PEP 668. We use --break-system-packages
     # because we are modifying the container's system python intentionally.
    
     apt-get remove -qy python3-numpy python3-scipy python3-matplotlib python3-pandas 2>/dev/null || true
 
-    # /bin_external is ahead of /usr/bin in %environment, so the pipeline's 'python3' is 3.13
-    # while the OS keeps 3.14 for apt and its own tooling
-    python3.13 -m ensurepip --upgrade
-    ln -sf /usr/bin/python3.13 /bin_external/python3
-    ln -sf /usr/bin/python3.13 /bin_external/python
-
-    python3.13 -m pip install --no-cache-dir --break-system-packages torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-    python3.13 -m pip install --no-cache-dir --break-system-packages --ignore-installed -r $APPTAINER_TMPDIR/requirements.txt
+    pip3 install --no-cache-dir --break-system-packages --ignore-installed -r $APPTAINER_TMPDIR/requirements.txt
 
     # --------------------------------------------------------------------------
-    # 4. R Packages (Ubuntu 26.04 / Resolute)
+    # 4. R Packages (Ubuntu 24.04 / Noble)
     # --------------------------------------------------------------------------
     # Installing R, pinned to 4.6.1 (the cran40 repo retains old versions, so this
     # exact-version pin is reproducible and won't drift when R 4.6.2/4.7 are released)
-    wget -qO- https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc | tee -a /etc/apt/trusted.gpg.d/cran_ubuntu_key.asc
-    add-apt-repository -y "deb https://cloud.r-project.org/bin/linux/ubuntu $(lsb_release -cs)-cran40/"
+    wget -qO /etc/apt/trusted.gpg.d/cran_ubuntu_key.asc https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc
+    echo "deb https://cloud.r-project.org/bin/linux/ubuntu noble-cran40/" > /etc/apt/sources.list.d/cran40.list
     apt-get update -qq && apt-get install -qy --no-install-recommends \
-      r-base-core=4.6.1-1.2604.1 r-base-dev=4.6.1-1.2604.1 r-base=4.6.1-1.2604.1 pandoc
+      r-base-core=4.6.1-1.2404.1 r-base-dev=4.6.1-1.2404.1 r-base=4.6.1-1.2404.1 \
+      r-recommended=4.6.1-1.2404.1 pandoc
     
     cat <<EOF > $APPTAINER_TMPDIR/install_r.R
 install.packages("pak", quiet = T)
@@ -190,54 +200,55 @@ library(pak); options(pak.timeout = 1200); pak_cleanup(force = TRUE)
 
 pkgs <- c(
   "abind", "affy", "annotate", "AnnotationDbi", "AnnotationFilter", "AnnotationHub", "ape", "aplot", "arules", "askpass",
-  "ASpli", "assorthead", "autoGO", "backports", "base64enc", "beachmat", "BH", "Biobase", "BiocBaseUtils", "BiocFileCache",
-  "BiocGenerics", "BiocIO", "BiocManager", "BiocParallel", "BiocSingular", "BiocStyle", "BiocVersion", "biomaRt", "Biostrings", "biovizBase",
-  "bit", "bit64", "bitops", "blob", "bookdown", "brew", "brio", "broom", "BSgenome", "bslib",
-  "cachem", "callr", "car", "carData", "caTools", "cellranger", "checkmate", "chron", "cigarillo", "circlize",
-  "cli", "clipr", "clue", "clusterProfiler", "colorspace", "commonmark", "ComplexHeatmap", "confintr", "conflicted", "corpcor",
-  "corrplot", "cowplot", "cpp11", "crayon", "credentials", "crosstalk", "curl", "data.table", "DBI", "dbplyr",
-  "DelayedArray", "deldir", "dendextend", "DEoptimR", "Deriv", "desc", "DESeq2", "devtools", "DEXSeq", "dichromat",
-  "diffobj", "digest", "dir.expiry", "dirmult", "doBy", "docopt", "doParallel", "DOSE", "doSNOW", "dotCall64",
-  "downlit", "dplyr", "dqrng", "DT", "dtplyr", "dynamicTreeCut", "DynDoc", "e1071", "edgeR", "ellipse",
-  "ellipsis", "emmeans", "EnhancedVolcano", "enrichplot", "enrichR", "ensembldb", "estimability", "europepmc", "evaluate", "expm",
-  "FactoMineR", "fansi", "farver", "fastcluster", "fastDummies", "fastmap", "fastmatch", "fgsea", "filelock", "fitdistrplus",
-  "flashClust", "FNN", "fontawesome", "fontBitstreamVera", "fontLiberation", "fontquiver", "forcats", "foreach", "forecast", "formatR",
-  "Formula", "fracdiff", "fs", "funr", "futile.logger", "futile.options", "future", "future.apply", "gargle", "gdtools",
-  "genefilter", "geneplotter", "generics", "GenomeInfoDb", "GenomeInfoDbData", "GenomicAlignments", "GenomicFeatures", "GenomicRanges", "GEOquery", "gert",
-  "GetoptLong", "ggarchery", "ggdendro", "ggforce", "ggfortify", "ggfun", "ggiraph", "ggnewscale", "ggplot2", "ggplotify",
-  "ggpmisc", "ggpp", "ggpubr", "ggraph", "ggrepel", "ggridges", "ggsci", "ggsignif", "ggtangle", "ggtree",
-  "ggupset", "gh", "gitcreds", "GlobalOptions", "globals", "glue", "GO.db", "goftest", "gontr", "googledrive",
-  "googlesheets4", "GOSemSim", "gplots", "graph", "graphite", "graphlayouts", "gridExtra", "gridGraphics", "GSEABase", "gson",
-  "gsubfn", "GSVA", "gtable", "gtools", "Gviz", "h5mread", "harmony", "hash", "haven", "HDF5Array",
-  "here", "hexbin", "highr", "Hmisc", "hms", "htmlTable", "htmltools", "htmlwidgets", "httpuv", "httr",
-  "httr2", "hwriter", "ica", "ids", "igraph", "igvShiny", "impute", "ini", "interp", "IRanges",
-  "irlba", "isoband", "IsoformSwitchAnalyzeR", "iterators", "jpeg", "jquerylib", "jsonlite", "KEGGgraph", "KEGGREST", "kernlab",
-  "knitr", "labeling", "lambda.r", "later", "latticeExtra", "lazyeval", "leaps", "lifecycle", "limma", "limSolve",
-  "listenv", "lme4", "lmodel2", "lmtest", "locfdr", "locfit", "lpSolve", "lsa", "lubridate", "magick",
-  "magrittr", "matrixcalc", "MatrixGenerics", "MatrixModels", "matrixStats", "MCL", "memoise", "memuse", "Mfuzz", "microbenchmark",
-  "mime", "miniUI", "minpack.lm", "minqa", "mixtools", "modelr", "msigdbr", "multcomp", "multcompView", "mvtnorm",
-  "network", "nloptr", "NormqPCR", "numDeriv", "openssl", "openxlsx", "org.Hs.eg.db", "org.Mm.eg.db", "org.Rn.eg.db", "otel",
-  "pandoc", "parallelly", "patchwork", "pathview", "pbapply", "pbkrtest", "pbmcapply", "pdftools", "pfamAnalyzeR", "pillar",
-  "pkgbuild", "pkgconfig", "pkgdown", "pkgload", "plotly", "plotrix", "plyr", "png", "polyclip", "polynom",
-  "praise", "preprocessCore", "prettyunits", "processx", "profvis", "progress", "progressr", "promises", "ProtGenerics", "proto",
-  "proxy", "PRROC", "ps", "purrr", "pwalign", "qlcMatrix", "qpcR", "qpdf", "qs2", "quadprog",
-  "quantreg", "qvalue", "R.methodsS3", "R.oo", "R.utils", "R6", "ragg", "randomcoloR", "RANN", "rappdirs",
-  "rbibutils", "rbioapi", "rcmdcheck", "RColorBrewer", "RcppAnnoy", "RcppArmadillo", "RcppEigen", "RcppHNSW", "RcppParallel", "RcppProgress",
-  "RcppThread", "RcppTOML", "RCurl", "Rdpack", "reactome.db", "ReactomePA", "ReadqPCR", "readr", "readxl", "reformulas",
-  "rematch", "rematch2", "remotes", "rentrez", "reprex", "reshape2", "restfulr", "reticulate", "rgl", "Rgraphviz",
-  "rhdf5", "rhdf5filters", "Rhdf5lib", "RhpcBLASctl", "Rhtslib", "rjson", "rlang", "rmarkdown", "robustbase", "ROCR",
-  "roxygen2", "rprojroot", "rrvgo", "Rsamtools", "RSpectra", "RSQLite", "rstatix", "rstudioapi", "rsvd", "rtracklayer",
-  "Rtsne", "rversions", "rvest", "S4Arrays", "sandwich", "saseR", "sass", "satuRn", "ScaledMatrix", "scales",
-  "scattermore", "scatterpie", "scatterplot3d", "scRecover", "sctransform", "segmented", "selectr", "Seqinfo", "sessioninfo", "Seurat",
-  "SeuratObject", "shape", "shiny", "shinyjs", "SingleCellExperiment", "sitmo", "snow", "SnowballC", "sourcetools", "sp",
-  "spam", "SparseArray", "SparseM", "sparseMatrixStats", "sparsesvd", "SpatialExperiment", "spatstat.data", "spatstat.explore", "spatstat.geom", "spatstat.random",
-  "spatstat.sparse", "spatstat.univar", "spatstat.utils", "splus2R", "sqldf", "statmod", "STRINGdb", "stringfish", "stringi", "stringr",
-  "SummarizedExperiment", "sva", "sys", "systemfonts", "tensor", "testthat", "textshape", "textshaping", "TH.data", "tibble",
-  "tidydr", "tidygraph", "tidyr", "tidyselect", "tidytree", "tidyverse", "timechange", "timeDate", "tinytex", "tkWidgets",
-  "treeio", "tweenr", "txdbmaker", "tximeta", "tximport", "tzdb", "UCSC.utils", "umap", "UpSetR", "urca",
-  "urlchecker", "usethis", "utf8", "uuid", "uwot", "V8", "VariantAnnotation", "vctrs", "VennDiagram", "viridis",
-  "viridisLite", "vroom", "waldo", "WGCNA", "whisker", "widgetTools", "withr", "writexl", "xfun", "XML",
-  "xml2", "xopen", "xtable", "xts", "XVector", "yaml", "yulab.utils", "zip", "zoo"
+  "ASpli", "assorthead", "autoGO", "backports", "base64enc", "bbmle", "beachmat", "BH", "Biobase", "BiocBaseUtils",
+  "BiocFileCache", "BiocGenerics", "BiocIO", "BiocManager", "BiocParallel", "BiocSingular", "BiocStyle", "BiocVersion", "biomaRt", "Biostrings",
+  "biovizBase", "bit", "bit64", "bitops", "blob", "bookdown", "brew", "brio", "broom", "BSgenome",
+  "bslib", "cachem", "callr", "car", "carData", "caTools", "cellranger", "checkmate", "chron", "cigarillo",
+  "circlize", "cli", "clipr", "clue", "clusterProfiler", "colorspace", "commonmark", "ComplexHeatmap", "confintr", "conflicted",
+  "corpcor", "corrplot", "cowplot", "cpp11", "crayon", "credentials", "crosstalk", "curl", "data.table", "DBI",
+  "dbplyr", "DelayedArray", "deldir", "dendextend", "DEoptimR", "Deriv", "desc", "DESeq2", "devtools", "DEXSeq",
+  "dichromat", "diffobj", "digest", "dir.expiry", "dirmult", "doBy", "docopt", "doParallel", "DOSE", "doSNOW",
+  "dotCall64", "downlit", "dplyr", "dqrng", "DT", "dtplyr", "dynamicTreeCut", "DynDoc", "e1071", "edgeR",
+  "ellipse", "ellipsis", "emmeans", "EnhancedVolcano", "enrichplot", "enrichR", "ensembldb", "estimability", "europepmc", "evaluate",
+  "expm", "FactoMineR", "fansi", "farver", "fastcluster", "fastDummies", "fastmap", "fastmatch", "fgsea", "filelock",
+  "fitdistrplus", "flashClust", "FNN", "fontawesome", "fontBitstreamVera", "fontLiberation", "fontquiver", "forcats", "foreach", "forecast",
+  "formatR", "Formula", "fracdiff", "fs", "funr", "futile.logger", "futile.options", "future", "future.apply", "gamlss",
+  "gargle", "gdtools", "genefilter", "geneplotter", "generics", "GenomeInfoDb", "GenomeInfoDbData", "GenomicAlignments", "GenomicFeatures", "GenomicRanges",
+  "GEOquery", "gert", "GetoptLong", "ggarchery", "ggdendro", "ggforce", "ggfortify", "ggfun", "ggiraph", "ggnewscale",
+  "ggplot2", "ggplotify", "ggpmisc", "ggpp", "ggpubr", "ggraph", "ggrepel", "ggridges", "ggsci", "ggsignif",
+  "ggtangle", "ggtree", "ggupset", "gh", "gitcreds", "GlobalOptions", "globals", "glue", "GO.db", "goftest",
+  "gontr", "googledrive", "googlesheets4", "GOSemSim", "gplots", "graph", "graphite", "graphlayouts", "gridExtra", "gridGraphics",
+  "GSEABase", "gson", "gsubfn", "GSVA", "gtable", "gtools", "Gviz", "h5mread", "harmony", "hash",
+  "haven", "HDF5Array", "here", "hexbin", "highr", "Hmisc", "hms", "htmlTable", "htmltools", "htmlwidgets",
+  "httpuv", "httr", "httr2", "hwriter", "ica", "ids", "igraph", "igvShiny", "impute", "ini",
+  "interp", "IRanges", "irlba", "isoband", "IsoformSwitchAnalyzeR", "iterators", "jpeg", "jquerylib", "jsonlite", "KEGGgraph",
+  "KEGGREST", "kernlab", "knitr", "labeling", "lambda.r", "later", "latticeExtra", "lazyeval", "leaps", "lifecycle",
+  "limma", "limSolve", "listenv", "lme4", "lmodel2", "lmtest", "locfdr", "locfit", "lpSolve", "lsa",
+  "lubridate", "magick", "magrittr", "matrixcalc", "MatrixGenerics", "MatrixModels", "matrixStats", "MCL", "memoise", "memuse",
+  "Mfuzz", "microbenchmark", "mime", "miniUI", "minpack.lm", "minqa", "mixtools", "modelr", "msigdbr", "multcomp",
+  "multcompView", "mvtnorm", "network", "nloptr", "NormqPCR", "numDeriv", "openssl", "openxlsx", "org.Hs.eg.db", "org.Mm.eg.db",
+  "org.Rn.eg.db", "otel", "pandoc", "parallelly", "patchwork", "pathview", "pbapply", "pbkrtest", "pbmcapply", "pdftools",
+  "penalized", "pfamAnalyzeR", "pillar", "pkgbuild", "pkgconfig", "pkgdown", "pkgload", "plotly", "plotrix", "plyr",
+  "png", "polyclip", "polynom", "praise", "preprocessCore", "prettyunits", "processx", "profvis", "progress", "progressr",
+  "promises", "ProtGenerics", "proto", "proxy", "PRROC", "ps", "pscl", "purrr", "pwalign", "qlcMatrix",
+  "qpcR", "qpdf", "qs2", "quadprog", "quantreg", "qvalue", "R.methodsS3", "R.oo", "R.utils", "R6",
+  "ragg", "randomcoloR", "RANN", "rappdirs", "rbibutils", "rbioapi", "rcmdcheck", "RColorBrewer", "RcppAnnoy", "RcppArmadillo",
+  "RcppEigen", "RcppHNSW", "RcppParallel", "RcppProgress", "RcppThread", "RcppTOML", "RCurl", "Rdpack", "reactome.db", "ReactomePA",
+  "ReadqPCR", "readr", "readxl", "reformulas", "rematch", "rematch2", "remotes", "rentrez", "reprex", "reshape2",
+  "restfulr", "reticulate", "rgl", "Rgraphviz", "rhdf5", "rhdf5filters", "Rhdf5lib", "RhpcBLASctl", "Rhtslib", "rjson",
+  "rlang", "rmarkdown", "robustbase", "ROCR", "roxygen2", "rprojroot", "rrvgo", "Rsamtools", "RSpectra", "RSQLite",
+  "rstatix", "rstudioapi", "rsvd", "rtracklayer", "Rtsne", "rversions", "rvest", "S4Arrays", "sandwich", "saseR",
+  "sass", "satuRn", "SAVER", "ScaledMatrix", "scales", "scattermore", "scatterpie", "scatterplot3d", "sctransform", "segmented",
+  "selectr", "Seqinfo", "sessioninfo", "Seurat", "SeuratObject", "shape", "shiny", "shinyjs", "SingleCellExperiment", "sitmo",
+  "snow", "SnowballC", "sourcetools", "sp", "spam", "SparseArray", "SparseM", "sparseMatrixStats", "sparsesvd", "SpatialExperiment",
+  "spatstat.data", "spatstat.explore", "spatstat.geom", "spatstat.random", "spatstat.sparse", "spatstat.univar", "spatstat.utils", "splus2R", "sqldf", "statmod",
+  "STRINGdb", "stringfish", "stringi", "stringr", "SummarizedExperiment", "sva", "sys", "systemfonts", "tensor", "testthat",
+  "textshape", "textshaping", "TH.data", "tibble", "tidydr", "tidygraph", "tidyr", "tidyselect", "tidytree", "tidyverse",
+  "timechange", "timeDate", "tinytex", "tkWidgets", "treeio", "tweenr", "txdbmaker", "tximeta", "tximport", "tzdb",
+  "UCSC.utils", "umap", "UpSetR", "urca", "urlchecker", "usethis", "utf8", "uuid", "uwot", "V8",
+  "VariantAnnotation", "vctrs", "VennDiagram", "viridis", "viridisLite", "vroom", "waldo", "WGCNA", "whisker", "widgetTools",
+  "withr", "writexl", "xfun", "XML", "xml2", "xopen", "xtable", "xts", "XVector", "yaml",
+  "yulab.utils", "zip", "zoo"
 )
 
 # Function to install and properly handle dependencies
@@ -481,7 +492,12 @@ install_pkgs_batched <- function(pkgs) {
 }
 
 # Installation
+# Archived on CRAN; must precede the batch (scRecover Imports it)
+pak::pkg_install("url::https://cran.r-project.org/src/contrib/Archive/preseqR/preseqR_4.0.0.tar.gz", ask = FALSE)
+
 install_pkgs_batched(pkgs); cat("\n\n\n\n\nBLOCK 1 R packages installed!\n\n\n\n\n")
+
+pak::pkg_install("scRecover", dependencies = FALSE, ask = FALSE)
 
 pkg_install(c("url::https://cran.r-project.org/src/contrib/Archive/bayesbio/bayesbio_1.0.0.tar.gz",
 	      "stephenturner/annotables@5bf7dc0"), dependencies = F, ask = FALSE)
@@ -535,7 +551,6 @@ cat("\n\n\n\n\nBLOCK 3 R packages installed!\n\n\n\n\n")
 # Packages archived on CRAN, pinned to their last released version
 pak::pkg_install(c(
        "url::https://cran.r-project.org/src/contrib/Archive/imguR/imguR_1.0.3.tar.gz",
-       "url::https://cran.r-project.org/src/contrib/Archive/preseqR/preseqR_4.0.0.tar.gz",
        "url::https://cran.r-project.org/src/contrib/Archive/CDSeq/CDSeq_1.0.8.tar.gz"), dependencies = FALSE, ask = FALSE)
 
 cat("\n\n\n\n\nBLOCK 4 R packages installed!\n\n\n\n\n")
@@ -567,7 +582,9 @@ EOF
     # --------------------------------------------------------------------------
     # 6. Pipeline Installation & Cleanup
     # --------------------------------------------------------------------------
-    git clone -q https://github.com/BioinfoIPBLN/reanalyzerGSE /reanalyzerGSE
+    curl -fsSL --retry 10 https://codeload.github.com/BioinfoIPBLN/reanalyzerGSE/tar.gz/refs/heads/main -o pipeline.tar.gz
+    mkdir -p /reanalyzerGSE && tar xzf pipeline.tar.gz -C /reanalyzerGSE --strip-components=1
+    rm -f pipeline.tar.gz
     chmod +x /reanalyzerGSE/reanalyzerGSE.sh
     chmod +x /reanalyzerGSE/scripts/*
     chmod +x /reanalyzerGSE/external_software/miARma-seq/miARma
@@ -583,21 +600,48 @@ EOF
     rm -rf /usr/local/lib/R/site-library/*/help
     rm -rf /usr/local/lib/R/site-library/*/doc
     rm -rf /usr/local/lib/R/site-library/*/html
+    rm -rf /usr/lib/R/library/*/help
+    rm -rf /usr/lib/R/library/*/doc
+    rm -rf /usr/lib/R/library/*/html
+    rm -rf /usr/lib/R/doc /usr/share/R/doc 2>/dev/null || true
 
-    # Remove Python cache
+    # Remove Python cache and bundled test suites
     find /usr/lib/python3* -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null || true
     find /usr/local/lib/python3* -name __pycache__ -type d -exec rm -rf {} + 2>/dev/null || true
     find /usr/local/lib/python3* -name "*.pyc" -delete 2>/dev/null || true
+    find /usr/local/lib/python3*/dist-packages -type d -name tests -prune -exec rm -rf {} + 2>/dev/null || true
 
     # Final 
     apt-get install -qy --no-install-recommends libgfortran5 libgomp1 libuv1
+
+    # Runtime libraries reachable only through a -dev parent (igraph, gert, pdftools,
+    # magick, pytables); marking them manual keeps --auto-remove off them
+    apt-mark manual \
+      libamd3 libcolamd3 libgit2-1.7 libglpk40 libhttp-parser2.9 libmagick++-6.q16-9t64 \
+      libpoppler134 libpoppler-cpp0t64 libpython3.12t64 libssh2-1t64 libsuitesparseconfig7
+
+    # Toolchain and headers, not needed once everything is compiled
+    apt-get purge -qy --auto-remove \
+      build-essential cmake cpanminus cython3 g++ gcc gfortran libbz2-dev libcairo2-dev \
+      libcurl4-openssl-dev libdeflate-dev libfontconfig1-dev libfreetype-dev libfribidi-dev \
+      libgit2-dev libgl1-mesa-dev libglpk-dev libglu1-mesa-dev libharfbuzz-dev libhdf5-dev \
+      libisal-dev libjpeg-dev liblapack-dev liblzma-dev libmagickcore-dev libmagick++-dev \
+      libmagickwand-dev libncurses-dev libnode-dev libopenblas-dev libpng-dev \
+      libpoppler-cpp-dev libssl-dev libtiff5-dev libtiff-dev libxml2-dev python3-dev r-base-dev \
+      zlib1g-dev
+
     apt-get autoremove -qy --purge
     apt-get clean
+    rm -rf /var/lib/apt/lists/*
 
     # Cleanup
     rm -rf /root/.cpan 2>/dev/null || true
     rm -rf /root/.cache 2>/dev/null || true
     rm -rf /root/.npm 2>/dev/null || true
+
+    # Build scratch
+    cd /
+    rm -rf "$TMPDIR" "$APPTAINER_CACHEDIR" 2>/dev/null || true
 
 
 %environment
