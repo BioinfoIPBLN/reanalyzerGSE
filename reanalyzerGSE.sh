@@ -1503,7 +1503,6 @@ _log_step "Step_3a_Prepare" "start"
 			fi
 			# ── End featureCounts parameter validation ──
 			if [ "$bam_mapq_threshold" -gt 0 ] 2>/dev/null; then
-				sed -i "s,quality=10,quality=$bam_mapq_threshold,g" ${unit_ini[index]}
 				sed -i "s,bam_mapq_threshold=,bam_mapq_threshold=$bam_mapq_threshold,g" ${unit_ini[index]}
 			fi
 			if [ ! -z "$bam_require_flags" ]; then

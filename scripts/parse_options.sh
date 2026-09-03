@@ -115,7 +115,7 @@ for argument in $options; do
 	        -rev | -revigo_threshold_similarity # Similarity threshold for Revigo summaries of GO terms (0-1, suggested values are 0.9, 0.7, 0.5, 0.4 for large, medium, small, and tiny levels of similarity, respectively, being default 0.7
 
 	        #### BAM filtering (post-alignment):
-	        -mQ | -bam_mapq_threshold # Min MAPQ for samtools view -q and featureCounts -Q (0 = use default)
+	        -mQ | -bam_mapq_threshold # Min MAPQ for samtools view -q when building the BAM (0 by default, meaning no filter). The featureCounts cutoff is no longer tied to this: it is the '-Q' inside '-Ofc/-featureCounts_extra_args'
 	        -Fex | -bam_exclude_flags # samtools -F flags to exclude, e.g. '4' (unmapped), '256' (secondary), '2308' (combined)
 	        -Freq | -bam_require_flags # samtools -f flags to require. Suggestion: use '2' for Paired-End (proper pair), leave empty or '4' for Single-End.
 	        -Fdup | -bam_dedup # Duplicate removal: 'no' (default), 'samtools' (markdup -r), 'picard' (REMOVE_DUPLICATES), 'picard_optical' (REMOVE_SEQUENCING_DUPLICATES)
@@ -128,7 +128,7 @@ for argument in $options; do
 	        -Ak | -kallisto_extra_args # Extra arguments appended verbatim to the kallisto command line ('--pseudobam' in the config template, which writes a per-sample 'pseudoalignments.bam' of the transcriptome pseudoalignments next to the abundance tables; nothing downstream consumes it, it is there to inspect). Other options: '--bias', '--fusion', '--genomebam --gtf FILE' (BAM projected to genome coordinates, needs a GTF). Leave empty to write no BAM. Only used when '-A kallisto'
 
 	        #### Count-level options (quantification):
-	        -Ofc | -featureCounts_extra_args # Extra arguments to pass to featureCounts (default '-M -O -C -B'). These are appended to the automatically built featureCounts command line after strand, feature type, seqid, threads, and MAPQ options.
+	        -Ofc | -featureCounts_extra_args # Extra arguments to pass to featureCounts (default '-M -O -C -B -Q 10'). These are appended to the automatically built featureCounts command line after strand, feature type, seqid and threads. The MAPQ cutoff lives here too: '-Q 10' discards multi-mapping reads because STAR scores them 3 or below, so drop it (or lower it) to let '-M' actually count them, and note that removing '-Q' entirely applies no MAPQ filter at all
 	        -Fgene | -counts_custom_gene_filter # Shell command to filter gene rows from count tables before R processing (e.g. \"grep -v als\" to remove genes starting with 'als'). Applied to featureCounts .tab and Kallisto abundance.tsv files. Header is always preserved.
 
 	        #### Performance:
@@ -384,6 +384,7 @@ echo -e "\ninput=$input\n"
 echo -e "\noutput_folder=$output_folder\n"
 echo -e "\ncores=$cores\n"
 export RGSE_QS_THREADS=$(( cores < 8 ? cores : 8 ))
+export RGSE_CORES=$cores
 if [ -z "$name" ]; then
 	if [[ $input == G* ]]; then
 		arrIN=(${input//,/ }); name=$(for a in "${arrIN[@]}"; do echo "$a"; done | sort | tr '\n' '_' | sed 's,_$,,g')
@@ -667,7 +668,7 @@ if [ -z "$save_unaligned" ]; then
 	save_unaligned="no"
 fi
 if [ -z "$featureCounts_extra_args" ]; then
-	featureCounts_extra_args="-M -O -C -B"
+	featureCounts_extra_args="-M -O -C -B -Q 10"
 fi
 if [ -z "$counts_custom_gene_filter" ]; then
 	counts_custom_gene_filter=""

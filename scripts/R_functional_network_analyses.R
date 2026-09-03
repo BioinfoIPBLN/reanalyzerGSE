@@ -289,7 +289,8 @@ run_wgcna <- function(nexpr_mat, new_path, label, orgdb = NULL, all_gene_ids = N
         return(invisible(NULL))
     }
 
-    allowWGCNAThreads()
+    .wgcna_threads <- suppressWarnings(as.integer(Sys.getenv("RGSE_CORES", unset = "")))
+    if (is.na(.wgcna_threads) || .wgcna_threads < 1) allowWGCNAThreads() else allowWGCNAThreads(nThreads = .wgcna_threads)
     system(paste("mkdir -p", new_path))
 
     t_exprs <- t(nexpr_mat)
@@ -447,8 +448,9 @@ run_wgcna <- function(nexpr_mat, new_path, label, orgdb = NULL, all_gene_ids = N
 
     ## Hub gene identification
     tryCatch({
-        adj <- adjacency(t_exprs, power = power, type = "signed")
-        connectivity <- intramodularConnectivity(adj, netwk$colors)
+        connectivity <- intramodularConnectivity.fromExpr(t_exprs, colors = netwk$colors,
+                                                          networkType = "signed", power = power,
+                                                          ignoreColors = character(0))
         connectivity$Gene_ID <- names(netwk$colors)
         connectivity$module <- netwk$colors
         connectivity <- connectivity[order(-connectivity$kWithin), ]

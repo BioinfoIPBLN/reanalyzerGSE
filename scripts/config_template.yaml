@@ -198,7 +198,7 @@ kallisto_extra_args: "--pseudobam"     # writes a per-sample pseudoalignments.ba
                                        # GTF). Empty to write no BAM at all
 
 # === Count-level options (quantification) ===
-featureCounts_extra_args: "-M -O -C -B" # Extra arguments to pass to featureCounts (default '-M -O -C -B').
+featureCounts_extra_args: "-M -O -C -B -Q 10" # Extra arguments to pass to featureCounts (default '-M -O -C -B -Q 10'). '-Q 10' drops multi-mapping reads (STAR scores them 3 or less), so lower or remove it to let '-M' count them
 counts_custom_gene_filter: ""          # Shell command to filter gene rows from count tables before R processing (e.g. "grep -v als" to remove genes starting with 'als'). Header is always preserved.
 
 # === Performance ===
