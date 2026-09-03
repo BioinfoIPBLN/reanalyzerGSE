@@ -1441,6 +1441,8 @@ _log_step "Step_3a_Prepare" "start"
 			sed -i "s,indexthreads=,indexthreads=$indexthreads,g" ${unit_ini[index]}
 			sed -i "s,parallelnumber=,parallelnumber=$number_parallel,g" ${unit_ini[index]}
 			sed -i "s,memorylimit=,memorylimit=$memory_max,g" ${unit_ini[index]}
+			sed -i "s,totalcores=,totalcores=$cores,g" ${unit_ini[index]}
+			sed -i "s,bigwig_binsize=,bigwig_binsize=$bigwig_binsize,g" ${unit_ini[index]}
 			if [[ "$aligner" == "star" ]]; then
 				if [ -z "${unit_ri[index]}" ]; then
 					sed -i "s,indexname=,indexname=${organism}_$(basename ${unit_fasta[index]%.*})_$(basename ${gff%.*})_star_idx,g" ${unit_ini[index]}

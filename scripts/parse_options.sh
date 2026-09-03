@@ -121,6 +121,7 @@ for argument in $options; do
 	        -Fdup | -bam_dedup # Duplicate removal: 'no' (default), 'samtools' (markdup -r), 'picard' (REMOVE_DUPLICATES), 'picard_optical' (REMOVE_SEQUENCING_DUPLICATES)
 	        -Fcust | -bam_custom_filter # Custom shell command to pipe SAM text through post-alignment (e.g. \"grep -E '^@|\\<NM:i:0\\>'\" for perfect matches). Must preserve header lines (^@).
 	        -bN | -bam_normalization # Normalization method using deeptool's bamCoverage. Choices: RPKM, CPM, BPM, RPGC, None. ('BPM' by default)
+	        -bs | -bigwig_binsize # Bin size in bp for the bigwig coverage tracks built by deeptool's bamCoverage (10 by default). Larger bins are much faster to compute and much smaller on disk: 50 is ample for genome-browser inspection, and 10 is only worth its cost when near-base resolution is needed
 	        -Su | -save_unaligned # Save unaligned reads from hisat2/STAR ('no' by default, or 'yes'). When enabled, reads that did not align to the reference genome are written to compressed fastq files alongside the BAM files
 	        -Ah | -hisat2_extra_args # Extra arguments appended verbatim to the hisat2 command line (e.g. '--very-sensitive --no-mixed --no-discordant'). Only used when '-A hisat2'
 	        -As | -star_extra_args # Extra arguments appended verbatim to the STAR command line (e.g. '--outSAMmultNmax 1 --alignIntronMax 100000'). Only used when '-A star'
@@ -248,6 +249,7 @@ for argument in $options; do
 		-Fdup) bam_dedup=${arguments[index]} ;;
 		-Fcust) bam_custom_filter=${arguments[index]} ;;
 		-bN) bam_normalization=${arguments[index]} ;;
+		-bs | -bigwig_binsize) bigwig_binsize=${arguments[index]} ;;
 		-Su | -save_unaligned) save_unaligned=${arguments[index]} ;;
 		-Ah | -hisat2_extra_args) hisat2_extra_args=${arguments[index]} ;;
 		-As | -star_extra_args) star_extra_args=${arguments[index]} ;;
@@ -654,6 +656,12 @@ if [ -z "$bam_custom_filter" ]; then
 fi
 if [ -z "$bam_normalization" ]; then
 	bam_normalization="BPM"
+fi
+if [ -z "$bigwig_binsize" ]; then
+	bigwig_binsize=10
+fi
+if ! [[ "$bigwig_binsize" =~ ^[0-9]+$ ]] || [ "$bigwig_binsize" -lt 1 ]; then
+	echo "Error: -bs/-bigwig_binsize must be a positive integer number of bp. You provided: $bigwig_binsize"; exit 1
 fi
 if [ -z "$save_unaligned" ]; then
 	save_unaligned="no"

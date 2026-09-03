@@ -683,6 +683,7 @@ sub run_miARma{
 						threads=>$cfg->val("General","threads") || 1,
 						parallelnumber=>$cfg->val("General","parallelnumber") || 2,
 						memorylimit=>$cfg->val("General","memorylimit") || 107374182400,
+						totalcores=>$cfg->val("General","totalcores") || 0,
 						readlength=>$cfg->val("General","read_length") || 75,
 						indexthreads=>$cfg->val("Aligner","indexthreads") || 2,
 						bowtie2index=>$cfg->val("Aligner","bowtie2index") || undef,
@@ -724,6 +725,7 @@ sub run_miARma{
 						bam_dedup=>$cfg->val("Aligner","bam_dedup") || "no",
 						bam_custom_filter=>$cfg->val("Aligner","bam_custom_filter") || undef,
 						bam_normalization=>$cfg->val("Aligner","bam_normalization") || "BPM",
+						bigwig_binsize=>$cfg->val("Aligner","bigwig_binsize") || 10,
 						save_unaligned=>$cfg->val("Aligner","save_unaligned") || "no",
 						strand=>$cfg->val("General","strand")|| "yes",
 					);
