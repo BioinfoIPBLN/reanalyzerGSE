@@ -11,6 +11,7 @@ suppressMessages(library("dplyr",quiet = T,warn.conflicts = F))
 script_dir <- dirname(sub("^--file=", "", commandArgs()[grep("--file=", commandArgs())]))
 ensembl_helper <- file.path(script_dir, "R_ensembl_to_symbol.R")
 if (file.exists(ensembl_helper)) source(ensembl_helper)
+source(file.path(script_dir, "R_gene_id_helpers.R"))
 
 # Load annotation info:
 organism_cp <- gsub("_"," ",organism)
@@ -71,7 +72,10 @@ convert_ids <- function(ids,mode) {
     ids2 <- tolower(ids)
   } else if (mode=="first_upper_rest_lower") {
     ids2 <- stringr::str_to_title(ids)
+  } else {
+    ids2 <- ids
   }
+  if (exists("canonicalise_gene_ids")) return(canonicalise_gene_ids(ids))
   return(ids2)
 }
 mode <- check_naming(keys(eval(parse(text=orgDB)), keytype = "SYMBOL"))

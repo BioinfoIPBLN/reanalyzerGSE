@@ -1966,6 +1966,8 @@ if run_step step6; then
 	fi
 	export RGSE_KEGG_CACHE="$output_folder/$name/.kegg_cache"
 	mkdir -p "$RGSE_KEGG_CACHE"
+	export RGSE_STRING_CACHE="$output_folder/$name/.string_cache"
+	mkdir -p "$RGSE_STRING_CACHE"
 	for index in "${!array[@]}"; do
 		if [ ! -d "$output_folder/$name/final_results_reanalysis$index/DGE/" ]; then
 			echo -e "\nWARNING: DGE directory not found at $output_folder/$name/final_results_reanalysis$index/DGE/. Skipping enrichment for index $index."

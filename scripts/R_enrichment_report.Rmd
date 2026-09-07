@@ -992,6 +992,22 @@ if (has_network) {
       }
     }
 
+    # Comparative GOBP enrichment across modules
+    mod_go <- list.files(wgcna_dir, pattern = "WGCNA_module_enrichment_GOBP_.*\\.txt$", full.names = TRUE)
+    if (length(mod_go) > 0) {
+      cat("\n### Module GO enrichment\n\n")
+      cat("Comparative GO Biological Process over-representation across the detected modules (`compareCluster`):\n\n")
+      for (f in mod_go) {
+        df <- safe_read(f)
+        if (!is.null(df) && nrow(df) > 0) {
+          cat(sprintf("\n**%s**\n\n", gsub("WGCNA_module_enrichment_GOBP_|\\.txt$", "", basename(f))))
+          make_table(df, gsub("\\.txt$", ".csv", basename(f)), max_rows = 30)
+        }
+      }
+      for (p in list.files(wgcna_dir, pattern = "WGCNA_module_enrichment_GOBP_.*\\.png$", full.names = TRUE))
+        embed_png(p, gsub("WGCNA_module_enrichment_GOBP_|\\.png$", "", basename(p)))
+    }
+
     # Dendrograms / other PDFs
     wgcna_pdfs <- list.files(wgcna_dir, pattern = "\\.pdf$", full.names = TRUE)
     wgcna_pdfs <- head(wgcna_pdfs[!grepl("blockwiseModules", wgcna_pdfs)], 5)
@@ -1057,6 +1073,9 @@ if (has_network) {
     cat("Bayesian Optimized Networks (BONOBO) via netZooPy — regulatory network inference:\n\n")
     bonobo_files <- list.files(bonobo_dir, pattern = "\\.csv$", full.names = TRUE, recursive = TRUE)
     if (length(bonobo_files) > 0) {
+      bonobo_files <- bonobo_files[file.info(bonobo_files)$size <= 256 * 1024^2]
+      if (length(bonobo_files) == 0)
+        cat("*BONOBO networks are too large to preview here; read them from the results folder.*\n\n")
       for (f in head(bonobo_files, 5)) {
         df <- safe_read(f)
         if (!is.null(df) && nrow(df) > 0) {

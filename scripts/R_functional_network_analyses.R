@@ -87,39 +87,108 @@ out_base <- paste0(path, "/network_analyses/")
 system(paste("mkdir -p", out_base))
 
 
+
+################################################################################
+#### Helper: retry a remote call on transient failures only
+################################################################################
+.rgse_transient <- function(msg) {
+  grepl(paste("cannot open the connection", "Timeout", "timed out", "Connection reset",
+              "Could not resolve", "Recv failure", "Operation too slow",
+              "HTTP error 429", "HTTP error 5[0-9][0-9]", "Service Unavailable",
+              "Bad Gateway", "Gateway Time", "internal server error",
+              "SSL", "curl", sep = "|"), msg, ignore.case = TRUE)
+}
+
+with_retry <- function(expr, what = "remote call", attempts = 5, base_delay = 2) {
+  call_expr <- substitute(expr)
+  env <- parent.frame()
+  for (k in seq_len(attempts)) {
+    res <- try(eval(call_expr, env), silent = TRUE)
+    if (!inherits(res, "try-error")) return(res)
+    msg <- conditionMessage(attr(res, "condition"))
+    if (!.rgse_transient(msg) || k == attempts) {
+      cat(sprintf("    %s failed%s: %s\n", what,
+                  if (k > 1) sprintf(" after %d attempts", k) else "", msg))
+      return(res)
+    }
+    wait <- base_delay * 2^(k - 1) + stats::runif(1, 0, base_delay)
+    cat(sprintf("    %s failed (attempt %d/%d), retrying in %.0fs: %s\n",
+                what, k, attempts, wait, msg))
+    Sys.sleep(wait)
+  }
+  invisible(NULL)
+}
+
+.rgse_string_dir <- function() {
+  d <- Sys.getenv("RGSE_STRING_CACHE", unset = "")
+  if (!nzchar(d)) d <- file.path(tempdir(), "rgse_string_cache")
+  dir.create(d, recursive = TRUE, showWarnings = FALSE)
+  d
+}
+
+.rgse_string_db <- local({
+  cache <- list()
+  function(taxid) {
+    key <- as.character(taxid)
+    if (!is.null(cache[[key]])) return(cache[[key]])
+    obj <- with_retry(STRINGdb$new(version = "12.0", species = taxid,
+                                   score_threshold = 400, network_type = "full",
+                                   input_directory = .rgse_string_dir()),
+                      what = "STRINGdb initialisation")
+    if (inherits(obj, "try-error") || is.null(obj)) return(NULL)
+    cache[[key]] <<- obj
+    obj
+  }
+})
+
 ################################################################################
 #### Helper: map gene IDs to Entrez IDs
 ################################################################################
 map_to_entrez <- function(gene_ids, orgdb) {
     if (is.null(orgdb)) return(NULL)
-    # Try ENSEMBL first (strip version suffix)
-    ids_clean <- gsub("\\..*", "", toupper(gene_ids))
-    mapped <- tryCatch({
-        res <- suppressMessages(AnnotationDbi::select(orgdb,
-                                   keys = ids_clean,
-                                   columns = c("ENTREZID", "SYMBOL"),
-                                   keytype = "ENSEMBL"))
-        res <- res[!is.na(res$ENTREZID), ]
-        res <- res[!duplicated(res$ENSEMBL), ]
-        res
-    }, error = function(e) NULL)
-    
-    # If ENSEMBL mapping failed or yielded nothing, try SYMBOL
-    if (is.null(mapped) || nrow(mapped) == 0) {
-        mapped <- tryCatch({
-            res <- suppressMessages(AnnotationDbi::select(orgdb,
-                                       keys = gene_ids,
-                                       columns = c("ENTREZID", "ENSEMBL"),
-                                       keytype = "SYMBOL"))
-            res <- res[!is.na(res$ENTREZID), ]
-            res <- res[!duplicated(res$SYMBOL), ]
-            colnames(res)[colnames(res) == "SYMBOL"] <- "input_id"
-            res
+    gene_ids <- unique(gene_ids[!is.na(gene_ids) & nzchar(gene_ids)])
+    if (length(gene_ids) == 0) return(NULL)
+
+    by_keytype <- function(keytype, keys) {
+        if (length(keys) == 0) return(NULL)
+        tryCatch({
+            res <- suppressWarnings(suppressMessages(AnnotationDbi::select(
+                orgdb, keys = unique(keys), columns = "ENTREZID", keytype = keytype)))
+            res <- res[!is.na(res$ENTREZID), , drop = FALSE]
+            if (nrow(res) == 0) return(NULL)
+            res <- res[!duplicated(res[[keytype]]), , drop = FALSE]
+            data.frame(lookup_key = res[[keytype]], ENTREZID = res$ENTREZID, stringsAsFactors = FALSE)
         }, error = function(e) NULL)
-    } else {
-        colnames(mapped)[colnames(mapped) == "ENSEMBL"] <- "input_id"
     }
-    return(mapped)
+
+    attempts <- list(
+        list(keytype = "SYMBOL",  key_of = function(x) x),
+        list(keytype = "ENSEMBL", key_of = function(x) toupper(sub("\\..*$", "", x))),
+        list(keytype = "ALIAS",   key_of = function(x) x)
+    )
+    valid <- AnnotationDbi::keytypes(orgdb)
+    best <- NULL
+    for (a in attempts) {
+        if (!a$keytype %in% valid) next
+        remaining <- if (is.null(best)) gene_ids else setdiff(gene_ids, best$input_id)
+        if (length(remaining) == 0) break
+        keys <- a$key_of(remaining)
+        hit <- by_keytype(a$keytype, keys)
+        if (is.null(hit)) next
+        back <- data.frame(input_id = remaining, lookup_key = keys, stringsAsFactors = FALSE)
+        merged <- merge(back, hit, by = "lookup_key")
+        merged$lookup_key <- NULL
+        merged <- merged[!duplicated(merged$input_id), , drop = FALSE]
+        best <- if (is.null(best)) merged else rbind(best, merged)
+    }
+    if (is.null(best) || nrow(best) == 0) return(NULL)
+    sym <- tryCatch({
+        s <- suppressWarnings(suppressMessages(AnnotationDbi::select(
+            orgdb, keys = unique(best$ENTREZID), columns = "SYMBOL", keytype = "ENTREZID")))
+        s[!duplicated(s$ENTREZID), , drop = FALSE]
+    }, error = function(e) NULL)
+    if (!is.null(sym)) best <- merge(best, sym, by = "ENTREZID", all.x = TRUE)
+    best[, c("input_id", "ENTREZID", setdiff(colnames(best), c("input_id", "ENTREZID"))), drop = FALSE]
 }
 
 
@@ -587,9 +656,14 @@ run_stringdb <- function(deg_df, label, new_path, organism_taxid, orgdb = NULL) 
             }
         }
 
-        string_db <- STRINGdb$new(version="12.0", species=organism_taxid,
-                                  score_threshold=400, network_type="full", input_directory="")
-        example1_mapped <- string_db$map(deg_df, map_col, removeUnmappedRows = TRUE)
+        string_db <- .rgse_string_db(organism_taxid)
+        if (is.null(string_db)) {
+            cat("    STRINGdb unavailable after retries; skipping\n")
+            return(invisible(NULL))
+        }
+        example1_mapped <- with_retry(string_db$map(deg_df, map_col, removeUnmappedRows = TRUE),
+                                      what = "STRINGdb id mapping")
+        if (inherits(example1_mapped, "try-error") || is.null(example1_mapped)) return(invisible(NULL))
 
         if (nrow(example1_mapped) == 0) {
             cat("    No genes mapped to STRING database\n")
@@ -640,7 +714,10 @@ run_stringdb <- function(deg_df, label, new_path, organism_taxid, orgdb = NULL) 
             chunk_ids <- hits[start_idx:end_idx]
             cat(sprintf("    Querying STRINGdb enrichment chunk %d/%d (%d genes)...\n", i, num_chunks, length(chunk_ids)))
             tryCatch({
-                enrich_chunk <- string_db$get_enrichment(chunk_ids)
+                enrich_chunk <- with_retry(string_db$get_enrichment(chunk_ids),
+                                           what = sprintf("STRINGdb enrichment chunk %d", i))
+                if (inherits(enrich_chunk, "try-error")) enrich_chunk <- NULL
+                Sys.sleep(1)
                 if (!is.null(enrich_chunk) && nrow(enrich_chunk) > 0) {
                     colnames(enrich_chunk)[colnames(enrich_chunk) == "inputGenes"] <- "geneID"
                     enrichment_list[[i]] <- enrich_chunk
@@ -665,7 +742,10 @@ run_stringdb <- function(deg_df, label, new_path, organism_taxid, orgdb = NULL) 
             chunk_ids <- hits[start_idx:end_idx]
             cat(sprintf("    Querying STRINGdb interactions chunk %d/%d (%d genes)...\n", i, num_chunks, length(chunk_ids)))
             tryCatch({
-                interact_chunk <- string_db$get_interactions(chunk_ids)
+                interact_chunk <- with_retry(string_db$get_interactions(chunk_ids),
+                                             what = sprintf("STRINGdb interactions chunk %d", i))
+                if (inherits(interact_chunk, "try-error")) interact_chunk <- NULL
+                Sys.sleep(1)
                 if (!is.null(interact_chunk) && nrow(interact_chunk) > 0) {
                     interactions_list[[i]] <- interact_chunk
                 }

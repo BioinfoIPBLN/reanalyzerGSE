@@ -6,6 +6,7 @@ output_dir <- args[3]
 genes <- args[4] # If not provided, "none"
 filter_option <- args[5] # For now, bin or standard
 organism <- args[6]
+
 targets_file <- args[7] # if not provided, "no"
 diff_soft <- args[8] # if not provided, "edgeR"
 batch_format <- args[9] # if not provided, "fact"
@@ -25,6 +26,7 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
 
 .rgse_scripts_dir <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[1])))
 source(file.path(.rgse_scripts_dir, "R_qs_helpers.R"))
+source(file.path(.rgse_scripts_dir, "R_gene_id_helpers.R"))
 
 PSEUDOCOUNT <- 1
 PSEUDO_TAG  <- paste0("log2_", PSEUDOCOUNT)
@@ -98,7 +100,7 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
 
   rownames(gene_counts) <- gene_counts$Geneid
   gene_counts <- gene_counts[,-1]
-  gene_counts$Gene_ID <- stringr::str_to_title(rownames(gene_counts))
+  gene_counts$Gene_ID <- canonicalise_gene_ids(rownames(gene_counts))
   colnames(gene_counts) <- basename(colnames(gene_counts))
 
   # Clean sample column names: remove _STAR.*, _hisat2.*, .fastq.gz. These are per-sample
@@ -494,7 +496,7 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
 
   gene_counts_rpkm <- as.data.frame(rpkm(edgeR_object_norm,normalized.lib.sizes=TRUE))
   colnames(gene_counts_rpkm) <- rownames(edgeR_object_norm$samples)
-  gene_counts_rpkm$Gene_ID <- stringr::str_to_title(rownames(gene_counts_rpkm))
+  gene_counts_rpkm$Gene_ID <- canonicalise_gene_ids(rownames(gene_counts_rpkm))
 
   # Function for saving tpms later:
   rpkm_to_tpm <- function(rpkm) {    
@@ -519,7 +521,7 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
   # CPM calculation and writing (mirroring the RPKM pattern to avoid case-mismatch issues)
   cpm_counts <- as.data.frame(cpm(edgeR_object_norm, normalized.lib.sizes=TRUE))
   colnames(cpm_counts) <- rownames(edgeR_object_norm$samples)
-  rownames(cpm_counts) <- stringr::str_to_title(rownames(cpm_counts))
+  rownames(cpm_counts) <- canonicalise_gene_ids(rownames(cpm_counts))
   # Reorder rows and columns to match RPKM/TPM ordering
   cpm_counts <- cpm_counts[gene_counts_rpkm_to_write$Gene_ID,]
   cpm_counts <- cpm_counts[,sort(colnames(cpm_counts))]
@@ -633,7 +635,7 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
     #edgeR_object_norm_adjusted <- estimateTagwiseDisp(edgeR_object_norm_adjusted)
     gene_counts_rpkm_adjusted <- as.data.frame(rpkm(edgeR_object_norm_adjusted,normalized.lib.sizes=TRUE))
     colnames(gene_counts_rpkm_adjusted) <- rownames(edgeR_object_norm_adjusted$samples)
-    gene_counts_rpkm_adjusted$Gene_ID <- stringr::str_to_title(rownames(gene_counts_rpkm_adjusted))
+    gene_counts_rpkm_adjusted$Gene_ID <- canonicalise_gene_ids(rownames(gene_counts_rpkm_adjusted))
 
     gene_counts_rpkm_adjusted_to_write <- gene_counts_rpkm_adjusted[,c(grep("Gene_ID",colnames(gene_counts_rpkm_adjusted)),grep("Gene_ID",colnames(gene_counts_rpkm_adjusted),invert=T))]
     gene_counts_rpkm_adjusted_to_write <- gene_counts_rpkm_adjusted_to_write[,c("Gene_ID",sort(colnames(gene_counts_rpkm_adjusted_to_write)[-1]))]
@@ -653,7 +655,7 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
     # CPM calculation and writing for adjusted counts
     cpm_counts_adjusted <- as.data.frame(cpm(edgeR_object_norm_adjusted, normalized.lib.sizes=TRUE))
     colnames(cpm_counts_adjusted) <- rownames(edgeR_object_norm_adjusted$samples)
-    rownames(cpm_counts_adjusted) <- stringr::str_to_title(rownames(cpm_counts_adjusted))
+    rownames(cpm_counts_adjusted) <- canonicalise_gene_ids(rownames(cpm_counts_adjusted))
     cpm_counts_adjusted <- cpm_counts_adjusted[gene_counts_rpkm_adjusted_to_write$Gene_ID,]
     cpm_counts_adjusted <- cpm_counts_adjusted[,sort(colnames(cpm_counts_adjusted))]
     write.table(cpm_counts_adjusted,
@@ -1085,7 +1087,7 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
         #edgeR_object_norm <- estimateTagwiseDisp(edgeR_object_norm)
         gene_counts_rpkm <- as.data.frame(rpkm(edgeR_object_norm,normalized.lib.sizes=TRUE))
         colnames(gene_counts_rpkm) <- rownames(edgeR_object_norm$samples)
-        gene_counts_rpkm$Gene_ID <- stringr::str_to_title(rownames(gene_counts_rpkm))
+        gene_counts_rpkm$Gene_ID <- canonicalise_gene_ids(rownames(gene_counts_rpkm))
       } 
       
       if(sum(!startsWith(as.character(edgeR_object_norm$samples$group),"__")) == length(as.character(edgeR_object_norm$samples$group))){
