@@ -58,6 +58,7 @@ for argument in $options; do
 	        -fd | -full_differential_analyses # Whether to perform full differential enrichment analyses (for example including computation of DEGs or Venn diagrams, 'no' or 'yes', by default)
 	        -fe | -functional_enrichment_analyses # Whether to perform functional enrichment analyses ('no' or 'yes', by default)
 	        -cPf | -clusterProfiler_full # Whether to perform additional functional enrichment analyses with multiple databases using clusterProfiler, by default only ORA for GO BP, GO MF and GO CC, and KEGG and REACTOME enrichment, will be performed, as additional analyses may be slow if many significant DEGs or multiple number of comparisons ('yes' or 'no', by default)
+	        -cPc | -clusterProfiler_cores # Number of gene lists to enrich concurrently within each comparison (3 by default). The ceiling here is KEGG, not CPU: enrichKEGG/gseKEGG and the pathview snapshots query rest.kegg.jp, so every unit of concurrency multiplies the request rate against a shared public service. Raise it only when '-cPf no' (which removes the GSEA-KEGG and module-KEGG calls) or when KEGG enrichment is not needed
 	        -b | -batch # Batch effect present? (no by default, yes if correction through Combat-seq and model is to be performed, and info is going to be required in other arguments or prompts)
 	        -B | -bed_mode # Whether to convert list of files to bed format so they can be visualized in genome browsers ('yes' or 'no', by default)
 	        -Dc | -deconvolution # Deconvolution method for bulk RNA-seq data: 'no' (default), 'CDSeq' (unsupervised, may take hours), or 'BisqueRNA' (reference-based, requires -scM, -scP, and -bulkM)
@@ -70,6 +71,7 @@ for argument in $options; do
 	        -Tr | -tidy_report_files # Whether to shrink the built report tree once Sphinx is done ('yes', by default, or 'no'). Sphinx copies whole result folders into 'sphinx_report/html', which duplicates most of the analysis; this drops the copies no page links to and hard-links the ones that are linked back to their originals. A file is only ever touched when the same file still exists elsewhere in the output folder, so nothing is lost and every link in the report keeps working
 	        -Txls | -convert_tables_excel # Convert all tables in results from .txt format, without limitation of size to Excel's .xlsx format, with a limitation of 32,767 characters ('yes' or 'no', by default)
 	        -Tc | -time_course # Whether to perform additional time-course analyses as a last step ('yes' or 'no', by default)
+	        -bnb | -bonobo # Whether to add BONOBO single-sample gene regulatory networks to the network analyses ('yes' or 'no', by default). Requires '-Na yes' and netzoopy. BONOBO writes one dense gene-by-gene network per sample, so on a few thousand DEGs it produces several GB per sample and tens of GB per comparison; leave it off unless single-sample networks are the point of the analysis
 	        -Na | -network_analyses # Whether to perform network analyses ('yes' or 'no', by default). WGCNA is organism-agnostic; STRINGdb supports any organism with a valid taxon ID
 	        -Wm | -wgcna_mode # WGCNA mode: 'all' (canonical, runs on all expressed genes, by default) or 'degs' (runs on DEGs only, per comparison)
 	        -apl | -auto_panther_log # Whether to perform additional autoGO and Panther analyses for DEGs separated by log2Fc positive or negative ('yes' or 'no', by default)
@@ -203,6 +205,7 @@ for argument in $options; do
 		-scP | -sc_phenotype) sc_phenotype=${arguments[index]} ;;
 		-bulkM | -bulk_expression_matrix) bulk_expression_matrix=${arguments[index]} ;;
 		-cPf) clusterProfiler_full=${arguments[index]} ;;
+		-cPc | -clusterProfiler_cores) clusterProfiler_cores=${arguments[index]} ;;
 		-fe) functional_enrichment_analyses=${arguments[index]} ;;
 		-fd) full_differential_analyses=${arguments[index]} ;;
 		-vv) perform_volcano_venn=${arguments[index]} ;;
@@ -235,6 +238,7 @@ for argument in $options; do
 		-MGS) clusterProfiler_maxGSSize=${arguments[index]} ;;
 		-Pm) panther_method=${arguments[index]} ;;
 		-Na) network_analyses=${arguments[index]} ;;
+		-bnb | -bonobo) bonobo=${arguments[index]} ;;
 		-Wm) wgcna_mode=${arguments[index]} ;;
 		-fp) fastp_mode=${arguments[index]} ;;
 		-fpa) fastp_adapter=${arguments[index]} ;;
@@ -535,6 +539,12 @@ fi
 if [ -z "$clusterProfiler_full" ]; then
 	clusterProfiler_full="no"
 fi
+if [ -z "$clusterProfiler_cores" ]; then
+	clusterProfiler_cores=3
+fi
+if ! [[ "$clusterProfiler_cores" =~ ^[0-9]+$ ]] || [ "$clusterProfiler_cores" -lt 1 ]; then
+	echo "Error: -cPc/-clusterProfiler_cores must be a positive integer. You provided: $clusterProfiler_cores"; exit 1
+fi
 if [ -z "$functional_enrichment_analyses" ]; then
 	functional_enrichment_analyses="yes"
 fi
@@ -588,6 +598,10 @@ export tidy_report_files
 if [ -z "$network_analyses" ]; then
 	network_analyses="no"
 fi
+if [ -z "$bonobo" ]; then
+	bonobo="no"
+fi
+export RGSE_BONOBO="$bonobo"
 if [ -z "$wgcna_mode" ]; then
 	wgcna_mode="all"
 fi

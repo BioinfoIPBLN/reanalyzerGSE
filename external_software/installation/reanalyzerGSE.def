@@ -680,6 +680,7 @@ EOF
     export LC_ALL=en_US.UTF-8
     export LANG=en_US.UTF-8
     export LD_LIBRARY_PATH="/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"
+    export R_LIBS_USER=-
 
 %runscript
     exec /reanalyzerGSE/reanalyzerGSE.sh "$@"

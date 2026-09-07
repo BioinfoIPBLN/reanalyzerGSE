@@ -43,6 +43,88 @@ if(organism_cp=="Homo sapiens"){
   suppressMessages(library("org.Mm.eg.db",quiet = T,warn.conflicts = F))
 }
 org <- if (grepl("Homo", organism_cp, ignore.case = TRUE)) "hsa" else if (grepl("Mus", organism_cp, ignore.case = TRUE)) "mmu" else if (grepl("Rattus", organism_cp, ignore.case = TRUE)) "rno" else tryCatch(search_kegg_organism(organism_cp, by = "scientific_name")[1,1], error = function(e) "hsa")
+
+.kegg_memo <- new.env(parent = emptyenv())
+local({
+  ns <- asNamespace("clusterProfiler")
+  for (fn in c("download_KEGG", "kegg_release")) {
+    if (!exists(fn, envir = ns, inherits = FALSE)) next
+    orig <- get(fn, envir = ns)
+    memoised <- local({
+      f <- orig; nm <- fn
+      function(...) {
+        k <- paste(nm, paste(vapply(list(...), function(z) paste(as.character(z), collapse = ","), ""), collapse = "|"), sep = "|")
+        if (!nzchar(k) || is.null(.kegg_memo[[k]])) assign(k, f(...), envir = .kegg_memo)
+        .kegg_memo[[k]]
+      }
+    })
+    try(utils::assignInNamespace(fn, memoised, ns = "clusterProfiler"), silent = TRUE)
+  }
+})
+for (.kt in c("KEGG", "MKEGG")) try(suppressMessages(clusterProfiler:::prepare_KEGG(org, .kt, "kegg")), silent = TRUE)
+
+.rgse_kegg_cache <- function() {
+  d <- Sys.getenv("RGSE_KEGG_CACHE", unset = "")
+  if (!nzchar(d)) d <- file.path(tempdir(), "rgse_kegg_cache")
+  dir.create(d, recursive = TRUE, showWarnings = FALSE)
+  d
+}
+
+.rgse_kegg_stem <- function(pathway.id, species) paste0(species, sub(paste0("^", species), "", pathway.id))
+
+.rgse_kegg_fetch <- function(pathway.id, species, cache, timeout = 300) {
+  stem <- .rgse_kegg_stem(pathway.id, species)
+  want <- file.path(cache, paste0(stem, c(".xml", ".png")))
+  ready <- function() all(file.exists(want)) && all(file.info(want)$size > 0, na.rm = TRUE)
+  if (ready()) return(TRUE)
+  lockdir <- file.path(cache, paste0(".lock_", stem))
+  if (!suppressWarnings(dir.create(lockdir, showWarnings = FALSE))) {
+    waited <- 0
+    while (!ready() && waited < timeout && dir.exists(lockdir)) { Sys.sleep(1); waited <- waited + 1 }
+    if (ready()) return(TRUE)
+  } else {
+    on.exit(unlink(lockdir, recursive = TRUE), add = TRUE)
+  }
+  staging <- file.path(cache, paste0(".stage_", stem, "_", Sys.getpid()))
+  dir.create(staging, recursive = TRUE, showWarnings = FALSE)
+  on.exit(unlink(staging, recursive = TRUE), add = TRUE)
+  st <- try(suppressMessages(pathview::download.kegg(
+    pathway.id = sub(paste0("^", species), "", pathway.id), species = species, kegg.dir = staging)), silent = TRUE)
+  if (inherits(st, "try-error")) return(FALSE)
+  for (nm in paste0(stem, c(".xml", ".png"))) {
+    src <- file.path(staging, nm)
+    if (file.exists(src) && isTRUE(file.info(src)$size > 0)) file.rename(src, file.path(cache, nm))
+  }
+  ready()
+}
+
+safe_pathview <- function(gene.data, pathway.id, species, out_file = NULL, keep_kegg_copy = NULL, ...) {
+  cache <- .rgse_kegg_cache()
+  if (!isTRUE(.rgse_kegg_fetch(pathway.id, species, cache))) return(FALSE)
+  stem <- .rgse_kegg_stem(pathway.id, species)
+  if (!is.null(keep_kegg_copy)) {
+    dir.create(keep_kegg_copy, recursive = TRUE, showWarnings = FALSE)
+    for (nm in paste0(stem, c(".xml", ".png"))) {
+      src <- file.path(cache, nm)
+      if (file.exists(src)) file.copy(src, file.path(keep_kegg_copy, nm), overwrite = TRUE)
+    }
+  }
+  render <- file.path(tempdir(), paste0("rgse_pv_", stem, "_", Sys.getpid(), "_", as.integer(stats::runif(1, 0, 1e9))))
+  dir.create(render, recursive = TRUE, showWarnings = FALSE)
+  old <- getwd()
+  on.exit({ setwd(old); unlink(render, recursive = TRUE) }, add = TRUE)
+  setwd(render)
+  res <- try(suppressMessages(pathview::pathview(
+    gene.data = gene.data, pathway.id = pathway.id, species = species, kegg.dir = cache, ...)), silent = TRUE)
+  if (!is.null(out_file)) {
+    produced <- list.files(render, pattern = "pathview[.](png|pdf)$", full.names = TRUE)
+    if (length(produced) > 0) {
+      dir.create(dirname(out_file), recursive = TRUE, showWarnings = FALSE)
+      file.copy(produced[1], out_file, overwrite = TRUE)
+    }
+  }
+  !inherits(res, "try-error")
+}
 entrez_ids_keys <- select(eval(parse(text=orgDB)), keys=keys(eval(parse(text=orgDB)),keytype="ENTREZID"), columns=c("SYMBOL"), keytype="ENTREZID")
 entrez_ids_keys$Custom_ID <- paste(entrez_ids_keys$SYMBOL,entrez_ids_keys$ENTREZID,sep="_")
 
@@ -512,12 +594,11 @@ process_file <- function(file){
               })))
               for (f in paths_list){
                 tryCatch({
-                  suppressMessages(pathview(gene.data=kk@result,pathway.id=f,species=org,kegg.dir=paste0(getwd(),"/kegg_paths_snapshots")))
+                  safe_pathview(gene.data=kk@result,pathway.id=f,species=org,keep_kegg_copy=paste0(getwd(),"/kegg_paths_snapshots"))
                 }, error = function(e) {
                   writeLines(as.character(e), paste0(getwd(),"/kegg_paths_snapshots/err.txt"))
                 })
               }
-              invisible(file.remove(list.files(path=getwd(),pattern="*.pathview.png",full.names = T)))
 
       ###### 5. Reactome over-representation:      
           while(dev.cur() > 1) dev.off()
@@ -906,10 +987,8 @@ process_file <- function(file){
                       df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
                       write.table(df,file=paste0("KEGG_GSEA_",f,"_",i,"_fgsea.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                       for (k in gse_enrich@result$ID[gse_enrich@result$pvalue < 0.05]){
-                        suppressMessages(pathview(gene.data=b,
-                                                  pathway.id=k,species=org))
-                        invisible(file.remove(grep("pathview",list.files(path=getwd(),pattern=paste0(k,".*"),full.names = T),invert=T,val=T)))
-                        invisible(file.rename(grep("pathview",list.files(path=getwd(),pattern=paste0(k,".*"),full.names = T),val=T),paste0(getwd(),"/kegg_paths_snapshots/",k,"_","KEGG_GSEA_",f,"_",i,"_fgsea.png")))
+                        safe_pathview(gene.data=b,pathway.id=k,species=org,
+                                      out_file=paste0(getwd(),"/kegg_paths_snapshots/",k,"_","KEGG_GSEA_",f,"_",i,"_fgsea.png"))
                       }
                       if(cluster_enrich=="yes"){
                         p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
@@ -942,10 +1021,8 @@ process_file <- function(file){
                       df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
                       write.table(df,file=paste0("KEGG_DOSE_",f,"_",i,"_DOSE.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                       for (k in gse_enrich@result$ID[gse_enrich@result$pvalue < 0.05]){
-                        suppressMessages(pathview(gene.data=b,
-                                                  pathway.id=k,species=org))
-                        invisible(file.remove(grep("pathview",list.files(path=getwd(),pattern=paste0(k,".*"),full.names = T),invert=T,val=T)))
-                        invisible(file.rename(grep("pathview",list.files(path=getwd(),pattern=paste0(k,".*"),full.names = T),val=T),paste0(getwd(),"/kegg_paths_snapshots/",k,"_","KEGG_DOSE_",f,"_",i,"_DOSE.png")))
+                        safe_pathview(gene.data=b,pathway.id=k,species=org,
+                                      out_file=paste0(getwd(),"/kegg_paths_snapshots/",k,"_","KEGG_DOSE_",f,"_",i,"_DOSE.png"))
                       }
                       if(cluster_enrich=="yes"){
                         p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
@@ -1401,7 +1478,7 @@ process_file <- function(file){
           }
         }
     }
-    if(cores==1){cores_2=1} else {cores_2=6}
+    cores_2 <- max(1, as.integer(cores))
     mclapply(
       mc.cores = cores_2,
       X = grep("_backg",grep("readlist_",names(genes_of_interest),invert=T,val=T),invert=T,val=T),
@@ -1422,7 +1499,7 @@ print(paste0("Processing... Here all the pathways that may be of interest in KEG
 print(paste0("Processing... Remember that to visualize particular pathways of interest in Reactome, the function viewPathway() can be used, https://yulab-smu.top/biomedical-knowledge-mining-book/reactomepa.html#pathway-visualization"))
 print(paste0("Processing... Here all the pathways that may be of interest in Reactome (i..e pval < 0.05) are shown, but without coloring because it would change for each case... please redo if required adding the parameter 'foldChange=' in the function"))
 
-if(cores==1){cores_3=1} else {cores_3=round(as.numeric(cores)/6)}
+cores_3 <- max(1, round(as.numeric(cores)/6))
 mclapply(
     mc.cores = cores_3,
     X = files,

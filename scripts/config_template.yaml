@@ -61,6 +61,7 @@ qc_raw_reads: "yes"                    # QC on raw reads ('yes' or 'no')
 full_differential_analyses: "yes"      # Full differential analyses ('yes' or 'no')
 functional_enrichment_analyses: "yes"  # Functional enrichment ('yes' or 'no')
 clusterProfiler_full: "no"             # Additional clusterProfiler analyses ('yes' or 'no')
+clusterProfiler_cores: 3               # Gene lists enriched concurrently per comparison (default 3). Bounded by KEGG request rate, not CPU
 batch: "no"                            # Batch effect correction ('yes' or 'no')
 bed_mode: "no"                         # Convert to BED format for genome browsers ('yes' or 'no')
 deconvolution: "no"                    # Deconvolution method: 'no', 'CDSeq', or 'BisqueRNA'
@@ -74,6 +75,7 @@ tidy_report_files: "yes"               # Shrink sphinx_report/html by dropping u
 convert_tables_excel: "no"             # Convert tables to .xlsx ('yes' or 'no')
 time_course: "no"                      # Time-course analyses ('yes' or 'no')
 network_analyses: "no"                 # Network analyses: WGCNA + STRINGdb + BONOBO ('yes' or 'no')
+bonobo: "no"                           # Add BONOBO single-sample networks to the network analyses. Writes several GB per sample; needs network_analyses: "yes"
 wgcna_mode: "all"                      # WGCNA mode: 'all' (canonical, all expressed genes) or 'degs' (DEGs only, per comparison)
 auto_panther_log: "no"                 # Additional autoGO/Panther by log2Fc ('yes' or 'no')
 exploreDE_se: "no"                     # Generate SummarizedExperiment (.qs2) for the exploreLocalDE app ('yes' or 'no')

@@ -1964,6 +1964,8 @@ if run_step step6; then
 			array=("")
 		fi
 	fi
+	export RGSE_KEGG_CACHE="$output_folder/$name/.kegg_cache"
+	mkdir -p "$RGSE_KEGG_CACHE"
 	for index in "${!array[@]}"; do
 		if [ ! -d "$output_folder/$name/final_results_reanalysis$index/DGE/" ]; then
 			echo -e "\nWARNING: DGE directory not found at $output_folder/$name/final_results_reanalysis$index/DGE/. Skipping enrichment for index $index."
@@ -2024,13 +2026,13 @@ _log_step "Step_6_Enrichment" "start"
     				echo -e "\nPerforming functional enrichment analyses for DEGs. The results up to this point are ready to use (including DEGs and expression table including gene_ids). This step of funtional enrichment analyses may take long if many significant DEGs, comparisons, or analyses...\n"
 				export ANNOTATION_FILE="${array[index]}"
 				cd $output_folder/$name/final_results_reanalysis$index/DGE/
-				ls | egrep "^DGE_analysis_comp[0-9]+.txt$" | parallel --halt-on-error 2 --joblog R_clusterProfiler_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_clusterProfiler_analyses_parallel.R $PWD $organism "1" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution '^{}$' $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_{}_funct_enrichment.log"
+				ls | egrep "^DGE_analysis_comp[0-9]+.txt$" | parallel --halt-on-error 2 --joblog R_clusterProfiler_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_clusterProfiler_analyses_parallel.R $PWD $organism "$clusterProfiler_cores" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution '^{}$' $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_{}_funct_enrichment.log"
 				echo -e "\nPerforming autoGO and Panther execution... this may take long if many genes or comparisons...\n"
-				ls | egrep "^DGE_analysis_comp[0-9]+.txt$" | parallel --halt-on-error 2 --joblog R_autoGO_panther_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism "1" $databases_function {} $panther_method $auto_panther_log &> autoGO_panther_{}_funct_enrichment.log"
+				ls | egrep "^DGE_analysis_comp[0-9]+.txt$" | parallel --halt-on-error 2 --joblog R_autoGO_panther_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism "$clusterProfiler_cores" $databases_function {} $panther_method $auto_panther_log &> autoGO_panther_{}_funct_enrichment.log"
 				if [[ "$time_course" == "yes" ]]; then
 					cd $output_folder/$name/final_results_reanalysis$index/time_course_analyses
-					ls | egrep "^DGE_limma_timecourse.*.txt$" | parallel --halt-on-error 2 --joblog R_clusterProfiler_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_clusterProfiler_analyses_parallel.R $PWD $organism "1" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution '^{}$' $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_{}_funct_enrichment.log"
-					ls | egrep "^DGE_limma_timecourse.*.txt$" | parallel --halt-on-error 2 --joblog R_autoGO_panther_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism "1" $databases_function {} $panther_method $auto_panther_log &> autoGO_panther_{}_funct_enrichment.log"
+					ls | egrep "^DGE_limma_timecourse.*.txt$" | parallel --halt-on-error 2 --joblog R_clusterProfiler_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_clusterProfiler_analyses_parallel.R $PWD $organism "$clusterProfiler_cores" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution '^{}$' $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_{}_funct_enrichment.log"
+					ls | egrep "^DGE_limma_timecourse.*.txt$" | parallel --halt-on-error 2 --joblog R_autoGO_panther_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism "$clusterProfiler_cores" $databases_function {} $panther_method $auto_panther_log &> autoGO_panther_{}_funct_enrichment.log"
 				fi
 			else
 				echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
@@ -2110,14 +2112,14 @@ _log_step "Step_6_Enrichment" "start"
 			        if [ -f "$ff" ]; then
 			            echo "  Retrying clusterProfiler for $ff ..."
 			            rm -rf $(echo $ff | sed 's/.txt$//')_funct_enrich_clusterProfiler
-			            R_clusterProfiler_analyses_parallel.R $PWD $organism "1" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution "^${ff}$" $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_${ff}_funct_enrichment_retry.log
+			            R_clusterProfiler_analyses_parallel.R $PWD $organism "$clusterProfiler_cores" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution "^${ff}$" $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_${ff}_funct_enrichment_retry.log
 			        fi
 			    done
 			    failed_ago=$(grep -lE "$enrich_err_re" autoGO_panther_*_funct_enrichment.log 2>/dev/null | sed 's/autoGO_panther_//g;s/_funct_enrichment.log//g' | sort | uniq)
 			    for ff in $failed_ago; do
 			        if [ -f "$ff" ]; then
 			            echo "  Retrying autoGO+Panther for $ff ..."
-			            R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism "1" $databases_function $ff $panther_method $auto_panther_log &> autoGO_panther_${ff}_funct_enrichment_retry.log
+			            R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism "$clusterProfiler_cores" $databases_function $ff $panther_method $auto_panther_log &> autoGO_panther_${ff}_funct_enrichment_retry.log
 			        fi
 			    done
 

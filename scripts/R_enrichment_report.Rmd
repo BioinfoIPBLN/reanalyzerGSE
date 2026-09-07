@@ -153,9 +153,14 @@ make_table <- function(df, filename = NULL, max_rows = NULL) {
 
   if (!is.null(filename)) {
     csv_text <- paste(capture.output(write.csv(df, stdout(), row.names = FALSE)), collapse = "\n")
-    b64 <- xfun::base64_encode(charToRaw(csv_text))
-    cat(sprintf('<p><a href="data:text/csv;base64,%s" download="%s" class="btn btn-sm btn-outline-primary">\u2b07 Download CSV (%d rows)</a></p>\n\n',
-                b64, filename, nrow(df)))
+    if (nchar(csv_text, type = "bytes") > 64 * 1024^2) {
+      cat(sprintf('<p><em>Table too large to embed (%d rows, %.1f MB); read it from %s in the results folder.</em></p>\n\n',
+                  nrow(df), nchar(csv_text, type = "bytes") / 1024^2, filename))
+    } else {
+      b64 <- xfun::base64_encode(charToRaw(csv_text))
+      cat(sprintf('<p><a href="data:text/csv;base64,%s" download="%s" class="btn btn-sm btn-outline-primary">\u2b07 Download CSV (%d rows)</a></p>\n\n',
+                  b64, filename, nrow(df)))
+    }
   }
 }
 

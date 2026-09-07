@@ -824,7 +824,9 @@ for (genes_interest in list.files(pattern = pattern_search, path = path)){
 
 #### Computing BONOBO:
     tryCatch({
-		if (nzchar(Sys.which("netzoopy"))) {
+		if (!identical(tolower(Sys.getenv("RGSE_BONOBO", unset = "no")), "yes")) {
+			cat("BONOBO not requested (-bnb/-bonobo is not 'yes'). Skipping.\n")
+		} else if (nzchar(Sys.which("netzoopy"))) {
 			cat(paste0("Processing BONOBO of ",genes_interest,"...\n\n"))
 			setwd(path)
 			a <- get_expression()
