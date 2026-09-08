@@ -39,18 +39,7 @@
     if (is.null(db)) return(cached)
     cached <<- tryCatch({
       syms <- AnnotationDbi::keys(db, keytype = "SYMBOL")
-      lut <- stats::setNames(syms, tolower(syms))
-      if ("ALIAS" %in% AnnotationDbi::keytypes(db)) {
-        ali <- AnnotationDbi::keys(db, keytype = "ALIAS")
-        ali <- ali[!tolower(ali) %in% names(lut)]
-        if (length(ali) > 0) {
-          amap <- suppressWarnings(suppressMessages(AnnotationDbi::select(
-            db, keys = ali, columns = "SYMBOL", keytype = "ALIAS")))
-          amap <- amap[!is.na(amap$SYMBOL) & !duplicated(tolower(amap$ALIAS)), , drop = FALSE]
-          lut <- c(lut, stats::setNames(amap$SYMBOL, tolower(amap$ALIAS)))
-        }
-      }
-      list(official = syms, lut = lut[!duplicated(names(lut))])
+      list(official = syms, lut = stats::setNames(syms, tolower(syms)))
     }, error = function(e) NULL)
     cached
   }
@@ -66,6 +55,11 @@ canonicalise_gene_ids <- function(ids, fallback = NULL) {
   if (any(todo)) {
     hit <- ref$lut[tolower(ids[todo])]
     out[todo] <- ifelse(is.na(hit), fallback[todo], unname(hit))
+  }
+  changed <- !is.na(out) & !is.na(ids) & out != ids
+  if (any(changed)) {
+    collide <- changed & (out %in% out[duplicated(out)])
+    if (any(collide)) out[collide] <- ids[collide]
   }
   out
 }
