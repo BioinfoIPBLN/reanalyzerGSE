@@ -18,6 +18,7 @@ suppressMessages(library(rbioapi,quiet = T,warn.conflicts = F))
 script_dir <- dirname(sub("^--file=", "", commandArgs()[grep("--file=", commandArgs())]))
 ensembl_helper <- file.path(script_dir, "R_ensembl_to_symbol.R")
 if (file.exists(ensembl_helper)) source(ensembl_helper)
+source(file.path(script_dir, "R_gene_id_helpers.R"))
 
 org_panther <- if (grepl("Homo", organism, ignore.case = TRUE)) 9606 else if (grepl("Mus", organism, ignore.case = TRUE)) 10090 else if (grepl("Rattus", organism, ignore.case = TRUE)) 10116 else {
   tryCatch({
@@ -296,7 +297,10 @@ convert_ids <- function(ids,mode) {
     ids2 <- tolower(ids)
   } else if (mode=="first_upper_rest_lower") {
     ids2 <- stringr::str_to_title(ids)
+  } else {
+    ids2 <- ids
   }
+  if (exists("canonicalise_gene_ids")) return(canonicalise_gene_ids(ids))
   return(ids2)
 }
 
@@ -411,12 +415,19 @@ process_file <- function(file){
   
   # autoGO:
   Sys.sleep(runif(1, 0.5, 3.5))
-  tryCatch({
-    autoGO(read_gene_lists(gene_lists_path=path2,which_list="everything",from_autoGO=F,files_format=basename(file)),
-           databases_autoGO)
-  }, error = function(e) {
-          print("autoGO with errors"); print(e)
-  })
+  .ago_ok <- FALSE
+  for (.ago_try in 1:3) {
+    .ago_ok <- tryCatch({
+      autoGO(read_gene_lists(gene_lists_path=path2,which_list="everything",from_autoGO=F,files_format=basename(file)),
+             databases_autoGO)
+      TRUE
+    }, error = function(e) {
+      print(paste0("autoGO attempt ",.ago_try," failed for ",file2,": ",conditionMessage(e))); FALSE
+    })
+    if (isTRUE(.ago_ok)) break
+    Sys.sleep(10 * .ago_try)
+  }
+  if (!isTRUE(.ago_ok)) print(paste0("autoGO with errors after retries: ",file2))
   path3=paste0(path2,"/","enrichment_tables")
   if (dir.exists(path3) & length(list.files(path3)) > 0){
     setwd(path3)
@@ -446,9 +457,12 @@ process_file <- function(file){
 
   # Panther:
   print(paste0("Processing Panther for ",file2," and ",length(read.table(file,head=F)$V1)," genes..."))
+  tryCatch({
   setwd(path2)
   dataset <- read.table(paste0(file2,".txt"),head=F)$V1
-  expr_back <- convert_ids(read.table(key_files$old_file[grep(file2,key_files$new_files)])$V1,mode)
+  .bk_idx <- grep(file2,key_files$new_files)
+  if (length(.bk_idx) == 0) print(paste0("No registered background for ",file2,"; Panther reference-gene analyses skipped"))
+  expr_back <- if (length(.bk_idx) > 0 && file.exists(key_files$old_file[.bk_idx[1]])) convert_ids(read.table(key_files$old_file[.bk_idx[1]])$V1,mode) else character(0)
   if (length(dataset) < 10000){
     for(annot_panther in methods){
       annot_panther2 <- annot_panther
@@ -513,6 +527,9 @@ process_file <- function(file){
   } else {
     cat(file2, "... too many genes to apply PANTHER\n")
   } 
+  }, error = function(e) {
+    print(paste0("Panther stage failed for ",file2,": ",conditionMessage(e)))
+  })
   setwd(path)
   invisible(file.rename(path2,sub("_funct_enrichment/","_funct_enrichment_panther",path2)))
 }
