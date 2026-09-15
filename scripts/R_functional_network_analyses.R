@@ -309,7 +309,7 @@ run_gsea <- function(deg_df, label, gsea_base_dir, orgdb, kegg_org, species_labe
             suppressMessages(library(ReactomePA, quiet = T, warn.conflicts = F))
             ReactomePA::gsePathway(geneList = ranked, organism = species_label,
                                    minGSSize = 15, maxGSSize = 500,
-                                   pvalueCutoff = 1, eps = 0, verbose = FALSE)
+                                   pvalueCutoff = 1, verbose = FALSE)
         }, error = function(e) { cat(paste0("    Reactome error: ", e$message, "\n")); NULL })
         save_gsea_results(gsea_reactome, "Reactome", out_dir, metric_label)
         
@@ -765,16 +765,24 @@ run_stringdb <- function(deg_df, label, new_path, organism_taxid, orgdb = NULL) 
         # PPI enrichment test
         tryCatch({
             ppi_enrich <- string_db$get_ppi_enrichment(hits)
-            write.table(ppi_enrich, file = paste0(new_path, "STRINGdb_PPI_enrichment_test_", label, ".txt"),
+            ppi_df <- data.frame(metric = names(ppi_enrich),
+                                 value = vapply(ppi_enrich, function(x) paste(as.character(x), collapse = ";"), character(1)),
+                                 stringsAsFactors = FALSE)
+            write.table(ppi_df, file = paste0(new_path, "STRINGdb_PPI_enrichment_test_", label, ".txt"),
                         sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
-            cat(paste0("    PPI enrichment p-value: ", ppi_enrich$p_value, "\n"))
+            cat(paste0("    PPI enrichment: ", paste(ppi_df$metric, ppi_df$value, sep = "=", collapse = ", "), "\n"))
         }, error = function(e) {
             cat(paste0("    PPI enrichment test error: ", e$message, "\n"))
         })
 
         # Clusters
         tryCatch({
-            clustersList <- string_db$get_clusters(example1_mapped$STRING_id)
+            cluster_ids <- example1_mapped$STRING_id
+            if (length(cluster_ids) > 2000) {
+                cat(paste0("    Capping STRINGdb cluster analysis to top 2000 most significant genes (total mapped: ", length(cluster_ids), "; STRING API limit)\n"))
+                cluster_ids <- cluster_ids[1:2000]
+            }
+            clustersList <- string_db$get_clusters(cluster_ids)
             for(i in seq(1:length(clustersList))){
                 pdf(file = paste(new_path, "String_network_clusters_", label, "_", i, ".pdf", sep=""), paper="a4")
                 string_db$plot_network(clustersList[[i]])

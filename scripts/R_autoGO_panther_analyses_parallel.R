@@ -412,6 +412,10 @@ process_file <- function(file){
   path2=paste0(dirname(file),"/",file2,"_funct_enrichment/")
   dir.create(path2, showWarnings = FALSE);setwd(path2);invisible(file.copy(file,paste0(path2,basename(file))))
   print(paste0("Processing autoGO for ",file2," and ",length(read.table(file,head=F)$V1)," genes..."))
+  .bk_idx <- grep(file2,key_files$new_files)
+  if (length(.bk_idx) == 0) print(paste0("No registered background for ",file2,"; custom-background and Panther reference-gene analyses skipped"))
+  expr_back <- if (length(.bk_idx) > 0 && file.exists(key_files$old_file[.bk_idx[1]])) convert_ids(read.table(key_files$old_file[.bk_idx[1]])$V1,mode) else character(0)
+  expr_back <- unique(expr_back[nzchar(expr_back) & expr_back != "Gene_ID"])
   
   # autoGO:
   Sys.sleep(runif(1, 0.5, 3.5))
@@ -455,14 +459,41 @@ process_file <- function(file){
   }
   invisible(file.rename(path3,sub("/enrichment_tables/?$","_autoGO",path3)))
 
+  # autoGO with custom background:
+  if (length(expr_back) > 0) {
+    path_bg <- paste0(dirname(file),"/",file2,"_funct_enrichment_custom_background/")
+    dir.create(path_bg, showWarnings = FALSE, recursive = TRUE)
+    .bg_genes <- unique(read.table(file,head=F)$V1)
+    print(paste0("Processing autoGO with custom background for ",file2,": ",length(.bg_genes)," genes vs ",length(expr_back)," background genes..."))
+    for (.bg_try in 1:3) {
+      .bg_ok <- tryCatch({
+        .bg_res <- enrichR::enrichr(genes = .bg_genes, databases = databases_autoGO, background = expr_back, include_overlap = TRUE)
+        for (.nm in names(.bg_res)) {
+          .d <- .bg_res[[.nm]]
+          if (is.data.frame(.d) && nrow(.d) > 0 && "Term" %in% names(.d)) {
+            write.table(.d, file = paste0(path_bg,.nm,".tsv"), col.names = T, row.names = F, quote = F, sep="\t")
+            tryCatch({
+              barplotGO(enrich_tables = .d, title = c(.nm,paste0(file2," (custom background)")),
+                        outfolder = path_bg, outfile = paste0(file2,"_",.nm,"_barplot.png"), from_autoGO = F)
+              lolliGO(enrich_tables = .d, title = c(.nm,paste0(file2," (custom background)")),
+                      outfolder = path_bg, outfile = paste0(file2,"_",.nm,"_lolliplot.png"), from_autoGO = F)
+            }, error = function(e) print(paste0("custom-background plots failed for ",file2," ",.nm,": ",conditionMessage(e))))
+          }
+        }
+        TRUE
+      }, error = function(e) {
+        print(paste0("autoGO custom-background attempt ",.bg_try," failed for ",file2,": ",conditionMessage(e))); FALSE
+      })
+      if (isTRUE(.bg_ok)) break
+      Sys.sleep(10 * .bg_try)
+    }
+  }
+
   # Panther:
   print(paste0("Processing Panther for ",file2," and ",length(read.table(file,head=F)$V1)," genes..."))
   tryCatch({
   setwd(path2)
   dataset <- read.table(paste0(file2,".txt"),head=F)$V1
-  .bk_idx <- grep(file2,key_files$new_files)
-  if (length(.bk_idx) == 0) print(paste0("No registered background for ",file2,"; Panther reference-gene analyses skipped"))
-  expr_back <- if (length(.bk_idx) > 0 && file.exists(key_files$old_file[.bk_idx[1]])) convert_ids(read.table(key_files$old_file[.bk_idx[1]])$V1,mode) else character(0)
   if (length(dataset) < 10000){
     for(annot_panther in methods){
       annot_panther2 <- annot_panther

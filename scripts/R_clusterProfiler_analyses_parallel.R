@@ -99,6 +99,47 @@ for (.kt in c("KEGG", "MKEGG")) try(suppressMessages(clusterProfiler:::prepare_K
   ready()
 }
 
+.rgse_go_cache_dir <- local({
+  d <- NULL
+  function() {
+    if (!is.null(d)) return(d)
+    base <- Sys.getenv("RGSE_GOXPLORE_CACHE", unset = "")
+    if (!nzchar(base)) {
+      k <- Sys.getenv("RGSE_KEGG_CACHE", unset = "")
+      base <- if (nzchar(k)) file.path(dirname(k), ".goxplore_cache") else file.path(tempdir(), "rgse_goxplore_cache")
+    }
+    dir.create(base, recursive = TRUE, showWarnings = FALSE)
+    d <<- base
+    d
+  }
+})
+
+.rgse_gene2go <- function(genes, organism, domain) {
+  genes <- sort(unique(as.character(genes[!is.na(genes)])))
+  if (length(genes) == 0) stop("no genes supplied for GO level mapping")
+  f <- file.path(.rgse_go_cache_dir(),
+                 paste0("gene2go_", gsub("[^A-Za-z0-9]+", "_", organism), "_", domain, "_",
+                        digest::digest(genes, algo = "md5"), ".rds"))
+  if (file.exists(f)) {
+    v <- tryCatch(readRDS(f), error = function(e) NULL)
+    if (!is.null(v) && NROW(v) > 0) return(v)
+  }
+  v <- tryCatch(GOxploreR::Gene2GOTermAndLevel(genes = genes, organism = organism, domain = domain),
+                error = function(e) NULL)
+  if (is.null(v) || NROW(v) == 0) {
+    for (attempt in 1:3) {
+      v <- tryCatch(GOxploreR::Gene2GOTermAndLevel_ON(genes = genes, organism = organism, domain = domain),
+                    error = function(e) NULL)
+      if (!is.null(v) && NROW(v) > 0) break
+      Sys.sleep(10 * attempt)
+    }
+  }
+  if (is.null(v) || NROW(v) == 0) stop("Gene2GOTermAndLevel failed offline and online for domain ", domain)
+  tmp <- paste0(f, ".tmp", Sys.getpid())
+  tryCatch({ saveRDS(v, tmp); file.rename(tmp, f) }, error = function(e) unlink(tmp))
+  v
+}
+
 safe_pathview <- function(gene.data, pathway.id, species, out_file = NULL, keep_kegg_copy = NULL, ...) {
   cache <- .rgse_kegg_cache()
   if (!isTRUE(.rgse_kegg_fetch(pathway.id, species, cache))) return(FALSE)
@@ -358,7 +399,7 @@ process_file <- function(file){
         }
         tryCatch({
           b <- c(); Sys.sleep(sample(1:5, size = 1))
-          b <- GOxploreR::Gene2GOTermAndLevel_ON(genes = entrez_ids_keys$ENTREZID[entrez_ids_keys$SYMBOL %in% convert_ids(genes_of_interest[[geneset]],mode)], organism = organism_cp, domain = "BP")
+          b <- .rgse_gene2go(genes = entrez_ids_keys$ENTREZID[entrez_ids_keys$SYMBOL %in% convert_ids(genes_of_interest[[geneset]],mode)], organism = organism_cp, domain = "BP")
           b$GO_Description <- Term(b$"GO ID"); b$Gene_ID <- sapply(b$"Entrezgene ID",function(x){paste(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x],collapse=",")})
           # Assuming your data is in a data frame named 'df'
           d <- do.call(rbind, lapply(split(b, b$"GO ID"), function(group) {data.frame(GO_ID = unique(group$"GO ID"),GO_Description = unique(group$GO_Description),
@@ -369,7 +410,7 @@ process_file <- function(file){
         })
         tryCatch({
           b <- c(); Sys.sleep(sample(1:5, size = 1))
-          b <- GOxploreR::Gene2GOTermAndLevel_ON(genes = entrez_ids_keys$ENTREZID[entrez_ids_keys$SYMBOL %in% convert_ids(genes_of_interest[[geneset]],mode)], organism = organism_cp, domain = "MF")
+          b <- .rgse_gene2go(genes = entrez_ids_keys$ENTREZID[entrez_ids_keys$SYMBOL %in% convert_ids(genes_of_interest[[geneset]],mode)], organism = organism_cp, domain = "MF")
           b$GO_Description <- Term(b$"GO ID"); b$Gene_ID <- sapply(b$"Entrezgene ID",function(x){paste(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x],collapse=",")})
           # Assuming your data is in a data frame named 'df'
           d <- do.call(rbind, lapply(split(b, b$"GO ID"), function(group) {data.frame(GO_ID = unique(group$"GO ID"),GO_Description = unique(group$GO_Description),
@@ -380,7 +421,7 @@ process_file <- function(file){
         })
         tryCatch({
           b <- c(); Sys.sleep(sample(1:5, size = 1))
-          b <- GOxploreR::Gene2GOTermAndLevel_ON(genes = entrez_ids_keys$ENTREZID[entrez_ids_keys$SYMBOL %in% convert_ids(genes_of_interest[[geneset]],mode)], organism = organism_cp, domain = "CC")
+          b <- .rgse_gene2go(genes = entrez_ids_keys$ENTREZID[entrez_ids_keys$SYMBOL %in% convert_ids(genes_of_interest[[geneset]],mode)], organism = organism_cp, domain = "CC")
           b$GO_Description <- Term(b$"GO ID"); b$Gene_ID <- sapply(b$"Entrezgene ID",function(x){paste(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x],collapse=",")})
           # Assuming your data is in a data frame named 'df'
           d <- do.call(rbind, lapply(split(b, b$"GO ID"), function(group) {data.frame(GO_ID = unique(group$"GO ID"),GO_Description = unique(group$GO_Description),
@@ -416,10 +457,10 @@ process_file <- function(file){
                   ego_df$summary_NEG <- unlist(lapply(strsplit(ego_df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
                   write.table(ego_df,file=paste0("GO_overrepresentation_test_",i,"_",geneset,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
                   if(cluster_enrich=="yes"){
-                    p <- enrichmentNetwork(ego@result, repelLabels = TRUE, drawEllipses = TRUE)
+                    clusters <- findPathClusters(ego@result)
+                    p <- plotPathClusters(enrichment = ego@result, sim = clusters$similarity, clusters = clusters$clusters, repelLabels = TRUE, drawEllipses = TRUE)
                     ggsave(p, filename = paste0("GO_overrepresentation_test_",i,"_",geneset,"_aPEAR.pdf"),width=30, height=30)
                     suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_overrepresentation_test_",i,"_",geneset,"_aPEAR.html"),selfcontained = TRUE))
-                    clusters <- findPathClusters(ego@result)
                     write.table(clusters$clusters,file=paste0("GO_overrepresentation_test_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                     write.table(clusters$similarity,file=paste0("GO_overrepresentation_test_",i,"_",geneset,"_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                   }
@@ -456,10 +497,10 @@ process_file <- function(file){
                   suppressMessages(ggsave(upsetplot(ego), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_BP_",i,"_",geneset,"_upsetplot.pdf"),width=30, height=30))
                   suppressMessages(ggsave(pmcplot(ego$Description[1:10], 2010:paste0("20",unlist(lapply(strsplit(date(),"20"),function(x){x[2]})))), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_BP_",i,"_",geneset,"_pmcplot.pdf"),width=30, height=30))
                   if(cluster_enrich=="yes"){          
-                    p <- enrichmentNetwork(ego@result, repelLabels = TRUE, drawEllipses = TRUE)
+                    clusters <- findPathClusters(ego@result)
+                    p <- plotPathClusters(enrichment = ego@result, sim = clusters$similarity, clusters = clusters$clusters, repelLabels = TRUE, drawEllipses = TRUE)
                     ggsave(p, filename = paste0("GO_overrepresentation_test_BP_",i,"_",geneset,"_aPEAR.pdf"),width=30, height=30)
                     suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_overrepresentation_test_BP_",i,"_",geneset,"_aPEAR.html"),selfcontained = TRUE))
-                    clusters <- findPathClusters(ego@result)
                     write.table(clusters$clusters,file=paste0("GO_overrepresentation_test_BP_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                     write.table(clusters$similarity,file=paste0("GO_overrepresentation_test_BP_",i,"_",geneset,"_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")                  
                   }
@@ -497,10 +538,10 @@ process_file <- function(file){
                   suppressMessages(ggsave(upsetplot(ego), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_MF_",i,"_",geneset,"_upsetplot.pdf"),width=30, height=30))
                   suppressMessages(ggsave(pmcplot(ego$Description[1:10], 2010:paste0("20",unlist(lapply(strsplit(date(),"20"),function(x){x[2]})))), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_MF_",i,"_",geneset,"_pmcplot.pdf"),width=30, height=30))
                   if(cluster_enrich=="yes"){
-                    p <- enrichmentNetwork(ego@result, repelLabels = TRUE, drawEllipses = TRUE)
+                    clusters <- findPathClusters(ego@result)
+                    p <- plotPathClusters(enrichment = ego@result, sim = clusters$similarity, clusters = clusters$clusters, repelLabels = TRUE, drawEllipses = TRUE)
                     ggsave(p, filename = paste0("GO_overrepresentation_test_MF_",i,"_",geneset,"_aPEAR.pdf"),width=30, height=30)
                     suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_overrepresentation_test_MF_",i,"_",geneset,"_aPEAR.html"),selfcontained = TRUE))
-                    clusters <- findPathClusters(ego@result)
                     write.table(clusters$clusters,file=paste0("GO_overrepresentation_test_MF_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                     write.table(clusters$similarity,file=paste0("GO_overrepresentation_test_MF_",i,"_",geneset,"_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")                  
                   }
@@ -537,10 +578,10 @@ process_file <- function(file){
                   suppressMessages(ggsave(upsetplot(ego), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_CC_",i,"_",geneset,"_upsetplot.pdf"),width=30, height=30))
                   suppressMessages(ggsave(pmcplot(ego$Description[1:10], 2010:paste0("20",unlist(lapply(strsplit(date(),"20"),function(x){x[2]})))), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_CC_",i,"_",geneset,"_pmcplot.pdf"),width=30, height=30))
                   if(cluster_enrich=="yes"){
-                    p <- enrichmentNetwork(ego@result, repelLabels = TRUE, drawEllipses = TRUE)
+                    clusters <- findPathClusters(ego@result)
+                    p <- plotPathClusters(enrichment = ego@result, sim = clusters$similarity, clusters = clusters$clusters, repelLabels = TRUE, drawEllipses = TRUE)
                     ggsave(p, filename = paste0("GO_overrepresentation_test_CC_",i,"_",geneset,"_aPEAR.pdf"),width=30, height=30)
                     suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_overrepresentation_test_CC_",i,"_",geneset,"_aPEAR.html"),selfcontained = TRUE))
-                    clusters <- findPathClusters(ego@result)
                     write.table(clusters$clusters,file=paste0("GO_overrepresentation_test_CC_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                     write.table(clusters$similarity,file=paste0("GO_overrepresentation_test_CC_",i,"_",geneset,"_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")                  
                   }
@@ -577,10 +618,10 @@ process_file <- function(file){
               kk_write$summary_down <- unlist(lapply(strsplit(kk_write$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
               write.table(kk_write,file=paste0("KEGG_enrich_",i,"_",geneset,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
               if(cluster_enrich=="yes"){
-                p <- enrichmentNetwork(kk_write, repelLabels = TRUE, drawEllipses = TRUE)
+                clusters <- findPathClusters(kk_write)
+                p <- plotPathClusters(enrichment = kk_write, sim = clusters$similarity, clusters = clusters$clusters, repelLabels = TRUE, drawEllipses = TRUE)
                 ggsave(p, filename = paste0("KEGG_enrich_",i,"_",geneset,"_aPEAR.pdf"),width=30, height=30)
                 suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("KEGG_enrich_",i,"_",geneset,"_aPEAR.html"),selfcontained = TRUE))
-                clusters <- findPathClusters(kk_write)
                 write.table(clusters$clusters,file=paste0("KEGG_enrich_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                 write.table(clusters$similarity,file=paste0("KEGG_enrich_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
               }
@@ -596,13 +637,14 @@ process_file <- function(file){
                 data <- read.delim(x)
                 data_filtered <- data$ID[data$pvalue < 0.05]
               })))
-              for (f in paths_list){
+              .kegg_wd <- getwd()
+              invisible(parallel::mclapply(paths_list, mc.cores = .rgse_inner_cores, FUN = function(f){
                 tryCatch({
-                  safe_pathview(gene.data=kk@result,pathway.id=f,species=org,keep_kegg_copy=paste0(getwd(),"/kegg_paths_snapshots"))
+                  safe_pathview(gene.data=kk@result,pathway.id=f,species=org,keep_kegg_copy=paste0(.kegg_wd,"/kegg_paths_snapshots"))
                 }, error = function(e) {
-                  writeLines(as.character(e), paste0(getwd(),"/kegg_paths_snapshots/err.txt"))
+                  writeLines(as.character(e), paste0(.kegg_wd,"/kegg_paths_snapshots/err.txt"))
                 })
-              }
+              }))
 
       ###### 5. Reactome over-representation:      
           while(dev.cur() > 1) dev.off()
@@ -628,10 +670,10 @@ process_file <- function(file){
             df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
             write.table(df,file=paste0("REACT_",i,"_",geneset,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
             if(cluster_enrich=="yes"){
-              p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+              clusters <- findPathClusters(df)
+              p <- plotPathClusters(enrichment = df, sim = clusters$similarity, clusters = clusters$clusters, repelLabels = TRUE, drawEllipses = TRUE)
               ggsave(p, filename = paste0("REACT_",i,"_",geneset,"_aPEAR.pdf"),width=30, height=30)
               suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("REACT_",i,"_",geneset,"_aPEAR.html"),selfcontained = TRUE))
-              clusters <- findPathClusters(df)
               write.table(clusters$clusters,file=paste0("REACT_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
               write.table(clusters$similarity,file=paste0("REACT_",i,"_",geneset,"_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
             }
@@ -647,13 +689,14 @@ process_file <- function(file){
               data <- read.delim(x)
               data_filtered <- data$Description[data$pvalue < 0.05]
           })))
-          for (f in paths_list){
+          .react_wd <- getwd()
+          invisible(parallel::mclapply(paths_list, mc.cores = .rgse_inner_cores, FUN = function(f){
             tryCatch({
-              suppressMessages(ggsave(viewPathway(f,readable = TRUE,organism = organism_cp_react),filename = paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome.pdf"),width=30, height=30, create.dir=T))
+              suppressMessages(ggsave(viewPathway(f,readable = TRUE,organism = organism_cp_react),filename = paste0(.react_wd,"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome.pdf"),width=30, height=30, create.dir=T))
             }, error = function(e) {
-              writeLines(as.character(e), paste0(getwd(),"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.txt"))
+              writeLines(as.character(e), paste0(.react_wd,"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.txt"))
             })
-          }        
+          }))        
 
     if(all_analyses=="yes"){
         print(paste0("Processing ",file,"_",name_internal,"... Gene Set Enrichment Analysis of Gene Ontology"))
@@ -684,10 +727,10 @@ process_file <- function(file){
                         df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
                         write.table(df,file=paste0("GO_GSEA_",f,"_",i,"_fgsea.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                         if(cluster_enrich=="yes"){
-                          p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+                          clusters <- findPathClusters(df)
+                          p <- plotPathClusters(enrichment = df, sim = clusters$similarity, clusters = clusters$clusters, repelLabels = TRUE, drawEllipses = TRUE)
                           ggsave(p, filename = paste0("GO_GSEA_",f,"_",i,"_fgsea_aPEAR.pdf"),width=30, height=30)
                           suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_GSEA_",f,"_",i,"_fgsea_aPEAR.html"),selfcontained = TRUE))
-                          clusters <- findPathClusters(df)
                           write.table(clusters$clusters,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                           write.table(clusters$similarity,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                         }
@@ -723,10 +766,10 @@ process_file <- function(file){
                         suppressMessages(ggsave(pmcplot(gse_enrich@result$Description[1:10], 2010:paste0("20",unlist(lapply(strsplit(date(),"20"),function(x){x[2]})))), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_BP_pmcplot.pdf"),width=30, height=30))
                         suppressMessages(ggsave(ridgeplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_BP_ridgeplot.pdf"),width=30, height=30))
                         if(cluster_enrich=="yes"){
-                          p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+                          clusters <- findPathClusters(df)
+                          p <- plotPathClusters(enrichment = df, sim = clusters$similarity, clusters = clusters$clusters, repelLabels = TRUE, drawEllipses = TRUE)
                           ggsave(p, filename = paste0("GO_GSEA_",f,"_",i,"_fgsea_BP_aPEAR.pdf"),width=30, height=30)
                           suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_GSEA_",f,"_",i,"_fgsea_BP_aPEAR.html"),selfcontained = TRUE))
-                          clusters <- findPathClusters(df)
                           write.table(clusters$clusters,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_BP_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                           write.table(clusters$similarity,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_BP_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                         }
@@ -762,10 +805,10 @@ process_file <- function(file){
                         suppressMessages(ggsave(pmcplot(gse_enrich@result$Description[1:10], 2010:paste0("20",unlist(lapply(strsplit(date(),"20"),function(x){x[2]})))), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_MF_pmcplot.pdf"),width=30, height=30))
                         suppressMessages(ggsave(ridgeplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_MF_ridgeplot.pdf"),width=30, height=30))
                         if(cluster_enrich=="yes"){
-                          p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+                          clusters <- findPathClusters(df)
+                          p <- plotPathClusters(enrichment = df, sim = clusters$similarity, clusters = clusters$clusters, repelLabels = TRUE, drawEllipses = TRUE)
                           ggsave(p, filename = paste0("GO_GSEA_",f,"_",i,"_fgsea_MF_aPEAR.pdf"),width=30, height=30)
                           suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_GSEA_",f,"_",i,"_fgsea_MF_aPEAR.html"),selfcontained = TRUE))
-                          clusters <- findPathClusters(df)
                           write.table(clusters$clusters,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_MF_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                           write.table(clusters$similarity,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_MF_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                         }
@@ -801,10 +844,10 @@ process_file <- function(file){
                         suppressMessages(ggsave(pmcplot(gse_enrich@result$Description[1:10], 2010:paste0("20",unlist(lapply(strsplit(date(),"20"),function(x){x[2]})))), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_CC_pmcplot.pdf"),width=30, height=30))
                         suppressMessages(ggsave(ridgeplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_CC_ridgeplot.pdf"),width=30, height=30))
                         if(cluster_enrich=="yes"){
-                          p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+                          clusters <- findPathClusters(df)
+                          p <- plotPathClusters(enrichment = df, sim = clusters$similarity, clusters = clusters$clusters, repelLabels = TRUE, drawEllipses = TRUE)
                           ggsave(p, filename = paste0("GO_GSEA_",f,"_",i,"_fgsea_CC_aPEAR.pdf"),width=30, height=30)
                           suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_GSEA_",f,"_",i,"_fgsea_CC_aPEAR.html"),selfcontained = TRUE))
-                          clusters <- findPathClusters(df)
                           write.table(clusters$clusters,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_CC_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                           write.table(clusters$similarity,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_CC_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                         }
@@ -832,10 +875,10 @@ process_file <- function(file){
                         df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
                         write.table(df,file=paste0("GO_GSEA_",f,"_",i,"_DOSE.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                         if(cluster_enrich=="yes"){
-                          p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+                          clusters <- findPathClusters(df)
+                          p <- plotPathClusters(enrichment = df, sim = clusters$similarity, clusters = clusters$clusters, repelLabels = TRUE, drawEllipses = TRUE)
                           ggsave(p, filename = paste0("GO_GSEA_",f,"_",i,"_DOSE_aPEAR.pdf"),width=30, height=30)
                           suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_GSEA_",f,"_",i,"_DOSE_aPEAR.html"),selfcontained = TRUE))
-                          clusters <- findPathClusters(df)
                           write.table(clusters$clusters,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                           write.table(clusters$similarity,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                         }
@@ -872,10 +915,10 @@ process_file <- function(file){
                         suppressMessages(ggsave(pmcplot(gse_enrich@result$Description[1:10], 2010:paste0("20",unlist(lapply(strsplit(date(),"20"),function(x){x[2]})))), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_BP_pmcplot.pdf"),width=30, height=30))
                         suppressMessages(ggsave(ridgeplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_BP_ridgeplot.pdf"),width=30, height=30))
                         if(cluster_enrich=="yes"){
-                          p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+                          clusters <- findPathClusters(df)
+                          p <- plotPathClusters(enrichment = df, sim = clusters$similarity, clusters = clusters$clusters, repelLabels = TRUE, drawEllipses = TRUE)
                           ggsave(p, filename = paste0("GO_GSEA_",f,"_",i,"_DOSE_BP_aPEAR.pdf"),width=30, height=30)
                           suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_GSEA_",f,"_",i,"_DOSE_BP_aPEAR.html"),selfcontained = TRUE))
-                          clusters <- findPathClusters(df)
                           write.table(clusters$clusters,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_BP_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                           write.table(clusters$similarity,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_BP_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                         }
@@ -912,10 +955,10 @@ process_file <- function(file){
                         suppressMessages(ggsave(pmcplot(gse_enrich@result$Description[1:10], 2010:paste0("20",unlist(lapply(strsplit(date(),"20"),function(x){x[2]})))), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_MF_pmcplot.pdf"),width=30, height=30))
                         suppressMessages(ggsave(ridgeplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_MF_ridgeplot.pdf"),width=30, height=30))
                         if(cluster_enrich=="yes"){
-                          p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+                          clusters <- findPathClusters(df)
+                          p <- plotPathClusters(enrichment = df, sim = clusters$similarity, clusters = clusters$clusters, repelLabels = TRUE, drawEllipses = TRUE)
                           ggsave(p, filename = paste0("GO_GSEA_",f,"_",i,"_DOSE_MF_aPEAR.pdf"),width=30, height=30)
                           suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_GSEA_",f,"_",i,"_DOSE_MF_aPEAR.html"),selfcontained = TRUE))
-                          clusters <- findPathClusters(df)
                           write.table(clusters$clusters,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_MF_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                           write.table(clusters$similarity,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_MF_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                         }
@@ -952,10 +995,10 @@ process_file <- function(file){
                         suppressMessages(ggsave(pmcplot(gse_enrich@result$Description[1:10], 2010:paste0("20",unlist(lapply(strsplit(date(),"20"),function(x){x[2]})))), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_CC_pmcplot.pdf"),width=30, height=30))
                         suppressMessages(ggsave(ridgeplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_CC_ridgeplot.pdf"),width=30, height=30))
                         if(cluster_enrich=="yes"){
-                          p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+                          clusters <- findPathClusters(df)
+                          p <- plotPathClusters(enrichment = df, sim = clusters$similarity, clusters = clusters$clusters, repelLabels = TRUE, drawEllipses = TRUE)
                           ggsave(p, filename = paste0("GO_GSEA_",f,"_",i,"_DOSE_CC_aPEAR.pdf"),width=30, height=30)
                           suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("GO_GSEA_",f,"_",i,"_DOSE_CC_aPEAR.html"),selfcontained = TRUE))
-                          clusters <- findPathClusters(df)
                           write.table(clusters$clusters,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_CC_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                           write.table(clusters$similarity,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_CC_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                         }
@@ -995,10 +1038,10 @@ process_file <- function(file){
                                       out_file=paste0(getwd(),"/kegg_paths_snapshots/",k,"_","KEGG_GSEA_",f,"_",i,"_fgsea.png"))
                       }
                       if(cluster_enrich=="yes"){
-                        p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+                        clusters <- findPathClusters(df)
+                        p <- plotPathClusters(enrichment = df, sim = clusters$similarity, clusters = clusters$clusters, repelLabels = TRUE, drawEllipses = TRUE)
                         ggsave(p, filename = paste0("KEGG_GSEA_",f,"_",i,"_fgsea_aPEAR.pdf"),width=30, height=30)
                         suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("KEGG_GSEA_",f,"_",i,"_fgsea_aPEAR.html"),selfcontained = TRUE))
-                        clusters <- findPathClusters(df)
                         write.table(clusters$clusters,file=paste0("KEGG_GSEA_",f,"_",i,"_fgsea_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                         write.table(clusters$similarity,file=paste0("KEGG_GSEA_",f,"_",i,"_fgsea_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                       }
@@ -1029,10 +1072,10 @@ process_file <- function(file){
                                       out_file=paste0(getwd(),"/kegg_paths_snapshots/",k,"_","KEGG_DOSE_",f,"_",i,"_DOSE.png"))
                       }
                       if(cluster_enrich=="yes"){
-                        p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+                        clusters <- findPathClusters(df)
+                        p <- plotPathClusters(enrichment = df, sim = clusters$similarity, clusters = clusters$clusters, repelLabels = TRUE, drawEllipses = TRUE)
                         ggsave(p, filename = paste0("KEGG_GSEA_",f,"_",i,"_DOSE_aPEAR.pdf"),width=30, height=30)
                         suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("KEGG_GSEA_",f,"_",i,"_DOSE_aPEAR.html"),selfcontained = TRUE))
-                        clusters <- findPathClusters(df)
                         write.table(clusters$clusters,file=paste0("KEGG_GSEA_",f,"_",i,"_DOSE_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                         write.table(clusters$similarity,file=paste0("KEGG_GSEA_",f,"_",i,"_DOSE_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                       }
@@ -1064,10 +1107,10 @@ process_file <- function(file){
                 kk_write$summary_down <- unlist(lapply(strsplit(kk_write$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
                 write.table(kk_write,file=paste0("MKEGG_",i,"_",geneset,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
                 if(cluster_enrich=="yes"){
-                  p <- enrichmentNetwork(kk_write, repelLabels = TRUE, drawEllipses = TRUE)
+                  clusters <- findPathClusters(kk_write)
+                  p <- plotPathClusters(enrichment = kk_write, sim = clusters$similarity, clusters = clusters$clusters, repelLabels = TRUE, drawEllipses = TRUE)
                   ggsave(p, filename = paste0("MKEGG_",i,"_",geneset,"_aPEAR.pdf"),width=30, height=30)
                   suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("MKEGG_",i,"_",geneset,"_aPEAR.html"),selfcontained = TRUE))
-                  clusters <- findPathClusters(kk_write)
                   write.table(clusters$clusters,file=paste0("MKEGG_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                   write.table(clusters$similarity,file=paste0("MKEGG_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                 }
@@ -1103,10 +1146,10 @@ process_file <- function(file){
                       df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
                       write.table(df,file=paste0("MKEGG_GSEA_",f,"_",i,"_fgsea.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                       if(cluster_enrich=="yes"){
-                        p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+                        clusters <- findPathClusters(df)
+                        p <- plotPathClusters(enrichment = df, sim = clusters$similarity, clusters = clusters$clusters, repelLabels = TRUE, drawEllipses = TRUE)
                         ggsave(p, filename = paste0("MKEGG_GSEA_",f,"_",i,"_fgsea_aPEAR.pdf"),width=30, height=30)
                         suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("MKEGG_GSEA_",f,"_",i,"_fgsea_aPEAR.html"),selfcontained = TRUE))
-                        clusters <- findPathClusters(df)
                         write.table(clusters$clusters,file=paste0("MKEGG_GSEA_",f,"_",i,"_fgsea_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                         write.table(clusters$similarity,file=paste0("MKEGG_GSEA_",f,"_",i,"_fgsea_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                       }
@@ -1134,10 +1177,10 @@ process_file <- function(file){
                       df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
                       write.table(df,file=paste0("MKEGG_GSEA_",f,"_",i,"_DOSE.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                       if(cluster_enrich=="yes"){
-                        p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+                        clusters <- findPathClusters(df)
+                        p <- plotPathClusters(enrichment = df, sim = clusters$similarity, clusters = clusters$clusters, repelLabels = TRUE, drawEllipses = TRUE)
                         ggsave(p, filename = paste0("MKEGG_GSEA_",f,"_",i,"_DOSE_aPEAR.pdf"),width=30, height=30)
                         suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("MKEGG_GSEA_",f,"_",i,"_DOSE_aPEAR.html"),selfcontained = TRUE))
-                        clusters <- findPathClusters(df)
                         write.table(clusters$clusters,file=paste0("MKEGG_GSEA_",f,"_",i,"_DOSE_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                         write.table(clusters$similarity,file=paste0("MKEGG_GSEA_",f,"_",i,"_DOSE_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                       }
@@ -1170,10 +1213,10 @@ process_file <- function(file){
             df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
             write.table(df,file=paste0("WP_",i,"_",geneset,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
             if(cluster_enrich=="yes"){
-              p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+              clusters <- findPathClusters(df)
+              p <- plotPathClusters(enrichment = df, sim = clusters$similarity, clusters = clusters$clusters, repelLabels = TRUE, drawEllipses = TRUE)
               ggsave(p, filename = paste0("WP_",i,"_",geneset,"_aPEAR.pdf"),width=30, height=30)
               suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("WP_",i,"_",geneset,"_aPEAR.html"),selfcontained = TRUE))
-              clusters <- findPathClusters(df)
               write.table(clusters$clusters,file=paste0("WP_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
               write.table(clusters$similarity,file=paste0("WP_",i,"_",geneset,"_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
             }
@@ -1209,10 +1252,10 @@ process_file <- function(file){
                     df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
                     write.table(df,file=paste0("WP_GSEA_",f,"_",i,"_fgsea.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                     if(cluster_enrich=="yes"){
-                      p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+                      clusters <- findPathClusters(df)
+                      p <- plotPathClusters(enrichment = df, sim = clusters$similarity, clusters = clusters$clusters, repelLabels = TRUE, drawEllipses = TRUE)
                       ggsave(p, filename = paste0("WP_GSEA_",i,"_",geneset,"_fgsea_aPEAR.pdf"),width=30, height=30)
                       suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("WP_GSEA",i,"_",geneset,"_fgsea_aPEAR.html"),selfcontained = TRUE))
-                      clusters <- findPathClusters(df)
                       write.table(clusters$clusters,file=paste0("WP_GSEA_",i,"_",geneset,"_fgsea_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                       write.table(clusters$similarity,file=paste0("WP_GSEA_",i,"_",geneset,"_fgsea_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                     }
@@ -1240,10 +1283,10 @@ process_file <- function(file){
                     df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
                     write.table(df,file=paste0("WP_GSEA_",f,"_",i,"_DOSE.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                     if(cluster_enrich=="yes"){
-                      p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+                      clusters <- findPathClusters(df)
+                      p <- plotPathClusters(enrichment = df, sim = clusters$similarity, clusters = clusters$clusters, repelLabels = TRUE, drawEllipses = TRUE)
                       ggsave(p, filename = paste0("WP_GSEA_",i,"_",geneset,"_DOSE_aPEAR.pdf"),width=30, height=30)
                       suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("WP_GSEA",i,"_",geneset,"_DOSE_aPEAR.html"),selfcontained = TRUE))
-                      clusters <- findPathClusters(df)
                       write.table(clusters$clusters,file=paste0("WP_GSEA_",i,"_",geneset,"_DOSE_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                       write.table(clusters$similarity,file=paste0("WP_GSEA_",i,"_",geneset,"_DOSE_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                     }
@@ -1279,10 +1322,10 @@ process_file <- function(file){
                     df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
                     write.table(df,file=paste0("REACT_GSEA_",f,"_",i,"_fgsea.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                     if(cluster_enrich=="yes"){
-                      p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+                      clusters <- findPathClusters(df)
+                      p <- plotPathClusters(enrichment = df, sim = clusters$similarity, clusters = clusters$clusters, repelLabels = TRUE, drawEllipses = TRUE)
                       ggsave(p, filename = paste0("REACT_GSEA_",i,"_",geneset,"_fgsea_aPEAR.pdf"),width=30, height=30)
                       suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("REACT_GSEA",i,"_",geneset,"_fgsea_aPEAR.html"),selfcontained = TRUE))
-                      clusters <- findPathClusters(df)
                       write.table(clusters$clusters,file=paste0("REACT_GSEA_",i,"_",geneset,"_fgsea_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                       write.table(clusters$similarity,file=paste0("REACT_GSEA_",i,"_",geneset,"_fgsea_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                     }
@@ -1310,10 +1353,10 @@ process_file <- function(file){
                     df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
                     write.table(df,file=paste0("REACT_GSEA_",f,"_",i,"_DOSE.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                     if(cluster_enrich=="yes"){
-                      p <- enrichmentNetwork(df, repelLabels = TRUE, drawEllipses = TRUE)
+                      clusters <- findPathClusters(df)
+                      p <- plotPathClusters(enrichment = df, sim = clusters$similarity, clusters = clusters$clusters, repelLabels = TRUE, drawEllipses = TRUE)
                       ggsave(p, filename = paste0("REACT_GSEA_",i,"_",geneset,"_DOSE_aPEAR.pdf"),width=30, height=30)
                       suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("REACT_GSEA",i,"_",geneset,"_DOSE_aPEAR.html"),selfcontained = TRUE))
-                      clusters <- findPathClusters(df)
                       write.table(clusters$clusters,file=paste0("REACT_GSEA_",i,"_",geneset,"_DOSE_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                       write.table(clusters$similarity,file=paste0("REACT_GSEA_",i,"_",geneset,"_DOSE_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                     }
@@ -1483,9 +1526,11 @@ process_file <- function(file){
         }
     }
     cores_2 <- max(1, as.integer(cores))
+    .rgse_units <- grep("_backg",grep("readlist_",names(genes_of_interest),invert=T,val=T),invert=T,val=T)
+    .rgse_inner_cores <- max(1, floor(cores_2 / max(1, length(.rgse_units))))
     mclapply(
-      mc.cores = cores_2,
-      X = grep("_backg",grep("readlist_",names(genes_of_interest),invert=T,val=T),invert=T,val=T),
+      mc.cores = min(cores_2, max(1, length(.rgse_units))),
+      X = .rgse_units,
       FUN = process_file_within
     )     
 
