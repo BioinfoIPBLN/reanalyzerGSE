@@ -306,9 +306,12 @@ run_gsea <- function(deg_df, label, gsea_base_dir, orgdb, kegg_org, species_labe
         save_gsea_results(gsea_kegg, "KEGG", out_dir, metric_label)
         
         # Reactome (via ReactomePA)
-        gsea_reactome <- tryCatch({
+        reactome_org <- switch(species_label, "Mus musculus" = "mouse", "Homo sapiens" = "human", NULL)
+        gsea_reactome <- if (is.null(reactome_org)) {
+            cat(paste0("    Reactome skipped: ReactomePA has no organism mapping for '", species_label, "'\n")); NULL
+        } else tryCatch({
             suppressMessages(library(ReactomePA, quiet = T, warn.conflicts = F))
-            ReactomePA::gsePathway(geneList = ranked, organism = species_label,
+            ReactomePA::gsePathway(geneList = ranked, organism = reactome_org,
                                    minGSSize = 15, maxGSSize = 500,
                                    pvalueCutoff = 1, verbose = FALSE)
         }, error = function(e) { cat(paste0("    Reactome error: ", e$message, "\n")); NULL })
