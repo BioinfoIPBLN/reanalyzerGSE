@@ -24,10 +24,10 @@ source(file.path(script_dir, "R_report_notes.R"))
 .rgse_enrichr_tables <- function(genes, dbs, attempts = 6) {
   for (k in seq_len(attempts)) {
     res <- tryCatch(enrichR::enrichr(genes = genes, databases = dbs), error = function(e) e)
-    if (!inherits(res, "error") && is.list(res) &&
-        any(vapply(res, function(d) is.data.frame(d) && nrow(d) > 0 && "Term" %in% names(d), logical(1))))
+    if (!inherits(res, "error") && is.list(res) && length(res) > 0 &&
+        all(vapply(res, is.data.frame, logical(1))))
       return(res)
-    Sys.sleep(min(120, 5 * 2^(k - 1)) + runif(1, 0, 5))
+    if (k < attempts) Sys.sleep(min(120, 5 * 2^(k - 1)) + runif(1, 0, 5))
   }
   NULL
 }
