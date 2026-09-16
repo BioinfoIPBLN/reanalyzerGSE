@@ -10,6 +10,7 @@ samples_info <- if (length(args) >= 7) args[7] else ""   # reads_study_info/samp
 
 .rgse_scripts_dir <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[1])))
 source(file.path(.rgse_scripts_dir, "R_qs_helpers.R"))
+source(file.path(.rgse_scripts_dir, "R_report_notes.R"))
 
 # Condition per sample, taken from samples_info.txt (col1 = sample, col3 = condition).
 # Falls back to stripping "_Rep..." off the sample name when the file is absent or a
@@ -656,6 +657,8 @@ run_stringdb <- function(deg_df, label, new_path, organism_taxid, orgdb = NULL) 
             }
         }
 
+        if ("FDR" %in% colnames(deg_df)) deg_df <- deg_df[order(deg_df$FDR), ]
+
         string_db <- .rgse_string_db(organism_taxid)
         if (is.null(string_db)) {
             cat("    STRINGdb unavailable after retries; skipping\n")
@@ -764,7 +767,14 @@ run_stringdb <- function(deg_df, label, new_path, organism_taxid, orgdb = NULL) 
 
         # PPI enrichment test
         tryCatch({
-            ppi_enrich <- string_db$get_ppi_enrichment(hits)
+            ppi_ids <- hits
+            if (length(ppi_ids) > 2000) {
+                cat(paste0("    Capping STRINGdb PPI enrichment to the 2000 most significant of ", length(ppi_ids), " mapped genes (STRING API limit)\n"))
+                .rgse_capping_note(path, "STRINGdb PPI enrichment", label, 2000, length(ppi_ids),
+                                   "the STRING API rejects networks above 2000 nodes")
+                ppi_ids <- ppi_ids[1:2000]
+            }
+            ppi_enrich <- string_db$get_ppi_enrichment(ppi_ids)
             ppi_df <- data.frame(metric = names(ppi_enrich),
                                  value = vapply(ppi_enrich, function(x) paste(as.character(x), collapse = ";"), character(1)),
                                  stringsAsFactors = FALSE)
@@ -779,7 +789,9 @@ run_stringdb <- function(deg_df, label, new_path, organism_taxid, orgdb = NULL) 
         tryCatch({
             cluster_ids <- example1_mapped$STRING_id
             if (length(cluster_ids) > 2000) {
-                cat(paste0("    Capping STRINGdb cluster analysis to top 2000 most significant genes (total mapped: ", length(cluster_ids), "; STRING API limit)\n"))
+                cat(paste0("    Capping STRINGdb cluster analysis to the 2000 most significant of ", length(cluster_ids), " mapped genes (STRING API limit)\n"))
+                .rgse_capping_note(path, "STRINGdb module clustering", label, 2000, length(cluster_ids),
+                                   "the STRING API rejects networks above 2000 nodes")
                 cluster_ids <- cluster_ids[1:2000]
             }
             clustersList <- string_db$get_clusters(cluster_ids)

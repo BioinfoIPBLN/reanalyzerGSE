@@ -316,6 +316,13 @@ print("<div style='background:#eef6ff;border-left:5px solid #4a90d9;padding:10px
 PYEOF
 }
 ai_rst() { local box; box=$(ai_box "$1"); [ -n "$box" ] || return 0; printf '\n.. raw:: html\n\n   %s\n' "$box"; }
+capping_notes_rst() {
+	local f="$1"
+	[ -s "$f" ] || return 0
+	printf '\n.. note::\n\n   Some analyses below were computed on a subset of the input genes, because the\n   external tool or API refuses lists above a fixed size. The genes kept are the\n   most significant ones (lowest FDR); the rest were not submitted.\n\n'
+	sort -u "$f" | awk -F'\t' '{printf "   * %s, %s: kept the %s most significant of %s genes (%s).\n", $1, $2, $3, $4, $5}'
+	printf '\n'
+}
 ai_design_rst=$(ai_rst "$path/$final_dir_name/DGE/study_design.ai_insight.md")
 ai_counts_rst=$(ai_rst "$path/$final_dir_name/DGE/counts.ai_insight.md")
 # Per-comparison DEG insight boxes are injected per-subsection inside process_degs()
@@ -737,6 +744,7 @@ $(if [ -f "$path/$final_dir_name/DGE/functional_enrichment_report.html" ]; then 
 "; fi)
 $(if [ -f "$path/$final_dir_name/DGE/funct_enrichment_analyses.tar.gz" ]; then echo "You can also download all raw enrichment result files: :download:\`tar.gz archive <../$final_dir_name/DGE/funct_enrichment_analyses.tar.gz>\`"; fi)
 $(if [ ! -f "$path/$final_dir_name/DGE/functional_enrichment_report.html" ] && [ ! -f "$path/$final_dir_name/DGE/funct_enrichment_analyses.tar.gz" ]; then echo "Functional enrichment not requested or not available"; fi)
+$(capping_notes_rst "$path/$final_dir_name/DGE/analysis_capping_notes.txt")
 
 .. index:: Funct_enrich
 

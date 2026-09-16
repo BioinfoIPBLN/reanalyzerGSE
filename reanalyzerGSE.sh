@@ -70,6 +70,17 @@ run_step() {
 	fi
 	return 0
 }
+restore_final_results_dir() {
+	local idx=$1
+	local base="$output_folder/$name/final_results_reanalysis$idx"
+	[ -d "$base" ] && return 0
+	local found
+	found=$(find "$output_folder/$name" -maxdepth 1 -type d -name "final_results_reanalysis${idx}_*" 2>/dev/null | head -1)
+	if [ -n "$found" ]; then
+		echo -e "\nResuming a completed run: restoring $(basename "$found") to final_results_reanalysis$idx"
+		mv "$found" "$base"
+	fi
+}
 build_alignment_units() {
 	unit_ini=(); unit_out=(); unit_fasta=(); unit_gtf=(); unit_reads=(); unit_ri=(); unit_label=()
 	local _i; local _annot_arr=()
@@ -1969,6 +1980,7 @@ if run_step step6; then
 	export RGSE_STRING_CACHE="$output_folder/$name/.string_cache"
 	mkdir -p "$RGSE_STRING_CACHE"
 	for index in "${!array[@]}"; do
+		restore_final_results_dir $index
 		if [ ! -d "$output_folder/$name/final_results_reanalysis$index/DGE/" ]; then
 			echo -e "\nWARNING: DGE directory not found at $output_folder/$name/final_results_reanalysis$index/DGE/. Skipping enrichment for index $index."
 			continue
@@ -2335,6 +2347,7 @@ if run_step step7; then
 _log_step "Step_7_Annotation" "start"
 	echo -e "\n\nAnnotating list of genes...\n\n"
 	for index in "${!array[@]}"; do
+		restore_final_results_dir $index
 		# Export the annotation file path so R scripts can use it for ENSEMBL->Symbol mapping
 		export ANNOTATION_FILE="${array[index]}"
 		# All the tables that contain list of genes, annotate them:
@@ -2547,6 +2560,7 @@ _log_step "Step_9_Cleanup" "start"
 	# Note: xlsx conversion now happens in STEP 8 (before sphinx report), not here
 
 	for index in "${!array[@]}"; do
+		restore_final_results_dir $index
 	 	if [ ! -d "$output_folder/$name/final_results_reanalysis$index/DGE/" ]; then
 			continue
 		fi
