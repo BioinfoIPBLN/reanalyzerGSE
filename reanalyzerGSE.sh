@@ -1964,8 +1964,26 @@ if run_step step6; then
 	if [[ $network_analyses == "yes" ]]; then
 		if [ -z "$taxonid" ]; then
 			cd $TMPDIR
-			mkdir -p taxdump && cd taxdump && rm -rf * && wget -q https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/taxdmp.zip && unzip -qq taxdmp.zip && rm taxdmp.zip
+			mkdir -p taxdump && cd taxdump && rm -rf *
+			for _tx_try in 1 2 3; do
+				wget -q -O taxdmp.zip https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/taxdmp.zip
+				if unzip -tqq taxdmp.zip >/dev/null 2>&1; then break; fi
+				echo "Taxonomy archive download attempt $_tx_try produced a corrupt file; retrying..."
+				rm -f taxdmp.zip; sleep $((10 * _tx_try))
+			done
+			if ! unzip -tqq taxdmp.zip >/dev/null 2>&1; then
+				echo -e "\nERROR: could not download a valid NCBI taxonomy archive after 3 attempts."
+				echo "Network analyses need a taxon ID. Set 'taxonid' explicitly in the options file and rerun."
+				exit 1
+			fi
+			unzip -qq taxdmp.zip && rm taxdmp.zip
 			taxonid=$(echo $organism | sed 's/_\+/ /g' | taxonkit name2taxid --data-dir $PWD | head -1 | cut -f2)
+		fi
+		if [ -z "$taxonid" ]; then
+			echo -e "\nERROR: could not resolve a taxon ID for organism '$organism'."
+			echo "Network analyses would receive shifted arguments and produce meaningless results."
+			echo "Set 'taxonid' explicitly in the options file and rerun."
+			exit 1
 		fi
 	fi
 	if [ -z "${!array[@]}" ]; then
@@ -2027,7 +2045,7 @@ if run_step step6; then
 			mkdir -p network_analyses && rm -rf network_analyses/* && cd network_analyses
 			echo -e "\nSTEP 6a: Performing network analyses (WGCNA mode: $wgcna_mode)...\nCurrent date/time: $(date)\n"
 			_log_step "Step_6a_Network" "start"
-			R_functional_network_analyses.R $output_folder/$name/final_results_reanalysis$index/DGE/ $output_folder/$name/final_results_reanalysis$index/Raw_counts_genes.txt "^DGE_analysis_comp[0-9]+.txt$" $taxonid $wgcna_mode $organism $output_folder/$name/reads_study_info/samples_info.txt &> network_analyses_funct_enrichment.log
+			R_functional_network_analyses.R "$output_folder/$name/final_results_reanalysis$index/DGE/" "$output_folder/$name/final_results_reanalysis$index/Raw_counts_genes.txt" "^DGE_analysis_comp[0-9]+.txt$" "$taxonid" "$wgcna_mode" "$organism" "$output_folder/$name/reads_study_info/samples_info.txt" &> network_analyses_funct_enrichment.log
 			_log_step "Step_6a_Network" "end"
 			echo -e "\nSTEP 6a: DONE\nCurrent date/time: $(date)\n"
 		fi
