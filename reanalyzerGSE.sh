@@ -2019,38 +2019,45 @@ if run_step step6; then
 			continue
 		fi
 
+		echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
+		_log_step "Step_6_Enrichment" "start"
+
 		# Network analyses (WGCNA is organism-agnostic; STRINGdb supports any organism with a valid taxon ID)
 		if [[ $network_analyses == "yes" ]]; then
 			mkdir -p network_analyses && rm -rf network_analyses/* && cd network_analyses
-			echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
-_log_step "Step_6_Enrichment" "start"
-    			echo -e "\nPerforming network analyses (WGCNA mode: $wgcna_mode)...\n"
+			echo -e "\nSTEP 6a: Performing network analyses (WGCNA mode: $wgcna_mode)...\nCurrent date/time: $(date)\n"
+			_log_step "Step_6a_Network" "start"
 			R_functional_network_analyses.R $output_folder/$name/final_results_reanalysis$index/DGE/ $output_folder/$name/final_results_reanalysis$index/Raw_counts_genes.txt "^DGE_analysis_comp[0-9]+.txt$" $taxonid $wgcna_mode $organism $output_folder/$name/reads_study_info/samples_info.txt &> network_analyses_funct_enrichment.log
+			_log_step "Step_6a_Network" "end"
+			echo -e "\nSTEP 6a: DONE\nCurrent date/time: $(date)\n"
 		fi
 
 		# Functional Enrichment Analyses
 		if [[ "$functional_enrichment_analyses" == "no" ]]; then
-			echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
-_log_step "Step_6_Enrichment" "start"
     			echo -e "\nSkipping functional enrichment analyses\n"
 		else
 			if [[ "$organism" == "Mus_musculus" || "$organism" == "Homo_sapiens" || "$organism" == "Mus musculus" || "$organism" == "Homo sapiens" ]]; then
-				echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
-_log_step "Step_6_Enrichment" "start"
     				echo -e "\nPerforming functional enrichment analyses for DEGs. The results up to this point are ready to use (including DEGs and expression table including gene_ids). This step of funtional enrichment analyses may take long if many significant DEGs, comparisons, or analyses...\n"
 				export ANNOTATION_FILE="${array[index]}"
 				cd $output_folder/$name/final_results_reanalysis$index/DGE/
+				echo -e "\nSTEP 6b: Performing clusterProfiler execution...\nCurrent date/time: $(date)\n"
+				_log_step "Step_6b_clusterProfiler" "start"
 				ls | egrep "^DGE_analysis_comp[0-9]+.txt$" | parallel --halt-on-error 2 --joblog R_clusterProfiler_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_clusterProfiler_analyses_parallel.R $PWD $organism "$clusterProfiler_cores" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution '^{}$' $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_{}_funct_enrichment.log"
-				echo -e "\nPerforming autoGO and Panther execution... this may take long if many genes or comparisons...\n"
+				_log_step "Step_6b_clusterProfiler" "end"
+				echo -e "\nSTEP 6b: DONE\nCurrent date/time: $(date)\n"
+				echo -e "\nSTEP 6c: Performing autoGO and Panther execution... this may take long if many genes or comparisons...\nCurrent date/time: $(date)\n"
+				_log_step "Step_6c_autoGO_Panther" "start"
 				ls | egrep "^DGE_analysis_comp[0-9]+.txt$" | parallel --halt-on-error 2 --joblog R_autoGO_panther_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism "$clusterProfiler_cores" $databases_function {} $panther_method $auto_panther_log &> autoGO_panther_{}_funct_enrichment.log"
+				_log_step "Step_6c_autoGO_Panther" "end"
+				echo -e "\nSTEP 6c: DONE\nCurrent date/time: $(date)\n"
 				if [[ "$time_course" == "yes" ]]; then
 					cd $output_folder/$name/final_results_reanalysis$index/time_course_analyses
 					ls | egrep "^DGE_limma_timecourse.*.txt$" | parallel --halt-on-error 2 --joblog R_clusterProfiler_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_clusterProfiler_analyses_parallel.R $PWD $organism "$clusterProfiler_cores" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution '^{}$' $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_{}_funct_enrichment.log"
 					ls | egrep "^DGE_limma_timecourse.*.txt$" | parallel --halt-on-error 2 --joblog R_autoGO_panther_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism "$clusterProfiler_cores" $databases_function {} $panther_method $auto_panther_log &> autoGO_panther_{}_funct_enrichment.log"
 				fi
 			else
-				echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
-_log_step "Step_6_Enrichment" "start"
+				echo -e "\nSTEP 6b: Performing non-model organism over-representation analyses...\nCurrent date/time: $(date)\n"
+				_log_step "Step_6b_NonModel_ORA" "start"
    				echo "Organism '$organism' is not human/mouse, so functional enrichment support is limited: reanalyzerGSE will attempt GO/KEGG over-representation using terms extracted from the provided annotation (dedicated OrgDb-based analyses are human/mouse only)."
 				# Determine which annotation file to use for functional enrichment
 				annot_enrichm=""
@@ -2102,6 +2109,8 @@ _log_step "Step_6_Enrichment" "start"
 				else
 					echo "For $organism and the annotation $annotation_file, no GO or functional information found. Consider providing a GAF, GMT, or GO-annotated GFF/GTF via 'non_reference_funct_enrichm'"
 				fi
+				_log_step "Step_6b_NonModel_ORA" "end"
+				echo -e "\nSTEP 6b: DONE\nCurrent date/time: $(date)\n"
 			fi
 
 			cd $output_folder/$name/final_results_reanalysis$index/DGE/
@@ -2156,8 +2165,11 @@ _log_step "Step_6_Enrichment" "start"
 			if [ -n "$files_to_process" ]; then
 				enrichment_results_found="yes"
 				cd $output_folder/$name/final_results_reanalysis$index/DGE/
-				echo -e "\nFunctional enrichment completed: $(echo $files_to_process | wc -w) result file(s) produced. Formatting..."
+				echo -e "\nSTEP 6d: Functional enrichment completed: $(echo $files_to_process | wc -w) result file(s) produced. Formatting...\nCurrent date/time: $(date)\n"
+				_log_step "Step_6d_Format" "start"
 				echo $files_to_process | parallel --halt-on-error 2 --joblog R_enrich_format_analyses_parallel_log_parallel.txt -j $cores "file={}; R_enrich_format.R \"\$file\" \$(echo \"\$file\" | sed 's,DGE/.*,DGE/,g')\$(echo \"\$file\" | sed 's,.*DGE_analysis_comp,DGE_analysis_comp,g;s,_pval.*,,g;s,_fdr.*,,g;s,_funct.*,,g;s,_cluster.*,,g' | sed 's,.txt,,g').txt $organism $rev_thr" &> $PWD/enrichment_format.log
+				_log_step "Step_6d_Format" "end"
+				echo -e "\nSTEP 6d: DONE\nCurrent date/time: $(date)\n"
 			else
 				enrichment_results_found="no"
 				echo -e "\nFunctional enrichment produced no result files, so the HTML report will not be rendered."
@@ -2183,7 +2195,8 @@ _log_step "Step_6_Enrichment" "start"
 			ai_dge_dir="$ai_fdir/DGE"
 			if [ -d "$ai_dge_dir" ]; then
 				ai_log="$ai_dge_dir/ai_insights.log"; : > "$ai_log"
-				echo -e "\nGenerating AI report insights (ai_insights=$ai_insights, model=${llm_model:-<unset>})..."
+				echo -e "\nSTEP 6e: Generating AI report insights (ai_insights=$ai_insights, model=${llm_model:-<unset>})...\nCurrent date/time: $(date)\n"
+				_log_step "Step_6e_AI_Insights" "start"
 				# Write the 'timeout, please try again' placeholder box for one output.
 				ai_write_timeout() {   # $1 = output .md path
 					printf '%s\n\n%s\n' "**AI summary** — the LLM did not respond in time." \
@@ -2318,6 +2331,8 @@ PYEOF
 					done
 				fi
 				echo "AI insights written under $ai_dge_dir (*.ai_insight.md); log: $ai_log"
+				_log_step "Step_6e_AI_Insights" "end"
+				echo -e "\nSTEP 6e: DONE\nCurrent date/time: $(date)\n"
 			fi
 		fi
 
