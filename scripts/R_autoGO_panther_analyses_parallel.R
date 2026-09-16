@@ -21,12 +21,20 @@ if (file.exists(ensembl_helper)) source(ensembl_helper)
 source(file.path(script_dir, "R_gene_id_helpers.R"))
 source(file.path(script_dir, "R_report_notes.R"))
 
-.rgse_enrichr_tables <- function(genes, dbs, attempts = 6) {
+.rgse_enrichr_tables <- function(genes, dbs, background = NULL, attempts = 6, empty_plausible_below = 5) {
   for (k in seq_len(attempts)) {
-    res <- tryCatch(enrichR::enrichr(genes = genes, databases = dbs), error = function(e) e)
+    res <- tryCatch(
+      if (length(background) > 0)
+        enrichR::enrichr(genes = genes, databases = dbs, background = background, include_overlap = TRUE)
+      else
+        enrichR::enrichr(genes = genes, databases = dbs),
+      error = function(e) e)
     if (!inherits(res, "error") && is.list(res) && length(res) > 0 &&
-        all(vapply(res, is.data.frame, logical(1))))
-      return(res)
+        all(vapply(res, is.data.frame, logical(1)))) {
+      if (any(vapply(res, function(d) nrow(d) > 0, logical(1))) ||
+          length(genes) < empty_plausible_below)
+        return(res)
+    }
     if (k < attempts) Sys.sleep(min(120, 5 * 2^(k - 1)) + runif(1, 0, 5))
   }
   NULL
@@ -425,14 +433,15 @@ process_file <- function(file){
   dir.create(path2, showWarnings = FALSE);setwd(path2);invisible(file.copy(file,paste0(path2,basename(file))))
   print(paste0("Processing autoGO for ",file2," and ",length(read.table(file,head=F)$V1)," genes..."))
   .bk_idx <- grep(file2,key_files$new_files)
-  if (length(.bk_idx) == 0) print(paste0("No registered background for ",file2,"; custom-background and Panther reference-gene analyses skipped"))
+  if (length(.bk_idx) == 0) print(paste0("No registered background for ",file2,"; falling back to the Enrichr default background, and Panther reference-gene analyses skipped"))
   expr_back <- if (length(.bk_idx) > 0 && file.exists(key_files$old_file[.bk_idx[1]])) convert_ids(read.table(key_files$old_file[.bk_idx[1]])$V1,mode) else character(0)
   expr_back <- unique(expr_back[nzchar(expr_back) & expr_back != "Gene_ID"])
   
   # autoGO:
   Sys.sleep(runif(1, 0.5, 3.5))
   path3=paste0(path2,"/","enrichment_tables")
-  .ago_res <- .rgse_enrichr_tables(unique(read.table(file,head=F)$V1), databases_autoGO)
+  if (length(expr_back) > 0) print(paste0("Using the detected-gene universe as background for ",file2,": ",length(expr_back)," genes"))
+  .ago_res <- .rgse_enrichr_tables(unique(read.table(file,head=F)$V1), databases_autoGO, background = expr_back)
   if (is.null(.ago_res)) {
     print(paste0("autoGO with errors after retries: ",file2))
   } else {
@@ -468,36 +477,6 @@ process_file <- function(file){
         })
   }
   invisible(file.rename(path3,sub("/enrichment_tables/?$","_autoGO",path3)))
-
-  # autoGO with custom background:
-  if (length(expr_back) > 0) {
-    path_bg <- paste0(dirname(file),"/",file2,"_funct_enrichment_custom_background/")
-    dir.create(path_bg, showWarnings = FALSE, recursive = TRUE)
-    .bg_genes <- unique(read.table(file,head=F)$V1)
-    print(paste0("Processing autoGO with custom background for ",file2,": ",length(.bg_genes)," genes vs ",length(expr_back)," background genes..."))
-    for (.bg_try in 1:3) {
-      .bg_ok <- tryCatch({
-        .bg_res <- enrichR::enrichr(genes = .bg_genes, databases = databases_autoGO, background = expr_back, include_overlap = TRUE)
-        for (.nm in names(.bg_res)) {
-          .d <- .bg_res[[.nm]]
-          if (is.data.frame(.d) && nrow(.d) > 0 && "Term" %in% names(.d)) {
-            write.table(.d, file = paste0(path_bg,.nm,".tsv"), col.names = T, row.names = F, quote = F, sep="\t")
-            tryCatch({
-              barplotGO(enrich_tables = .d, title = c(.nm,paste0(file2," (custom background)")),
-                        outfolder = path_bg, outfile = paste0(file2,"_",.nm,"_barplot.png"), from_autoGO = F)
-              lolliGO(enrich_tables = .d, title = c(.nm,paste0(file2," (custom background)")),
-                      outfolder = path_bg, outfile = paste0(file2,"_",.nm,"_lolliplot.png"), from_autoGO = F)
-            }, error = function(e) print(paste0("custom-background plots failed for ",file2," ",.nm,": ",conditionMessage(e))))
-          }
-        }
-        TRUE
-      }, error = function(e) {
-        print(paste0("autoGO custom-background attempt ",.bg_try," failed for ",file2,": ",conditionMessage(e))); FALSE
-      })
-      if (isTRUE(.bg_ok)) break
-      Sys.sleep(10 * .bg_try)
-    }
-  }
 
   # Panther:
   print(paste0("Processing Panther for ",file2," and ",length(read.table(file,head=F)$V1)," genes..."))
