@@ -140,6 +140,27 @@ for (.kt in c("KEGG", "MKEGG")) try(suppressMessages(clusterProfiler:::prepare_K
   v
 }
 
+.rgse_mclapply_timeout <- function(X, mc.cores, timeout_s, FUN) {
+  X <- as.list(X)
+  if (length(X) == 0) return(invisible(NULL))
+  n <- max(1L, as.integer(mc.cores))
+  i <- 1L
+  while (i <= length(X)) {
+    idx  <- i:min(i + n - 1L, length(X))
+    jobs <- lapply(X[idx], function(x) parallel::mcparallel(FUN(x)))
+    done <- names(parallel::mccollect(jobs, wait = FALSE, timeout = timeout_s))
+    for (j in jobs) {
+      if (!(as.character(j$pid) %in% done)) {
+        print(paste0("Timed out after ", timeout_s, "s; abandoning one pathway rendering (pid ", j$pid, ")"))
+        tryCatch(tools::pskill(j$pid), error = function(e) NULL)
+      }
+    }
+    tryCatch(parallel::mccollect(jobs, wait = FALSE), error = function(e) NULL)
+    i <- max(idx) + 1L
+  }
+  invisible(NULL)
+}
+
 safe_pathview <- function(gene.data, pathway.id, species, out_file = NULL, keep_kegg_copy = NULL, ...) {
   cache <- .rgse_kegg_cache()
   if (!isTRUE(.rgse_kegg_fetch(pathway.id, species, cache))) return(FALSE)
@@ -638,13 +659,13 @@ process_file <- function(file){
                 data_filtered <- data$ID[data$pvalue < 0.05]
               })))
               .kegg_wd <- getwd()
-              invisible(parallel::mclapply(paths_list, mc.cores = .rgse_inner_cores, FUN = function(f){
+              .rgse_mclapply_timeout(paths_list, .rgse_inner_cores, 900, function(f){
                 tryCatch({
                   safe_pathview(gene.data=kk@result,pathway.id=f,species=org,keep_kegg_copy=paste0(.kegg_wd,"/kegg_paths_snapshots"))
                 }, error = function(e) {
                   writeLines(as.character(e), paste0(.kegg_wd,"/kegg_paths_snapshots/err.txt"))
                 })
-              }))
+              })
 
       ###### 5. Reactome over-representation:      
           while(dev.cur() > 1) dev.off()
@@ -690,13 +711,13 @@ process_file <- function(file){
               data_filtered <- data$Description[data$pvalue < 0.05]
           })))
           .react_wd <- getwd()
-          invisible(parallel::mclapply(paths_list, mc.cores = .rgse_inner_cores, FUN = function(f){
+          .rgse_mclapply_timeout(paths_list, .rgse_inner_cores, 900, function(f){
             tryCatch({
               suppressMessages(ggsave(viewPathway(f,readable = TRUE,organism = organism_cp_react),filename = paste0(.react_wd,"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome.pdf"),width=15, height=15, create.dir=T))
             }, error = function(e) {
               writeLines(as.character(e), paste0(.react_wd,"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.txt"))
             })
-          }))        
+          })        
 
     if(all_analyses=="yes"){
         print(paste0("Processing ",file,"_",name_internal,"... Gene Set Enrichment Analysis of Gene Ontology"))
