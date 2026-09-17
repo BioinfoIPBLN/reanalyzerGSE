@@ -2005,6 +2005,8 @@ if run_step step6; then
 		fi
 		cd $output_folder/$name/final_results_reanalysis$index/DGE/
 		rm -rf $(find . -type d \( -name "*_autoGO" -o -name "*_clusterProfiler" -o -name "*_panther" -o -name "*funct_enr*" \)) $(find . -type f \( -name "*_autoGO" -o -name "*_clusterProfiler" -o -name "*_panther" -o -name "*funct_enr*" \)) # So it's redone if resuming
+		rm -f analysis_capping_notes.txt
+		rm -rf report_tables
 		if [ -z "$annotation_file" ]; then
 			annotation_file=${array[index]}
 		fi
