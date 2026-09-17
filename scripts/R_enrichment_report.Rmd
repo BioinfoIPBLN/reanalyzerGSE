@@ -113,8 +113,6 @@ select_cols <- function(df) {
 }
 
 make_table <- function(df, filename = NULL, max_rows = NULL) {
-  # max_rows is accepted for back-compat with older callers but ignored: the DT
-  # table paginates the full result set, so nothing is truncated.
   if (is.null(df) || nrow(df) == 0) {
     cat("<p><em>No results found</em></p>\n\n")
     return(invisible(NULL))
@@ -124,6 +122,11 @@ make_table <- function(df, filename = NULL, max_rows = NULL) {
   # Round enrichment/score columns for on-screen readability (CSV keeps full precision)
   for (nm in intersect(c("FoldEnrichment","RichFactor","zScore"), names(display)))
     display[[nm]] <- round(suppressWarnings(as.numeric(display[[nm]])), 2)
+
+  n_total     <- nrow(display)
+  display_cap <- if (is.null(max_rows)) 500L else as.integer(max_rows)
+  truncated   <- n_total > display_cap
+  if (truncated) display <- display[seq_len(display_cap), , drop = FALSE]
 
   # Full interactive table: all rows (paginated), per-column search boxes,
   # click-to-sort headers, page-length dropdown (10 default / 20 / 50 / 100 / All).
@@ -152,14 +155,16 @@ make_table <- function(df, filename = NULL, max_rows = NULL) {
   cat(knitr::knit_print(widget), "\n\n")
 
   if (!is.null(filename)) {
-    csv_text <- paste(capture.output(write.csv(df, stdout(), row.names = FALSE)), collapse = "\n")
-    if (nchar(csv_text, type = "bytes") > 64 * 1024^2) {
-      cat(sprintf('<p><em>Table too large to embed (%d rows, %.1f MB); read it from %s in the results folder.</em></p>\n\n',
-                  nrow(df), nchar(csv_text, type = "bytes") / 1024^2, filename))
+    tbl_dir <- file.path(params$dge_dir, "report_tables")
+    dir.create(tbl_dir, showWarnings = FALSE, recursive = TRUE)
+    ok <- tryCatch({ write.csv(df, file.path(tbl_dir, filename), row.names = FALSE); TRUE },
+                   error = function(e) FALSE)
+    if (ok) {
+      cat(sprintf('<p><a href="report_tables/%s" download="%s" class="btn btn-sm btn-outline-primary">\u2b07 Download CSV (%d rows)</a>%s</p>\n\n',
+                  utils::URLencode(filename), filename, n_total,
+                  if (truncated) sprintf(' <em>table above shows the first %d of %d rows</em>', display_cap, n_total) else ""))
     } else {
-      b64 <- xfun::base64_encode(charToRaw(csv_text))
-      cat(sprintf('<p><a href="data:text/csv;base64,%s" download="%s" class="btn btn-sm btn-outline-primary">\u2b07 Download CSV (%d rows)</a></p>\n\n',
-                  b64, filename, nrow(df)))
+      cat(sprintf('<p><em>Could not write %s; read the table from the results folder.</em></p>\n\n', filename))
     }
   }
 }
@@ -392,19 +397,26 @@ render_cp_threshold <- function(cp_dir, comp, tok, full_mode_ran, primary) {
   invisible()
 }
 
+rgse_rel_path <- function(path) {
+  root <- tryCatch(normalizePath(params$dge_dir, mustWork = FALSE), error = function(e) NA_character_)
+  full <- tryCatch(normalizePath(path, mustWork = FALSE), error = function(e) NA_character_)
+  if (is.na(root) || is.na(full)) return(NULL)
+  if (!startsWith(full, paste0(root, .Platform$file.sep))) return(NULL)
+  substring(full, nchar(root) + 2L)
+}
+
 embed_png <- function(path, caption = "", max_width = "700px") {
   if (!file.exists(path)) return(invisible(NULL))
   uri <- xfun::base64_uri(path)
   fname <- basename(path)
-  # Base64-encode the original file for download
-  dl_b64 <- xfun::base64_encode(readBin(path, "raw", file.info(path)$size))
-  dl_mime <- if (grepl("\\.png$", fname, ignore.case = TRUE)) "image/png" else "image/jpeg"
+  rel <- rgse_rel_path(path)
   cat(sprintf('<figure style="margin:10px 0;text-align:center;"><img src="%s" style="max-width:%s;border:1px solid #ddd;border-radius:4px;padding:2px;" />',
               uri, max_width))
   if (nchar(caption) > 0)
     cat(sprintf('<figcaption style="font-style:italic;color:#666;font-size:0.9em;">%s</figcaption>', caption))
-  cat(sprintf('<br/><a href="data:%s;base64,%s" download="%s" class="btn btn-sm btn-outline-secondary" style="margin-top:4px;">\u2b07 Download %s</a>',
-              dl_mime, dl_b64, fname, fname))
+  if (!is.null(rel))
+    cat(sprintf('<br/><a href="%s" download="%s" class="btn btn-sm btn-outline-secondary" style="margin-top:4px;">\u2b07 Download %s</a>',
+                utils::URLencode(rel), fname, fname))
   cat('</figure>\n\n')
 }
 
@@ -417,13 +429,13 @@ embed_pdf <- function(pdf_path, caption = "", dpi = 48) {
     fname <- basename(pdf_path)
     # Show rendered PNG preview
     uri <- xfun::base64_uri(tmp)
-    # Base64-encode the original PDF for download
-    dl_b64 <- xfun::base64_encode(readBin(pdf_path, "raw", file.info(pdf_path)$size))
+    rel <- rgse_rel_path(pdf_path)
     cat(sprintf('<figure style="margin:10px 0;text-align:center;"><img src="%s" style="max-width:700px;border:1px solid #ddd;border-radius:4px;padding:2px;" />', uri))
     if (nchar(caption) > 0)
       cat(sprintf('<figcaption style="font-style:italic;color:#666;font-size:0.9em;">%s</figcaption>', caption))
-    cat(sprintf('<br/><a href="data:application/pdf;base64,%s" download="%s" class="btn btn-sm btn-outline-secondary" style="margin-top:4px;">\u2b07 Download PDF</a>',
-                dl_b64, fname))
+    if (!is.null(rel))
+      cat(sprintf('<br/><a href="%s" download="%s" class="btn btn-sm btn-outline-secondary" style="margin-top:4px;">\u2b07 Download PDF</a>',
+                  utils::URLencode(rel), fname))
     cat('</figure>\n\n')
     unlink(tmp)
   }, error = function(e) NULL)
@@ -664,7 +676,6 @@ cat("\n")
 targz <- file.path(dge_dir, "funct_enrichment_analyses.tar.gz")
 if (file.exists(targz)) {
   targz_size <- round(file.info(targz)$size / 1024 / 1024, 1)
-  targz_b64 <- xfun::base64_encode(readBin(targz, "raw", file.info(targz)$size))
   cat(sprintf('
 <div class="alert alert-warning" style="margin:20px 0;border-left:5px solid #f0ad4e;padding:15px;border-radius:4px;">
 <strong>\u26a0\ufe0f Full results archive</strong><br/>
@@ -672,10 +683,10 @@ This report shows <strong>summarised tables and reduced-resolution image preview
 The original full-quality plots (PDF vector graphics), complete enrichment tables,
 KEGG pathway snapshots, aPEAR interactive HTML widgets, and all other raw output files
 are available in the compressed archive:<br/><br/>
-<a href="data:application/gzip;base64,%s" download="funct_enrichment_analyses.tar.gz"
+<a href="funct_enrichment_analyses.tar.gz" download="funct_enrichment_analyses.tar.gz"
    class="btn btn-warning" style="color:#fff;">
 \u2b07 Download funct_enrichment_analyses.tar.gz (%s MB)</a>
-</div>\n\n', targz_b64, targz_size))
+</div>\n\n', targz_size))
 } else {
   cat('
 <div class="alert alert-info" style="margin:20px 0;border-left:5px solid #5bc0de;padding:15px;border-radius:4px;">
