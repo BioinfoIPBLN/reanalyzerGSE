@@ -92,7 +92,7 @@ for (i in unlist(strsplit(genes,","))){
 				position = ggplot2::position_dodge()) +
 				theme_classic() + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size=9)) +
 			labs(x="",color="Condition", title=paste0(paste(a$V2[grep("Series_geo_accession",a$V1)],a$V2[grep("Series_title",a$V1)],sep=": "),". GENE SHOWN: ", i))
-		  ggsave(p, filename = paste0(path,"/final_results_reanalysis/",i,"_barplot_",paste0("custom_design_",z),".pdf"),width=30, height=30)
+		  ggsave(p, filename = paste0(path,"/final_results_reanalysis/",i,"_barplot_",paste0("custom_design_",z),".pdf"),width=15, height=15)
 
 		  df2 <- reshape2::melt(df)
 		  df2 <- unique(df2[df2$variable=="Expr_RPKM (log2 + .1)",c("condition","value","sample")])
@@ -108,7 +108,7 @@ for (i in unlist(strsplit(genes,","))){
 			geom_point(data = dplyr::filter(df2, condition_n == 1)) +
 			theme_classic() + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size=9)) +
 			labs(x="",y="Expr_RPKM (log2 + .1)",color="Condition", title=paste0(paste(a$V2[grep("Series_geo_accession",a$V1)],a$V2[grep("Series_title",a$V1)],sep=": "),". GENE SHOWN: ", i))
-		  ggsave(p, filename = paste0(path,"/final_results_reanalysis/",i,"_violin_",paste0("custom_design_",z),".pdf"),width=30, height=30)
+		  ggsave(p, filename = paste0(path,"/final_results_reanalysis/",i,"_violin_",paste0("custom_design_",z),".pdf"),width=15, height=15)
 
 		  df2$i <- 1
 		  labs_total <- aggregate(i~condition,df2,sum)
@@ -124,7 +124,7 @@ for (i in unlist(strsplit(genes,","))){
 			annotate("text", x=df2$condition[length(df2$condition)], y=max(df2$value) + 2.5, label=paste0("Samples_numbering:\n",paste0("Number_",1:length(df2$sample),": ",df2$sample,collapse="\n")), hjust=0, vjust=1) +
 			theme_classic() + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size=8)) +
 			labs(x="",y="Expr_marray (log2 + .1)",color="Condition", title=paste0(paste(a$V2[grep("Series_geo_accession",a$V1)],a$V2[grep("Series_title",a$V1)],sep=": "),". GENE SHOWN: ", i))
-		  ggsave(p, filename = paste0(path,"/final_results_reanalysis/",i,"_violin_",paste0("custom_design_",z),"_label_samples.pdf"),width=30, height=30)
+		  ggsave(p, filename = paste0(path,"/final_results_reanalysis/",i,"_violin_",paste0("custom_design_",z),"_label_samples.pdf"),width=15, height=15)
 		  write.table(paste0("Samples_numbering:\n",paste0("Number_",1:length(df2$sample),": ",df2$sample,collapse="\n")),
 		              file=paste0(path,"/final_results_reanalysis/label_samples.txt"),quote = F,row.names = F, col.names = F,sep = "\n")
 
@@ -140,7 +140,7 @@ for (i in unlist(strsplit(genes,","))){
 			geom_point(data = dplyr::filter(df2, condition_n == 1)) +
 			theme_classic() + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size=9)) +
 			labs(x="",y="Expr_RPKM (log2 + .1)",color="Condition", title=paste0(paste(a$V2[grep("Series_geo_accession",a$V1)],a$V2[grep("Series_title",a$V1)],sep=": "),". GENE SHOWN: ", i))
-		  ggsave(p, filename = paste0(path,"/final_results_reanalysis/violin_stats/",i,"_violin_ttest_",paste0("custom_design_",z),".pdf"),width=30, height=30)
+		  ggsave(p, filename = paste0(path,"/final_results_reanalysis/violin_stats/",i,"_violin_ttest_",paste0("custom_design_",z),".pdf"),width=15, height=15)
 		  p <- ggplot(df2, aes(x=condition, y=value,color=condition,label = sample2)) +
 			geom_violin(trim=T) +
 			# geom_signif(comparisons = list(unique(df2$condition)),
@@ -152,7 +152,7 @@ for (i in unlist(strsplit(genes,","))){
 			geom_point(data = dplyr::filter(df2, condition_n == 1)) +
 			theme_classic() + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size=9)) +
 			labs(x="",y="Expr_RPKM (log2 + .1)",color="Condition", title=paste0(paste(a$V2[grep("Series_geo_accession",a$V1)],a$V2[grep("Series_title",a$V1)],sep=": "),". GENE SHOWN: ", i))
-		  ggsave(p, filename = paste0(path,"/final_results_reanalysis/violin_stats/",i,"_violin_wilcoxtest_",paste0("custom_design_",z),".pdf"),width=30, height=30)
+		  ggsave(p, filename = paste0(path,"/final_results_reanalysis/violin_stats/",i,"_violin_wilcoxtest_",paste0("custom_design_",z),".pdf"),width=15, height=15)
 		  p <- ggplot(df2, aes(x=condition, y=value,color=condition,label = sample2)) +
 			geom_violin(trim=T) +
 			# geom_signif(comparisons = list(unique(df2$condition)),
@@ -164,7 +164,7 @@ for (i in unlist(strsplit(genes,","))){
 			geom_point(data = dplyr::filter(df2, condition_n == 1)) +
 			theme_classic() + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size=9)) +
 			labs(x="",y="Expr_RPKM (log2 + .1)",color="Condition", title=paste0(paste(a$V2[grep("Series_geo_accession",a$V1)],a$V2[grep("Series_title",a$V1)],sep=": "),". GENE SHOWN: ", i))
-		  ggsave(p, filename = paste0(path,"/final_results_reanalysis/violin_stats/",i,"_violin_kruskaltest_",paste0("custom_design_",z),".pdf"),width=30, height=30)
+		  ggsave(p, filename = paste0(path,"/final_results_reanalysis/violin_stats/",i,"_violin_kruskaltest_",paste0("custom_design_",z),".pdf"),width=15, height=15)
 		  p <- ggplot(df2, aes(x=condition, y=value,color=condition,label = sample2)) +
 			geom_violin(trim=T) +
 			# geom_signif(comparisons = list(unique(df2$condition)),
@@ -176,7 +176,7 @@ for (i in unlist(strsplit(genes,","))){
 			geom_point(data = dplyr::filter(df2, condition_n == 1)) +
 			theme_classic() + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size=9)) +
 			labs(x="",y="Expr_RPKM (log2 + .1)",color="Condition", title=paste0(paste(a$V2[grep("Series_geo_accession",a$V1)],a$V2[grep("Series_title",a$V1)],sep=": "),". GENE SHOWN: ", i))
-		   ggsave(p, filename = paste0(path,"/final_results_reanalysis/violin_stats/",i,"_violin_anova_",paste0("custom_design_",z),".pdf"),width=30, height=30)
+		   ggsave(p, filename = paste0(path,"/final_results_reanalysis/violin_stats/",i,"_violin_anova_",paste0("custom_design_",z),".pdf"),width=15, height=15)
 }
 }
 }

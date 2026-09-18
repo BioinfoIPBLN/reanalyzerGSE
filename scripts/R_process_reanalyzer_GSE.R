@@ -727,7 +727,7 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
           position = ggplot2::position_dodge()) +
           theme_classic() + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size=9)) +
         labs(x="",color="Condition", title=paste0(lab_title,"// GENE SHOWN: ", i))
-        ggsave(p, filename = paste0(output_dir,"/violin/",i,"_barplot_",gsub(".txt","",basename(z)),".pdf"),width=30, height=30)
+        ggsave(p, filename = paste0(output_dir,"/violin/",i,"_barplot_",gsub(".txt","",basename(z)),".pdf"),width=15, height=15)
         suppressWarnings(htmlwidgets::saveWidget(widget = ggplotly(p),file = paste0(output_dir,"/violin/",i,"_barplot_",gsub(".txt","",basename(z)),".html"),selfcontained = TRUE))
 
         df2 <- reshape2::melt(df)
@@ -749,7 +749,7 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
         geom_text(data=labs_total,aes(x=condition,y= max(df2$value) + 0.1,label=i)) +
         theme_classic() + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size=9)) +
         labs(x="",y=expr_col,color="Condition", title=paste0(lab_title,"// GENE SHOWN: ", i))
-        ggsave(p, filename = paste0(output_dir,"/violin/",i,"_violin_",gsub(".txt","",basename(z)),".pdf"),width=30, height=30)
+        ggsave(p, filename = paste0(output_dir,"/violin/",i,"_violin_",gsub(".txt","",basename(z)),".pdf"),width=15, height=15)
         suppressWarnings(htmlwidgets::saveWidget(widget = ggplotly(p),file = paste0(output_dir,"/violin/",i,"_violin_",gsub(".txt","",basename(z)),".html"),selfcontained = TRUE))
         write.table(paste0("Samples_numbering:\n",paste0("Number_",1:length(df2$sample),": ",df2$sample,collapse="\n")),
                     file=paste0(output_dir,"/violin/label_samples.txt"),quote = F,row.names = F, col.names = F,sep = "\n")
@@ -766,7 +766,7 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
         geom_point(data = dplyr::filter(df2, condition_n == 1)) +
         theme_classic() + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size=9)) +
         labs(x="",y=expr_col,color="Condition", title=paste0(lab_title,"// GENE SHOWN: ", i))
-        ggsave(p, filename = paste0(output_dir,"/violin/",i,"_violin_ttest_",gsub(".txt","",basename(z)),".pdf"),width=30, height=30)
+        ggsave(p, filename = paste0(output_dir,"/violin/",i,"_violin_ttest_",gsub(".txt","",basename(z)),".pdf"),width=15, height=15)
         suppressWarnings(htmlwidgets::saveWidget(widget = ggplotly(p),file = paste0(output_dir,"/violin/",i,"_violin_ttest_",gsub(".txt","",basename(z)),".html"),selfcontained = TRUE))
         p <- ggplot(df2, aes(x=condition, y=value,color=condition,label = sample2)) +
         geom_violin(trim=T) +
@@ -780,7 +780,7 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
         geom_point(data = dplyr::filter(df2, condition_n == 1)) +
         theme_classic() + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size=9)) +
         labs(x="",y=expr_col,color="Condition", title=paste0(lab_title,"// GENE SHOWN: ", i))
-        ggsave(p, filename = paste0(output_dir,"/violin/",i,"_violin_wilcoxtest_",gsub(".txt","",basename(z)),".pdf"),width=30, height=30)
+        ggsave(p, filename = paste0(output_dir,"/violin/",i,"_violin_wilcoxtest_",gsub(".txt","",basename(z)),".pdf"),width=15, height=15)
         suppressWarnings(htmlwidgets::saveWidget(widget = ggplotly(p),file = paste0(output_dir,"/violin/",i,"_violin_wilcoxtest_",gsub(".txt","",basename(z)),".html"),selfcontained = TRUE))
         p <- ggplot(df2, aes(x=condition, y=value,color=condition,label = sample2)) +
         geom_violin(trim=T) +
@@ -794,7 +794,7 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
         geom_point(data = dplyr::filter(df2, condition_n == 1)) +
         theme_classic() + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size=9)) +
         labs(x="",y=expr_col,color="Condition", title=paste0(lab_title,"// GENE SHOWN: ", i))
-        ggsave(p, filename = paste0(output_dir,"/violin/",i,"_violin_kruskaltest_",gsub(".txt","",basename(z)),".pdf"),width=30, height=30)
+        ggsave(p, filename = paste0(output_dir,"/violin/",i,"_violin_kruskaltest_",gsub(".txt","",basename(z)),".pdf"),width=15, height=15)
         suppressWarnings(htmlwidgets::saveWidget(widget = ggplotly(p),file = paste0(output_dir,"/violin/",i,"_violin_kruskaltest_",gsub(".txt","",basename(z)),".html"),selfcontained = TRUE))
         p <- ggplot(df2, aes(x=condition, y=value,color=condition,label = sample2)) +
         geom_violin(trim=T) +
@@ -808,7 +808,7 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
         geom_point(data = dplyr::filter(df2, condition_n == 1)) +
         theme_classic() + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size=9)) +
         labs(x="",y=expr_col,color="Condition", title=paste0(lab_title,"// GENE SHOWN: ", i))
-        ggsave(p, filename = paste0(output_dir,"/violin/",i,"_violin_anova_",gsub(".txt","",basename(z)),".pdf"),width=30, height=30)
+        ggsave(p, filename = paste0(output_dir,"/violin/",i,"_violin_anova_",gsub(".txt","",basename(z)),".pdf"),width=15, height=15)
         suppressWarnings(htmlwidgets::saveWidget(widget = ggplotly(p),file = paste0(output_dir,"/violin/",i,"_violin_anova_",gsub(".txt","",basename(z)),".html"),selfcontained = TRUE))  
   }
   }
@@ -846,7 +846,7 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
       geom_point(alpha=0.4, size=1.75) +
       xlab("log2 fold change") + ylab("-log10 adj.P.Val") +
       geom_text_repel(data=selected_FC, aes(label=Gene),colour="black",size=3) + ggtitle(main) + theme(plot.title = element_text(hjust = 0.5)) #adding text for the top1 20 genes  
-    ggsave(p, filename = file,width=30, height=30)
+    ggsave(p, filename = file,width=15, height=15)
     suppressWarnings(htmlwidgets::saveWidget(widget = ggplotly(p),file = gsub("pdf","html",file),selfcontained = TRUE))
 
     # EnhancedVolcano version
@@ -1290,7 +1290,7 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
           #position = ggplot2::position_dodge()) +
           #theme_classic() + theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1,size=9)) +
           #labs(x="", title=paste0("GENE SHOWN: ", i))
-        #ggsave(p, filename = paste0("KOvsWT12m_hallmark_bars_",i,".pdf"),width=30, height=30)
+        #ggsave(p, filename = paste0("KOvsWT12m_hallmark_bars_",i,".pdf"),width=15, height=15)
         #}
         # qpdf::pdf_combine(input = list.files(pattern="KOvsWT12m_hallmark_bars_"),output="KOvsWT12m_hallmark_bars.pdf")
         # file.remove(list.files(pattern="KOvsWT12m_hallmark_bars_"))
