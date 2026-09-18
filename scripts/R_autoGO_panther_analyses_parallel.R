@@ -23,7 +23,10 @@ source(file.path(script_dir, "R_report_notes.R"))
 source(file.path(script_dir, "R_net_config.R"))
 .rgse_net_configure()
 
-.rgse_enrichr_tables <- function(genes, dbs, background = NULL, attempts = 6, empty_plausible_below = 5) {
+.rgse_min_enrich_genes <- 5
+
+.rgse_enrichr_tables <- function(genes, dbs, background = NULL, attempts = 6, empty_plausible_below = .rgse_min_enrich_genes) {
+  if (length(genes) < empty_plausible_below) attempts <- 1L
   for (k in seq_len(attempts)) {
     res <- tryCatch(
       if (length(background) > 0)
@@ -443,9 +446,13 @@ process_file <- function(file){
   Sys.sleep(runif(1, 0.5, 3.5))
   path3=paste0(path2,"/","enrichment_tables")
   if (length(expr_back) > 0) print(paste0("Using the detected-gene universe as background for ",file2,": ",length(expr_back)," genes"))
-  .ago_res <- .rgse_enrichr_tables(unique(read.table(file,head=F)$V1), databases_autoGO, background = expr_back)
+  .ago_genes <- unique(read.table(file,head=F)$V1)
+  .ago_res <- .rgse_enrichr_tables(.ago_genes, databases_autoGO, background = expr_back)
   if (is.null(.ago_res)) {
-    print(paste0("autoGO with errors after retries: ",file2))
+    if (length(.ago_genes) < .rgse_min_enrich_genes)
+      print(paste0("autoGO returned nothing for ",file2,": only ",length(.ago_genes)," gene(s), too few to enrich, retries skipped"))
+    else
+      print(paste0("autoGO with errors after retries: ",file2))
   } else {
     dir.create(path3, showWarnings = FALSE, recursive = TRUE)
     for (.nm in names(.ago_res)) {
