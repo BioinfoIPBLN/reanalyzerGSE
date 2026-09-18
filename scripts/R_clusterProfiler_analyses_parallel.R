@@ -28,6 +28,8 @@ suppressMessages(library(aPEAR,quiet = T,warn.conflicts = F))
 
 # Source shared ENSEMBL helper
 script_dir <- dirname(sub("^--file=", "", commandArgs()[grep("--file=", commandArgs())]))
+source(file.path(script_dir, "R_net_config.R"))
+.rgse_net_configure()
 ensembl_helper <- file.path(script_dir, "R_ensembl_to_symbol.R")
 if (file.exists(ensembl_helper)) source(ensembl_helper)
 source(file.path(script_dir, "R_gene_id_helpers.R"))
@@ -148,12 +150,16 @@ for (.kt in c("KEGG", "MKEGG")) try(suppressMessages(clusterProfiler:::prepare_K
   while (i <= length(X)) {
     idx  <- i:min(i + n - 1L, length(X))
     jobs <- lapply(X[idx], function(x) parallel::mcparallel(FUN(x)))
-    done <- names(parallel::mccollect(jobs, wait = FALSE, timeout = timeout_s))
-    for (j in jobs) {
-      if (!(as.character(j$pid) %in% done)) {
-        print(paste0("Timed out after ", timeout_s, "s; abandoning one pathway rendering (pid ", j$pid, ")"))
-        tryCatch(tools::pskill(j$pid), error = function(e) NULL)
-      }
+    names(jobs) <- vapply(jobs, function(j) as.character(j$pid), character(1))
+    pending  <- names(jobs)
+    deadline <- Sys.time() + timeout_s
+    while (length(pending) > 0 && Sys.time() < deadline) {
+      got <- names(parallel::mccollect(jobs[pending], wait = FALSE, timeout = 5))
+      if (length(got) > 0) pending <- setdiff(pending, got)
+    }
+    for (p in pending) {
+      print(paste0("Timed out after ", timeout_s, "s; abandoning one pathway rendering (pid ", p, ")"))
+      tryCatch(tools::pskill(as.integer(p)), error = function(e) NULL)
     }
     tryCatch(parallel::mccollect(jobs, wait = FALSE), error = function(e) NULL)
     i <- max(idx) + 1L
@@ -659,7 +665,7 @@ process_file <- function(file){
                 data_filtered <- data$ID[data$pvalue < 0.05]
               })))
               .kegg_wd <- getwd()
-              .rgse_mclapply_timeout(paths_list, .rgse_inner_cores, 900, function(f){
+              .rgse_mclapply_timeout(paths_list, .rgse_inner_cores, 3600, function(f){
                 tryCatch({
                   safe_pathview(gene.data=kk@result,pathway.id=f,species=org,keep_kegg_copy=paste0(.kegg_wd,"/kegg_paths_snapshots"))
                 }, error = function(e) {
@@ -711,7 +717,7 @@ process_file <- function(file){
               data_filtered <- data$Description[data$pvalue < 0.05]
           })))
           .react_wd <- getwd()
-          .rgse_mclapply_timeout(paths_list, .rgse_inner_cores, 900, function(f){
+          .rgse_mclapply_timeout(paths_list, .rgse_inner_cores, 3600, function(f){
             tryCatch({
               suppressMessages(ggsave(viewPathway(f,readable = TRUE,organism = organism_cp_react),filename = paste0(.react_wd,"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome.pdf"),width=15, height=15, create.dir=T))
             }, error = function(e) {

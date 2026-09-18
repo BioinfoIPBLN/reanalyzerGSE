@@ -8,6 +8,8 @@ kegg_annotation <- if (length(args) >= 5 && nchar(args[5]) > 0) args[5] else NUL
 
 .rgse_scripts_dir <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[1])))
 source(file.path(.rgse_scripts_dir, "R_qs_helpers.R"))
+source(file.path(.rgse_scripts_dir, "R_net_config.R"))
+.rgse_net_configure()
 
 suppressMessages(library(clusterProfiler,quiet = T,warn.conflicts = F))
 suppressMessages(library(aPEAR,quiet = T,warn.conflicts = F))

@@ -4,6 +4,10 @@ GEO_ID <- args[1]
 path <- args[2]
 genes <- args[3]
 
+.rgse_scripts_dir <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[1])))
+source(file.path(.rgse_scripts_dir, "R_net_config.R"))
+.rgse_net_configure()
+
 ### I think normally the matrix of counts are not normalized, and I try to load the non-normalized counts. Then, I normalize:
 ### I also load the annotations:
 setwd(paste(path,GEO_ID,"reads_study_info",GEO_ID,sep="/"))

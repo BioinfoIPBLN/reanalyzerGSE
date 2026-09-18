@@ -69,6 +69,8 @@ if (grepl("Mus_?musculus|^Mus$|Mouse", organism_clean, ignore.case = TRUE)) {
 
 # Source shared ENSEMBL helper
 script_dir <- dirname(sub("^--file=", "", commandArgs()[grep("--file=", commandArgs())]))
+source(file.path(script_dir, "R_net_config.R"))
+.rgse_net_configure()
 ensembl_helper <- file.path(script_dir, "R_ensembl_to_symbol.R")
 if (file.exists(ensembl_helper)) source(ensembl_helper)
 

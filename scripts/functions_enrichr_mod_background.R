@@ -182,9 +182,15 @@ listEnrichrDbs <- function() {
     url <- paste0(base.address, "geneSetLibrary?mode=text&libraryName=", db)
     tf <- tempfile(pattern = db, fileext = ".gmt")
     cat("   - Download GMT file... ")
-    tryCatch(download.file(url, tf, mode = "w", quiet = TRUE), 
-	     warning = function(warn) { message(warn); message("") },
-	     error = function(err) { message(err); message("") })
+    if (exists(".rgse_net_retry", mode = "function")) {
+	.rgse_net_retry(tryCatch(download.file(url, tf, mode = "w", quiet = TRUE),
+				 warning = function(w) stop(conditionMessage(w))),
+			label = paste0("GMT ", db))
+    } else {
+	tryCatch(download.file(url, tf, mode = "w", quiet = TRUE),
+		 warning = function(warn) { message(warn); message("") },
+		 error = function(err) { message(err); message("") })
+    }
     lines <- readLines(tf)
     # Formatting from backr.R
     gmt <- list()

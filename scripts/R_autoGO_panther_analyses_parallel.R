@@ -20,6 +20,8 @@ ensembl_helper <- file.path(script_dir, "R_ensembl_to_symbol.R")
 if (file.exists(ensembl_helper)) source(ensembl_helper)
 source(file.path(script_dir, "R_gene_id_helpers.R"))
 source(file.path(script_dir, "R_report_notes.R"))
+source(file.path(script_dir, "R_net_config.R"))
+.rgse_net_configure()
 
 .rgse_enrichr_tables <- function(genes, dbs, background = NULL, attempts = 6, empty_plausible_below = 5) {
   for (k in seq_len(attempts)) {

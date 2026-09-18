@@ -11,6 +11,8 @@ samples_info <- if (length(args) >= 7) args[7] else ""   # reads_study_info/samp
 .rgse_scripts_dir <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[1])))
 source(file.path(.rgse_scripts_dir, "R_qs_helpers.R"))
 source(file.path(.rgse_scripts_dir, "R_report_notes.R"))
+source(file.path(.rgse_scripts_dir, "R_net_config.R"))
+.rgse_net_configure()
 
 # Condition per sample, taken from samples_info.txt (col1 = sample, col3 = condition).
 # Falls back to stripping "_Rep..." off the sample name when the file is absent or a

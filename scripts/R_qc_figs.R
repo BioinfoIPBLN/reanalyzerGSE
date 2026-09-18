@@ -5,6 +5,8 @@ rgse_load_env(file.path(commandArgs(trailingOnly=TRUE)[3],"QC_and_others/globale
 # globalenvir.qs2 carries the whole saved environment, helper functions included, so re-source
 # them afterwards to make sure the definitions on disk win over any stale copy in the dump:
 source(file.path(.rgse_scripts_dir, "R_qs_helpers.R"))
+source(file.path(.rgse_scripts_dir, "R_net_config.R"))
+.rgse_net_configure()
 
 args = commandArgs(trailingOnly=TRUE)
 path <- args[1]
