@@ -684,6 +684,8 @@ run_stringdb <- function(deg_df, label, new_path, organism_taxid, orgdb = NULL) 
         plot_ids <- hits
         if (length(plot_ids) > 400) {
             cat(paste0("    Capping STRINGdb network plot to top 400 most significant genes (total mapped: ", length(plot_ids), ")\n"))
+            .rgse_capping_note(path, "STRINGdb network plot", label, 400, length(plot_ids),
+                               "the network plot is limited to 400 nodes to stay readable")
             plot_ids <- plot_ids[1:400]
         }
 
