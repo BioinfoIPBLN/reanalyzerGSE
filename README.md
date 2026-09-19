@@ -12,7 +12,7 @@ apptainer build reanalyzerGSE.sif reanalyzerGSE/external_software/installation/r
 ```
 2) Download the ready-to-use .sif image:
 ```
-wget -q https://drive.switch.ch/index.php/s/qPfA9btiGZKtkEE/download -O reanalyzerGSE.sif
+wget -q https://bit.ly/reanalyzerGSE_sif -O reanalyzerGSE.sif
 ```
 
 
