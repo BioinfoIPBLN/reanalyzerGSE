@@ -21,7 +21,7 @@ Venn_funct <- function(files){
   	color_rgb <- col2rgb(color); luminance <- 0.299*color_rgb[1,] + 0.587*color_rgb[2,] + 0.114*color_rgb[3,]
   	# Filter out light colors based on a luminance threshold
   	color <- color[luminance < 400] # You can adjust the threshold value as needed
-  	levels(col.group) <- sample(color, nlevels(col.group))
+  	levels(col.group) <- rgse_stable_sample(color, nlevels(col.group))
   	col.group <- as.character(col.group)
   	list_of_ids <- lapply(list_of_tables,function(y){y$Gene_ID[y$FDR<0.05]})
   	names(list_of_ids) <- group
@@ -170,6 +170,7 @@ if(length(list.files(path=paste0(path,"/time_course_analyses"),full.names=T,patt
       # An automatica approach to try and capture the number of clusters where repetitions starts. If no repetitions, then the max number of clusters by default in cselection (32) is used.
 
 	  pdf("mfuzz_cselection_plot.pdf")
+	  set.seed(1234)
 	  tmp  <- cselection(clust.s,m=mestimate_value,repeats=5,visu=TRUE)
 	  dev.off()
 
@@ -198,6 +199,7 @@ if(length(list.files(path=paste0(path,"/time_course_analyses"),full.names=T,patt
 
     
       # Final computation:
+      set.seed(1234)
       cl <- mfuzz(clust.s,c=cluster_number_final,m=mestimate_value)
       
 	  grid_dimensions <- function(n) {

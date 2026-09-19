@@ -24,11 +24,17 @@ SEQUENTIAL IS A HARD INVARIANT.
 Nothing here is deployment-specific: the endpoint/model/key come from the caller
 (CLI flag or LLM_* env var); none is hardcoded.
 """
-import hashlib, json, os, re, socket, sys, tempfile, threading, time, urllib.error, urllib.request
+import hashlib, json, os, re, socket, sys, tempfile, threading, time, urllib.error, urllib.parse, urllib.request
 try:
     import fcntl                       # POSIX advisory file locking; absent on non-Unix
 except ImportError:                    # pragma: no cover
     fcntl = None
+
+
+class LLMBadResponse(Exception):
+    """Raised when the endpoint answers 200 with a body that is not JSON (a
+    gateway error page, typically). Carries an endpoint-scrubbed diagnostic so
+    the failure is visible instead of collapsing into an empty summary."""
 
 
 class LLMTimeout(Exception):
@@ -152,7 +158,14 @@ def chat_completion(endpoint, model, api_key, messages, timeout=600):
             t0 = time.time()
             try:
                 with urllib.request.urlopen(req, timeout=timeout) as r:
-                    body = json.loads(r.read())
+                    raw = r.read()
+                try:
+                    body = json.loads(raw)
+                except ValueError as e:
+                    snippet = raw[:200].decode("utf-8", "replace").replace("\n", " ")
+                    raise LLMBadResponse(mask(
+                        f"the endpoint returned a non-JSON body ({e}): {snippet}",
+                        secret_values(endpoint=endpoint, api_key=api_key))[0]) from None
                 dur = time.time() - t0
                 usage = dict(body.get("usage") or {})
                 usage["duration_s"] = dur
@@ -212,6 +225,10 @@ def secret_values(endpoint=None, api_key=None):
         m = re.match(r"^\w+://([^/]+)", endpoint)   # bare host:port, in case only that leaks
         if m:
             vals.add(m.group(1))
+    for v in list(vals):
+        for enc in (urllib.parse.quote(v, safe=""), urllib.parse.quote_plus(v)):
+            if enc != v and len(enc) >= 4:
+                vals.add(enc)
     return sorted(vals, key=len, reverse=True)
 
 def mask(text, secrets):

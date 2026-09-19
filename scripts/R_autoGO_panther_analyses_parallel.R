@@ -281,52 +281,8 @@ methods <- tryCatch(rba_panther_info(what = "datasets")$id, error = function(e) 
 #[224] "WikiPathway_2023_Human"                            
 #[225] "SynGO_2024"#
 
-# Deduce the naming convention in the orgDB package:
-check_naming <- function(names) {
-  names <- grep("[[:punct:]]|orf|p43|p45",names,val=T,invert=T)  
-  print(paste0("Looking at the annotation of ",length(names)," genes..."))
-  all_upper <- grepl("^[A-Z0-9]+$", names)
-  all_lower <- grepl("^[a-z0-9]+$", names)
-  
-  # Checks if the first letter is uppercase followed by lowercase letters or numbers, for names with at least one letter
-  first_upper_rest_lower <- sapply(names, function(name) {
-    if (grepl("[A-Za-z]", name)) { # Check if the name contains at least one letter
-      # Extract the first letter and the rest of the string separately
-      first_letter <- substr(name, regexpr("[A-Za-z]", name), regexpr("[A-Za-z]", name))
-      rest <- substr(name, regexpr("[A-Za-z]", name) + 1, nchar(name))
-      # Check if the first letter is uppercase and the rest of the string is lowercase or numeric (ignoring leading numbers)
-      return(grepl("^[A-Z]$", first_letter) && grepl("^[a-z0-9]*$", rest))
-    } else {
-      return(TRUE) # If the name doesn't contain letters, it trivially satisfies the condition
-    }
-  })
-
-  if(!all(all_upper) && !all(all_lower) && !all(first_upper_rest_lower)){
-    pattern_results <- which.max(c(sum(all_upper),sum(all_lower),sum(first_upper_rest_lower)))
-    num_genes <- c(sum(all_upper),sum(all_lower),sum(first_upper_rest_lower))[pattern_results]
-    pattern_result_final <- c("all_upper","all_lower","first_upper_rest_lower")[pattern_results]
-    print(paste0("Identified pattern for gene naming is ",pattern_result_final, ", accounting for ",num_genes," genes"))
-  } else {
-    pattern_result_final <- c("all_upper","all_lower","first_upper_rest_lower")[c(all(all_upper),all(all_lower),all(first_upper_rest_lower))]
-    print(paste0("Identified pattern for gene naming is ",pattern_result_final, ", accounting for all annotated genes"))
-  }
-  
-  return(pattern_result_final)
-
-  
-}
-convert_ids <- function(ids,mode) {
-  if(mode=="all_upper"){
-    ids2 <- toupper(ids)
-  } else if (mode=="all_lower") {
-    ids2 <- tolower(ids)
-  } else if (mode=="first_upper_rest_lower") {
-    ids2 <- stringr::str_to_title(ids)
-  } else {
-    ids2 <- ids
-  }
-  if (exists("canonicalise_gene_ids")) return(canonicalise_gene_ids(ids))
-  return(ids2)
+convert_ids <- function(ids) {
+  canonicalise_gene_ids(ids)
 }
 
 # Decide autoGO/enrichr databases: honour EXACTLY what the user asked for via
@@ -346,13 +302,11 @@ if (grepl("sapiens", organism, fixed=TRUE)){
   databases_autoGO_print <- paste(databases_autoGO,collapse=",")
   print(paste0("The databases selected for autoGO are ",databases_autoGO_print,". Please double check autoGO::choose_database(), which has > 200 databases, in case you want to add any extra by using the pipeline argument..."))
   suppressMessages(library("org.Hs.eg.db",quiet = T,warn.conflicts = F))
-  mode <- check_naming(keys(org.Hs.eg.db, keytype = "SYMBOL"))
 } else if (grepl("musculus", organism, fixed=TRUE)){
   databases_autoGO <- unique(enrichment_databases)   # strict: exactly -databases_function, no auto-added extras
   databases_autoGO_print <- paste(databases_autoGO,collapse=",")
   print(paste0("The databases selected for autoGO are ",databases_autoGO_print,". Please double check autoGO::choose_database(), which has > 200 databases, in case you want to add any extra by using the pipeline argument..."))
   suppressMessages(library("org.Mm.eg.db",quiet = T,warn.conflicts = F))
-  mode <- check_naming(keys(org.Mm.eg.db, keytype = "SYMBOL"))
 } else {
   print(paste0("Your organism is ",organism,", and unfortunately the pipeline for automatic functional enrichment currently fully supports only mouse and human. We'll include non-model organisms eventually, but in the meantime please don't give up and double check if you can use autoGO manually with any of the rest of databases that may contain your organism from autoGO::choose_database(), which has > 200 databases"))
   stop("Exiting")
@@ -397,17 +351,17 @@ for (f in .dge_files_ago){
     if (dim(b)[1]!=0){
       print(paste0("Writing ",basename(paste0(gsub(".txt","",f),"_fdr_05.txt"))," and ",basename(paste0(gsub(".txt","",f),"_fdr_05_Gene_IDs.txt")),"... ",dim(b)[1]," genes"))
       write.table(b,file=paste0(gsub(".txt","",f),"_fdr_05.txt"),col.names = F,row.names = F,quote = F,sep="\t")  
-      write.table(convert_ids(b$Gene_ID,mode),file=paste0(gsub(".txt","",f),"_fdr_05_Gene_IDs.txt"),col.names = F,row.names = F,quote = F,sep="\n")
+      write.table(convert_ids(b$Gene_ID),file=paste0(gsub(".txt","",f),"_fdr_05_Gene_IDs.txt"),col.names = F,row.names = F,quote = F,sep="\n")
     }
     if (dim(d)[1]!=0){
       print(paste0("Writing ",basename(paste0(gsub(".txt","",f),"_fdr_05_logpos.txt"))," and ",basename(paste0(gsub(".txt","",f),"_fdr_05_logpos_Gene_IDs.txt")),"... ",dim(d)[1]," genes"))
       write.table(d,file=paste0(gsub(".txt","",f),"_fdr_05_logpos.txt"),col.names = F,row.names = F,quote = F,sep="\t")
-      write.table(convert_ids(d$Gene_ID,mode),file=paste0(gsub(".txt","",f),"_fdr_05_logpos_Gene_IDs.txt"),col.names = F,row.names = F,quote = F,sep="\n")
+      write.table(convert_ids(d$Gene_ID),file=paste0(gsub(".txt","",f),"_fdr_05_logpos_Gene_IDs.txt"),col.names = F,row.names = F,quote = F,sep="\n")
     }
     if (dim(e)[1]!=0){
       print(paste0("Writing ",basename(paste0(gsub(".txt","",f),"_fdr_05_logneg.txt"))," and ",basename(paste0(gsub(".txt","",f),"_fdr_05_logneg_Gene_IDs.txt")),"... ",dim(e)[1]," genes"))
       write.table(e,file=paste0(gsub(".txt","",f),"_fdr_05_logneg.txt"),col.names = F,row.names = F,quote = F,sep="\t")
-      write.table(convert_ids(e$Gene_ID,mode),file=paste0(gsub(".txt","",f),"_fdr_05_logneg_Gene_IDs.txt"),col.names = F,row.names = F,quote = F,sep="\n")
+      write.table(convert_ids(e$Gene_ID),file=paste0(gsub(".txt","",f),"_fdr_05_logneg_Gene_IDs.txt"),col.names = F,row.names = F,quote = F,sep="\n")
     }
     key_files <- rbind(key_files,data.frame(new_files=c(paste0(gsub(".txt","",f),"_fdr_05_Gene_IDs.txt"),paste0(gsub(".txt","",f),"_fdr_05_logpos_Gene_IDs.txt"),paste0(gsub(".txt","",f),"_fdr_05_logneg_Gene_IDs.txt")),
                                             old_file=rep(f,3)))
@@ -439,7 +393,7 @@ process_file <- function(file){
   print(paste0("Processing autoGO for ",file2," and ",length(read.table(file,head=F)$V1)," genes..."))
   .bk_idx <- grep(file2,key_files$new_files)
   if (length(.bk_idx) == 0) print(paste0("No registered background for ",file2,"; falling back to the Enrichr default background, and Panther reference-gene analyses skipped"))
-  expr_back <- if (length(.bk_idx) > 0 && file.exists(key_files$old_file[.bk_idx[1]])) convert_ids(read.table(key_files$old_file[.bk_idx[1]])$V1,mode) else character(0)
+  expr_back <- if (length(.bk_idx) > 0 && file.exists(key_files$old_file[.bk_idx[1]])) convert_ids(read.table(key_files$old_file[.bk_idx[1]])$V1) else character(0)
   expr_back <- unique(expr_back[nzchar(expr_back) & expr_back != "Gene_ID"])
   
   # autoGO:

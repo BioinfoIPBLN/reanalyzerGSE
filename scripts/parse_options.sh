@@ -189,7 +189,7 @@ for argument in $options; do
 		-t) transcripts=${arguments[index]} ;;
 		-T) target=${arguments[index]} ;;
 		-A) aligner=${arguments[index]} ;;
-		-A) aligner_index_cache=${arguments[index]} ;;
+		-Ac | -aligner_index_cache) aligner_index_cache=${arguments[index]} ;;
 		-K) kraken2_fast=${arguments[index]}; echo "WARNING: -K/Kraken2_fast is deprecated; k2 daemon mode is used instead. This option has no effect." ;;
 		-Dk) kraken2_databases=${arguments[index]} ;;
 		-Kc | -kraken2_confidence) kraken2_confidence=${arguments[index]} ;;
@@ -289,10 +289,16 @@ if [ ! -z "$options_file" ]; then
 		echo "Error: Config file '$options_file' not found."; exit 1
 	fi
 	echo -e "\nLoading configuration from YAML file: $options_file\n"
+	allowed_yaml_keys=$(sed -n 's/^[[:space:]]*-[^)]*)[[:space:]]*\([a-zA-Z_][a-zA-Z0-9_]*\)=\${arguments\[index\]}.*/\1/p' "$CURRENT_DIR_SCRIPTS/parse_options.sh" | sort -u)
+	allowed_yaml_keys=$(printf '%s\ndebug_step\norganism\n' "$allowed_yaml_keys")
 	while IFS='=' read -r key val; do
 		# Skip empty keys or null values
 		[ -z "$key" ] && continue
 		[ "$val" = "null" ] && continue
+		if ! printf '%s\n' "$allowed_yaml_keys" | grep -qxF -- "$key"; then
+			echo "WARNING: ignoring '$key' in $options_file: not a reanalyzerGSE option. Check 'reanalyzerGSE.sh -h' for valid keys."
+			continue
+		fi
 		# Only set if not already defined by CLI arguments (CLI takes priority)
 		if [ -z "${!key}" ]; then
 			export "$key=$val"
@@ -829,7 +835,10 @@ seqs_location=$output_folder/$name/raw_reads
 organism_argument=$organism
 number_reads=$number_reads_to_subsample
 perform_differential_analyses=$full_differential_analyses
-if [ -z "$debug_step" ]; then
+if [ ! -z "$debug_module" ]; then
+	if [ ! -z "$debug_step" ] && [ "$debug_step" != "$debug_module" ]; then
+		echo -e "\nWARNING: 'debug_step: $debug_step' in the YAML and '-Dm $debug_module' on the command line disagree. Using the command-line value ($debug_module).\n"
+	fi
 	debug_step=$debug_module
 fi
 minstd=$time_course_std

@@ -13,6 +13,7 @@ via CLI flags or env vars (LLM_ENDPOINT, LLM_MODEL, LLM_API_KEY).
 """
 
 import argparse
+import html
 import os
 import re
 import sys
@@ -111,7 +112,7 @@ def style_directives(txt):
     return txt
 
 def md_to_html(txt):
-    txt = style_directives(txt)
+    txt = style_directives(html.escape(txt, quote=False))
     out, depth = [], 0
     for line in txt.split("\n"):
         indent = len(line) - len(line.lstrip())

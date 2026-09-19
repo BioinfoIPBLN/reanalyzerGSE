@@ -140,6 +140,20 @@ def check_parallel_logs(analysis_dir):
     return failed_parallel
 
 
+def has_alignment_output(analysis_dir, aligner):
+    """True when the aligner produced something. Used to tell a run that has
+    nothing to validate yet from one whose sample list went missing."""
+    patterns = {
+        "star":     [("star_results", "*_STAR.bam")],
+        "hisat2":   [("hisat2_results", "*_hisat2.bam")],
+        "kallisto": [("kallisto_results", "*")],
+    }.get(aligner, [("star_results", "*_STAR.bam")])
+    for subdir, leaf in patterns:
+        if glob.glob(os.path.join(analysis_dir, "miARma_out*", subdir, leaf)):
+            return True
+    return False
+
+
 def validate_alignment_and_counts(analysis_dir, aligner="star", samples_info_path=None):
     """
     Validate alignment BAMs, read counts, and execution logs for all expected samples.
@@ -149,6 +163,11 @@ def validate_alignment_and_counts(analysis_dir, aligner="star", samples_info_pat
     expected_samples = parse_expected_samples(analysis_dir, samples_info_path)
 
     if not expected_samples:
+        if has_alignment_output(analysis_dir, aligner):
+            return False, (
+                "[Validation ERROR] Alignment output is present but the expected sample list "
+                "could not be determined from samples_info.txt or raw_reads, so no sample could "
+                "be checked. Refusing to continue into Step 4 with an unverifiable run.")
         return True, "[Validation Notice] No expected samples found in samples_info.txt or raw_reads. Skipping validation."
 
     failed_samples = {}

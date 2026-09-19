@@ -109,17 +109,15 @@ def index_originals(source_root, html_root):
 def same_content(a, b, sample=8192):
     try:
         with open(a, "rb") as fa, open(b, "rb") as fb:
-            if fa.read(sample) != fb.read(sample):
-                return False
-            size = os.path.getsize(a)
-            if size > 2 * sample:
-                fa.seek(-sample, os.SEEK_END)
-                fb.seek(-sample, os.SEEK_END)
-                if fa.read(sample) != fb.read(sample):
+            while True:
+                ba = fa.read(1 << 20)
+                bb = fb.read(1 << 20)
+                if ba != bb:
                     return False
+                if not ba:
+                    return True
     except OSError:
         return False
-    return True
 
 
 def human(n):

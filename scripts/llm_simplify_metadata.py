@@ -15,6 +15,7 @@ Rules:
 
 import argparse
 import os
+import shutil
 import sys
 import re
 
@@ -150,7 +151,7 @@ def main():
         new_conditions.append(s_cond)
 
     # Backup original files
-    os.system(f"cp '{samples_info_path}' '{samples_info_path}.raw_bak'")
+    shutil.copy2(samples_info_path, samples_info_path + ".raw_bak")
 
     # Write streamlined samples_info.txt
     with open(samples_info_path, "w", encoding="utf-8") as f:

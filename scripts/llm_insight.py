@@ -370,7 +370,6 @@ def main():
     except Exception as e:
         llm_common.log(f"[llm_insight] error for {out}: {e}; skipping.")
         return 0
-        return 0
     return 0
 
 

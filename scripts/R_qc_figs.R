@@ -123,7 +123,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   color = grDevices::colors()[grep('gr(a|e)y|white', grDevices::colors(), invert = TRUE)] # Get a list of non-gray or white colors
   contrast <- sapply(color,colorspace::contrast_ratio); contrast <- contrast[contrast>4] # Ensure a high contrast here and below (>4 on W3C standard)
   contrast2 <- unique(t(combn(unique(names(contrast)),2))[apply(t(combn(unique(names(contrast)),2)),1,function(x){colorspace::contrast_ratio(x[1],col2=x[2])}) > 4])
-  levels(col.group) <- sample(contrast2, nlevels(col.group)); col.group <- as.character(col.group)
+  levels(col.group) <- rgse_stable_sample(contrast2, nlevels(col.group)); col.group <- as.character(col.group)
   # Name the color vector by normalized sample name for correct mapping after reordering (e.g. corrplot AOE)
   sample_names_for_col <- rgse_resolve_collisions(rgse_sample_id(colnames(x$counts)), colnames(x$counts), "count column names")
   names(col.group) <- sample_names_for_col
@@ -209,7 +209,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
     cutoff_cols <- c(cutoff_cols, "red")
   }
   legend("topleft", legend=cutoff_legends, lty=cutoff_ltys, col=cutoff_cols, bty="n", cex=0.5)
-  legend("topright",legend=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), text.col=col, bty = "n", cex = 0.5)
+  legend("topright",legend=gsub("(_t|m_Rep|_seq|_KO|_WT)$","",targets$Name), text.col=col, bty = "n", cex = 0.5)
   
   ### 1.2. Density rawcounts log2, cpm...:
   plot(density(lcpm[,1]), col=col[1], lwd=2, las=2, main="", xlab="")
@@ -221,7 +221,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
     lines(den$x, den$y, col=col[i], lwd=2)
   }
   legend("topleft", legend=cutoff_legends, lty=cutoff_ltys, col=cutoff_cols, bty="n", cex=0.5)
-  legend("topright", legend=gsub("_t|m_Rep|_seq|_KO|_WT","",targets$Name), text.col=col, bty="n", cex = 0.5)
+  legend("topright", legend=gsub("(_t|m_Rep|_seq|_KO|_WT)$","",targets$Name), text.col=col, bty="n", cex = 0.5)
   
   ### 2.1. Boxplots non-normalised:
   cat("\n[3/12] Boxplots (unnorm + norm)\n")

@@ -31,7 +31,7 @@ Usage:
         --llm-endpoint https://your-llm-host/v1/chat/completions --llm-model your-model-name
     python multiqc_ai.py --analysis-dir ./results --out-dir ./multiqc --builtin
 """
-import argparse, os, re, subprocess, sys, time
+import argparse, html as html_mod, os, re, subprocess, sys, time
 
 # Import the sibling shared module regardless of how this script is invoked
 # (PATH, absolute path, symlink): put its own directory on sys.path first.
@@ -88,9 +88,15 @@ def run_multiqc(cfg, analysis_dir, out_dir, builtin):
             ]
     # Mask the endpoint before logging the command line (it carries
     # --ai-custom-endpoint <url> in builtin mode); the model is left visible.
-    print("[MultiQC]", llm_common.mask(" ".join(cmd),
-          llm_common.secret_values(endpoint=cfg.endpoint, api_key=cfg.api_key))[0], flush=True)
-    subprocess.run(cmd, check=True, env=env)
+    secrets = llm_common.secret_values(endpoint=cfg.endpoint, api_key=cfg.api_key)
+    print("[MultiQC]", llm_common.mask(" ".join(cmd), secrets)[0], flush=True)
+    proc = subprocess.run(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    child_out = proc.stdout.decode("utf-8", "replace") if proc.stdout else ""
+    if child_out:
+        print(llm_common.mask(child_out, secrets)[0], end="" if child_out.endswith("\n") else "\n",
+              flush=True)
+    if proc.returncode != 0:
+        raise subprocess.CalledProcessError(proc.returncode, ["multiqc"])
 
 # --------------------------------------------------------- LLM call helper
 def ask_llm(cfg, section_id, data):
@@ -152,7 +158,7 @@ def style_directives(txt):
     return txt
 
 def md_to_html(txt):
-    txt = style_directives(txt)
+    txt = style_directives(html_mod.escape(txt, quote=False))
     out, depth = [], 0
     for line in txt.split("\n"):
         indent = len(line) - len(line.lstrip())
@@ -274,7 +280,8 @@ def inject(html, sec_id, summary_html):
 def per_section(cfg, out_dir):
     html_path = os.path.join(out_dir, "multiqc_report.html")
     data_dir  = os.path.join(out_dir, "multiqc_data")
-    html = open(html_path, encoding="utf-8").read()
+    with open(html_path, encoding="utf-8", errors="surrogateescape", newline="") as fh:
+        html = fh.read()
     sec_ids = discover_sections(html)
     print(f"[AI] {len(sec_ids)} sections found in report", flush=True)
 
@@ -284,7 +291,8 @@ def per_section(cfg, out_dir):
         status = os.path.basename(f) if f else "SKIPPED (no matching data file)"
         mappings_log.append(f"  - {sec_id:<45} -> {status}")
     print("[AI] Section -> Data File Mappings:\n" + "\n".join(mappings_log[2:]), flush=True)
-    open(os.path.join(data_dir, "section_mappings.txt"), "w").write("\n".join(mappings_log))
+    with open(os.path.join(data_dir, "section_mappings.txt"), "w", encoding="utf-8") as fh:
+        fh.write("\n".join(mappings_log))
 
     prompts_log = [f"Per-section AI prompts -- model: {cfg.model}", ""]
     timed_out = False   # once the LLM times out we stop calling and mark the rest
@@ -314,8 +322,10 @@ def per_section(cfg, out_dir):
         print(f"[AI] {sec_id}: {'injected' if ok else 'NO ANCHOR'} "
               f"({usage.get('duration_s',0):.1f}s, {usage.get('total_tokens',0)} tok)", flush=True)
         prompts_log += ["=" * 76, f"Section: {sec_id}", "=" * 76, "", "[USER DATA FILE]", f, ""]
-    open(os.path.join(data_dir, "section_prompts.txt"), "w").write("\n".join(prompts_log))
-    open(html_path, "w", encoding="utf-8").write(html)
+    with open(os.path.join(data_dir, "section_prompts.txt"), "w", encoding="utf-8") as fh:
+        fh.write("\n".join(prompts_log))
+    with open(html_path, "w", encoding="utf-8", errors="surrogateescape", newline="") as fh:
+        fh.write(html)
     print(f"[AI] wrote {html_path}", flush=True)
 
 # --------------------------------------------------------------------- main
@@ -384,7 +394,12 @@ def main():
     cfg = Config(a)
     ai_mode = a.builtin or a.per_section
     if not a.skip_multiqc:
-        run_multiqc(cfg, a.analysis_dir, a.out_dir, a.builtin)
+        try:
+            run_multiqc(cfg, a.analysis_dir, a.out_dir, a.builtin)
+        except BaseException:
+            if ai_mode:
+                llm_common.redact_outputs(a.out_dir, endpoint=cfg.endpoint, api_key=cfg.api_key)
+            raise
     # Scrub the sensitive endpoint that MultiQC's builtin AI baked into the
     # report NOW -- before the (potentially long, one-LLM-call-per-section)
     # per-section loop -- so the raw endpoint sits on disk for seconds, not for

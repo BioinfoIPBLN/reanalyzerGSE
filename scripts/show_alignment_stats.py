@@ -126,18 +126,27 @@ def parse_alignment_stats(analysis_dir, aligner=""):
             multi_reads = 0
             multi_pct = 0.0
 
+            def star_field(line, cast):
+                parts = line.split("|")
+                if len(parts) < 2:
+                    return None
+                try:
+                    return cast(parts[1].replace("%", "").strip())
+                except ValueError:
+                    return None
+
             with open(log_path, "r", errors="ignore") as f:
                 for line in f:
                     if "Number of input reads" in line:
-                        total_reads = int(line.split("|")[1].strip())
+                        v = star_field(line, int); total_reads = total_reads if v is None else v
                     elif "Uniquely mapped reads number" in line:
-                        unique_reads = int(line.split("|")[1].strip())
+                        v = star_field(line, int); unique_reads = unique_reads if v is None else v
                     elif "Uniquely mapped reads %" in line:
-                        unique_pct = float(line.split("|")[1].replace("%", "").strip())
+                        v = star_field(line, float); unique_pct = unique_pct if v is None else v
                     elif "Number of reads mapped to multiple loci" in line:
-                        multi_reads = int(line.split("|")[1].strip())
+                        v = star_field(line, int); multi_reads = multi_reads if v is None else v
                     elif "% of reads mapped to multiple loci" in line:
-                        multi_pct = float(line.split("|")[1].replace("%", "").strip())
+                        v = star_field(line, float); multi_pct = multi_pct if v is None else v
 
             overall_rate = unique_pct + multi_pct
             sample_stats[sample] = {

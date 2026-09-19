@@ -34,8 +34,10 @@ def parse_reference_annotations(ref_path):
     """Build protein_id/transcript_id/locus/symbol -> gene_id mapping from reference GTF/GFF."""
     prot_to_gene = {}
     known_genes = set()
+    gene_upper = {}
+    upper_collisions = set()
     if not ref_path or not os.path.isfile(ref_path):
-        return prot_to_gene, known_genes
+        return prot_to_gene, known_genes, gene_upper
 
     with open_file(ref_path) as f:
         for line in f:
@@ -68,7 +70,9 @@ def parse_reference_annotations(ref_path):
             gene_key = gid or locus or name
             if gene_key:
                 known_genes.add(gene_key)
-                known_genes.add(gene_key.upper())
+                prev = gene_upper.setdefault(gene_key.upper(), gene_key)
+                if prev != gene_key:
+                    upper_collisions.add((prev, gene_key))
                 for id_val in [pid, tid, locus, name]:
                     if id_val and id_val != gene_key:
                         prot_to_gene[id_val] = gene_key
@@ -78,12 +82,18 @@ def parse_reference_annotations(ref_path):
                             prot_to_gene[base_val] = gene_key
                             prot_to_gene[base_val.upper()] = gene_key
 
-    return prot_to_gene, known_genes
+    if upper_collisions:
+        sys.stderr.write(
+            "[parse_functional_annotation] WARNING: %d gene identifier(s) differ only in case; "
+            "the case-insensitive fallback will resolve to the first spelling seen: %s\n"
+            % (len(upper_collisions),
+               ", ".join("%s/%s" % pair for pair in sorted(upper_collisions)[:10])))
+    return prot_to_gene, known_genes, gene_upper
 
 
 def parse_functional_file(input_path, ref_path, out_go, out_kegg):
     """Extract GO and KEGG terms from input annotation file and resolve IDs."""
-    prot_to_gene, known_genes = parse_reference_annotations(ref_path)
+    prot_to_gene, known_genes, gene_upper = parse_reference_annotations(ref_path)
 
     go_pairs = set()
     kegg_pairs = set()
@@ -150,11 +160,14 @@ def parse_functional_file(input_path, ref_path, out_go, out_kegg):
                 elif col3_sym and col3_sym in known_genes:
                     target_gid = col3_sym
                     mapped_sym += 1
-                elif col3_sym and col3_sym.upper() in known_genes:
-                    target_gid = col3_sym
+                elif col3_sym and col3_sym.upper() in gene_upper:
+                    target_gid = gene_upper[col3_sym.upper()]
                     mapped_sym += 1
                 elif col2_id in known_genes:
                     target_gid = col2_id
+                    mapped_direct += 1
+                elif col2_id and col2_id.upper() in gene_upper:
+                    target_gid = gene_upper[col2_id.upper()]
                     mapped_direct += 1
                 elif col3_sym:
                     target_gid = col3_sym

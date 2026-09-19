@@ -499,10 +499,12 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
   gene_counts_rpkm$Gene_ID <- canonicalise_gene_ids(rownames(gene_counts_rpkm))
 
   # Function for saving tpms later:
-  rpkm_to_tpm <- function(rpkm) {    
-    rpkm_sum <- sum(rpkm)
-    tpm <- (rpkm / rpkm_sum) * 1e6    
-    return(tpm)
+  rpkm_to_tpm <- function(rpkm) {
+    col_sums <- colSums(rpkm, na.rm = TRUE)
+    col_sums[!is.finite(col_sums) | col_sums == 0] <- NA_real_
+    tpm <- sweep(as.matrix(rpkm), 2, col_sums, "/") * 1e6
+    tpm[is.na(tpm)] <- 0
+    return(as.data.frame(tpm, check.names = FALSE))
   }
 
 ###### Reorder so gene_counts columns follow the alfanumeric order, easier for the users in the written tables, although for the figures the script needs GSMXXXX-ordered:
@@ -917,7 +919,7 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
     tab <- data.frame(Gene_ID = object$genes$Gene_ID,
                       Length  = object$genes$Length,
                       logFC   = res$log2FoldChange,
-                      logCPM  = log2(res$baseMean + 1),
+                      logCPM  = edgeR::aveLogCPM(counts_mat),
                       PValue  = res$pvalue,
                       FDR     = res$padj)
     rownames(tab) <- rownames(counts_mat)
@@ -1118,7 +1120,7 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
             Gene_ID = edgeR_object_norm_temp_to_process$genes$Gene_ID,
             Length = edgeR_object_norm_temp_to_process$genes$Length,
             logFC = mean1 - mean2,
-            logCPM = (mean1 + mean2) / 2,
+            logCPM = edgeR::aveLogCPM(edgeR_object_norm_temp_to_process),
             PValue = NA,
             FDR = NA
           )
@@ -1310,7 +1312,7 @@ if (venn_volcano!="no"){
       color = grDevices::colors()[grep('gr(a|e)y|white', grDevices::colors(), invert = TRUE)] # Get a list of non-gray or white colors
       contrast <- sapply(color,colorspace::contrast_ratio); contrast <- contrast[contrast>4] # Ensure a high contrast here and below (>4 on W3C standard)
       contrast2 <- unique(t(combn(unique(names(contrast)),2))[apply(t(combn(unique(names(contrast)),2)),1,function(x){colorspace::contrast_ratio(x[1],col2=x[2])}) > 4])
-      levels(col.group) <- sample(contrast2, nlevels(col.group)); col.group <- as.character(col.group)
+      levels(col.group) <- rgse_stable_sample(contrast2, nlevels(col.group)); col.group <- as.character(col.group)
       list_of_ids <- lapply(list_of_tables,function(y){y$Gene_ID[which(y$FDR<0.05)]})
       names(list_of_ids) <- group
   

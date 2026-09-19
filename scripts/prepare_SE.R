@@ -172,6 +172,8 @@ de_results_list <- lapply(1:length(deg_results_files), function(i) {
   de_results
 }) %>% setNames(paste0("contrast_", comparisons))
 
+de_results_full <- de_results_list
+
 # Use common genes across all DE result tables for rowData alignment
 common_genes <- Reduce(intersect, lapply(de_results_list, function(x) x$gene_name))
 cat("\n      Genes common across all contrasts:", length(common_genes))
@@ -257,6 +259,19 @@ universe_genes <- de_results_list[[1]]$gene_name
 universe_entrez <- as.character(de_results_list[[1]]$entrez_id)
 universe_entrez <- universe_entrez[!is.na(universe_entrez) & universe_entrez != "NA"]
 cat("      Genes with Entrez IDs:", length(universe_entrez), "\n")
+
+universe_entrez_for <- function(contrast_name) {
+  tbl <- de_results_full[[contrast_name]]
+  if (is.null(tbl)) return(universe_entrez)
+  u <- as.character(tbl$entrez_id)
+  unique(u[!is.na(u) & u != "NA"])
+}
+
+universe_symbols_for <- function(contrast_name) {
+  tbl <- de_results_full[[contrast_name]]
+  if (is.null(tbl)) tbl <- de_results_list[[contrast_name]]
+  unique(toupper(tbl$gene_name[!is.na(tbl$gene_name)]))
+}
 
 # --- Non-model functional annotation (basic GO ORA from annotation file) ---
 # For non-model organisms, parse the provided gene->GO mapping (nrf_file) ONCE into
@@ -362,6 +377,7 @@ enrichOutput_parallel <- mclapply(names(de_results_list), function(contrast_name
   cat("\n      Processing:", contrast_name)
   
   de_data <- de_results_list[[contrast_name]]
+  universe_entrez <- universe_entrez_for(contrast_name)
   
   # Select DEGs based on FDR < 0.05
   sig_genes <- de_data[de_data$fdr < 0.05 & !is.na(de_data$fdr), ]
@@ -512,6 +528,7 @@ enrichOutput_parallel <- mclapply(names(de_results_list), function(contrast_name
   enrichOutput_parallel <- lapply(names(de_results_list), function(contrast_name) {
     cat("\n      Processing:", contrast_name)
     de_data <- de_results_list[[contrast_name]]
+    universe_g <- universe_symbols_for(contrast_name)
 
     sig_genes <- de_data[de_data$fdr < 0.05 & !is.na(de_data$fdr), ]
     up_genes <- sig_genes[sig_genes$log2Ratio > 0, ]
@@ -549,7 +566,8 @@ enrichOutput_parallel <- mclapply(names(de_results_list), function(contrast_name
           tryCatch({
             suppressMessages(suppressWarnings(
             er <- clusterProfiler::enricher(
-              gene = genes, TERM2GENE = t2g, TERM2NAME = t2n,
+              gene = genes, universe = universe_g,
+              TERM2GENE = t2g, TERM2NAME = t2n,
               pvalueCutoff = 1, qvalueCutoff = 1
             )))
             if (!is.null(er) && nrow(er@result) > 0) {

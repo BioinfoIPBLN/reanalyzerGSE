@@ -51,3 +51,14 @@ rgse_resolve_collisions <- function(clean, raw, what = "sample names") {
   }
   clean
 }
+
+rgse_stable_sample <- function(x, size, seed = 1234) {
+  if (exists(".Random.seed", envir = .GlobalEnv)) {
+    old_seed <- get(".Random.seed", envir = .GlobalEnv)
+    on.exit(assign(".Random.seed", old_seed, envir = .GlobalEnv), add = TRUE)
+  } else {
+    on.exit(suppressWarnings(rm(".Random.seed", envir = .GlobalEnv)), add = TRUE)
+  }
+  set.seed(seed)
+  sample(x, size)
+}

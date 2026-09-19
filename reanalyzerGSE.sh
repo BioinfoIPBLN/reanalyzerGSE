@@ -7,7 +7,9 @@ echo "doi.org/10.1101/2023.07.12.548663v2"
 ###### 0. Define arguments and variables:
 ### Export a string with command options and an array with arguments and deal with them in parse_options.sh
 export options=$@
+set -f
 export arguments=($options)
+set +f
 
 CURRENT_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 source $CURRENT_DIR/scripts/parse_options.sh
@@ -158,7 +160,16 @@ fi
 
 ###### STEP 1. Download info from GEO and organize metadata and so:
 if run_step step1; then
-	rm -rf $output_folder/*
+	case "$output_folder" in
+		""|/|//) echo "ERROR: -o/-output_folder ('$output_folder') is not a safe output root. Exiting..."; exit 1 ;;
+		/*) : ;;
+		*) echo "ERROR: -o/-output_folder ('$output_folder') must be an absolute path. Exiting..."; exit 1 ;;
+	esac
+	if [ "$(readlink -f "$output_folder")" = "/" ]; then
+		echo "ERROR: -o/-output_folder resolves to '/'. Refusing to wipe it. Exiting..."; exit 1
+	fi
+	mkdir -p "$output_folder"
+	rm -rf "$output_folder"/*
 	# Re-create step_times.tsv after rm -rf (which deletes it)
 	if [[ $debug_step == "all" ]]; then
 		mkdir -p "$output_folder/$name"
@@ -402,7 +413,7 @@ if run_step step1a; then
 				fi
 			else
 				echo -e "\nSoft linking the already downloaded raw reads from the provided directory: $input_geo_reads\n"
-				ln -sf $input_geo_reads/* $seqs_location
+				ln -sf "$input_geo_reads"/* "$seqs_location"
 			fi
 			num_files=$(ls | wc -l); num_samples=$(cat $output_folder/$name/reads_study_info/srr_ids.txt | wc -l)
 			if [ "$num_files" -lt "$num_samples" ]; then
@@ -423,14 +434,17 @@ if run_step step1a; then
 			echo -e "\nIn the future this will automatically detect and only resume the downloads that fail...\n"
 			seqs_location=$output_folder/$name/raw_reads
 			number_ids=$(echo $input | tr ',' '\n' | wc -l)
+			if [ "${number_ids:-0}" -lt 1 ]; then number_ids=1; fi
 			if [ $number_ids -le $number_parallel ]; then
-				export cores_parallel=$((cores / number_files))
+				export cores_parallel=$((cores / number_ids))
 			else
 				export cores_parallel=$((cores / number_parallel))
 			fi
+			if [ "${cores_parallel:-0}" -lt 1 ]; then export cores_parallel=1; fi
 			cd $seqs_location; rm -rf *
 			echo $input | tr ',' '\n' | parallel --halt-on-error 2 --joblog $output_folder/$name/fastq_dl_log_parallel.txt -j $number_parallel --max-args 1 "if [ \$(echo {} | egrep -c 'PRJEB|PRJNA|PRJDB|ERX|DRX|SRX|ERP|DRP|SRP') -eq 1 ]; then fastq-dl --cpus $cores_parallel --silent --force --max-attempts 10 --gzip-level $compression_level --accession {}; fi && 
 																																		   if [ \$(echo {} | egrep -c 'ERS|DRS|SRS|SAMD|SAME|SAMN|ERR|DRR|SRR') -eq 1 ]; then fastq-dl --cpus $cores_parallel --silent --force --max-attempts 10 --gzip-level $compression_level --accession {}; fi"
+			num_gz_files=$(ls -1 $output_folder/$name/raw_reads/*.fastq.gz 2>/dev/null | wc -l)
 		 	if [ "$num_gz_files" -eq "$(($num_samples * 2))" ] || [ "$num_gz_files" -eq "$num_samples" ]; then
 		 		echo "It seems the download has been sucessful, but please double check"
 		 	else
@@ -486,7 +500,13 @@ if run_step step1a; then
 			}
 			export -f subsample_reads
 			parallel --halt-on-error 2 --verbose -j $cores_reads_to_subsample subsample_reads {} ::: "${arr2[@]}" :::+ "${arr3[@]}" # 10 only because of RAM
-			rm $(ls | grep -v subsamp); for file in $(ls); do mv $file $(echo $file | sed 's,_subsamp,,g;s,.gz,,g'); done
+			find . -maxdepth 1 -type f -name '*_subsamp' -print0 | while IFS= read -r -d '' sub; do
+				orig="${sub%_subsamp}"
+				[ -f "$orig" ] && rm -f -- "$orig"
+			done
+			find . -maxdepth 1 -type f -name '*_subsamp' -print0 | while IFS= read -r -d '' sub; do
+				mv -- "$sub" "$(echo "$sub" | sed 's,_subsamp,,g;s,.gz,,g')"
+			done
 			pigz --best -p $cores * # gz was lost with seqtk sample
 			echo -e "\nSubsampling (+-10%) completed...\n"
 		fi
@@ -568,7 +588,7 @@ if run_step step1b; then
 				echo -e "\nPlease make sure that the input files are named _1.fastq.gz, _R1.fastq.gz, _R1_001.fastq.gz, _2.fastq.gz, _R2.fastq.gz, _R2_001.fastq.gz\n"
 				exit 1
 			fi
-			for f in $(ls -d $input/*); do ln -sf $f $seqs_location/$(basename $f | sed 's,fq,fastq,g;s,_R1_[0-9]*.fastq,_1.fastq,g;s,_R2_[0-9]*.fastq,_2.fastq,g;s,_R1.fastq,_1.fastq,g;s,_R2.fastq,_2.fastq,g'); done
+			for f in "$input"/*; do ln -sf "$f" "$seqs_location"/$(basename "$f" | sed 's,fq,fastq,g;s,_R1_[0-9]*.fastq,_1.fastq,g;s,_R2_[0-9]*.fastq,_2.fastq,g;s,_R1.fastq,_1.fastq,g;s,_R2.fastq,_2.fastq,g'); done
 			if [ ! -z "$input_filter_regex" ]; then
 				echo -e "\nFiltering input files with regex: $input_filter_regex\n"
 				cd $seqs_location
@@ -649,7 +669,13 @@ if run_step step1b; then
 			}
 			export -f subsample_reads
 			parallel --halt-on-error 2 --verbose -j $cores_reads_to_subsample subsample_reads {} ::: "${arr2[@]}" :::+ "${arr3[@]}" # 10 only because of RAM
-			rm $(ls | grep -v subsamp); for file in $(ls); do mv $file $(echo $file | sed 's,_subsamp,,g;s,.gz,,g'); done
+			find . -maxdepth 1 -type f -name '*_subsamp' -print0 | while IFS= read -r -d '' sub; do
+				orig="${sub%_subsamp}"
+				[ -f "$orig" ] && rm -f -- "$orig"
+			done
+			find . -maxdepth 1 -type f -name '*_subsamp' -print0 | while IFS= read -r -d '' sub; do
+				mv -- "$sub" "$(echo "$sub" | sed 's,_subsamp,,g;s,.gz,,g')"
+			done
 			pigz --best -p $cores * # gz was lost with seqtk sample
 			echo -e "\nSubsampling (+-10%) completed...\n"
 		fi
@@ -698,11 +724,13 @@ if run_step step1c; then
   		seqs_location=$output_folder/$name/raw_reads
 		rm -rf $seqs_location # I'm now removing the seqs_location at the beginning of this section, in the context of the new system of resuming by -Dm stepx, so this should always be done
 		number_ids=$(echo $input | tr ',' '\n' | wc -l)
+		if [ "${number_ids:-0}" -lt 1 ]; then number_ids=1; fi
 		if [ $number_ids -le $number_parallel ]; then
-			export cores_parallel=$((cores / number_files))
+			export cores_parallel=$((cores / number_ids))
 		else
 			export cores_parallel=$((cores / number_parallel))
 		fi
+		if [ "${cores_parallel:-0}" -lt 1 ]; then export cores_parallel=1; fi
 		if [ ! -d "$seqs_location" ]; then
 			mkdir -p $seqs_location; cd $seqs_location
 			echo -e "\nDownloading from the input accessions that you manually provided...\n"

@@ -19,7 +19,7 @@ Exit codes:
     5   the query proteome or the annotation could not be parsed
 """
 
-import argparse, collections, gzip, json, os, re, shutil, subprocess, sys, urllib.error, urllib.request
+import argparse, collections, gzip, hashlib, json, os, re, shutil, subprocess, sys, urllib.error, urllib.request
 
 ORTHOLOGR_METHODS = ("DIAMOND_RBH", "DIAMOND_BH", "RBH", "BH")
 UNIPROT_HUMAN = ("https://rest.uniprot.org/uniprotkb/stream"
@@ -133,6 +133,26 @@ def sanitize_proteome(src, dest):
     return headers, genes
 
 
+def file_digest(path):
+    h = hashlib.sha256()
+    try:
+        with open(path, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                h.update(chunk)
+    except OSError:
+        return "nofile"
+    return h.hexdigest()[:12]
+
+
+def search_signature(method, eval_thr, sens, query_path, subject_path):
+    h = hashlib.sha256()
+    for part in (method, str(eval_thr), str(sens),
+                 file_digest(query_path), file_digest(subject_path)):
+        h.update(part.encode("utf-8"))
+        h.update(b"\x00")
+    return h.hexdigest()[:12]
+
+
 def download_human_proteome(cache_dir):
     dest = os.path.join(cache_dir, "human_reference_proteome_uniprot.faa.gz")
     if os.path.isfile(dest) and os.path.getsize(dest) > 1_000_000:
@@ -153,6 +173,14 @@ def download_human_proteome(cache_dir):
     if os.path.getsize(tmp) < 1_000_000:
         os.remove(tmp)
         log("  [error] the downloaded human proteome is implausibly small; discarded.")
+        return None
+    try:
+        with gzip.open(tmp, "rb") as fh:
+            while fh.read(1 << 20):
+                pass
+    except (OSError, EOFError, gzip.BadGzipFile) as exc:
+        os.remove(tmp)
+        log(f"  [error] the downloaded human proteome is not a complete gzip stream ({exc}); discarded.")
         return None
     os.replace(tmp, dest)
     return dest
@@ -306,7 +334,8 @@ def main():
     p2g = build_protein_to_gene(query_headers, query_header_genes, a.annotation, a.gene_attribute)
 
     pairs_tsv = os.path.join(a.out_dir, f"orthologr_pairs_{a.method}.tsv")
-    cached_pairs = os.path.join(a.cache_dir, f"orthologr_pairs_{a.method}.tsv")
+    cache_tag = search_signature(a.method, a.eval_thr, a.sensitivity_mode, query_clean, human_clean)
+    cached_pairs = os.path.join(a.cache_dir, f"orthologr_pairs_{a.method}_{cache_tag}.tsv")
     pairs = None
     if not a.force and os.path.isfile(cached_pairs) and os.path.getsize(cached_pairs) > 0:
         pairs = read_pairs_tsv(cached_pairs)
@@ -326,12 +355,21 @@ def main():
             log(f"ERROR: ortholog detection failed (exit {rc}).")
             return 4 if rc == 4 else 3
         pairs = read_pairs_tsv(pairs_tsv)
+        tmp_cache = cached_pairs + ".part"
         try:
-            with open(cached_pairs, "w", encoding="utf-8") as fh:
+            with open(tmp_cache, "w", encoding="utf-8") as fh:
                 fh.write("query_id\tsubject_id\tperc_identity\tevalue\tbit_score\n")
                 for row in pairs:
                     fh.write("\t".join(str(x) for x in row) + "\n")
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(tmp_cache, cached_pairs)
         except OSError as exc:
+            if os.path.exists(tmp_cache):
+                try:
+                    os.remove(tmp_cache)
+                except OSError:
+                    pass
             log(f"  [warn] the ortholog pairs could not be cached: {exc}")
 
     if a.min_identity > 0:

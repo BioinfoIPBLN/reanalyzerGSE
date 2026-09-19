@@ -94,7 +94,13 @@ def linked_pmids(api, gid, n):
         links = d["linksets"][0]["linksetdbs"][0]["links"]
     except (KeyError, IndexError, TypeError):
         return [], 0
-    ordered = sorted(links, key=int, reverse=True)
+    numeric = []
+    for link in links:
+        try:
+            numeric.append((int(link), link))
+        except (TypeError, ValueError):
+            continue
+    ordered = [link for _, link in sorted(numeric, reverse=True)]
     return ordered[:n], len(ordered)
 
 
