@@ -83,6 +83,9 @@ Microarray and single-cell studies follow a shorter route that stops after a tem
 
 Please refer to the [wiki](https://github.com/BioinfoIPBLN/reanalyzerGSE/wiki/Output-Structure) for the full directory structure, file by file, and for the output of a test run.
 
+## AI-assisted development
+AI coding agents were used to assist with code refinement, comments, and documentation. The design and implementation of the software remain the responsibility of the authors, and all AI-assisted changes were reviewed and tested by the authors.
+
 ## Citation
 Please cite this reference when using reanalyzerGSE for your publications:
 
