@@ -23,7 +23,10 @@ echo -e "\nUsing parallel blocks of $number_parallel files with $cores_parallel 
 # Processing:
 cd $dest
 
-parallel --halt-on-error 2 --verbose --joblog $dest/../download_sra_fq_log_parallel.txt -j $number_parallel fastq-dl --accession {} --cpus $cores_parallel --silent --force --max-attempts 10 --gzip-level $compression_level ::: $(cat $file)
+parallel --verbose --joblog $dest/../download_sra_fq_log_parallel.txt -j $number_parallel fastq-dl --accession {} --cpus $cores_parallel --silent --force --max-attempts 10 --gzip-level $compression_level ::: $(cat $file)
+if [ $? -ne 0 ]; then
+	echo -e "\nWARNING: some accessions failed to download (a non-zero Exitval in $dest/../download_sra_fq_log_parallel.txt marks each); the pipeline retries the missing ones.\n" >&2
+fi
 
 # Extract library_layout by column name
 awk -F'\t' 'NR==1 { for(i=1;i<=NF;i++) if($i=="library_layout") col=i } NR>1 && col { print $col }' fastq-run-info.tsv | head -1 > $(dirname $file)/library_layout_info.txt

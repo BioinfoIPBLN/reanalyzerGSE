@@ -122,14 +122,14 @@ DPKGCFG
     mv qualimap_v2.3/lib/* /bin_external/lib/
 
     # Compiling seqk and hisat2
-    curl -fsSL --retry 10 https://codeload.github.com/lh3/seqtk/tar.gz/refs/heads/master -o seqtk.tar.gz
+    curl -fsSL --retry 10 https://codeload.github.com/lh3/seqtk/tar.gz/94e707082d39b0a038f234df676e32d9802c0dc7 -o seqtk.tar.gz
     mkdir -p seqtk
     tar xzf seqtk.tar.gz -C seqtk --strip-components=1
     cd seqtk
     make -s
     mv seqtk /bin_external/
     cd ..
-    curl -fsSL --retry 10 https://codeload.github.com/DaehwanKimLab/hisat2/tar.gz/refs/heads/master -o hisat2.tar.gz
+    curl -fsSL --retry 10 https://codeload.github.com/DaehwanKimLab/hisat2/tar.gz/0d244324f98de541bce04d45c75e83bc3522f7f4 -o hisat2.tar.gz
     mkdir -p hisat2
     tar xzf hisat2.tar.gz -C hisat2 --strip-components=1
     cd hisat2
@@ -138,13 +138,13 @@ DPKGCFG
     cd ..
     
     # Kraken2
-    curl -fsSL --retry 10 https://codeload.github.com/DerrickWood/kraken2/tar.gz/refs/heads/master -o kraken2.tar.gz
+    curl -fsSL --retry 10 https://codeload.github.com/DerrickWood/kraken2/tar.gz/01fb1d90167c720b6ecab3db707587d6406c8df4 -o kraken2.tar.gz
     mkdir -p kraken2
     tar xzf kraken2.tar.gz -C kraken2 --strip-components=1
     mkdir -p kraken2/bin
     ./kraken2/install_kraken2.sh $PWD/kraken2/bin
     mv kraken2/bin/* /bin_external/
-    curl -fsSL --retry 10 https://codeload.github.com/jenniferlu717/KrakenTools/tar.gz/refs/heads/master -o krakentools.tar.gz
+    curl -fsSL --retry 10 https://codeload.github.com/jenniferlu717/KrakenTools/tar.gz/3199bea2b4768b2bb435f04483f5af3d8e51d4ae -o krakentools.tar.gz
     mkdir -p KrakenTools
     tar xzf krakentools.tar.gz -C KrakenTools --strip-components=1
     chmod +x KrakenTools/*
@@ -222,6 +222,7 @@ EOF
       r-recommended=4.6.1-1.2404.1 pandoc
     
     cat <<EOF > $APPTAINER_TMPDIR/install_r.R
+options(repos = c(CRAN = "https://packagemanager.posit.co/cran/2026-09-25"))
 install.packages("pak", quiet = T)
 library(pak); options(pak.timeout = 1200); pak_cleanup(force = TRUE)
 
@@ -609,9 +610,12 @@ EOF
     # --------------------------------------------------------------------------
     # 6. Pipeline Installation & Cleanup
     # --------------------------------------------------------------------------
-    curl -fsSL --retry 10 https://codeload.github.com/BioinfoIPBLN/reanalyzerGSE/tar.gz/refs/heads/main -o pipeline.tar.gz
+    pipeline_commit=$(git ls-remote https://github.com/BioinfoIPBLN/reanalyzerGSE refs/heads/main | cut -f1)
+    [ -n "$pipeline_commit" ] || { echo "Could not resolve the reanalyzerGSE main commit" >&2; exit 1; }
+    curl -fsSL --retry 10 https://codeload.github.com/BioinfoIPBLN/reanalyzerGSE/tar.gz/$pipeline_commit -o pipeline.tar.gz
     mkdir -p /reanalyzerGSE
     tar xzf pipeline.tar.gz -C /reanalyzerGSE --strip-components=1
+    echo "$pipeline_commit" > /reanalyzerGSE/COMMIT
     rm -f pipeline.tar.gz
     chmod +x /reanalyzerGSE/reanalyzerGSE.sh
     chmod +x /reanalyzerGSE/scripts/*

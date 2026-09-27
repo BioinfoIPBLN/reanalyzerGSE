@@ -17,36 +17,36 @@ import os
 import sys
 
 
+def read_samples_info(path):
+    """Return (samples, rows_without_sample) from a samples_info.txt file."""
+    samples = []
+    rows_without_sample = 0
+    with open(path, "r", encoding="utf-8", errors="replace") as f:
+        for line in f:
+            line = line.rstrip("\r\n")
+            if not line.strip():
+                continue
+            sample = line.split("\t")[0].strip()
+            if not sample:
+                rows_without_sample += 1
+            elif sample not in samples:
+                samples.append(sample)
+    return samples, rows_without_sample
+
+
 def parse_expected_samples(analysis_dir, samples_info_path=None):
-    """Extract expected sample names from samples_info.txt or raw_reads directory."""
-    expected = []
-    
-    # 1. Try samples_info.txt
-    if samples_info_path and os.path.exists(samples_info_path):
-        with open(samples_info_path, "r", encoding="utf-8", errors="replace") as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    sample = line.split("\t")[0].strip()
-                    if sample and sample not in expected:
-                        expected.append(sample)
-        if expected:
-            return expected
+    """Extract expected sample names from samples_info.txt or raw_reads directory.
 
-    # 2. Try default samples_info.txt location inside analysis_dir
+    Returns (samples, rows_without_sample)."""
     default_info = os.path.join(analysis_dir, "reads_study_info", "samples_info.txt")
-    if os.path.exists(default_info):
-        with open(default_info, "r", encoding="utf-8", errors="replace") as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    sample = line.split("\t")[0].strip()
-                    if sample and sample not in expected:
-                        expected.append(sample)
-        if expected:
-            return expected
+    for path in (samples_info_path, default_info):
+        if path and os.path.exists(path):
+            samples, rows_without_sample = read_samples_info(path)
+            if samples or rows_without_sample:
+                return samples, rows_without_sample
 
-    # 3. Fallback: inspect raw_reads folder
+    expected = []
+    # Fallback: inspect raw_reads folder
     raw_reads_dir = os.path.join(analysis_dir, "raw_reads")
     if os.path.exists(raw_reads_dir):
         files = os.listdir(raw_reads_dir)
@@ -63,7 +63,7 @@ def parse_expected_samples(analysis_dir, samples_info_path=None):
                 if s and s not in expected:
                     expected.append(s)
 
-    return sorted(expected)
+    return sorted(expected), 0
 
 
 def find_star_error(log_file):
@@ -160,7 +160,15 @@ def validate_alignment_and_counts(analysis_dir, aligner="star", samples_info_pat
     Returns (is_valid: bool, report_str: str).
     """
     aligner = aligner.lower() if aligner else "star"
-    expected_samples = parse_expected_samples(analysis_dir, samples_info_path)
+    expected_samples, rows_without_sample = parse_expected_samples(analysis_dir, samples_info_path)
+
+    if rows_without_sample:
+        return False, (
+            f"[Validation ERROR] samples_info.txt has {rows_without_sample} row(s) with no sample name, "
+            "which happens when the design lists more conditions than there are samples (for "
+            "paired-end reads, one condition per sample, not one per FASTQ file). The sample "
+            "conditions in that file are misaligned too, so please fix the design and rerun from "
+            "the start rather than resuming.")
 
     if not expected_samples:
         if has_alignment_output(analysis_dir, aligner):

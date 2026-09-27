@@ -149,7 +149,10 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   }
 
   current_sec_name <- ""
+  qc_blocks <- character(0)
+  qc_alignment_kind <- "bam"
   open_section_pdf <- function(sec_name) {
+    if (!(sec_name %in% qc_blocks)) qc_blocks <<- c(qc_blocks, sec_name)
     if (split_sections != "yes") return()
     if (current_sec_name == sec_name && dev.cur() > 1) return()
     if (dev.cur() > 1) dev.off()
@@ -465,6 +468,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
     if (length(kallisto_json_files) > 0) {
       cat("\n[4b/12] Kallisto pseudoalignment QC barplots\n")
       open_section_pdf("04_alignment_categories")
+      qc_alignment_kind <- "kallisto"
       kallisto_stats <- do.call(rbind, lapply(kallisto_json_files, function(f) {
         tryCatch({
           info <- jsonlite::fromJSON(f)
@@ -748,6 +752,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
 
   }, error = function(e) {
     cat(paste("\nSkipping top N genes plot:", e$message, "\n"))
+    qc_blocks <<- setdiff(qc_blocks, "10_top_overrepresented")
   })
 
 
@@ -833,6 +838,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
     cat(paste0("\nCorrelation/clustering plots for top ", n_top, " genes done.\n"))
   }, error = function(e) {
     cat(paste("\nSkipping top-gene correlation/clustering:", e$message, "\n"))
+    qc_blocks <<- setdiff(qc_blocks, "11_top100_correlation")
   })
 
 
@@ -882,9 +888,11 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
       cat(paste0("\nScatter plots for ", ncol(cond_pairs), " condition pair(s) done.\n"))
     } else {
       cat("\nOnly one condition found, skipping scatter plots by condition.\n")
+      qc_blocks <- setdiff(qc_blocks, "12_scatter_condition")
     }
   }, error = function(e) {
     cat(paste("\nSkipping scatter plots by condition:", e$message, "\n"))
+    qc_blocks <<- setdiff(qc_blocks, "12_scatter_condition")
   })
 
   ### 12. geneBody_coverage logic
@@ -1115,8 +1123,32 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
           }
     }, error = function(e) {
       cat(paste("\nSkipping geneBody_coverage logic:", e$message, "\n"))
+      qc_blocks <<- setdiff(qc_blocks, "13_gene_body_coverage")
     })
   }
 
  cat("\n[QC] All sections complete, closing PDF\n")
  while (!is.null(dev.list())) dev.off()
+
+ qc_block_legend <- c(
+   "00_sample_targets" = "Sample table: the samples analysed, with their names, source files and conditions.",
+   "01_density" = "Expression density: distribution of log-CPM values in each sample, for the raw counts and after removing lowly expressed genes; comparable samples give overlapping curves.",
+   "02_boxplots" = "Expression boxplots: log-CPM distribution of each sample before and after normalisation, coloured by condition; after normalisation the medians should line up.",
+   "03_library_size" = "Library size: number of counted reads per sample, coloured by condition.",
+   "04_alignment_categories" = if (qc_alignment_kind == "kallisto") "Pseudoalignment: reads per sample and the percentage pseudoaligned by kallisto." else "Reads and alignment: reads in the FASTQ and BAM files of each sample (with the BAM/FASTQ percentage) and the aligner's read categories (e.g. uniquely mapped, multi-mapped, unmapped) as counts and proportions; each part appears only when its statistics were available.",
+   "05_correlation" = "Sample correlation: Spearman and Pearson correlation of the normalised expression between every pair of samples, as ordered colour matrices and with the coefficients printed.",
+   "06_mds_pcoa" = "MDS (PCoA): distances between samples from the normalised expression, on linear and log2 scale, labelled by sample name and by file name; replicates of a condition should group together.",
+   "07_pca" = "PCA: the samples on the first two principal components of the gene counts, coloured by condition and labelled by sample name and by file name.",
+   "08_heatmap" = "Heatmap: counts of the 250 most variable genes, with genes and samples clustered.",
+   "09_dendrograms" = "Hierarchical clustering: sample dendrograms from the Euclidean distance between the normalised counts, on linear and log2 scale.",
+   "10_top_overrepresented" = "Most abundant genes: share of each sample's reads taken by its top 5 and top 10 genes, to spot libraries dominated by a few genes (e.g. rRNA or mitochondrial).",
+   "11_top100_correlation" = "Correlation on the 100 most variable genes: Spearman and Pearson matrices and a Ward.D2 dendrogram, from the log2 normalised CPM of those genes.",
+   "12_scatter_condition" = "Condition scatter plots: mean log2 normalised CPM of each gene in one condition against another, for every pair of conditions, with their correlation and the identity line.",
+   "13_gene_body_coverage" = "Gene body coverage: average read coverage along the gene body, 5' to 3', for each BAM (up to 50,000 transcripts of at least 100 bp); a slope points to 3' or 5' bias from RNA degradation or library preparation."
+ )
+ tryCatch({
+   qc_readme_lines <- c(paste0("Blocks of ", label, "_", label2, "_QC.pdf, in the order they appear:"), "",
+                        paste0("- ", unname(qc_block_legend[qc_blocks[qc_blocks %in% names(qc_block_legend)]])))
+   if (split_sections == "yes") qc_readme_lines <- c(qc_readme_lines, "- AI commentary: when the AI annotation of this PDF succeeds, a page with the LLM's interpretation follows each block; always check it against the plots.")
+   writeLines(qc_readme_lines, file.path(output_dir, "QC_and_others", paste0("README_QC_", label, "_", label2, ".txt")))
+ }, error = function(e) cat(paste("\nCould not write the QC README:", e$message, "\n")))

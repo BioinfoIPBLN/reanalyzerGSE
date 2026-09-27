@@ -42,7 +42,7 @@ databases_function: "GO_Biological_Process_2025,GO_Molecular_Function_2025,GO_Ce
 non_reference_funct_enrichm: ""        # Annotation file (GAF, GMT, GFF, GTF, or 2-column TSV/TXT mapping) for GO/KEGG enrichment in non-model organisms or Kallisto mode
 
 # === Metadata and sample info ===
-design_custom_local: ""                # Experimental design for local dataset (comma-separated list, '/' for multiple. If no design, please provide a dummy one, e.g. with every sample in the same group or a separate one.)
+design_custom_local: ""                # Experimental design for local dataset (comma-separated list, one condition per sample, '/' for multiple. 'auto' derives it from the sample names by dropping the '_Rep<N>' suffix, 'llm' asks the configured LLM to propose it. If no design, please provide a dummy one, e.g. with every sample in the same group or a separate one.)
 design_custom: "no"                    # Manually specify experimental design for GEO ('yes' or 'no')
 organism: ""                           # Scientific name with underscore (e.g. Homo_sapiens)
 taxonid: ""                            # NCBI taxon ID

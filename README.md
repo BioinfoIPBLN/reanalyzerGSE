@@ -76,8 +76,8 @@ Please refer to the help ('-h') or contact us for any further clarification.
 ## Output
 Everything is written into `OUTPUT_FOLDER/PROJECT_NAME/`. Two places cover most needs:
 
-* **`final_report.html`**, at the top level of the project folder, is the entry point to the run. It is an HTML report linking to the sample and design summary, the per-sample alignment summary, the count matrices, the DEG tables and volcano plots, the functional enrichment report, the QC PDFs and the MultiQC/Qualimap reports, the pipeline timing and Gantt chart, and the objects for interactive exploration. It uses relative links, so keep it inside the project folder (move or archive the whole folder if you need to share it).
-* **`final_results_reanalysis0_<OUTPUT_FOLDER_NAME>/`** is the results folder itself, holding the count matrices plus `QC_and_others/` (QC PDF and the tables behind every figure) and `DGE/` (differential expression, functional enrichment and network analyses).
+* **`final_report.html`**, inside the results folder below together with the `sphinx_report/` folder it links to, is the entry point to the run. It is an HTML report linking to the sample and design summary, the per-sample alignment summary, the count matrices, the DEG tables and volcano plots, the functional enrichment report, the QC PDFs and the MultiQC/Qualimap reports, the pipeline timing and Gantt chart, and the objects for interactive exploration. It uses relative links, so keep it next to `sphinx_report/` (move or archive the whole results folder if you need to share it).
+* **`final_results_reanalysis0_<OUTPUT_FOLDER_NAME>/`** is the results folder itself, holding the final report, the count matrices plus `QC_and_others/` (QC PDF, a `README_QC_*.txt` describing each block of it, and the tables behind every figure) and `DGE/` (differential expression, functional enrichment and network analyses).
 
 Microarray and single-cell studies follow a shorter route that stops after a template script, so they produce a smaller `final_results_reanalysis/` and no `final_report.html`.
 

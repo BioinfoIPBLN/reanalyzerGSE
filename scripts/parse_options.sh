@@ -5,7 +5,7 @@ REANALYZER_VERSION=$(cat "$(dirname "$CURRENT_DIR_SCRIPTS")/VERSION" 2>/dev/null
 
 ##### From the command line, get arguments by looping through an index...
 index=0
-for argument in $options; do
+for argument in "${arguments[@]}"; do
 
 ### Incrementing index
 	index=`expr $index + 1`
@@ -30,7 +30,7 @@ for argument in $options; do
 	        -rG | -reference_genome_groups # Align different subsets of samples to different reference genomes, then quantify them ALL with the single shared annotation given in '-a', so that one merged count matrix and one differential expression analysis are produced. Provide a semicolon-separated list of 'label:regex:fasta' triplets, e.g. 'hostA:^(A|B|C)_:/ref/genomeA.fa;hostB:^(D|E|F)_:/ref/genomeB.fa'. The regex is matched against the sample names (file names in the reads folder without the _1/_2.fastq.gz suffix). Every sample must match exactly one group (samples matching none, or more than one, are an error). Requires a single annotation in '-a' and is incompatible with '-ri' and with the kallisto aligner. Intended for variant-personalized references or a common assembly plus sample-specific extra contigs: the shared annotation MUST be coordinate-valid on every genome (this is verified before aligning), otherwise the resulting counts are not comparable
 	        -a | -annotation # Reference annotation to be used (absolute pathway). GTF, GFF and GFF3 are all accepted, and the format is detected from the content of the file (column 9) and not from its extension, so the file name does not matter. Two practical consequences. First, featureCounts is told which fields to read through '-t'/-optionsFeatureCounts_feat (feature type, column 3, e.g. 'exon' in GTF and often 'exon' or 'CDS' in GFF3) and '-g'/-optionsFeatureCounts_seq (attribute in column 9, e.g. 'gene_name' or 'gene_id' in GTF, and typically 'ID', 'Name', 'gene_id' or 'Parent' in GFF3), so please set both to names that exist in YOUR file; they are checked before aligning and the run stops listing the values available in the file if they do not match. Second, 'qualimap rnaseqqc' needs GTF-style attributes (key \"value\"), so it is run for GTF and automatically skipped, with a message, for GFF3-style annotations (key=value); alignment, quantification and every downstream step are unaffected. You can provide a comma-separated list of the pathways to different annotation, and one fully independent analysis (quantification, DGE and report) will be generated per annotation. Note that the aligner index is built per annotation, so the reads are aligned once per annotation rather than requantified from a single alignment. See '-r', which accepts a comma-separated list of genomes and pairs them with these annotations
 	        -t | -transcripts # Reference transcripts to be used (.fasta cDNA file, absolute pathway, only used if '-s' argument not provided so salmon prediction of strandness is required)
-	        -Dk | -kraken2_databases # Comma-separated list of Kraken2 database folders (e.g. '/path/to/core_nt,/path/to/gtdb'). Any input here activates the kraken2-based decontamination step. All DB+confidence combinations will be run
+	        -Dk | -kraken2_databases # Comma-separated list of Kraken2 database folders (e.g. '/path/to/core_nt,/path/to/gtdb'). Any input here activates the kraken2-based decontamination step. All DB+confidence combinations will be run for the reports; the reads are then filtered with the first database (which must contain a taxdump folder) and the first confidence, keeping only the reads assigned to the organism, its ancestors or its descendants, plus the unclassified ones, and those decontaminated reads are the ones used from then on
 	        -Kc | -kraken2_confidence # Comma-separated confidence scores for Kraken2 classification (default '0', e.g. '0,0.20,0.50'). Each score is run for each database
 	        -Ds | -sortmerna_databases # The database (absolute pathway) that should be used by SortMeRNA (any input here, e.g. '/path/to/rRNA_databases/smr_v4.3_sensitive_db.fasta', would activate the sortmerna-based rRNA removal step)
 	        -rRq | -rrna_qc_databases # Comma-separated list of rRNA reference FASTA paths for preliminary rRNA QC mapping (e.g. '/path/SILVA_138.2_LSURef_NR99_tax_silva.fasta.gz,/path/SILVA_138.2_SSURef_NR99_tax_silva.fasta.gz'). Any input here activates the Bowtie2-based rRNA mapping QC step. Output goes to preliminar_rrna_qc/
@@ -39,7 +39,7 @@ for argument in $options; do
 	        -nrf | -non_reference_funct_enrichm # Pathway to a file containing functional annotation (GAF, GMT, GFF, GTF, or a 2-column TSV/TXT mapping) to be used for functional enrichment. Required for Kallisto mode or when the organism is not Human or Mouse. If provided, this file is parsed for GO and KEGG terms, overriding the default behavior of searching the main reference annotation file.
 
 	        #### Metadata and sample info:
-	        -D | -design_custom_local # Specifying here the experimental design for the local dataset (by default an interactive prompt will ask for a comma-separated list of the same length than the number of samples, if you want to avoid that manual input please provide the list in this argument. If no design, please provide a dummy one, e.g. with every sample in the same group or a separate one. If more than one design to provide, please input comma-separated list separated by a '/', without spaces. Please avoid naming that would match the same pattern in grep, e.g. XXXX and XXXX_TREAT)
+	        -D | -design_custom_local # Specifying here the experimental design for the local dataset (by default an interactive prompt will ask for a comma-separated list of the same length than the number of samples, if you want to avoid that manual input please provide the list in this argument. If no design, please provide a dummy one, e.g. with every sample in the same group or a separate one. If more than one design to provide, please input comma-separated list separated by a '/', without spaces. Please avoid naming that would match the same pattern in grep, e.g. XXXX and XXXX_TREAT. Use 'auto' to take each sample's condition from its name, dropping the '_Rep<N>' replicate suffix and everything after it (e.g. s1_Ctrl_Rep2 becomes s1_Ctrl); every sample must then carry such a suffix. Use 'llm' to have the LLM given in -llm_endpoint and -llm_model propose one condition per sample from the sample names (i.e. the files left after -regex and -regexExclude), printed in the log so it can be reused as an explicit design. The number of conditions must equal the number of samples, otherwise the run stops)
 	        -d | -design_custom # Manually specifying the experimental design for GEO download ('no' by default and if 'yes', please expect an interactive prompt after data download from GEO, and please enter the assignment to groups when asked in the terminal, with a comma-separated list of the same length than the number of samples)
 	        -O | -organism # Specifying here the scientific name of the organism for the local dataset (by default an interactive prompt will ask for it, if you want to avoid that manual input please provide the full organism name in this argument, please use underline instead of space)
 	        -Tx | -taxon_id # NCBI's taxon id of the organism
@@ -280,6 +280,11 @@ for argument in $options; do
 	esac
 done
 
+copy_options_file_redacted() {
+	mkdir -p "$2" 2>/dev/null || return 0
+	sed -E 's/^([[:space:]]*(llm_endpoint|llm_api_key)[[:space:]]*:[[:space:]]*)("[^"]+"|\x27[^\x27]+\x27|[^"#\x27[:space:]][^#]*)(.*)$/\1"" # redacted, set it again to rerun with AI/' "$1" > "$2/$(basename "$1")" 2>/dev/null || true
+}
+
 ##### From the YAML configuration file...
 if [ ! -z "$options_file" ]; then
 	if ! command -v yq &> /dev/null; then
@@ -305,8 +310,7 @@ if [ ! -z "$options_file" ]; then
 		fi
 	done < <(yq -r 'to_entries[] | select(.value != null) | "\(.key)=\(.value)"' "$options_file")
 	if [ -n "$output_folder" ] && [ -n "$name" ]; then
-		mkdir -p "$output_folder/$name" 2>/dev/null
-		cp -f "$options_file" "$output_folder/$name/" 2>/dev/null || true
+		copy_options_file_redacted "$options_file" "$output_folder/$name"
 	fi
 fi
 
@@ -626,9 +630,6 @@ fi
 if [ -z "$pattern_to_remove" ]; then
 	pattern_to_remove="none"
 fi
-if [ -z "$debug_module" ]; then
-	debug_module="all"
-fi
 if [ -z "$end_step" ]; then
 	end_step="none"
 fi
@@ -841,6 +842,10 @@ if [ ! -z "$debug_module" ]; then
 	fi
 	debug_step=$debug_module
 fi
+if [ -z "$debug_step" ]; then
+	debug_step="all"
+fi
+debug_module=$debug_step
 minstd=$time_course_std
 mestimate=$time_course_fuzz
 rev_thr=$revigo_threshold_similarity

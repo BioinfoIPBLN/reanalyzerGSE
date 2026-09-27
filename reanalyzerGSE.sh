@@ -6,10 +6,7 @@ echo "doi.org/10.1101/2023.07.12.548663v2"
 
 ###### 0. Define arguments and variables:
 ### Export a string with command options and an array with arguments and deal with them in parse_options.sh
-export options=$@
-set -f
-export arguments=($options)
-set +f
+arguments=("$@")
 
 CURRENT_DIR=$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 source $CURRENT_DIR/scripts/parse_options.sh
@@ -28,12 +25,12 @@ _cleanup_star_shared_memory() {
 	
 	# 1. Cleanly request STAR to unload index if path exists and STAR is available
 	if [ -n "$index_dir" ] && [ -d "$index_dir" ] && command -v STAR >/dev/null 2>&1; then
-		STAR --genomeDir "$index_dir" --genomeLoad Remove --outFileNamePrefix /tmp/star_rm_tmp >/dev/null 2>&1 || true
-		rm -rf /tmp/star_rm_tmp* 2>/dev/null || true
+		STAR --genomeDir "$index_dir" --genomeLoad Remove --outFileNamePrefix "${TMPDIR:-/tmp}/star_rm_tmp_$$_" >/dev/null 2>&1 || true
+		rm -rf "${TMPDIR:-/tmp}"/star_rm_tmp_$$_* 2>/dev/null || true
 	fi
 
 	# 2. Inspect Linux kernel shared memory (ipcs) for unattached segments (nattch=0, >100MB) owned by current user
-	if command -v ipcs >/dev/null 2>&1 && command -v ipcrm >/dev/null 2>&1; then
+	if ! pgrep -u "$(id -u)" -x STAR >/dev/null 2>&1 && command -v ipcs >/dev/null 2>&1 && command -v ipcrm >/dev/null 2>&1; then
 		local stale_shmids
 		stale_shmids=$(ipcs -m 2>/dev/null | awk -v u="$USER" '$3 == u && $6 == 0 && $5 > 100000000 {print $2}')
 		if [ -n "$stale_shmids" ]; then
@@ -49,16 +46,19 @@ _cleanup_star_shared_memory() {
 		rm -rf "$output_folder/$name"/miARma_out*/star_results/*__STARtmp 2>/dev/null || true
 		rm -rf "$output_folder/$name"/miARma_out*/star_results/genomeloading.tmp* 2>/dev/null || true
 	fi
-	rm -rf /dev/shm/*STAR* /tmp/*STAR* 2>/dev/null || true
+	if ! pgrep -u "$(id -u)" -x STAR >/dev/null 2>&1; then
+		find /dev/shm /tmp -maxdepth 1 -user "$(id -u)" -name "*STAR*" -exec rm -rf {} + 2>/dev/null || true
+	fi
 }
 
 # Trap to clean shared memory on interrupt / termination
-trap '_cleanup_star_shared_memory "$reference_genome_index"' INT TERM
+trap '_cleanup_star_shared_memory "$reference_genome_index"; exit 130' INT
+trap '_cleanup_star_shared_memory "$reference_genome_index"; exit 143' TERM
 
 ###### Step gating (resume with -Dm/debug_step, force-end with -Es/end_step):
 # Ordered list of pipeline steps. MUST stay in sync with the block order below,
 # including the optional/internal 'step1a_bis', so the after-comparison is correct.
-STEP_ORDER=(step1 step1a step1a_bis step1b step1c step1d step2 step2b step3a step3b step4 step4b step5 step6 step7 step8 step9)
+STEP_ORDER=(step1 step1a step1b step1c step1a_bis step1d step2 step2b step3a step3b step4 step4b step5 step6 step7 step8 step9)
 # Echo the 0-based position of a step in STEP_ORDER, or -1 if unknown.
 _step_pos() { local t=$1 i=0; for s in "${STEP_ORDER[@]}"; do [ "$s" = "$t" ] && { echo "$i"; return; }; i=$((i+1)); done; echo -1; }
 # Whether the block for step $1 should run: the resume gate (debug_step, which
@@ -158,6 +158,136 @@ if [[ -n "$end_step" && "$end_step" != "none" && "$end_step" != "all" ]]; then
 	echo -e "\nThe pipeline will force-end after '$end_step' (-Es/-end_step); later steps will be skipped.\n"
 fi
 
+READS_LOCATION_DIR="$output_folder/$name/reads_study_info"
+set_reads_location() {
+	seqs_location=$2
+	export seqs_location
+	mkdir -p "$READS_LOCATION_DIR"
+	echo "$2" > "$READS_LOCATION_DIR/reads_location_$1.txt"
+}
+_resume_pos=$(_step_pos "$debug_step")
+if [ "$debug_step" != "all" ] && [ "$_resume_pos" -ge 0 ]; then
+	for _stage in decontam prep; do
+		if [ "$_stage" == "decontam" ] && [ "$_resume_pos" -le "$(_step_pos step2)" ]; then continue; fi
+		if [ "$_stage" == "prep" ] && [ "$_resume_pos" -le "$(_step_pos step1a_bis)" ]; then continue; fi
+		_loc_file="$READS_LOCATION_DIR/reads_location_$_stage.txt"
+		if [ -s "$_loc_file" ] && [ -d "$(cat "$_loc_file")" ]; then
+			seqs_location=$(cat "$_loc_file")
+			export seqs_location
+			echo -e "\nResuming with the reads in $seqs_location\n"
+			break
+		fi
+	done
+fi
+sed_escape() { printf '%s' "$1" | sed 's/[\\&,]/\\&/g'; }
+rename_sra_downloads() {
+	cd "$seqs_location" || exit 1
+	local layout_file="$output_folder/$name/reads_study_info/library_layout_info.txt"
+	local sinfo="$output_folder/$name/reads_study_info/samples_info.txt"
+	local i sname old_file f1 f2 f
+	if [[ "$(cat "$layout_file")" == "SINGLE" ]]; then
+		for i in $(cat "$output_folder/$name/reads_study_info/srr_ids.txt"); do
+			sname=$(awk -F'\t' -v id="$i" '$1 == id { print $2 }' "$sinfo")
+			if [ -n "$sname" ]; then
+				old_file=$(ls | egrep "^${i}[._]" 2>/dev/null | head -1)
+				[ -z "$old_file" ] && old_file=$(ls | egrep "^${i}" 2>/dev/null | head -1)
+				[ -f "$old_file" ] && mv "$old_file" "${sname}_1.fastq.gz"
+			fi
+		done
+	elif [[ "$(cat "$layout_file")" == "PAIRED" ]]; then
+		for i in $(cat "$output_folder/$name/reads_study_info/srr_ids.txt"); do
+			sname=$(awk -F'\t' -v id="$i" '$1 == id { print $2 }' "$sinfo")
+			if [ -n "$sname" ]; then
+				f1=$(ls | egrep "^${i}_1\." 2>/dev/null | head -1)
+				f2=$(ls | egrep "^${i}_2\." 2>/dev/null | head -1)
+				[ -z "$f1" ] && f1=$(ls | egrep "^${i}" 2>/dev/null | head -1)
+				[ -z "$f2" ] && f2=$(ls | egrep "^${i}" 2>/dev/null | tail -1)
+				[ -f "$f1" ] && mv "$f1" "${sname}_1.fastq.gz"
+				[ -f "$f2" ] && mv "$f2" "${sname}_2.fastq.gz"
+			fi
+		done
+	fi
+	if [[ "$(cat "$layout_file")" == "SINGLE" ]]; then
+		if [ $(ls *.fastq.gz 2>/dev/null | egrep -c "_[12]\.fastq\.gz$") -eq 0 ] && [ $(ls *.fastq.gz 2>/dev/null | wc -l) -gt 0 ]; then
+			echo -e "\nSingle-end reads detected without _1.fastq.gz suffix, adding it...\n"
+			for f in *.fastq.gz; do
+				mv "$f" "${f%.fastq.gz}_1.fastq.gz"
+			done
+		fi
+	fi
+}
+missing_sra_downloads() {
+	local layout i sname
+	layout=$(cat "$output_folder/$name/reads_study_info/library_layout_info.txt" 2>/dev/null)
+	for i in $(cat "$output_folder/$name/reads_study_info/srr_ids.txt"); do
+		sname=$(awk -F'\t' -v id="$i" '$1 == id { print $2 }' "$output_folder/$name/reads_study_info/samples_info.txt")
+		if [ -n "$sname" ] && [ -e "$seqs_location/${sname}_1.fastq.gz" ] && { [ "$layout" != "PAIRED" ] || [ -e "$seqs_location/${sname}_2.fastq.gz" ]; }; then continue; fi
+		if [ -z "$sname" ] && ls "$seqs_location" 2>/dev/null | egrep -q "^${i}[._]"; then continue; fi
+		echo "$i"
+	done
+}
+apply_random_shift() {
+	awk -v n="$1" -v seed="$(printf '%s' "$2" | cksum | cut -d' ' -f1)" 'BEGIN { srand(seed); p = rand() * 10; c = (rand() < 0.5) ? -1 : 1; printf "%d\n", n + n * p / 100 * c + 0.5 }'
+}
+subsample_reads() {
+	local files number file
+	files=$(ls | egrep "^${1}[12]\.fastq\.gz$")
+	number=$2
+	if [ "$number" -eq 0 ]; then
+		echo "Skipping subsampling for $1 (not found in reads_numbers.txt, keeping all reads)"
+		return
+	fi
+	for file in $files; do seqtk sample -s 123 "$file" "$number" > "${file}_subsamp"; done
+}
+export -f subsample_reads
+subsample_local_reads() {
+	echo -e "\nSubsampling...\n"
+	cd "$seqs_location" || exit 1
+	local arr arr2 desired_number sample_prefix sample_name matched_line col2 col3 desired_number_rand
+	local -a arr3=()
+	IFS=', ' read -r -a arr <<< "$number_reads"
+	IFS=', ' read -r -a arr2 <<< "$(ls | egrep .fastq.gz$ | sed 's,[12].fastq.gz,,g' | sort | uniq | tr '\n' ',')"
+	desired_number=${arr[1]}
+	for sample_prefix in "${arr2[@]}"; do
+		sample_name="${sample_prefix%_}"
+		matched_line=$(awk -F'\t' -v name="$sample_name" 'NR>1 && $1 == name' "${arr[0]}")
+		if [ -z "$matched_line" ]; then
+			echo "WARNING: Sample '$sample_name' not found in ${arr[0]}. Keeping all reads."
+			arr3+=("0")
+		else
+			col2=$(echo "$matched_line" | cut -f2)
+			col3=$(echo "$matched_line" | cut -f3)
+			desired_number_rand=$(apply_random_shift "$desired_number" "$sample_name")
+			if (( col3 < desired_number_rand )); then
+				arr3+=("$col2")
+			else
+				arr3+=("$((col2 * desired_number_rand / col3))")
+			fi
+		fi
+	done
+	parallel --halt-on-error 2 --verbose -j $cores_reads_to_subsample subsample_reads {} ::: "${arr2[@]}" :::+ "${arr3[@]}"
+	find . -maxdepth 1 -type f -name '*_subsamp' -print0 | while IFS= read -r -d '' sub; do
+		orig="${sub%_subsamp}"
+		[ -f "$orig" ] && rm -f -- "$orig"
+	done
+	find . -maxdepth 1 -type f -name '*_subsamp' -print0 | while IFS= read -r -d '' sub; do
+		mv -- "$sub" "$(echo "$sub" | sed 's,_subsamp$,,;s,\.gz$,,')"
+	done
+	pigz --best -p $cores *
+	echo -e "\nSubsampling (+-10%) completed...\n"
+}
+archive_and_remove_folders() {
+	local archive=$1; shift
+	tar -cf - "$@" | pigz --best -p $cores > "$archive"
+	local st=("${PIPESTATUS[@]}")
+	if [ "${st[0]}" -eq 0 ] && [ "${st[1]}" -eq 0 ] && tar -tzf "$archive" > /dev/null 2>&1; then
+		rm -rf "$@"
+	else
+		echo -e "\n\033[1;31mERROR:\033[0m could not create or verify $PWD/$archive (tar exit ${st[0]}, pigz exit ${st[1]}); the uncompressed folders are kept.\n" >&2
+		rm -f "$archive"
+	fi
+}
+
 ###### STEP 1. Download info from GEO and organize metadata and so:
 if run_step step1; then
 	case "$output_folder" in
@@ -176,7 +306,7 @@ if run_step step1; then
 	fi
 	if [ -n "$options_file" ] && [ -f "$options_file" ]; then
 		mkdir -p "$output_folder/$name"
-		cp -f "$options_file" "$output_folder/$name/" 2>/dev/null || true
+		copy_options_file_redacted "$options_file" "$output_folder/$name"
 	fi
 	_log_step "Step_1_Download" "start"
 	if [[ $input == G* ]]; then
@@ -228,13 +358,16 @@ if run_step step1; then
 				python3 -c "
 import os, sys
 gsm_list = [g.strip() for g in open('gsm_manual_filter.txt').read().strip().split(',') if g.strip()]
+import re
+def has_gsm(line):
+    return any(re.search('(?<![A-Za-z0-9])' + re.escape(g) + '(?![0-9])', line) for g in gsm_list)
 if not gsm_list:
     sys.exit(0)
 
 # Filter samples_info.txt
 if os.path.exists('samples_info.txt'):
     lines = [l for l in open('samples_info.txt').read().splitlines() if l.strip()]
-    kept = [l for l in lines if any(gsm in l for gsm in gsm_list)]
+    kept = [l for l in lines if has_gsm(l)]
     if kept:
         open('samples_info.txt', 'w').write('\n'.join(kept) + '\n')
         # Update srr_ids.txt and sample_names.txt from filtered samples_info.txt
@@ -248,12 +381,12 @@ if os.path.exists('samples_info.txt'):
             if f.startswith('design_possible_full_'):
                 dlines = [l for l in open(f).read().splitlines() if l.strip()]
                 # Keep matching indices from original lines
-                kept_d = [dlines[i] for i, l in enumerate(lines) if any(gsm in l for gsm in gsm_list) and i < len(dlines)]
+                kept_d = [dlines[i] for i, l in enumerate(lines) if has_gsm(l) and i < len(dlines)]
                 if kept_d:
                     open(f, 'w').write('\n'.join(kept_d) + '\n')
             elif f.startswith('design_possible_') and not f.startswith('design_possible_full_'):
                 dlines = [l for l in open(f).read().splitlines() if l.strip()]
-                kept_d = list(dict.fromkeys([lines[i].split('\t')[2] if len(lines[i].split('\t'))>2 else dlines[i] for i, l in enumerate(lines) if any(gsm in l for gsm in gsm_list) and i < len(lines)]))
+                kept_d = list(dict.fromkeys([lines[i].split('\t')[2] if len(lines[i].split('\t'))>2 else dlines[i] for i, l in enumerate(lines) if has_gsm(l) and i < len(lines)]))
                 if kept_d:
                     open(f, 'w').write('\n'.join(kept_d) + '\n')
 
@@ -261,7 +394,7 @@ if os.path.exists('samples_info.txt'):
 if os.path.exists('phenodata_extracted.txt'):
     plines = [l for l in open('phenodata_extracted.txt').read().splitlines() if l.strip()]
     if plines:
-        pkept = [l for i, l in enumerate(plines) if i == 0 or any(gsm in l for gsm in gsm_list)]
+        pkept = [l for i, l in enumerate(plines) if i == 0 or has_gsm(l)]
         if pkept:
             open('phenodata_extracted.txt', 'w').write('\n'.join(pkept) + '\n')
 "
@@ -305,7 +438,7 @@ if os.path.exists('phenodata_extracted.txt'):
 			echo -e "\nWrite 'yes' to continue with single-cell analyses, or 'no' to continue with normal analyses after reviewing the entry and the statements in the metadata pointing to single-cell..."
 			read -r single_cell_choice
 			if [ "$single_cell_choice" == "yes" ]; then
-				R_process_reanalyzer_GSE_single_cell.R $input $output_folder $genes; exit 1
+				R_process_reanalyzer_GSE_single_cell.R $input $output_folder $genes; exit $?
 			elif [ "$single_cell_choice" == "no" ]; then
 				echo -e "\nContinuing with bulk RNA-seq analyses...\n"
 			fi
@@ -318,7 +451,7 @@ if os.path.exists('phenodata_extracted.txt'):
 			echo -e "\nWrite 'yes' to continue with microarrays analyses, or 'no' to continue with normal analyses after reviewing the entry pointing to microarrays..."
 			read -r microarrays_choice
 			if [ "$microarrays_choice" == "yes" ]; then
-				R_process_reanalyzer_GSE_microarrays.R $input $output_folder $genes; exit 1
+				R_process_reanalyzer_GSE_microarrays.R $input $output_folder $genes; exit $?
 			elif [ "$microarrays_choice" == "no" ]; then
 				echo -e "\nContinuing with bulk RNA-seq analyses...\n"
 			fi
@@ -347,7 +480,6 @@ if os.path.exists('phenodata_extracted.txt'):
 			echo -e "\nOrganism detected in GEO: '$organism_from_geo'. Overriding it with the one provided in '-O': '$organism' (this manual value will be used in all the following steps).\n"
 			echo $organism > $output_folder/$name/reads_study_info/organism.txt
 		fi
-_log_step "Step_1_Download" "end"
 		echo -e "\nSTEP 1 DONE. Current time: $(date)\n"
 	fi
 _log_step "Step_1_Download" "end"
@@ -358,10 +490,13 @@ fi
 
 ###### STEP 1. Download and process fastq files from the GEO ID provided:
 if run_step step1a; then
-	rm -rf $seqs_location
+	rm -rf "$seqs_location"
 	mkdir -p $TMPDIR
 	if [[ $input == G* ]]; then
  		echo -e "\n\nSTEP 1: Downloading from the $input id provided...\nCurrent date/time: $(date)\n\n"
+		_log_step "Step_1a_Download_reads" "start"
+		set_reads_location prep "$output_folder/$name/raw_reads"
+		rm -f "$READS_LOCATION_DIR/reads_location_decontam.txt"
 		if [ "$stop" == "yes" ]; then
 			echo "You have requested a stop to manually provide the SRR ids, or potentially modify other files that may have not been detected properly from GEO, and were not correct, or you just want to adapt some of them. Please double check or manually modify the files reads_study_info/srr_ids.txt, samples_info.txt, sample_names.txt, phenodata_extracted.txt, library_layout_info.txt, organism.txt, design_files, etc. The pipeline is stopped. Please press space to continue or Ctrl + C to exit..."
 			read -n1 -s -r -p $'Press space to continue...\n' key
@@ -377,45 +512,12 @@ if run_step step1a; then
 				if [ -f "$output_folder/$name/reads_study_info/library_layout_info.txt" ]; then
 					cp -f "$output_folder/$name/reads_study_info/library_layout_info.txt" "$output_folder/$name/library_layout_info.txt" 2>/dev/null || true
 				fi
-	### Rename the fastq files (max length name 140 characters) or handle already downloaded datasets if provided:
-				cd $seqs_location
-				if [[ "$(cat $output_folder/$name/reads_study_info/library_layout_info.txt)" == "SINGLE" ]]; then
-					for i in $(cat $output_folder/$name/reads_study_info/srr_ids.txt); do
-						sname=$(awk -F'\t' -v id="$i" '$1 == id { print $2 }' $output_folder/$name/reads_study_info/samples_info.txt)
-						if [ -n "$sname" ]; then
-							old_file=$(ls | egrep "^${i}[._]" 2>/dev/null | head -1)
-							[ -z "$old_file" ] && old_file=$(ls | egrep "^${i}" 2>/dev/null | head -1)
-							[ -f "$old_file" ] && mv "$old_file" "${sname}_1.fastq.gz"
-						fi
-					done
-				elif [[ "$(cat $output_folder/$name/reads_study_info/library_layout_info.txt)" == "PAIRED" ]]; then
-					for i in $(cat $output_folder/$name/reads_study_info/srr_ids.txt); do
-						sname=$(awk -F'\t' -v id="$i" '$1 == id { print $2 }' $output_folder/$name/reads_study_info/samples_info.txt)
-						if [ -n "$sname" ]; then
-							f1=$(ls | egrep "^${i}_1\." 2>/dev/null | head -1)
-							f2=$(ls | egrep "^${i}_2\." 2>/dev/null | head -1)
-							[ -z "$f1" ] && f1=$(ls | egrep "^${i}" 2>/dev/null | head -1)
-							[ -z "$f2" ] && f2=$(ls | egrep "^${i}" 2>/dev/null | tail -1)
-							[ -f "$f1" ] && mv "$f1" "${sname}_1.fastq.gz"
-							[ -f "$f2" ] && mv "$f2" "${sname}_2.fastq.gz"
-						fi
-					done
-				fi
-				# If layout is SINGLE and files still lack _1.fastq.gz or _2.fastq.gz suffix, add it
-				if [[ "$(cat $output_folder/$name/reads_study_info/library_layout_info.txt)" == "SINGLE" ]]; then
-					cd $seqs_location
-					if [ $(ls *.fastq.gz 2>/dev/null | egrep -c "_[12]\.fastq\.gz$") -eq 0 ] && [ $(ls *.fastq.gz 2>/dev/null | wc -l) -gt 0 ]; then
-						echo -e "\nSingle-end reads detected without _1.fastq.gz suffix, adding it...\n"
-						for f in *.fastq.gz; do
-							mv "$f" "${f%.fastq.gz}_1.fastq.gz"
-						done
-					fi
-				fi
+				rename_sra_downloads
 			else
 				echo -e "\nSoft linking the already downloaded raw reads from the provided directory: $input_geo_reads\n"
 				ln -sf "$input_geo_reads"/* "$seqs_location"
 			fi
-			num_files=$(ls | wc -l); num_samples=$(cat $output_folder/$name/reads_study_info/srr_ids.txt | wc -l)
+			num_files=$(ls "$seqs_location" | wc -l); num_samples=$(cat $output_folder/$name/reads_study_info/srr_ids.txt | wc -l)
 			if [ "$num_files" -lt "$num_samples" ]; then
 				echo -e "\nPlease double check manually, is there some issue with the downloaded raw data? Exiting the script...\n"
 				exit 1
@@ -430,87 +532,31 @@ if run_step step1a; then
 		if [ "$num_gz_files" -eq "$(($num_samples * 2))" ] || [ "$num_gz_files" -eq "$num_samples" ]; then
 			echo "Number of fastq.gz files matched expected sample counts."
 		else
-			echo -e "\nRaw reads not downloaded fully? Please double check manually the log files and the folder $seqs_location to assess whether there have been errors with downloading. Retrying all downloads... with another approach\n"
-			echo -e "\nIn the future this will automatically detect and only resume the downloads that fail...\n"
-			seqs_location=$output_folder/$name/raw_reads
-			number_ids=$(echo $input | tr ',' '\n' | wc -l)
-			if [ "${number_ids:-0}" -lt 1 ]; then number_ids=1; fi
-			if [ $number_ids -le $number_parallel ]; then
-				export cores_parallel=$((cores / number_ids))
-			else
-				export cores_parallel=$((cores / number_parallel))
+			echo -e "\nSome raw reads are missing after the download ($num_gz_files fastq.gz file(s) for $num_samples sample(s)). Retrying only the missing accessions...\n"
+			missing_srr=$(missing_sra_downloads)
+			if [ -z "$missing_srr" ]; then
+				echo -e "\n\033[1;31mERROR:\033[0m every accession has its fastq file(s), but $seqs_location holds $num_gz_files fastq.gz file(s) for $num_samples sample(s). Please check that folder.\n" >&2
+				exit 1
 			fi
-			if [ "${cores_parallel:-0}" -lt 1 ]; then export cores_parallel=1; fi
-			cd $seqs_location; rm -rf *
-			echo $input | tr ',' '\n' | parallel --halt-on-error 2 --joblog $output_folder/$name/fastq_dl_log_parallel.txt -j $number_parallel --max-args 1 "if [ \$(echo {} | egrep -c 'PRJEB|PRJNA|PRJDB|ERX|DRX|SRX|ERP|DRP|SRP') -eq 1 ]; then fastq-dl --cpus $cores_parallel --silent --force --max-attempts 10 --gzip-level $compression_level --accession {}; fi && 
-																																		   if [ \$(echo {} | egrep -c 'ERS|DRS|SRS|SAMD|SAME|SAMN|ERR|DRR|SRR') -eq 1 ]; then fastq-dl --cpus $cores_parallel --silent --force --max-attempts 10 --gzip-level $compression_level --accession {}; fi"
+			cores_retry=$((cores / number_parallel))
+			if [ "$cores_retry" -lt 1 ]; then cores_retry=1; fi
+			cd "$seqs_location" || exit 1
+			echo "$missing_srr" | parallel --joblog $output_folder/$name/fastq_dl_retry_log_parallel.txt -j $number_parallel "fastq-dl --cpus $cores_retry --silent --force --max-attempts 10 --gzip-level $compression_level --accession {}"
+			rm -f fastq-run*
+			rename_sra_downloads
 			num_gz_files=$(ls -1 $output_folder/$name/raw_reads/*.fastq.gz 2>/dev/null | wc -l)
-		 	if [ "$num_gz_files" -eq "$(($num_samples * 2))" ] || [ "$num_gz_files" -eq "$num_samples" ]; then
-		 		echo "It seems the download has been sucessful, but please double check"
-		 	else
-		 		echo "Download still failed. Please double check manually, exiting..."; exit 1
-		 	fi
+			if [ "$num_gz_files" -eq "$(($num_samples * 2))" ] || [ "$num_gz_files" -eq "$num_samples" ]; then
+				echo "The missing reads were downloaded on the retry."
+			else
+				echo -e "\n\033[1;31mERROR:\033[0m the download is still incomplete after the retry. Accessions still missing: $(missing_sra_downloads | tr '\n' ' ')\n" >&2
+				exit 1
+			fi
 		fi
 
 		if [ ! -z "$number_reads" ]; then
-			echo -e "\nSubsampling...\n"
-			# From the input parameter by the user, obtain a random number allowing a +- 10% window:
-			IFS=', ' read -r -a arr <<< "$number_reads"
-			IFS=', ' read -r -a arr2 <<< "$(ls | egrep .fastq.gz$ | sed 's,[12].fastq.gz,,g' | sort | uniq | tr '\n' ',')"
-			desired_number=${arr[1]}
-			apply_random_shift() {
-				Rscript -e '
-				  modify_number <- function(number) {
-				    percentage <- runif(1, 0, 10)  # Random % between 0 and 10
-				    change <- ifelse(runif(1) < 0.5, -1, 1)  # Randomly add or subtract
-				    change_amount <- number * (percentage / 100) * change
-				    return(round(number + change_amount))
-				  }
-				  cat(modify_number('"$1"'), "\n")
-				'
-			}
-   			# Name-based lookup: match each sample prefix against reads_numbers.txt
-			declare -a arr3=()
-			for sample_prefix in "${arr2[@]}"; do
-				sample_name="${sample_prefix%_}"
-				matched_line=$(awk -F'\t' -v name="$sample_name" 'NR>1 && $1 == name' "${arr[0]}")
-				if [ -z "$matched_line" ]; then
-					echo "WARNING: Sample '$sample_name' not found in ${arr[0]}. Keeping all reads."
-					arr3+=("0")
-				else
-					col2=$(echo "$matched_line" | cut -f2)
-					col3=$(echo "$matched_line" | cut -f3)
-					desired_number_rand=$(apply_random_shift $desired_number)
-					if (( col3 < desired_number_rand )); then
-						arr3+=("$col2")
-					else
-						arr3+=("$((col2 * desired_number_rand / col3))")
-					fi
-				fi
-			done
-   			subsample_reads() {
-				files=$(ls | grep $1)
-				number=$2
-				if [ "$number" -eq 0 ]; then
-					echo "Skipping subsampling for $1 (not found in reads_numbers.txt, keeping all reads)"
-					for file in $files; do cp "$file" "${file}_subsamp"; done
-					return
-				fi
-				for file in $files; do seqtk sample -s 123 "$file" "$number" > "${file}_subsamp"; done
-			}
-			export -f subsample_reads
-			parallel --halt-on-error 2 --verbose -j $cores_reads_to_subsample subsample_reads {} ::: "${arr2[@]}" :::+ "${arr3[@]}" # 10 only because of RAM
-			find . -maxdepth 1 -type f -name '*_subsamp' -print0 | while IFS= read -r -d '' sub; do
-				orig="${sub%_subsamp}"
-				[ -f "$orig" ] && rm -f -- "$orig"
-			done
-			find . -maxdepth 1 -type f -name '*_subsamp' -print0 | while IFS= read -r -d '' sub; do
-				mv -- "$sub" "$(echo "$sub" | sed 's,_subsamp,,g;s,.gz,,g')"
-			done
-			pigz --best -p $cores * # gz was lost with seqtk sample
-			echo -e "\nSubsampling (+-10%) completed...\n"
+			subsample_local_reads
 		fi
-_log_step "Step_1_Download" "end"
+_log_step "Step_1a_Download_reads" "end"
 		echo -e "\n\nSTEP 1: DONE\nCurrent date/time: $(date)\n\n"
  	fi
 	export debug_step="all"
@@ -519,69 +565,15 @@ fi
 
 ### STEP 1. Process if not required to download from NCBI/GEO the metadata and raw reads provided locally:
 
-### STEP 1a_bis. Alignment Removal (Host Filtering)
-if run_step step1a_bis; then
-    if [ ! -z "$alignment_removal" ]; then
-        echo -e "\n\nSTEP 1a_bis: Alignment Removal (Host Filtering)...\nCurrent date/time: $(date)\n\n"
-        
-        # Define output directory for clean reads
-        clean_seqs_location=$output_folder/$name/clean_reads_no_host
-        mkdir -p $clean_seqs_location
-        mkdir -p $output_folder/$name/indexes
-
-        # Check/Build HISAT2 index for the removal genome
-        removal_index_name=$(basename $alignment_removal)_hisat2_idx
-        removal_index_path=$output_folder/$name/indexes/$removal_index_name
-        
-        if [ ! -f "${removal_index_path}.1.ht2" ]; then
-            echo "Building HISAT2 index for alignment removal: $alignment_removal"
-            hisat2-build -p $cores $alignment_removal $removal_index_path > $output_folder/$name/indexes/hisat2_build_removal.log 2>&1
-        fi
-
-        echo "Mapping reads against removal genome and extracting unmapped..."
-        cd $seqs_location
-
-        # Detect pairs or single
-        if [ $(ls | egrep -c "_1.fastq.gz$") -gt 0 ]; then
-             # Paired-end
-             for f in $(ls | egrep "_1.fastq.gz$" | sed 's,_1.fastq.gz,,g'); do
-                 echo "Processing $f..."
-                 hisat2 -p $cores -x $removal_index_path \
-                    -1 ${f}_1.fastq.gz -2 ${f}_2.fastq.gz \
-                    --un-conc-gz $clean_seqs_location/${f}_%.fastq.gz \
-                    --summary-file $clean_seqs_location/${f}_removal_summary.txt \
-                    > /dev/null
- 
-                 # Rename output to match expected format (_1.fastq.gz instead of _1.fastq.gz) - hisat2 output fits usually but let's ensure
-                 mv $clean_seqs_location/${f}_1.fastq.gz $clean_seqs_location/${f}_1.fastq.gz 2>/dev/null || true 
-                 mv $clean_seqs_location/${f}_2.fastq.gz $clean_seqs_location/${f}_2.fastq.gz 2>/dev/null || true
-             done
-        else
-             # Single-end
-             for f in $(ls | egrep ".fastq.gz$"); do
-                 echo "Processing $f..."
-                 hisat2 -p $cores -x $removal_index_path \
-                    -U $f \
-                    --un-gz $clean_seqs_location/$f \
-                    --summary-file $clean_seqs_location/${f}_removal_summary.txt \
-                    > /dev/null
-             done
-        fi
-
-        # Update seqs_location to point to clean reads
-        echo -e "\nAlignment removal completed. Updating sequences location to: $clean_seqs_location\n"
-        seqs_location=$clean_seqs_location
-        export seqs_location
-    fi
-fi
 
 if run_step step1b; then
 	mkdir -p $TMPDIR
 	if [[ $input == /* ]]; then
 		echo -e "\n\nSTEP 1b: Preparing the raw reads and metadata provided locally...\nCurrent date/time: $(date)\n\n"
 		_log_step "Step_1b_Fastp" "start"
-  		seqs_location=$output_folder/$name/raw_reads
-		rm -rf $seqs_location # I'm now removing the seqs_location at the beginning of this section, in the context of the new system of resuming by -Dm stepx, so this should always be done
+		set_reads_location prep "$output_folder/$name/raw_reads"
+		rm -f "$READS_LOCATION_DIR/reads_location_decontam.txt"
+		rm -rf "$seqs_location" # I'm now removing the seqs_location at the beginning of this section, in the context of the new system of resuming by -Dm stepx, so this should always be done
 		if [ ! -d "$seqs_location" ]; then
 			mkdir -p $seqs_location
 			if [ $(ls -d $input/* | egrep -c "_R1.fastq.gz$|_R1.fq.gz$|_R2.fastq.gz$|_R2.fq.gz$|_1.fastq.gz$|_1.fq.gz$|_2.fastq.gz$|_2.fq.gz$|_R1_[0-9]+.fastq.gz$|_R1_[0-9]+.fq.gz$|_R2_[0-9]+.fastq.gz$|_R2_[0-9]+.fq.gz$") -eq 0 ]; then
@@ -623,76 +615,54 @@ if run_step step1b; then
 			fi
 		fi
 		if [ ! -z "$number_reads" ]; then
-			echo -e "\nSubsampling...\n"
-			# From the input parameter by the user, obtain a random number allowing a +- 10% window:
-			IFS=', ' read -r -a arr <<< "$number_reads"
-			IFS=', ' read -r -a arr2 <<< "$(ls | egrep .fastq.gz$ | sed 's,[12].fastq.gz,,g' | sort | uniq | tr '\n' ',')"			
-			desired_number=${arr[1]}
-			apply_random_shift() {
-				Rscript -e '
-				  modify_number <- function(number) {
-				    percentage <- runif(1, 0, 10)  # Random % between 0 and 10
-				    change <- ifelse(runif(1) < 0.5, -1, 1)  # Randomly add or subtract
-				    change_amount <- number * (percentage / 100) * change
-				    return(round(number + change_amount))
-				  }
-				  cat(modify_number('"$1"'), "\n")
-				'
-			}
-   			# Name-based lookup: match each sample prefix against reads_numbers.txt
-			declare -a arr3=()
-			for sample_prefix in "${arr2[@]}"; do
-				sample_name="${sample_prefix%_}"
-				matched_line=$(awk -F'\t' -v name="$sample_name" 'NR>1 && $1 == name' "${arr[0]}")
-				if [ -z "$matched_line" ]; then
-					echo "WARNING: Sample '$sample_name' not found in ${arr[0]}. Keeping all reads."
-					arr3+=("0")
-				else
-					col2=$(echo "$matched_line" | cut -f2)
-					col3=$(echo "$matched_line" | cut -f3)
-					desired_number_rand=$(apply_random_shift $desired_number)
-					if (( col3 < desired_number_rand )); then
-						arr3+=("$col2")
-					else
-						arr3+=("$((col2 * desired_number_rand / col3))")
-					fi
-				fi
-			done
-   			subsample_reads() {
-				files=$(ls | grep $1)
-				number=$2
-				if [ "$number" -eq 0 ]; then
-					echo "Skipping subsampling for $1 (not found in reads_numbers.txt, keeping all reads)"
-					return
-				fi
-				for file in $files; do seqtk sample -s 123 "$file" "$number" > "${file}_subsamp"; done
-			}
-			export -f subsample_reads
-			parallel --halt-on-error 2 --verbose -j $cores_reads_to_subsample subsample_reads {} ::: "${arr2[@]}" :::+ "${arr3[@]}" # 10 only because of RAM
-			find . -maxdepth 1 -type f -name '*_subsamp' -print0 | while IFS= read -r -d '' sub; do
-				orig="${sub%_subsamp}"
-				[ -f "$orig" ] && rm -f -- "$orig"
-			done
-			find . -maxdepth 1 -type f -name '*_subsamp' -print0 | while IFS= read -r -d '' sub; do
-				mv -- "$sub" "$(echo "$sub" | sed 's,_subsamp,,g;s,.gz,,g')"
-			done
-			pigz --best -p $cores * # gz was lost with seqtk sample
-			echo -e "\nSubsampling (+-10%) completed...\n"
+			subsample_local_reads
 		fi
 	 	echo -e "This is the content of $seqs_location:\n$(ls -l $seqs_location | awk '{ print $9 }' | tail -n +2)\n"
+		local_samples=$(ls $seqs_location | egrep '.fq|.fastq' | sed 's,_[12].fastq.gz,,g' | uniq)
+		n_local_samples=$(echo "$local_samples" | grep -c .)
 		if [ -z "$design_custom_local" ]; then
 			echo -n "From the ordered list above, please input a comma-separated list with the conditions for each sample. Remember to try and avoid complex names, use as few underlines as possible, avoid names starting with numbers or others that would not be sorted appropriately such as containing spaces, if reads are paired-end, only one name of condition per pair of reads, and if you want to provide more than one design, separate the comma-separated list with a '/', no spaces: "
 			read -r design_input
 		else
 			design_input=$design_custom_local
-			echo -e "The used conditions are (the assignment must match sample names):\n"
-			paste \
-			  <(ls -l "$seqs_location" | awk '{ print $9 }' | tail -n +2 | sed 's,_[12].fastq.gz,,g' | uniq) \
-			  <(echo "$design_input" | sed 's_,_\n_g;s,/,\n\n,g')
 		fi
-		mkdir -p $output_folder/$name/reads_study_info/
-		paste <(ls $seqs_location | egrep '.fq|.fastq' | sed 's,_[12].fastq.gz,,g' | uniq) <(paste -d'_' <(ls $seqs_location | egrep '.fq|.fastq' | sed 's,_[12].fastq.gz,,g' | uniq) <(echo $design_input | sed 's*/*\t*g'| cut -f1 | sed 's*,*\n*g')) <(echo $design_input | sed 's*/*\t*g'| cut -f1 | sed 's*,*\n*g') > $output_folder/$name/reads_study_info/samples_info.txt
+		if [ "$design_input" == "auto" ]; then
+			auto_unmatched=$(echo "$local_samples" | grep -Ev '_[Rr][Ee][Pp][0-9]')
+			if [ -n "$auto_unmatched" ]; then
+				echo -e "\n\033[1;31mERROR:\033[0m the design is 'auto', which takes each sample's condition from its name by dropping the '_Rep<N>' replicate suffix and everything after it, but these sample(s) have no such suffix:\n$auto_unmatched\nPlease rename them or provide the design explicitly.\n" >&2
+				exit 1
+			fi
+			design_input=$(echo "$local_samples" | sed -E 's,_[Rr][Ee][Pp][0-9].*$,,' | paste -sd,)
+			echo -e "Design derived from the sample names (auto): $design_input\n"
+		fi
+		if [ "$design_input" == "llm" ]; then
+			if [ -z "$LLM_ENDPOINT" ] || [ -z "$LLM_MODEL" ]; then
+				echo -e "\n\033[1;31mERROR:\033[0m the design is 'llm', but no LLM is configured. Please provide -llm_endpoint and -llm_model, or use 'auto' or an explicit design.\n" >&2
+				exit 1
+			fi
+			echo -e "Asking the LLM (model=$LLM_MODEL) for the condition of each of the $n_local_samples sample(s)..."
+			design_input=$(echo "$local_samples" | llm_design_local.py --study "$name")
+			if [ $? -ne 0 ] || [ -z "$design_input" ]; then
+				echo -e "\n\033[1;31mERROR:\033[0m the LLM did not propose a usable design (see the messages above). Please rerun with 'auto' or an explicit design.\n" >&2
+				exit 1
+			fi
+			echo -e "Design proposed by the LLM: $design_input\nTo reuse exactly this design in a later run, set design_custom_local to the string above, since the LLM may not answer identically twice.\n"
+		fi
+		echo -e "The used conditions are (the assignment must match sample names):\n"
+		paste <(echo "$local_samples") <(echo "$design_input" | sed 's_,_\n_g;s,/,\n\n,g')
 		IFS='/' read -ra ADDR <<< "$design_input"
+		for i in "${!ADDR[@]}"; do
+			n_conditions=$(echo "${ADDR[$i]}" | awk -F',' '{print NF}')
+			if [ "$n_conditions" -ne "$n_local_samples" ]; then
+				echo -e "\n\033[1;31mERROR:\033[0m design $((i + 1)) has $n_conditions condition(s) but there are $n_local_samples sample(s). Please give exactly one condition per sample, in the order of the sample list above." >&2
+				if [ "$n_conditions" -eq $((2 * n_local_samples)) ]; then
+					echo -e "That is exactly twice the number of samples: for paired-end reads, give one condition per sample, not one per FASTQ file.\n" >&2
+				fi
+				exit 1
+			fi
+		done
+		mkdir -p $output_folder/$name/reads_study_info/
+		paste <(echo "$local_samples") <(paste -d'_' <(echo "$local_samples") <(echo $design_input | sed 's*/*\t*g'| cut -f1 | sed 's*,*\n*g')) <(echo $design_input | sed 's*/*\t*g'| cut -f1 | sed 's*,*\n*g') > $output_folder/$name/reads_study_info/samples_info.txt
 		for i in "${!ADDR[@]}"; do
 			# For each comma-separated list, split by ',' and echo to file
 			IFS=',' read -ra ITEMS <<< "${ADDR[$i]}"
@@ -721,8 +691,10 @@ fi
 if run_step step1c; then
 	if [[ $input == P* || $input == E* || $input == D* || $input == S* ]]; then
 		echo -e "\n\nSTEP 1: Downloading from the $input id provided...\nCurrent date/time: $(date)\n\n"
-  		seqs_location=$output_folder/$name/raw_reads
-		rm -rf $seqs_location # I'm now removing the seqs_location at the beginning of this section, in the context of the new system of resuming by -Dm stepx, so this should always be done
+		_log_step "Step_1c_Download_accessions" "start"
+		set_reads_location prep "$output_folder/$name/raw_reads"
+		rm -f "$READS_LOCATION_DIR/reads_location_decontam.txt"
+		rm -rf "$seqs_location" # I'm now removing the seqs_location at the beginning of this section, in the context of the new system of resuming by -Dm stepx, so this should always be done
 		number_ids=$(echo $input | tr ',' '\n' | wc -l)
 		if [ "${number_ids:-0}" -lt 1 ]; then number_ids=1; fi
 		if [ $number_ids -le $number_parallel ]; then
@@ -734,15 +706,64 @@ if run_step step1c; then
 		if [ ! -d "$seqs_location" ]; then
 			mkdir -p $seqs_location; cd $seqs_location
 			echo -e "\nDownloading from the input accessions that you manually provided...\n"
-			echo $input | tr ',' '\n' | parallel --halt-on-error 2 -j $number_parallel --max-args 1 "if [ \$(echo {} | egrep -c 'PRJEB|PRJNA|PRJDB|ERX|DRX|SRX|ERP|DRP|SRP') -eq 1 ]; then fastq-dl --cpus $cores_parallel --silent --force --max-attempts 10 --gzip-level $compression_level --accession {}; fi && 
+			echo $input | tr ',' '\n' | parallel --joblog $output_folder/$name/fastq_dl_log_parallel.txt -j $number_parallel --max-args 1 "if [ \$(echo {} | egrep -c 'PRJEB|PRJNA|PRJDB|ERX|DRX|SRX|ERP|DRP|SRP') -eq 1 ]; then fastq-dl --cpus $cores_parallel --silent --force --max-attempts 10 --gzip-level $compression_level --accession {}; fi && 
 		 																		   if [ \$(echo {} | egrep -c 'ERS|DRS|SRS|SAMD|SAME|SAMN|ERR|DRR|SRR') -eq 1 ]; then fastq-dl --cpus $cores_parallel --silent --force --max-attempts 10 --gzip-level $compression_level --accession {}; fi"
+			if [ $? -ne 0 ]; then
+				echo -e "\n\033[1;31mERROR:\033[0m some downloads failed; see $output_folder/$name/fastq_dl_log_parallel.txt, where a non-zero Exitval marks each failed accession.\n" >&2
+				exit 1
+			fi
 		fi
-_log_step "Step_1_Download" "end"
+_log_step "Step_1c_Download_accessions" "end"
 		echo -e "\n\nSTEP 1: DONE\nCurrent date/time: $(date)\n\n"
  	fi
 	export debug_step="all"
 fi
 
+
+### STEP 1a_bis. Alignment Removal (Host Filtering)
+if run_step step1a_bis; then
+	if [ ! -z "$alignment_removal" ]; then
+		echo -e "\n\nSTEP 1a_bis: Alignment Removal (Host Filtering)...\nCurrent date/time: $(date)\n\n"
+		_log_step "Step_1a_bis_Host_Removal" "start"
+		clean_seqs_location=$output_folder/$name/clean_reads_no_host
+		removal_summaries=$output_folder/$name/host_removal_summaries
+		rm -rf "$clean_seqs_location" "$removal_summaries"
+		mkdir -p "$clean_seqs_location" "$removal_summaries" "$output_folder/$name/indexes"
+		removal_index_name=$(basename $alignment_removal)_hisat2_idx
+		removal_index_path=$output_folder/$name/indexes/$removal_index_name
+		if [ ! -f "${removal_index_path}.1.ht2" ]; then
+			echo "Building HISAT2 index for alignment removal: $alignment_removal"
+			if ! hisat2-build -p $cores $alignment_removal $removal_index_path > $output_folder/$name/indexes/hisat2_build_removal.log 2>&1; then
+				echo -e "\n\033[1;31mERROR:\033[0m building the HISAT2 index for alignment removal failed. See $output_folder/$name/indexes/hisat2_build_removal.log\n" >&2
+				exit 1
+			fi
+		fi
+		echo "Mapping reads against removal genome and extracting unmapped..."
+		cd "$seqs_location" || exit 1
+		layout_removal=$(find $output_folder/$name -name library_layout_info.txt 2>/dev/null | head -1 | xargs cat 2>/dev/null | head -n1 | tr -d ' \r\n')
+		if [[ "$layout_removal" == "PAIRED" ]]; then
+			for f in $(ls | egrep "_1.fastq.gz$" | sed 's,_1.fastq.gz,,g'); do
+				echo "Processing $f..."
+				if ! hisat2 -p $cores -x $removal_index_path -1 ${f}_1.fastq.gz -2 ${f}_2.fastq.gz --un-conc-gz $clean_seqs_location/${f}_%.fastq.gz --summary-file $removal_summaries/${f}_removal_summary.txt > /dev/null; then
+					echo -e "\n\033[1;31mERROR:\033[0m host alignment removal failed for $f\n" >&2
+					exit 1
+				fi
+			done
+		else
+			for f in $(ls | egrep ".fastq.gz$"); do
+				echo "Processing $f..."
+				if ! hisat2 -p $cores -x $removal_index_path -U $f --un-gz $clean_seqs_location/$f --summary-file $removal_summaries/${f}_removal_summary.txt > /dev/null; then
+					echo -e "\n\033[1;31mERROR:\033[0m host alignment removal failed for $f\n" >&2
+					exit 1
+				fi
+			done
+		fi
+		echo -e "\nAlignment removal completed. Updating sequences location to: $clean_seqs_location\n"
+		set_reads_location prep "$clean_seqs_location"
+		_log_step "Step_1a_bis_Host_Removal" "end"
+	fi
+	export debug_step="all"
+fi
 
 ### STEP 1. Deal with batch correction... The user has to use certain arguments to manually provide a list or do it interactively:
 if run_step step1d; then
@@ -765,15 +786,19 @@ if run_step step1d; then
 	if [ ! -z "$covariables" ]; then
  		echo $covariables > $output_folder/$name/reads_study_info/covariables.txt
   	fi
+	export debug_step="all"
 fi
 
 ### STEP 1. Give info of NCBI's current genome:
-Rscript -e "organism <- '${organism}'; tryCatch({ ids <- rentrez::entrez_search(db='assembly', term=paste0(organism, '[orgn]'))\$ids; if(length(ids)==0) stop('No ids'); assemblies <- rentrez::entrez_summary(db='assembly', id=ids[1]); cat(paste(paste0('\n\nNCBI current assembly info: ', date()), assemblies\$assemblyname, assemblies\$assemblyaccession, assemblies\$submissiondate, '\n', sep='\n')) }, error=function(e) cat(paste0('\n\nNo genome information found in NCBI for: ', organism, '\n\n')))"
 organism=$(cat $output_folder/$name/reads_study_info/organism.txt | sed 's/ \+/_/g;s/__*/_/g') # Get again the organism in case it has been manually modified... and without spaces...
+timeout 120 Rscript -e 'organism <- commandArgs(TRUE)[1]; tryCatch({ ids <- rentrez::entrez_search(db="assembly", term=paste0(organism, "[orgn]"))$ids; if(length(ids)==0) stop("No ids"); assemblies <- rentrez::entrez_summary(db="assembly", id=ids[1]); cat(paste(paste0("\n\nNCBI current assembly info: ", date()), assemblies$assemblyname, assemblies$assemblyaccession, assemblies$submissiondate, "\n", sep="\n")) }, error=function(e) cat(paste0("\n\nNo genome information found in NCBI for: ", organism, "\n\n")))' "${organism//_/ }" || echo -e "\n\nNCBI assembly information not available (no answer within 120 s)\n"
 echo -e "\nYou are using $reference_genome\n"
 
 ### STEP 1. Auto-decompress gzipped reference inputs into the indexes subfolder:
 mkdir -p $output_folder/$name/indexes
+reference_genome_input=$reference_genome
+annotation_input=$annotation
+genome_group_fastas_input=("${genome_group_fastas[@]}")
 declare -a files_to_decompress=()
 declare -a decompressed_outputs=()
 
@@ -834,7 +859,10 @@ if [[ "$transcripts" == *.gz ]]; then
 fi
 
 if [ ${#files_to_decompress[@]} -gt 0 ]; then
-	parallel --halt-on-error 2 --tmpdir $TMPDIR -j $number_parallel 'echo "Using {1} -> {2}"; gunzip -c "{1}" > "{2}"' ::: "${files_to_decompress[@]}" :::+ "${decompressed_outputs[@]}"
+	if ! parallel --halt-on-error 2 --tmpdir $TMPDIR -j $number_parallel 'echo "Using {1} -> {2}"; gunzip -c "{1}" > "{2}.tmp" && mv "{2}.tmp" "{2}"' ::: "${files_to_decompress[@]}" :::+ "${decompressed_outputs[@]}"; then
+		echo -e "\n\033[1;31mERROR:\033[0m decompressing the reference inputs failed.\n" >&2
+		exit 1
+	fi
 fi
 
 ### STEP 1. Deal with fastp if required:
@@ -873,50 +901,74 @@ if [ ! -z "$fastp_extra_args" ]; then
 	fastp_extra_opts="$fastp_extra_opts $fastp_extra_args"
 fi
 
-if [ ! -z "$fastp_label" ]; then
-	echo -e "\n\nSTEP 1: $fastp_label...(output files will be renamed and moved to raw_reads internal folder)\nCurrent date/time: $(date)\n\n"
-	mkdir -p $output_folder/$name/fastp_out
-	cd $output_folder/$name/fastp_out
-	layout_fastp=$(find $output_folder/$name -name library_layout_info.txt 2>/dev/null | head -1 | xargs cat 2>/dev/null | head -n1 | tr -d ' \r\n')
+fastp_marker="$seqs_location/.rgse_fastp_done"
+rename_fastp_outputs() {
+	local f
+	for f in $(ls -d "$seqs_location"/* 2>/dev/null | grep "_fastp.fastq.gz$"); do mv "$f" "$(echo "$f" | sed 's,.fastq.gz_fastp.fastq.gz$,.fastq.gz,')"; done
+}
+if { [ ! -z "$fastp_label" ] || [ "$fastp_trimming" != "none" ]; } && [ -f "$fastp_marker" ]; then
+	echo -e "\nfastp was already applied to the reads in $seqs_location, so it is not run again.\n"
+elif [ ! -z "$fastp_label" ] || [ "$fastp_trimming" != "none" ]; then
+	if [ ! -z "$fastp_label" ]; then
+		echo -e "\n\nSTEP 1: $fastp_label...(output files will be renamed and moved to raw_reads internal folder)\nCurrent date/time: $(date)\n\n"
+		mkdir -p $output_folder/$name/fastp_out
+		cd $output_folder/$name/fastp_out
+		layout_fastp=$(find $output_folder/$name -name library_layout_info.txt 2>/dev/null | head -1 | xargs cat 2>/dev/null | head -n1 | tr -d ' \r\n')
 
-	if [[ "$layout_fastp" == "SINGLE" ]]; then
-		ls -d $seqs_location/*.fastq.gz | \
-			parallel --halt-on-error 2 --tmpdir $TMPDIR --verbose --joblog $output_folder/$name/fastp_out/fastp_log_parallel.txt -j $number_parallel \
-			'fastp --in1 {} --out1 {}_fastp.fastq.gz --dont_overwrite --dont_eval_duplication '$fastp_extra_opts' --thread '$cores_fastp' -z '$compression_level' -h '$output_folder/$name'/fastp_out/{/}_report.html -j '$output_folder/$name'/fastp_out/{/}_report.json &>> '$output_folder/$name'/fastp_out/{/}_fastp_out.log'
-	elif [[ "$layout_fastp" == "PAIRED" ]]; then
-		ls -d $seqs_location/*.fastq.gz | sed 's,_[12].fastq.gz,,g' | sort | uniq | \
-			parallel --halt-on-error 2 --tmpdir $TMPDIR --verbose --joblog $output_folder/$name/fastp_out/fastp_log_parallel.txt -j $number_parallel \
-			'fastp --in1 {}_1.fastq.gz --in2 {}_2.fastq.gz --out1 {}_1.fastq.gz_fastp.fastq.gz --out2 {}_2.fastq.gz_fastp.fastq.gz --dont_overwrite --dont_eval_duplication '$fastp_extra_opts' --thread '$cores_fastp' -z '$compression_level' -h '$output_folder/$name'/fastp_out/{/}_report.html -j '$output_folder/$name'/fastp_out/{/}_report.json &>> '$output_folder/$name'/fastp_out/{/}_fastp_out.log'
+		if [[ "$layout_fastp" == "SINGLE" ]]; then
+			ls -d $seqs_location/*.fastq.gz | \
+				parallel --halt-on-error 2 --tmpdir $TMPDIR --verbose --joblog $output_folder/$name/fastp_out/fastp_log_parallel.txt -j $number_parallel \
+				'fastp --in1 {} --out1 {}_fastp.fastq.gz --dont_overwrite --dont_eval_duplication '$fastp_extra_opts' --thread '$cores_fastp' -z '$compression_level' -h '$output_folder/$name'/fastp_out/{/}_report.html -j '$output_folder/$name'/fastp_out/{/}_report.json &>> '$output_folder/$name'/fastp_out/{/}_fastp_out.log'
+			if [ $? -ne 0 ]; then
+				echo -e "\n\033[1;31mERROR:\033[0m fastp preprocessing failed; see the logs in $output_folder/$name/fastp_out\n" >&2
+				exit 1
+			fi
+		elif [[ "$layout_fastp" == "PAIRED" ]]; then
+			ls -d $seqs_location/*.fastq.gz | sed 's,_[12].fastq.gz,,g' | sort | uniq | \
+				parallel --halt-on-error 2 --tmpdir $TMPDIR --verbose --joblog $output_folder/$name/fastp_out/fastp_log_parallel.txt -j $number_parallel \
+				'fastp --in1 {}_1.fastq.gz --in2 {}_2.fastq.gz --out1 {}_1.fastq.gz_fastp.fastq.gz --out2 {}_2.fastq.gz_fastp.fastq.gz --dont_overwrite --dont_eval_duplication '$fastp_extra_opts' --thread '$cores_fastp' -z '$compression_level' -h '$output_folder/$name'/fastp_out/{/}_report.html -j '$output_folder/$name'/fastp_out/{/}_report.json &>> '$output_folder/$name'/fastp_out/{/}_fastp_out.log'
+			if [ $? -ne 0 ]; then
+				echo -e "\n\033[1;31mERROR:\033[0m fastp preprocessing failed; see the logs in $output_folder/$name/fastp_out\n" >&2
+				exit 1
+			fi
+		fi
 	fi
-fi
+	rename_fastp_outputs
 
-# Trimming step can run in addition to the adapter/mode step above
-if [ "$fastp_trimming" != "none" ]; then
-	echo -e "\n\nSTEP 1: Preprocessing with fastp and trimming...\nCurrent date/time: $(date)\n\n"
-	mkdir -p $output_folder/$name/fastp_out
-	cd $output_folder/$name/fastp_out
-	IFS=', ' read -r -a arrfastp <<< "$fastp_trimming"
-	layout_fastp=$(find $output_folder/$name -name library_layout_info.txt 2>/dev/null | head -1 | xargs cat 2>/dev/null | head -n1 | tr -d ' \r\n')
+	if [ "$fastp_trimming" != "none" ]; then
+		echo -e "\n\nSTEP 1: Preprocessing with fastp and trimming...\nCurrent date/time: $(date)\n\n"
+		mkdir -p $output_folder/$name/fastp_out
+		cd $output_folder/$name/fastp_out
+		IFS=', ' read -r -a arrfastp <<< "$fastp_trimming"
+		layout_fastp=$(find $output_folder/$name -name library_layout_info.txt 2>/dev/null | head -1 | xargs cat 2>/dev/null | head -n1 | tr -d ' \r\n')
 
-	if [[ "$layout_fastp" == "SINGLE" ]]; then
-		ls -d $seqs_location/*.fastq.gz | \
-			parallel --halt-on-error 2 --tmpdir $TMPDIR --verbose --joblog $output_folder/$name/fastp_out/fastp_trim_log_parallel.txt -j $number_parallel \
-			'fastp --in1 {} --out1 {}_fastp.fastq.gz --dont_overwrite --dont_eval_duplication --trim_front1 '"${arrfastp[0]}"' --trim_tail1 '"${arrfastp[1]}"' --thread '$cores_fastp' -z '$compression_level' -h '$output_folder/$name'/fastp_out/{/}_trim_report.html -j '$output_folder/$name'/fastp_out/{/}_trim_report.json &>> '$output_folder/$name'/fastp_out/{/}_fastp_trim_out.log'
-	elif [[ "$layout_fastp" == "PAIRED" ]]; then
-		ls -d $seqs_location/*.fastq.gz | sed 's,_[12].fastq.gz,,g' | sort | uniq | \
-			parallel --halt-on-error 2 --tmpdir $TMPDIR --verbose --joblog $output_folder/$name/fastp_out/fastp_trim_log_parallel.txt -j $number_parallel \
-			'fastp --in1 {}_1.fastq.gz --in2 {}_2.fastq.gz --out1 {}_1.fastq.gz_fastp.fastq.gz --out2 {}_2.fastq.gz_fastp.fastq.gz --dont_overwrite --dont_eval_duplication --trim_front1 '"${arrfastp[0]}"' --trim_tail1 '"${arrfastp[1]}"' --thread '$cores_fastp' -z '$compression_level' -h '$output_folder/$name'/fastp_out/{/}_trim_report.html -j '$output_folder/$name'/fastp_out/{/}_trim_report.json &>> '$output_folder/$name'/fastp_out/{/}_fastp_trim_out.log'
+		if [[ "$layout_fastp" == "SINGLE" ]]; then
+			ls -d $seqs_location/*.fastq.gz | \
+				parallel --halt-on-error 2 --tmpdir $TMPDIR --verbose --joblog $output_folder/$name/fastp_out/fastp_trim_log_parallel.txt -j $number_parallel \
+				'fastp --in1 {} --out1 {}_fastp.fastq.gz --dont_overwrite --dont_eval_duplication --trim_front1 '"${arrfastp[0]}"' --trim_tail1 '"${arrfastp[1]}"' --thread '$cores_fastp' -z '$compression_level' -h '$output_folder/$name'/fastp_out/{/}_trim_report.html -j '$output_folder/$name'/fastp_out/{/}_trim_report.json &>> '$output_folder/$name'/fastp_out/{/}_fastp_trim_out.log'
+			if [ $? -ne 0 ]; then
+				echo -e "\n\033[1;31mERROR:\033[0m fastp trimming failed; see the logs in $output_folder/$name/fastp_out\n" >&2
+				exit 1
+			fi
+		elif [[ "$layout_fastp" == "PAIRED" ]]; then
+			ls -d $seqs_location/*.fastq.gz | sed 's,_[12].fastq.gz,,g' | sort | uniq | \
+				parallel --halt-on-error 2 --tmpdir $TMPDIR --verbose --joblog $output_folder/$name/fastp_out/fastp_trim_log_parallel.txt -j $number_parallel \
+				'fastp --in1 {}_1.fastq.gz --in2 {}_2.fastq.gz --out1 {}_1.fastq.gz_fastp.fastq.gz --out2 {}_2.fastq.gz_fastp.fastq.gz --dont_overwrite --dont_eval_duplication --trim_front1 '"${arrfastp[0]}"' --trim_tail1 '"${arrfastp[1]}"' --thread '$cores_fastp' -z '$compression_level' -h '$output_folder/$name'/fastp_out/{/}_trim_report.html -j '$output_folder/$name'/fastp_out/{/}_trim_report.json &>> '$output_folder/$name'/fastp_out/{/}_fastp_trim_out.log'
+			if [ $? -ne 0 ]; then
+				echo -e "\n\033[1;31mERROR:\033[0m fastp trimming failed; see the logs in $output_folder/$name/fastp_out\n" >&2
+				exit 1
+			fi
+		fi
 	fi
-fi
-
-if [ $(ls -d $seqs_location/* | grep -c _fastp.fastq.gz) -gt 0 ]; then
-	for f in $(ls -d $seqs_location/* | grep _fastp.fastq.gz); do mv $f $(echo $f | sed 's,.fastq.gz_fastp.fastq.gz,.fastq.gz,g'); done
+	rename_fastp_outputs
+	touch "$fastp_marker"
 	echo "Files in $seqs_location have been successfully processed by fastp!"
 fi
 
 
 ### STEP 2. Decontamination if required:
 if run_step step2; then
+	rm -f "$READS_LOCATION_DIR/reads_location_decontam.txt"
 	if [ ! -z "$kraken2_databases" ]; then
   		echo -e "\n\nSTEP 2: Decontamination starting with Kraken2 (k2 daemon mode)...\nCurrent date/time: $(date)\n\n"
 _log_step "Step_2_Decontamination" "start"
@@ -989,33 +1041,46 @@ _log_step "Step_2_Decontamination" "start"
 			taxdump_dir="${k2_db_array[0]}/taxdump"
 		fi
 
-		# Extract reads for the organism (use first DB for taxdump if available)
+		k2_reads_in=$seqs_location
 		if [ ! -z "$taxdump_dir" ]; then
 			if [ -z "$taxonid" ]; then
 				taxonid=$(echo $organism | sed 's/_\+/ /g' | taxonkit name2taxid --data-dir $taxdump_dir | head -1 | cut -f2)
 			fi
+			if [ -z "$taxonid" ]; then
+				echo -e "\n\033[1;31mERROR:\033[0m could not resolve a taxon ID for '$organism' from $taxdump_dir, so the reads cannot be decontaminated. Please set 'taxonid' explicitly.\n" >&2
+				exit 1
+			fi
 			taxon_name=$(taxonkit list --ids $taxonid -n -r --data-dir $taxdump_dir | grep $taxonid)
 			echo -e "\nOrganism provided: $organism"; echo -e "\nOrganism provided (taxonid): $taxonid"; echo $taxon_name
-			echo -e "\nIf not correct, please rerun and double check that you have provided it explicitly in the prompt... kraken2 output will be filtered to retain that taxa and below"
-			echo -e "\nCheck out the log in the file extract_kraken2_log_out.txt"
-
-			mkdir -p $seqs_location\_k2
-			# Use first confidence score + first DB for read extraction
+			echo -e "\nKeeping the reads classified to that taxon, its ancestors or its descendants, plus the unclassified ones; reads assigned to any other lineage are removed. If the taxon is not correct, please rerun providing 'taxonid' explicitly. Log: extract_kraken2_log_out.txt"
+			k2_clean_dir=$output_folder/$name/raw_reads_k2/decontaminated
+			rm -rf "$k2_clean_dir"; mkdir -p "$k2_clean_dir"
 			conf_label_first=$(echo "${k2_conf_array[0]}" | sed 's/^0$/00/;s/^0\.\([0-9]*\)/0\1/')
+			k2_suffix="${conf_label_first}k2_${first_db}"
 			if [[ "$layout" == "SINGLE" ]]; then
-				for f in $(ls | egrep "\.${conf_label_first}k2_${first_db}\.gz$"); do
-					base=$(echo $f | sed "s,\.${conf_label_first}k2_${first_db}\.gz,,g")
-					extract_kraken_reads.py -k $f -U $base -o $seqs_location\_k2/${f}_1.fastq.gz -t $taxonid -r ${base}.${conf_label_first}k2_${first_db}_report.txt --include-children &>> extract_kraken2_log_out.txt
+				for f in $(ls "$k2_reads_in" | egrep "\.fastq\.gz$|\.fq\.gz$"); do
+					base=$(echo "$f" | sed 's,\.\(fastq\|fq\)\.gz$,,')
+					kout=$(ls | egrep "^${base}\.${k2_suffix}(\.gz)?$" | head -1)
+					if [ -z "$kout" ] || ! extract_kraken_reads.py -k <(zcat -f "$kout") -U "$k2_reads_in/$f" -o "$k2_clean_dir/${base}.fastq" -t 0 $taxonid -r "${base}.${k2_suffix}_report.txt" --include-children --include-parents --fastq-output &>> extract_kraken2_log_out.txt; then
+						echo -e "\n\033[1;31mERROR:\033[0m Kraken2 read extraction failed for $f; see $PWD/extract_kraken2_log_out.txt\n" >&2
+						exit 1
+					fi
 				done
 			elif [[ "$layout" == "PAIRED" ]]; then
-				for f in $(ls | egrep "\.${conf_label_first}k2_${first_db}\.gz$"); do
-					base=$(echo $f | sed "s,\.${conf_label_first}k2_${first_db}\.gz,,g")
-					extract_kraken_reads.py -k $f -s1 ${base}_1.fastq.gz -s2 ${base}_2.fastq.gz -o $seqs_location\_k2/${f}_1.fastq.gz -o2 $seqs_location\_k2/${f}_2.fastq.gz -t $taxonid -r ${base}.${conf_label_first}k2_${first_db}_report.txt --include-children &>> extract_kraken2_log_out.txt
+				for base in $(ls "$k2_reads_in" | egrep "\.fastq\.gz$|\.fq\.gz$" | sed 's,_R\?[12]\.\(fastq\|fq\)\(\.gz\)\?$,,g' | sort -u); do
+					kout=$(ls | egrep "^${base}\.${k2_suffix}(\.gz)?$" | head -1)
+					if [ -z "$kout" ] || ! extract_kraken_reads.py -k <(zcat -f "$kout") -s1 "$k2_reads_in/${base}_1.fastq.gz" -s2 "$k2_reads_in/${base}_2.fastq.gz" -o "$k2_clean_dir/${base}_1.fastq" -o2 "$k2_clean_dir/${base}_2.fastq" -t 0 $taxonid -r "${base}.${k2_suffix}_report.txt" --include-children --include-parents --fastq-output &>> extract_kraken2_log_out.txt; then
+						echo -e "\n\033[1;31mERROR:\033[0m Kraken2 read extraction failed for $base; see $PWD/extract_kraken2_log_out.txt\n" >&2
+						exit 1
+					fi
 				done
 			fi
+			pigz -p $cores "$k2_clean_dir"/*.fastq
+			echo -e "\nDecontaminated reads written to $k2_clean_dir; they replace the original reads from here on.\n"
+			set_reads_location decontam "$k2_clean_dir"
+		else
+			echo -e "\nWARNING: ${k2_db_array[0]} has no taxdump folder, so the organism's taxon cannot be resolved: the reads are classified and reported but NOT decontaminated.\n"
 		fi
-
-		for f in $(ls | grep "k2" | egrep ".fastq.gz$"); do fastqc -q -t $cores $f; done
 _log_step "Step_2_Decontamination" "end"
   		echo -e "\n\nSTEP 2: DONE\nCurrent date/time: $(date)\n\n"
 	fi
@@ -1083,10 +1148,10 @@ _log_step "Step_2_Decontamination" "start"
 		rm -rf $sortmerna_out/*_sortmerna_workdir
 
 		fastqc -q -t $cores $sortmerna_out/*.fq.gz
-		mkdir $sortmerna_out/out_noRNA; cd $sortmerna_out/out_noRNA
+		mkdir -p "$sortmerna_out/out_noRNA"; cd "$sortmerna_out/out_noRNA" || exit 1
 		ln -sf ../*no_rRNA*.fq.gz .
 		for f in $(ls); do mv $f $(basename $f | sed 's,.fq.gz,.fastq.gz,g;s,_fwd,_1,g;s,_rev,_2,g;s,_no_rRNA,,g'); done
-		export seqs_location=$sortmerna_out/out_noRNA
+		set_reads_location decontam "$sortmerna_out/out_noRNA"
 _log_step "Step_2_Decontamination" "end"
 		echo -e "\n\nSTEP 2: DONE\nCurrent date/time: $(date)\n\n"
 	fi
@@ -1234,8 +1299,8 @@ fi
 if run_step step3a; then
 	echo -e "\n\nSTEP 3a: Starting...\nCurrent date/time: $(date)\n\n"
 _log_step "Step_3a_Prepare" "start"
-	cd $output_folder/$name/
-	rm -rf mi*
+	cd "$output_folder/$name/" || exit 1
+	rm -rf "$output_folder/$name"/miARma_out* "$output_folder/$name"/miarma*.ini
 	mkdir -p $TMPDIR
 	# If the running is resumed in this step, the above has to be done
 	if [ -z "$organism" ]; then
@@ -1255,43 +1320,58 @@ _log_step "Step_3a_Prepare" "start"
 				salmon_idx=$output_folder/$name/indexes/${organism}_salmon2_idx
 			fi
 
-			mkdir -p $output_folder/$name/strand_prediction/salmon_out
+			mkdir -p $output_folder/$name/strand_prediction
 			layout=$(find $output_folder/$name -name library_layout_info.txt 2>/dev/null | xargs cat 2>/dev/null | head -n 1 | tr -d ' \r\n')
-			if [[ "$layout" == "SINGLE" ]]; then
-				rand_sample=$(ls $seqs_location | shuf | head -1)
-				echo -e "\nPredicting strandness with salmon on random sample: $rand_sample\n"
-				salmon quant -i $salmon_idx -l A -r $seqs_location/$rand_sample -p $cores -o $output_folder/$name/strand_prediction/salmon_out/ --skipQuant &> $output_folder/$name/strand_prediction/salmon_out/salmon_out.log
-			elif [[ "$layout" == "PAIRED" ]]; then
-				rand_sample_root=$(ls $seqs_location | sed -E 's/_[12]\.fastq\.gz$//' | grep -v '^\s*$' | sort -u | shuf | head -1)
-				rand_sample="${rand_sample_root}_1.fastq.gz / ${rand_sample_root}_2.fastq.gz"
-				echo -e "\nPredicting strandness with salmon on random sample: $rand_sample\n"
-				salmon quant -i $salmon_idx -l A -1 $seqs_location/${rand_sample_root}_1.fastq.gz -2 $seqs_location/${rand_sample_root}_2.fastq.gz -p $cores -o $output_folder/$name/strand_prediction/salmon_out/ --skipQuant &> $output_folder/$name/strand_prediction/salmon_out/salmon_out.log
-			fi
-			salmon_meta=$output_folder/$name/strand_prediction/salmon_out/aux_info/meta_info.json
-			salmon_strand=$(python3 -c "import json; d=json.load(open('$salmon_meta')); print(d['library_types'][0])" 2>/dev/null)
-			salmon_json=$output_folder/$name/strand_prediction/salmon_out/lib_format_counts.json
-			if [ -f "$salmon_json" ]; then
-				salmon_compat_ratio=$(python3 -c "import json; d=json.load(open('$salmon_json')); print(d.get('compatible_fragment_ratio', 'N/A'))" 2>/dev/null)
+			if [[ "$layout" == "PAIRED" ]]; then
+				mapfile -t strand_candidates < <(ls "$seqs_location" | egrep '_1\.(fastq|fq)\.gz$' | sort)
 			else
-				salmon_compat_ratio="N/A"
+				mapfile -t strand_candidates < <(ls "$seqs_location" | egrep '\.(fastq|fq)\.gz$' | sort)
 			fi
-			if [[ "$salmon_strand" == "SR" || "$salmon_strand" == "ISR" ]]; then
-				strand="reverse"
-			elif [[ "$salmon_strand" == "SF" || "$salmon_strand" == "ISF" ]]; then
-				strand="yes"
-			elif [[ "$salmon_strand" == "U" || "$salmon_strand" == "IU" ]]; then
-				strand="no"
+			n_cand=${#strand_candidates[@]}
+			if [ "$n_cand" -eq 0 ]; then
+				echo -e "\n\033[1;31mERROR:\033[0m no fastq.gz files found in $seqs_location to predict the strandedness from. Please provide the parameter -s.\n" >&2
+				exit 1
+			fi
+			strand_picks=()
+			for _k in 0 $((n_cand / 2)) $((n_cand - 1)); do
+				[[ " ${strand_picks[*]} " == *" ${strand_candidates[$_k]} "* ]] || strand_picks+=("${strand_candidates[$_k]}")
+			done
+			strand_types=(); strand_ratios=(); strand_calls=()
+			for _f in "${strand_picks[@]}"; do
+				_out=$output_folder/$name/strand_prediction/salmon_out_${_f%%.*}
+				echo -e "\nPredicting strandedness with salmon on the first 1M reads of $_f\n"
+				if [[ "$layout" == "PAIRED" ]]; then
+					_mate=$(echo "$_f" | sed -E 's/_1\.(fastq|fq)\.gz$/_2.\1.gz/')
+					salmon quant -i $salmon_idx -l A -1 <(zcat -f "$seqs_location/$_f" | head -n 4000000) -2 <(zcat -f "$seqs_location/$_mate" | head -n 4000000) -p $cores -o "$_out" --skipQuant &> "$_out.log"
+				else
+					salmon quant -i $salmon_idx -l A -r <(zcat -f "$seqs_location/$_f" | head -n 4000000) -p $cores -o "$_out" --skipQuant &> "$_out.log"
+				fi
+				_type=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['library_types'][0])" "$_out/aux_info/meta_info.json" 2>/dev/null)
+				_ratio=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('compatible_fragment_ratio', 'N/A'))" "$_out/lib_format_counts.json" 2>/dev/null)
+				case "$_type" in
+					SR|ISR) _call=reverse ;;
+					SF|ISF) _call=yes ;;
+					U|IU) _call=no ;;
+					*) _call="" ;;
+				esac
+				strand_types+=("${_type:-failed} ($_f)"); strand_ratios+=("${_ratio:-N/A}"); strand_calls+=("$_call")
+			done
+			strand=""
+			if [ "$(printf '%s\n' "${strand_calls[@]}" | grep -c '^$')" -eq 0 ] && [ "$(printf '%s\n' "${strand_calls[@]}" | sort -u | wc -l)" -eq 1 ]; then
+				strand=${strand_calls[0]}
 			fi
 			cd $output_folder/$name
-			echo "Salmon library type: $salmon_strand" > $output_folder/$name/strand_info.txt
-			echo "Strandedness: $strand" >> $output_folder/$name/strand_info.txt
-			echo "Compatible fragment ratio: $salmon_compat_ratio" >> $output_folder/$name/strand_info.txt
-			echo "Sample used: $rand_sample" >> $output_folder/$name/strand_info.txt
-			if [ $(egrep -c "reverse|yes|no" $output_folder/$name/strand_info.txt) -gt 0 ]; then
+			{
+				echo "Salmon library type: $(IFS=','; echo "${strand_types[*]}" | sed 's/,/, /g')"
+				echo "Strandedness: ${strand:-undetermined}"
+				echo "Compatible fragment ratio: $(IFS=','; echo "${strand_ratios[*]}" | sed 's/,/, /g')"
+				echo "Samples used (first 1M reads each): $(IFS=','; echo "${strand_picks[*]}" | sed 's/,/, /g')"
+			} > $output_folder/$name/strand_info.txt
+			cat $output_folder/$name/strand_info.txt
+			if [ -n "$strand" ]; then
 				echo "Please double check carefully, based on the kit used in the library preparation, the paper, the GEO entry... because this is crucial for quantification. Please rerun with the argument '-s' in the unlikely case that the prediction by salmon is not correct"
-				cat $output_folder/$name/strand_info.txt
 			else
-				echo -e "Salmon to detect strandedness seems to have failed. This is not acceptable, please double check or provide the parameter -s. Exiting...\nThe random sample used was: $rand_sample"
+				echo -e "\n\033[1;31mERROR:\033[0m salmon could not determine one consistent strandedness across the samples checked (see above and the logs in $output_folder/$name/strand_prediction). Please provide the parameter -s.\n" >&2
 				exit 1
 			fi
 		else
@@ -1306,7 +1386,7 @@ _log_step "Step_3a_Prepare" "start"
 		elif [[ "$layout_detected" == "PAIRED" ]]; then
 			library_layout=Paired
 		fi
-		read_length_for_miarma=$(zcat $seqs_location/$(ls $seqs_location | shuf | head -1) | head -2 | sed -n '2p' | awk '{print length -1}')
+		read_length_for_miarma=$(zcat -f "$seqs_location/$(ls "$seqs_location" | egrep '\.(fastq|fq)\.gz$' | sort | head -1)" | head -n 4000 | awk 'NR % 4 == 2 { if (length($0) > m) m = length($0) } END { print m - 1 }')
 
 		# Final renaming of fastq raw files if SRR present in the filename:
 		if [ $(ls $seqs_location | grep -c SRR) -gt 0 ]; then
@@ -1545,16 +1625,16 @@ _log_step "Step_3a_Prepare" "start"
 				sed -i "s,bam_mapq_threshold=,bam_mapq_threshold=$bam_mapq_threshold,g" ${unit_ini[index]}
 			fi
 			if [ ! -z "$bam_require_flags" ]; then
-				sed -i "s,bam_require_flags=,bam_require_flags=$bam_require_flags,g" ${unit_ini[index]}
+				sed -i "s,bam_require_flags=,bam_require_flags=$(sed_escape "$bam_require_flags"),g" ${unit_ini[index]}
 			fi
 			if [ ! -z "$bam_exclude_flags" ]; then
-				sed -i "s,bam_exclude_flags=,bam_exclude_flags=$bam_exclude_flags,g" ${unit_ini[index]}
+				sed -i "s,bam_exclude_flags=,bam_exclude_flags=$(sed_escape "$bam_exclude_flags"),g" ${unit_ini[index]}
 			fi
 			if [ ! -z "$bam_dedup" ]; then
 				sed -i "s,bam_dedup=no,bam_dedup=$bam_dedup,g" ${unit_ini[index]}
 			fi
 			if [ ! -z "$bam_custom_filter" ]; then
-				bam_custom_filter_escaped=$(printf '%s' "$bam_custom_filter" | sed 's/[\\&]/\\&/g')
+				bam_custom_filter_escaped=$(sed_escape "$bam_custom_filter")
 				sed -i "s,bam_custom_filter=,bam_custom_filter=$bam_custom_filter_escaped,g" ${unit_ini[index]}
 			fi
 			if [ ! -z "$bam_normalization" ]; then
@@ -1564,7 +1644,7 @@ _log_step "Step_3a_Prepare" "start"
 				sed -i "s,save_unaligned=no,save_unaligned=yes,g" ${unit_ini[index]}
 			fi
 			if [ ! -z "$featureCounts_extra_args" ]; then
-				fc_extra_escaped=$(printf '%s' "$featureCounts_extra_args" | sed 's/[\\&]/\\&/g')
+				fc_extra_escaped=$(sed_escape "$featureCounts_extra_args")
 				sed -i "s,parameters=-M -O -C -B,parameters=$fc_extra_escaped,g" ${unit_ini[index]}
 			fi
 			# Extra aligner arguments: each aligner has its own option, so a preset that is only
@@ -1579,7 +1659,7 @@ _log_step "Step_3a_Prepare" "start"
 				aligner_extra_args_used=""
 			fi
 			if [ ! -z "$aligner_extra_args_used" ]; then
-				ae_escaped=$(printf '%s' "$aligner_extra_args_used" | sed 's/[\\&]/\\&/g')
+				ae_escaped=$(sed_escape "$aligner_extra_args_used")
 				sed -i "s,${aligner}parameters=,${aligner}parameters=$ae_escaped,g" ${unit_ini[index]}
 				echo "Extra args for $aligner: $aligner_extra_args_used"
 			fi
@@ -1771,7 +1851,7 @@ if run_step step4; then
 	if [ -z "$organism" ]; then
 		organism=$(cat $output_folder/$name/reads_study_info/organism.txt | sed 's, ,_,g;s,_+,_,g')
 	fi
-	if [ -z "${!array[@]}" ]; then
+	if [ ${#array[@]} -eq 0 ]; then
 		expand_annotations_per_unit
 		# In kallisto mode annotation is optional; ensure loop runs at least once
 		if [[ "$aligner" == "kallisto" && ${#array[@]} -eq 0 ]]; then
@@ -1790,9 +1870,9 @@ _log_step "Step_4_R_Process" "start"
 		if [ ! -z "$counts_custom_gene_filter" ]; then
 			echo -e "\nApplying counts_custom_gene_filter: $counts_custom_gene_filter\n"
 			for count_file in $(find $output_folder/$name/miARma_out$index -name "*_readcount.tab" -o -name "abundance.tsv" 2>/dev/null); do
-				cp "$count_file" "${count_file}.bak_before_gene_filter"
-				head -1 "$count_file" > "${count_file}.tmp"
-				tail -n +2 "$count_file" | eval "$counts_custom_gene_filter" >> "${count_file}.tmp"
+				[ -f "${count_file}.bak_before_gene_filter" ] || cp "$count_file" "${count_file}.bak_before_gene_filter"
+				head -1 "${count_file}.bak_before_gene_filter" > "${count_file}.tmp"
+				tail -n +2 "${count_file}.bak_before_gene_filter" | eval "$counts_custom_gene_filter" >> "${count_file}.tmp"
 				mv "$count_file.tmp" "$count_file"
 				echo "  Filtered: $count_file ($(wc -l < "${count_file}.bak_before_gene_filter") -> $(wc -l < "$count_file") lines)"
 			done
@@ -1878,7 +1958,7 @@ _log_step "Step_4_R_Process" "start"
 _log_step "Step_4_R_Process" "end"
 	echo -e "\n\nSTEP 4: DONE\nCurrent date/time: $(date)\n\n"
 	if [[ "$perform_differential_analyses" == "no" ]]; then
-		echo "Differential analyses not requested, exiting the pipeline..."; exit 1
+		echo "Differential analyses not requested, exiting the pipeline..."; exit 0
 	fi
 fi
 
@@ -1889,7 +1969,7 @@ if run_step step4b; then
 	if [ -z "$organism" ]; then
 		organism=$(cat $output_folder/$name/reads_study_info/organism.txt | sed 's, ,_,g;s,_+,_,g')
 	fi
-	if [ -z "${!array[@]}" ]; then
+	if [ ${#array[@]} -eq 0 ]; then
 		expand_annotations_per_unit
 		# In kallisto mode annotation is optional; ensure loop runs at least once
 		if [[ "$aligner" == "kallisto" && ${#array[@]} -eq 0 ]]; then
@@ -2014,7 +2094,7 @@ if run_step step6; then
 			exit 1
 		fi
 	fi
-	if [ -z "${!array[@]}" ]; then
+	if [ ${#array[@]} -eq 0 ]; then
 		expand_annotations_per_unit
 		# In kallisto mode annotation is optional; ensure loop runs at least once
 		if [[ "$aligner" == "kallisto" && ${#array[@]} -eq 0 ]]; then
@@ -2025,6 +2105,10 @@ if run_step step6; then
 	mkdir -p "$RGSE_KEGG_CACHE"
 	export RGSE_STRING_CACHE="$output_folder/$name/.string_cache"
 	mkdir -p "$RGSE_STRING_CACHE"
+	_cp_cores=${clusterProfiler_cores:-1}
+	if [ "$_cp_cores" -lt 1 ] 2>/dev/null; then _cp_cores=1; fi
+	enrich_jobs=$(( cores / _cp_cores ))
+	if [ "$enrich_jobs" -lt 1 ]; then enrich_jobs=1; fi
 	for index in "${!array[@]}"; do
 		restore_final_results_dir $index
 		if [ ! -d "$output_folder/$name/final_results_reanalysis$index/DGE/" ]; then
@@ -2035,9 +2119,7 @@ if run_step step6; then
 		rm -rf $(find . -type d \( -name "*_autoGO" -o -name "*_clusterProfiler" -o -name "*_panther" -o -name "*funct_enr*" \)) $(find . -type f \( -name "*_autoGO" -o -name "*_clusterProfiler" -o -name "*_panther" -o -name "*funct_enr*" \)) # So it's redone if resuming
 		rm -f analysis_capping_notes.txt
 		rm -rf report_tables
-		if [ -z "$annotation_file" ]; then
-			annotation_file=${array[index]}
-		fi
+		annotation_file=${array[index]}
 
 		# Check if any DGE comparison file contains significant DEGs (FDR < 0.05)
 		deg_count=0
@@ -2090,18 +2172,18 @@ if run_step step6; then
 				cd $output_folder/$name/final_results_reanalysis$index/DGE/
 				echo -e "\nSTEP 6b: Performing clusterProfiler execution...\nCurrent date/time: $(date)\n"
 				_log_step "Step_6b_clusterProfiler" "start"
-				ls | egrep "^DGE_analysis_comp[0-9]+.txt$" | parallel --halt-on-error 2 --joblog R_clusterProfiler_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_clusterProfiler_analyses_parallel.R $PWD $organism "$clusterProfiler_cores" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution '^{}$' $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_{}_funct_enrichment.log"
+				ls | egrep "^DGE_analysis_comp[0-9]+.txt$" | parallel --joblog R_clusterProfiler_analyses_parallel_log_parallel.txt -j $enrich_jobs --max-args 1 "R_clusterProfiler_analyses_parallel.R $PWD $organism "$clusterProfiler_cores" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution '^{}$' $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_{}_funct_enrichment.log"
 				_log_step "Step_6b_clusterProfiler" "end"
 				echo -e "\nSTEP 6b: DONE\nCurrent date/time: $(date)\n"
 				echo -e "\nSTEP 6c: Performing autoGO and Panther execution... this may take long if many genes or comparisons...\nCurrent date/time: $(date)\n"
 				_log_step "Step_6c_autoGO_Panther" "start"
-				ls | egrep "^DGE_analysis_comp[0-9]+.txt$" | parallel --halt-on-error 2 --joblog R_autoGO_panther_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism "$clusterProfiler_cores" $databases_function {} $panther_method $auto_panther_log &> autoGO_panther_{}_funct_enrichment.log"
+				ls | egrep "^DGE_analysis_comp[0-9]+.txt$" | parallel --joblog R_autoGO_panther_analyses_parallel_log_parallel.txt -j $enrich_jobs --max-args 1 "R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism "$clusterProfiler_cores" $databases_function {} $panther_method $auto_panther_log &> autoGO_panther_{}_funct_enrichment.log"
 				_log_step "Step_6c_autoGO_Panther" "end"
 				echo -e "\nSTEP 6c: DONE\nCurrent date/time: $(date)\n"
 				if [[ "$time_course" == "yes" ]]; then
 					cd $output_folder/$name/final_results_reanalysis$index/time_course_analyses
-					ls | egrep "^DGE_limma_timecourse.*.txt$" | parallel --halt-on-error 2 --joblog R_clusterProfiler_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_clusterProfiler_analyses_parallel.R $PWD $organism "$clusterProfiler_cores" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution '^{}$' $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_{}_funct_enrichment.log"
-					ls | egrep "^DGE_limma_timecourse.*.txt$" | parallel --halt-on-error 2 --joblog R_autoGO_panther_analyses_parallel_log_parallel.txt -j $cores --max-args 1 "R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism "$clusterProfiler_cores" $databases_function {} $panther_method $auto_panther_log &> autoGO_panther_{}_funct_enrichment.log"
+					ls | egrep "^DGE_limma_timecourse.*.txt$" | parallel --joblog R_clusterProfiler_analyses_parallel_log_parallel.txt -j $enrich_jobs --max-args 1 "R_clusterProfiler_analyses_parallel.R $PWD $organism "$clusterProfiler_cores" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution '^{}$' $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_{}_funct_enrichment.log"
+					ls | egrep "^DGE_limma_timecourse.*.txt$" | parallel --joblog R_autoGO_panther_analyses_parallel_log_parallel.txt -j $enrich_jobs --max-args 1 "R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism "$clusterProfiler_cores" $databases_function {} $panther_method $auto_panther_log &> autoGO_panther_{}_funct_enrichment.log"
 				fi
 			else
 				echo -e "\nSTEP 6b: Performing non-model organism over-representation analyses...\nCurrent date/time: $(date)\n"
@@ -2215,7 +2297,7 @@ if run_step step6; then
 				cd $output_folder/$name/final_results_reanalysis$index/DGE/
 				echo -e "\nSTEP 6d: Functional enrichment completed: $(echo $files_to_process | wc -w) result file(s) produced. Formatting...\nCurrent date/time: $(date)\n"
 				_log_step "Step_6d_Format" "start"
-				echo $files_to_process | parallel --halt-on-error 2 --joblog R_enrich_format_analyses_parallel_log_parallel.txt -j $cores "file={}; R_enrich_format.R \"\$file\" \$(echo \"\$file\" | sed 's,DGE/.*,DGE/,g')\$(echo \"\$file\" | sed 's,.*DGE_analysis_comp,DGE_analysis_comp,g;s,_pval.*,,g;s,_fdr.*,,g;s,_funct.*,,g;s,_cluster.*,,g' | sed 's,.txt,,g').txt $organism $rev_thr" &> $PWD/enrichment_format.log
+				printf '%s\n' $files_to_process | parallel --joblog R_enrich_format_analyses_parallel_log_parallel.txt -j $cores "file={}; R_enrich_format.R \"\$file\" \$(echo \"\$file\" | sed 's,DGE/.*,DGE/,g')\$(echo \"\$file\" | sed 's,.*DGE_analysis_comp,DGE_analysis_comp,g;s,_pval.*,,g;s,_fdr.*,,g;s,_funct.*,,g;s,_cluster.*,,g' | sed 's,.txt,,g').txt $organism $rev_thr" &> $PWD/enrichment_format.log
 				_log_step "Step_6d_Format" "end"
 				echo -e "\nSTEP 6d: DONE\nCurrent date/time: $(date)\n"
 			else
@@ -2413,16 +2495,30 @@ _log_step "Step_7_Annotation" "start"
 		restore_final_results_dir $index
 		# Export the annotation file path so R scripts can use it for ENSEMBL->Symbol mapping
 		export ANNOTATION_FILE="${array[index]}"
+		annotation_file=${array[index]}
 		# All the tables that contain list of genes, annotate them:
 		R_annotate_genes.R $output_folder/$name/final_results_reanalysis$index/ "^DGE_analysis_comp\\d+\\.txt$|^DGE_limma_timecourse_T\\d+_vs_T\\d+\\.txt$|mfuzz_elements_clusters|counts|WGCNA_all_modules_|STRINGdb_all_modules_" $organism			
 
 		if [[ "$bed_mode" == "yes" ]]; then
-			# All the tables of DEGs, provide bed files for direct upload in genome browser
-			cd $output_folder/$name/final_results_reanalysis$index/
+			cd "$output_folder/$name/final_results_reanalysis$index/" || exit 1
+			IFS=', ' read -r -a _fc_keys <<< "$optionsFeatureCounts_seq"
+			bed_key=${_fc_keys[index]:-${_fc_keys[0]:-gene_name}}
+			bed_gene_coords=$TMPDIR/bed_gene_coords_$index.tsv
+			zcat -f "$annotation_file" | awk -F'\t' -v OFS='\t' -v key="$bed_key" '
+				function attr(s, k,   t) { t = ";" s; if (match(t, ";[ ]*" k "[ =]\"?[^\";]+")) { t = substr(t, RSTART, RLENGTH); sub("^;[ ]*" k "[ =]\"?", "", t); return t } return "" }
+				function add(g,   u) { if (g == "") return; u = toupper(g); if (!(u in chr)) { chr[u] = $1; st[u] = $4 + 0; en[u] = $5 + 0; sd[u] = $7 } else if ($1 == chr[u]) { if ($4 + 0 < st[u]) st[u] = $4 + 0; if ($5 + 0 > en[u]) en[u] = $5 + 0 } }
+				!/^#/ && NF >= 9 { add(attr($9, key)); if (key != "gene_name") add(attr($9, "gene_name")); if (key != "Name") add(attr($9, "Name")) }
+				END { for (u in chr) print u, chr[u], st[u], en[u], sd[u] }' > "$bed_gene_coords"
 			for file in $(find . -name "DGE_analysis_comp*" | egrep "_fdr_05.txt$|_pval_05.txt$"); do
-				cut -f1 "$file" | parallel --halt-on-error 2 -j $((cores*3)) "gene={}; foldchange=\$(grep -i \"\$gene\" \"$file\" | cut -f3 | sed -n 's/\(.*[.,][0-9]\{2\}\).*/\1/p'); \
-															grep -i \"=\$gene\" \"$annotation_file\" | head -1 | awk -v id=\"\$gene\" -v fc=\"\$foldchange\" '{ print \$1\"\\t\"\$4\"\\t\"\$5\"\\t\"id\"_\"fc\"\\t.\t\"\$7 }' >> \"$file.bed\""
+				dge_full="$(dirname "$file")/$(basename "$file" | sed -E 's/_(fdr|pval)_05\.txt$/.txt/')"
+				[ -f "$dge_full" ] || dge_full=/dev/null
+				awk -F'\t' -v OFS='\t' '
+					FILENAME == ARGV[1] { chr[$1] = $2; st[$1] = $3; en[$1] = $4; sd[$1] = $5; next }
+					FILENAME == ARGV[2] { if (FNR == 1) { for (i = 1; i <= NF; i++) if ($i ~ /^logFC/) c = i; next } if (c) fc[toupper($1)] = $c; next }
+					{ u = toupper($1); if (u in chr) printf "%s\t%d\t%d\t%s%s\t.\t%s\n", chr[u], st[u] - 1, en[u], $1, ((u in fc) ? sprintf("_%.2f", fc[u]) : ""), sd[u] }
+				' "$bed_gene_coords" "$dge_full" "$file" | sort -k1,1 -k2,2n > "$file.bed"
 			done
+			rm -f "$bed_gene_coords"
 		fi
 
 		### Human orthologs of the analysed organism's proteins:
@@ -2589,7 +2685,11 @@ if run_step step8; then
 		echo -e "Converting tables to xlsx..."
 		R_convert_tables.R $output_folder/$name/ $cores "log_parallel|jquery|bamqc|rnaseqqc|samtools|strand" > $output_folder/$name/R_convert_tables.log 2>&1
 	fi
+	for _old_report in "$output_folder/$name"/final_results_reanalysis0*/sphinx_report "$output_folder/$name"/final_results_reanalysis0*/final_report.html; do
+		[ -e "$_old_report" ] && rm -rf "$_old_report"
+	done
 	sphinx_report.sh $output_folder/$name $name
+	export debug_step="all"
 _log_step "Step_8_Report" "end"
  	echo -e "\n\nSTEP 8: Final report DONE\nCurrent date/time: $(date)\n\n"
 fi
@@ -2603,12 +2703,6 @@ if run_step step9; then
 _log_step "Step_9_Cleanup" "start"
 	echo -e "\n\nTidying up, removing empty folders, temp files, compressing...\n\n"
 
-	# Remove decompressed reference files from the indexes subfolder
-	if [ -d "$output_folder/$name/indexes" ]; then
-		for _decomp_file in $(find $output_folder/$name/indexes -maxdepth 1 -type f \( -name '*.fa' -o -name '*.fasta' -o -name '*.gtf' -o -name '*.gff' -o -name '*.gff3' \) 2>/dev/null); do
-			rm -f "$_decomp_file"
-		done
-	fi
 
 
 	# Remove intermediate DEG-list text files (DGE_analysis_comp*_fdr_05.txt, logpos/logneg),
@@ -2631,23 +2725,30 @@ _log_step "Step_9_Cleanup" "start"
 		find . -type d -empty -delete
 		folders_funct=$(find . -type d \( -name "*_autoGO" -o -name "*_clusterProfiler" -o -name "*_panther" \) -o -type f \( -name "*_funct_enrichment.log" -o -name "funct_enrich_*" \))
 		if [ -n "$folders_funct" ]; then
-			tar -cf - $folders_funct | pigz --best -p $cores > funct_enrichment_analyses.tar.gz; rm -rf $folders_funct
+			archive_and_remove_folders funct_enrichment_analyses.tar.gz $folders_funct
 		fi
 		if [[ "$time_course" == "yes" ]]; then
 			cd $output_folder/$name/final_results_reanalysis$index/time_course_analyses
 			folders_funct=$(find . -type d \( -name "*_autoGO" -o -name "*_clusterProfiler" -o -name "*_panther" \))
 			if [ -n "$folders_funct" ]; then
-				tar -cf - $folders_funct | pigz --best -p $cores > funct_enrichment_analyses.tar.gz; rm -rf $folders_funct
+				archive_and_remove_folders funct_enrichment_analyses.tar.gz $folders_funct
 			fi
 		fi
 	done
 
-	for f in $(find $output_folder -type d -name "final_results_reanaly*"); do
-		mv $f $(echo $f"_"$(basename $output_folder))
+	for f in $(find "$output_folder/$name" -maxdepth 1 -type d -regextype posix-extended -regex '.*/final_results_reanalysis[0-9]+'); do
+		mv "$f" "${f}_$(basename "$output_folder")"
 	done
+	IFS=', ' read -r -a _ref_inputs <<< "$reference_genome_input"
+	original_reference_for_unit() {
+		if [ ! -z "$reference_genome_groups" ]; then echo "${genome_group_fastas_input[$1]}"
+		elif [ ${#_ref_inputs[@]} -gt 1 ]; then echo "${_ref_inputs[$1]}"
+		else echo "${_ref_inputs[0]}"; fi
+	}
 	if [ "$tidy_tmp_files" == "yes" ]; then
 		build_alignment_units
 		any_tidied=0
+		cram_failed=0
 		for index in "${!unit_out[@]}"; do
 			num_raw_files=$(cat ${unit_out[index]}/Pre_fastqc_results/list_of_files.txt 2>/dev/null | grep -c "fastq.gz")
 			[ "$num_raw_files" -lt 1 ] && continue
@@ -2659,20 +2760,35 @@ _log_step "Step_9_Cleanup" "start"
 			n_bams=$(ls ${unit_out[index]}/$aligner\_results 2>/dev/null | egrep -c ".bam$")
 			if [[ "$n_bams" -eq "$num_raw_files" || "$n_bams" -eq $((num_raw_files / 2)) ]]; then
 				echo -e "\nTidying up${unit_label[index]:+ (genome group ${unit_label[index]})}...\n"
-				cd ${unit_out[index]}/$aligner\_results
-				echo "For the sake of efficiente storage: samtools view -@ cores -T ref_genome -C -o xxx.bam.cram xxx.bam && rm xx.bam" >> conversion_bam_to_cram.txt
-				echo "Reference genome used for this CRAM conversion: ${unit_fasta[index]}" >> conversion_bam_to_cram.txt
-				find . -type f -name "*.bam" | parallel --halt-on-error 2 --verbose -j $number_parallel --max-args 1 samtools view -T ${unit_fasta[index]} -C -@ $((cores / number_parallel)) -o {}.cram {}
-				rm -rf $(ls | egrep ".bam$")
-				any_tidied=1
+				cd "${unit_out[index]}/${aligner}_results" || continue
+				if [ ! -s "${unit_fasta[index]}" ]; then
+					echo -e "\n\033[1;31mERROR:\033[0m the reference ${unit_fasta[index]} is not available, so the BAMs in $PWD cannot be converted to CRAM; they are kept.\n" >&2
+					cram_failed=1
+					continue
+				fi
+				echo "For the sake of efficient storage: samtools view -@ cores -T ref_genome -C -o xxx.bam.cram xxx.bam && rm xxx.bam" >> conversion_bam_to_cram.txt
+				echo "Reference genome used for this CRAM conversion: $(original_reference_for_unit $index) (the CRAM headers record the MD5 of each reference sequence)" >> conversion_bam_to_cram.txt
+				cores_cram=$((cores / number_parallel)); [ "$cores_cram" -lt 1 ] && cores_cram=1
+				find . -maxdepth 1 -type f -name "*.bam" | parallel --verbose -j $number_parallel --max-args 1 "samtools view -T ${unit_fasta[index]} -C -@ $cores_cram -o {}.cram {} && samtools quickcheck {}.cram && rm -f {} {}.bai"
+				n_left=$(ls | egrep -c "\.bam$")
+				if [ "$n_left" -gt 0 ]; then
+					echo -e "\n\033[1;31mERROR:\033[0m $n_left BAM file(s) in $PWD could not be converted to CRAM and were kept.\n" >&2
+					cram_failed=1
+				else
+					any_tidied=1
+				fi
 			fi
 		done
-		if [ "$any_tidied" -eq 1 ] && [ -d "$seqs_location" ]; then
-			cd $seqs_location
+		if [ "$any_tidied" -eq 1 ] && [ "$cram_failed" -eq 0 ] && [ -d "$seqs_location" ]; then
+			cd "$seqs_location" || exit 1
 			echo "After execution, raw reads have been removed for the sake of efficient storage. These were... " > readme
 			ls -lh | grep -v "^total" | grep -v " readme$" >> readme
 			ls | grep -v readme | xargs -r rm -rf
-			rm -rf $TMPDIR
+			case "$TMPDIR" in
+				"$output_folder/$name"/*) rm -rf "$TMPDIR" ;;
+			esac
+		elif [ "$cram_failed" -eq 1 ]; then
+			echo -e "\nThe raw reads are kept because not every BAM could be converted to CRAM.\n"
 		fi
 		if [ ! -z "$reference_genome_groups" ] && [ -d "$output_folder/$name/miARma_out0/${aligner}_results" ]; then
 			find $output_folder/$name/miARma_out0/${aligner}_results -xtype l -delete 2>/dev/null
@@ -2689,9 +2805,16 @@ _log_step "Step_9_Cleanup" "start"
 		fi
 	fi
 
+	# Remove decompressed reference files from the indexes subfolder
+	if [ -d "$output_folder/$name/indexes" ]; then
+		for _decomp_file in $(find $output_folder/$name/indexes -maxdepth 1 -type f \( -name '*.fa' -o -name '*.fasta' -o -name '*.gtf' -o -name '*.gff' -o -name '*.gff3' \) 2>/dev/null); do
+			rm -f "$_decomp_file"
+		done
+	fi
+
 	### Deploy igvShinyApp.R to final results folders
 	if [ -f "$CURRENT_DIR/scripts/igvShinyApp.R" ]; then
-		IFS=', ' read -r -a array_annot <<< "$annotation"
+		IFS=', ' read -r -a array_annot <<< "$annotation_input"
 		for index in "${!array_annot[@]}"; do
 			final_dir_igv=$(find $output_folder/$name -maxdepth 1 -type d -name "final_results_reanalysis${index}_*" | head -1)
 			if [ -z "$final_dir_igv" ]; then
@@ -2700,21 +2823,25 @@ _log_step "Step_9_Cleanup" "start"
 			if [ -d "$final_dir_igv" ]; then
 				bw_dir="$output_folder/$name/miARma_out${index}/${aligner}_results"
 				gtf_for_igv="${array_annot[index]}"
+				if [ -z "$reference_genome_groups" ]; then ref_for_igv=$(original_reference_for_unit $index); else ref_for_igv=${reference_genome_input%%,*}; fi
+				if [[ "$ref_for_igv" == *.gz ]]; then
+					echo "NOTE: igvShinyApp.R points at $ref_for_igv, which is compressed; the app needs an uncompressed or bgzip-compressed FASTA with its .fai index, so if it is plain gzip please decompress it (or recompress it with bgzip) and update the FASTA path in the app."
+				fi
 				cp "$CURRENT_DIR/scripts/igvShinyApp.R" "$final_dir_igv/igvShinyApp.R"
-				sed -i "s|/path/to/reference_genome.fa|${reference_genome}|g" "$final_dir_igv/igvShinyApp.R"
+				sed -i "s|/path/to/reference_genome.fa|${ref_for_igv}|g" "$final_dir_igv/igvShinyApp.R"
 				sed -i "s|/path/to/annotation.gtf|${gtf_for_igv}|g"          "$final_dir_igv/igvShinyApp.R"
 				sed -i "s|/path/to/bigwig_folder/|${bw_dir}/|g"              "$final_dir_igv/igvShinyApp.R"
 				sed -i "s|GENOME_NAME_PLACEHOLDER|${organism}|g"             "$final_dir_igv/igvShinyApp.R"
 				if [ ! -z "$reference_genome_groups" ]; then
 					{
 						echo "LIMITATION: this analysis used SEVERAL reference genomes (-rG), but igvShinyApp.R can only be configured with one."
-						echo "The deployed app points at: ${reference_genome} (the -r genome), with coverage tracks from ${bw_dir}/"
+						echo "The deployed app points at: ${ref_for_igv} (the -r genome), with coverage tracks from ${bw_dir}/"
 						echo "Only the samples aligned to that same genome will be displayed correctly. To browse the others, edit igvShinyApp.R"
 						echo "and replace the reference genome and the bigwig folder with the matching pair from the table below."
 						echo ""
 						echo "group<TAB>reference_genome<TAB>bigwig_folder" | sed 's,<TAB>,\t,g'
 						for _gi in "${!genome_group_labels[@]}"; do
-							echo -e "${genome_group_labels[$_gi]}\t${genome_group_fastas[$_gi]}\t$output_folder/$name/miARma_out_genome$_gi/${aligner}_results"
+							echo -e "${genome_group_labels[$_gi]}\t${genome_group_fastas_input[$_gi]}\t$output_folder/$name/miARma_out_genome$_gi/${aligner}_results"
 						done
 						echo ""
 						echo "The per-sample assignment is in reads_study_info/genome_group_assignment.tsv"
@@ -2730,6 +2857,12 @@ _log_step "Step_9_Cleanup" "end"
 	echo -e "\n\nSTEP 9: DONE\nCurrent date/time: $(date)\n\n"
 fi
 
+report_home="$output_folder/$name"
+if [ ! -d "$report_home/sphinx_report/html" ]; then
+	_final_home=$(find "$output_folder/$name" -maxdepth 1 -type d -name "final_results_reanalysis0*" 2>/dev/null | head -1)
+	if [ -n "$_final_home" ] && [ -d "$_final_home/sphinx_report/html" ]; then report_home=$_final_home; fi
+fi
+
 # Final Gantt chart with all steps (rendered after everything completes)
 if [ -f "$STEP_TIMES_FILE" ]; then
 	for qc_dir in $(find "$output_folder/$name" -maxdepth 2 -type d -name "QC_and_others" 2>/dev/null); do
@@ -2739,18 +2872,27 @@ if [ -f "$STEP_TIMES_FILE" ]; then
 			echo "WARNING: Gantt chart rendering failed."
 	done
 	# Also update the final Gantt chart in the built Sphinx HTML report directory if it exists
-	if [ -d "$output_folder/$name/sphinx_report/html" ]; then
+	if [ -d "$report_home/sphinx_report/html" ]; then
 		echo "Updating final pipeline Gantt chart in the Sphinx report..."
-		Rscript $CURRENT_DIR/scripts/R_gantt_chart.R "$STEP_TIMES_FILE" "$output_folder/$name/sphinx_report/html/pipeline_gantt_chart.pdf" 2>&1 || \
+		Rscript $CURRENT_DIR/scripts/R_gantt_chart.R "$STEP_TIMES_FILE" "$report_home/sphinx_report/html/pipeline_gantt_chart.pdf" 2>&1 || \
 			echo "WARNING: Sphinx report Gantt chart update failed."
 	fi
 fi
 
 # Shrink the built report tree, once nothing else writes into it
-if [ "${tidy_report_files:-yes}" != "no" ] && [ -d "$output_folder/$name/sphinx_report/html" ]; then
-	$CURRENT_DIR/scripts/prune_sphinx_html.py "$output_folder/$name/sphinx_report/html" \
-		--extra-html "$output_folder/$name/final_report.html" || \
+if [ "${tidy_report_files:-yes}" != "no" ] && [ -d "$report_home/sphinx_report/html" ]; then
+	$CURRENT_DIR/scripts/prune_sphinx_html.py "$report_home/sphinx_report/html" \
+		--source-root "$output_folder/$name" \
+		--extra-html "$report_home/final_report.html" || \
 		echo "WARNING: report tidying failed. The report itself is unaffected."
+fi
+
+report_dest=$(find "$output_folder/$name" -maxdepth 1 -type d -name "final_results_reanalysis0*" 2>/dev/null | head -1)
+if [ "$report_home" == "$output_folder/$name" ] && [ -n "$report_dest" ] && [ -d "$report_home/sphinx_report" ]; then
+	rm -rf "$report_dest/sphinx_report" "$report_dest/final_report.html"
+	mv "$report_home/sphinx_report" "$report_dest/"
+	[ -f "$report_home/final_report.html" ] && mv "$report_home/final_report.html" "$report_dest/"
+	echo -e "\nThe final report is in $report_dest/final_report.html\n"
 fi
 
 if [[ -n "$end_step" && "$end_step" != "none" && "$end_step" != "all" ]]; then
