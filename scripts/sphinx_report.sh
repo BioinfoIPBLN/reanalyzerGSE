@@ -135,6 +135,11 @@ class IncludeMatchingFiles(SphinxDirective):
             # Read the file as a tab-separated file and use the first row as header
             data = pd.read_csv(file_path, sep=\"\\\t\", header=0)
 
+            comparison = \"\"
+            lfc_name = next((str(c) for c in data.columns if str(c).startswith(\"logFC\") and \"__VS__\" in str(c)), \"\")
+            if lfc_name:
+                comparison = \" vs \".join(p[2:] if p.startswith(\"__\") else p for p in lfc_name[len(\"logFC\"):].split(\"__VS__\"))
+
             # Ensure numeric conversion for columns 3 and 6 (index 2 and 5)
             # Log2FoldChange is usually column 3, padj or FDR is usually column 6
             data.iloc[:, 2] = pd.to_numeric(data.iloc[:, 2], errors=\"coerce\")
@@ -164,7 +169,7 @@ class IncludeMatchingFiles(SphinxDirective):
 
             # Add information to nodes
             caption_node = nodes.paragraph()
-            strong_node = nodes.strong(text=f\"Contents of {file_name}:\")
+            strong_node = nodes.strong(text=f\"Contents of {file_name} ({comparison}):\" if comparison else f\"Contents of {file_name}:\")
             caption_node += strong_node
             deg_nodes.append(caption_node)
 
