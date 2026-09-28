@@ -2468,16 +2468,27 @@ PYEOF
 
 		# Render functional enrichment HTML report (self-contained), only if results exist
 		if [[ "$functional_enrichment_analyses" != "no" ]] && [[ "$enrichment_results_found" == "yes" ]] && [ -d "$output_folder/$name/final_results_reanalysis$index/DGE" ]; then
-			echo -e "Rendering functional enrichment HTML report..."
-			Rscript $CURRENT_DIR/scripts/render_enrichment_report.R \
-				"$output_folder/$name/final_results_reanalysis$index/DGE" \
-				"$name" \
-				"$organism" &> "$output_folder/$name/final_results_reanalysis$index/DGE/enrichment_report_render.log"
-			if [ $? -eq 0 ] && [ -f "$output_folder/$name/final_results_reanalysis$index/DGE/functional_enrichment_report.html" ]; then
-				echo "Done! Report: $output_folder/$name/final_results_reanalysis$index/DGE/functional_enrichment_report.html"
-			else
-				echo "WARNING: Functional enrichment report rendering failed. Check enrichment_report_render.log"
-			fi
+			for report_mode in minimal full; do
+				if [ "$report_mode" = "minimal" ]; then
+					report_html="functional_enrichment_report_minimal.html"
+					report_log="enrichment_report_minimal_render.log"
+				else
+					report_html="functional_enrichment_report.html"
+					report_log="enrichment_report_render.log"
+				fi
+				echo -e "Rendering functional enrichment HTML report ($report_mode)..."
+				rm -f "$output_folder/$name/final_results_reanalysis$index/DGE/$report_html"
+				Rscript $CURRENT_DIR/scripts/render_enrichment_report.R \
+					"$output_folder/$name/final_results_reanalysis$index/DGE" \
+					"$name" \
+					"$organism" \
+					"$report_mode" &> "$output_folder/$name/final_results_reanalysis$index/DGE/$report_log"
+				if [ $? -eq 0 ] && [ -f "$output_folder/$name/final_results_reanalysis$index/DGE/$report_html" ]; then
+					echo "Done! Report: $output_folder/$name/final_results_reanalysis$index/DGE/$report_html"
+				else
+					echo "WARNING: Functional enrichment report rendering ($report_mode) failed. Check $report_log"
+				fi
+			done
 		fi
 	done
 	export debug_step="all"

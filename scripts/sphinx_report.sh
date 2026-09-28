@@ -737,13 +737,16 @@ Functional enrichment analyses
 ------------------------------------------------------------------------------------
 Please use the following links:
 
-$(if [ -f "$path/$final_dir_name/DGE/functional_enrichment_report.html" ]; then echo "
+$(if [ -f "$path/$final_dir_name/DGE/functional_enrichment_report.html" ] || [ -f "$path/$final_dir_name/DGE/functional_enrichment_report_minimal.html" ]; then echo "
 .. raw:: html
-
-   <a href=\"functional_enrichment_report.html\" target=\"_blank\">Click to open Functional Enrichment HTML Report</a><br>
 "; fi)
+$(if [ -f "$path/$final_dir_name/DGE/functional_enrichment_report.html" ]; then echo "
+   <a href=\"functional_enrichment_report.html\" target=\"_blank\">Click to open Functional Enrichment HTML Report</a><br>"; fi)
+$(if [ -f "$path/$final_dir_name/DGE/functional_enrichment_report_minimal.html" ]; then echo "
+   <a href=\"functional_enrichment_report_minimal.html\" target=\"_blank\">Click to open minimal Functional Enrichment HTML Report (tables only, no plots)</a><br>"; fi)
+
 $(if [ -f "$path/$final_dir_name/DGE/funct_enrichment_analyses.tar.gz" ]; then echo "You can also download all raw enrichment result files: :download:\`tar.gz archive <../$final_dir_name/DGE/funct_enrichment_analyses.tar.gz>\`"; fi)
-$(if [ ! -f "$path/$final_dir_name/DGE/functional_enrichment_report.html" ] && [ ! -f "$path/$final_dir_name/DGE/funct_enrichment_analyses.tar.gz" ]; then echo "Functional enrichment not requested or not available"; fi)
+$(if [ ! -f "$path/$final_dir_name/DGE/functional_enrichment_report.html" ] && [ ! -f "$path/$final_dir_name/DGE/functional_enrichment_report_minimal.html" ] && [ ! -f "$path/$final_dir_name/DGE/funct_enrichment_analyses.tar.gz" ]; then echo "Functional enrichment not requested or not available"; fi)
 $(capping_notes_rst "$path/$final_dir_name/DGE/analysis_capping_notes.txt")
 
 .. index:: Funct_enrich

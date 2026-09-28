@@ -1,10 +1,11 @@
 ---
-title: "`r paste0('Functional Enrichment Report — ', params$project_name)`"
+title: "`r paste0('Functional Enrichment Report', if (isTRUE(params$minimal)) ' (tables only)' else '', ' — ', params$project_name)`"
 date: "`r format(Sys.time(), '%B %d, %Y at %H:%M')`"
 params:
   dge_dir: ""
   project_name: "Project"
   organism: "Unknown"
+  minimal: false
 output:
   html_document:
     toc: true
@@ -22,7 +23,8 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 library(data.table)
 library(knitr)
 
-has_pdftools  <- requireNamespace("pdftools",  quietly = TRUE)
+show_plots    <- !isTRUE(params$minimal)
+has_pdftools  <- show_plots && requireNamespace("pdftools",  quietly = TRUE)
 
 dge_dir      <- params$dge_dir
 organism     <- params$organism
@@ -406,7 +408,7 @@ rgse_rel_path <- function(path) {
 }
 
 embed_png <- function(path, caption = "", max_width = "700px") {
-  if (!file.exists(path)) return(invisible(NULL))
+  if (!show_plots || !file.exists(path)) return(invisible(NULL))
   uri <- xfun::base64_uri(path)
   fname <- basename(path)
   rel <- rgse_rel_path(path)
@@ -672,6 +674,15 @@ if (has_network) {
 }
 cat("\n")
 
+if (!show_plots) {
+  cat('
+<div class="alert alert-info" style="margin:20px 0;border-left:5px solid #5bc0de;padding:15px;border-radius:4px;">
+<strong>Tables only.</strong> This is the minimal version of the report: it has the same tables and CSV downloads as
+<a href="functional_enrichment_report.html" target="_blank">functional_enrichment_report.html</a>, without any images or plots,
+so it opens even when there are many comparisons.
+</div>\n\n')
+}
+
 # Link to tar.gz archive
 targz <- file.path(dge_dir, "funct_enrichment_analyses.tar.gz")
 if (file.exists(targz)) {
@@ -679,14 +690,14 @@ if (file.exists(targz)) {
   cat(sprintf('
 <div class="alert alert-warning" style="margin:20px 0;border-left:5px solid #f0ad4e;padding:15px;border-radius:4px;">
 <strong>\u26a0\ufe0f Full results archive</strong><br/>
-This report shows <strong>summarised tables and reduced-resolution image previews</strong>.
+This report shows <strong>summarised tables%s</strong>.
 The original full-quality plots (PDF vector graphics), complete enrichment tables,
 KEGG pathway snapshots, aPEAR interactive HTML widgets, and all other raw output files
 are available in the compressed archive:<br/><br/>
 <a href="funct_enrichment_analyses.tar.gz" download="funct_enrichment_analyses.tar.gz"
    class="btn btn-warning" style="color:#fff;">
 \u2b07 Download funct_enrichment_analyses.tar.gz (%s MB)</a>
-</div>\n\n', targz_size))
+</div>\n\n', if (show_plots) " and reduced-resolution image previews" else "", targz_size))
 } else {
   cat('
 <div class="alert alert-info" style="margin:20px 0;border-left:5px solid #5bc0de;padding:15px;border-radius:4px;">
@@ -925,7 +936,7 @@ for (idx in seq_along(comp_names)) {
   }
 
   # ── REVIGO results ──────────────────────────────────────────────────────────
-  if (!is.na(cp_dir) && dir.exists(cp_dir)) {
+  if (show_plots && !is.na(cp_dir) && dir.exists(cp_dir)) {
     revigo_pdfs <- list.files(cp_dir, pattern = "revigo\\.pdf$", full.names = TRUE, recursive = TRUE)
     if (length(revigo_pdfs) > 0) {
       cat("\n## REVIGO Semantic Similarity\n\n")
@@ -1022,7 +1033,7 @@ if (has_network) {
     # Dendrograms / other PDFs
     wgcna_pdfs <- list.files(wgcna_dir, pattern = "\\.pdf$", full.names = TRUE)
     wgcna_pdfs <- head(wgcna_pdfs[!grepl("blockwiseModules", wgcna_pdfs)], 5)
-    if (length(wgcna_pdfs) > 0) {
+    if (show_plots && length(wgcna_pdfs) > 0) {
       cat("\n### WGCNA Plots\n\n")
       for (p in wgcna_pdfs) embed_pdf(p, basename(p))
     }
@@ -1070,7 +1081,7 @@ if (has_network) {
 
     # Network plots
     string_pdfs <- list.files(string_dir, pattern = "\\.pdf$", full.names = TRUE)
-    if (length(string_pdfs) > 0) {
+    if (show_plots && length(string_pdfs) > 0) {
       cat("\n### Network Plots\n\n")
       for (p in head(string_pdfs, 5)) embed_pdf(p, basename(p))
       if (length(string_pdfs) > 5)
