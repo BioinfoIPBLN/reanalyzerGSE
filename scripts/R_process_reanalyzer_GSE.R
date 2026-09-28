@@ -332,7 +332,7 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
     count_matrix <- as.matrix(gene_counts[,grep("Gene_ID|Length",colnames(gene_counts),invert=T)])
     batch <- data.table::fread(paste0(path,"/reads_study_info/batch_vector.txt"),head=F,sep="*")$V1
     batch <- unlist(strsplit(batch,","))
-    if(covariab_format == "fact"){
+    if(batch_format == "fact"){
       adjusted_counts <- sva::ComBat_seq(count_matrix, batch=as.factor(batch), group=NULL)
     } else {
       adjusted_counts <- sva::ComBat_seq(count_matrix, batch=as.numeric(batch), group=NULL)
@@ -345,7 +345,7 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
     biological_cov <- data.table::fread(paste0(path,"/reads_study_info/batch_biological_variables.txt"),head=F,sep="*")$V1
     if (stringr::str_count(biological_cov," ") == 0){
       group <- unlist(strsplit(biological_cov,","))
-      if(covariab_format == "fact"){
+      if(batch_format == "fact"){
         adjusted_counts <- sva::ComBat_seq(count_matrix, batch=as.factor(batch), group=as.factor(group))
       } else {
         adjusted_counts <- sva::ComBat_seq(count_matrix, batch=as.numeric(batch), group=as.numeric(group))
@@ -358,7 +358,7 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
         covar_mat <- cbind(covar_mat,as.numeric(unlist(strsplit(strsplit(biological_cov," ")[[1]][i],","))))
       }
       covar_mat <- covar_mat[,-1]
-      if(covariab_format == "fact"){
+      if(batch_format == "fact"){
         adjusted_counts <- sva::ComBat_seq(count_matrix, batch=as.factor(batch), group=NULL, covar_mod=covar_mat)
       } else {
         adjusted_counts <- sva::ComBat_seq(count_matrix, batch=as.numeric(batch), group=NULL, covar_mod=covar_mat)
@@ -1001,9 +1001,16 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
       if (exists("keep_samples")) {
         condition <- condition[keep_samples]
       }
+      de_count_cols <- grep("Gene_ID|Length", colnames(gene_counts), invert = TRUE, value = TRUE)
+      de_keep <- rep(TRUE, length(de_count_cols))
+      if (pattern_to_remove != "none") {
+        de_keep <- !grepl(pattern_to_remove, de_count_cols)
+        if (any(!de_keep)) cat(paste0("\nExcluded from the differential expression analyses (still used for the batch correction and the adjusted counts): ", paste(de_count_cols[!de_keep], collapse = ", "), "\n"))
+        condition <- condition[de_keep]
+      }
 
       # Create edgeR_objects for each grouping/design if required:
-      edgeR_object_tmp <- DGEList(counts=gene_counts[,grep("Gene_ID|Length",colnames(gene_counts),invert=T)],
+      edgeR_object_tmp <- DGEList(counts=gene_counts[,de_count_cols[de_keep]],
                                		group=condition,
                                		genes=gene_counts[,c(grep("Gene_ID",colnames(gene_counts)),grep("Length",colnames(gene_counts)))])
       edgeR_object_tmp <- filter(filter=filter_option,edgeR_object_tmp)
@@ -1024,6 +1031,8 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
           } else if(covariab_format == "num"){
             Time <- as.numeric(unlist(strsplit(as.character(covariab),",")))
           }
+          if (exists("keep_samples") && length(Time) == length(keep_samples)) Time <- Time[keep_samples]
+          if (length(Time) == length(de_keep)) Time <- Time[de_keep]
           design <- model.matrix(~0+Treat+Time)
           rownames(design) <- colnames(edgeR_object_norm_temp)
           edgeR_object_norm_temp <- estimateDisp(edgeR_object_norm_temp, design, robust=TRUE) # Preparing for one covariable following edgeR vignette new methods Nov2023          
@@ -1142,8 +1151,8 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
           } else {
             fit <- glmQLFit(edgeR_object_norm_temp_to_process, design, robust=TRUE)
             contrast <- rep(0,dim(design)[2])
-            idxs_design <- rev(c(grep(sub("__","",list_combinations[[i]][1]),colnames(design)),grep(sub("__","",list_combinations[[i]][2]),colnames(design))))
-            if(length(idxs_design)!=2){cat(paste0("\n\nSomething is WRONG as one of your contrasts has been required to compare ",length(idxs_design)," conditions. Probably conflicting naming of biological conditions...\n\n"));stop("Exiting, please review the naming of the conditions...")}
+            idxs_design <- rev(match(paste0("Treat", sub("__","",list_combinations[[i]])), colnames(design)))
+            if(length(idxs_design)!=2 || anyNA(idxs_design)){cat(paste0("\n\nSomething is WRONG as one of your contrasts has been required to compare ",length(idxs_design)," conditions. Probably conflicting naming of biological conditions...\n\n"));stop("Exiting, please review the naming of the conditions...")}
             contrast[idxs_design] <- c(-1,1)
             qlf <- glmQLFTest(fit,contrast=contrast)
             dge_results <- topTags(qlf,n=nrow(qlf),adjust.method="BH",sort.by="PValue")
