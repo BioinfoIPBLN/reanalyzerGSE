@@ -107,6 +107,7 @@ for argument in "${arguments[@]}"; do
 	        -S | -stop # Manual stop so the automatically downloaded files can be manually modified ('yes' or 'no', by default)
 	        -pR | -pattern_to_remove # A pattern to exclude matching samples from downstream R processing only, i.e. QC figures and DGE analyses (by default 'none'). Unlike -regex/-regexExclude which filter raw reads before alignment, this option keeps all samples through alignment and counting but excludes matching ones at the R analysis stage; they are still used for the batch correction (ComBat-seq or limma) and the adjusted counts. Useful for removing outlier samples without re-running the full pipeline (e.g. resume from -Dm step4)
 	        -Dec | -differential_expr_comparisons # Restrict differential expression analyses to specific comparisons and control log2FC direction ('no' by default). Provide a comma-separated list using 'vs' as separator, e.g. 'AvsB,CvsD'. The order matters: the first element is the numerator, so positive log2FC = higher expression in the first element
+	        -los | -leave_out_samples # Samples to leave out in alternative differential expression runs, for comparison only ('no' by default). Either a comma-separated list of sample names as in the count table (e.g. 'S1_Rep1,S2_Rep3') or 'auto', which takes the samples flagged 'outlier' or 'check' by the sample outlier check of the normalised counts. The main run is never changed: the differential expression is repeated without each non-empty combination of those samples (2^n - 1 runs, at most 63, i.e. up to 6 samples) with the same engine, filter, covariates and comparisons, and DGE/leave_out/ gets, per run and comparison, the DEGs up/down, the DEGs lost and gained against the main run (with the gene tables), the logFC correlation with it, and the DEGs that stay significant in every run. Comparisons where a condition would keep fewer than 2 samples are skipped. Samples removed with -pattern_to_remove are not in the main run and cannot be left out
 
 	        #### Functional enrichment/networking analyses
 	        -cPm | -clusterProfiler_method # Method for adjusting p.value in clusterProfiler iterations (one of 'holm','hochberg','hommel','bonferroni','BH','BY,'none', or 'fdr', by default)
@@ -246,6 +247,7 @@ for argument in "${arguments[@]}"; do
 		-fpe) fastp_extra_args=${arguments[index]} ;;
 		-cR) cores_reads_to_subsample=${arguments[index]} ;;
 		-pR) pattern_to_remove=${arguments[index]} ;;
+		-los | -leave_out_samples) leave_out_samples=${arguments[index]} ;;
 		-apl) auto_panther_log=${arguments[index]} ;;
 		-mQ) bam_mapq_threshold=${arguments[index]} ;;
 		-Fex) bam_exclude_flags=${arguments[index]} ;;
@@ -629,6 +631,9 @@ if [ -z "$bed_mode" ]; then
 fi
 if [ -z "$pattern_to_remove" ]; then
 	pattern_to_remove="none"
+fi
+if [ -z "$leave_out_samples" ]; then
+	leave_out_samples="no"
 fi
 if [ -z "$end_step" ]; then
 	end_step="none"

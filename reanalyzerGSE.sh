@@ -1953,6 +1953,17 @@ _log_step "Step_4_R_Process" "start"
 			fi
 		done
 	fi
+	### Leave-out differential expression runs, for comparison with the main run only
+	if [[ "${leave_out_samples:-no}" != "no" ]]; then
+		for index in "${!array[@]}"; do
+			final_dir=$output_folder/$name/final_results_reanalysis$index
+			mkdir -p "$final_dir/DGE"
+			R_leave_out.R "$final_dir" "$leave_out_samples" "$cores" 2>&1 | tee "$final_dir/DGE/leave_out.log"
+			if [ "${PIPESTATUS[0]}" -ne 0 ]; then
+				echo -e "\n\033[1;31mERROR:\033[0m the leave-out runs failed (see $final_dir/DGE/leave_out.log); the main differential expression results are not affected.\n" >&2
+			fi
+		done
+	fi
 
 	export debug_step="all"
 _log_step "Step_4_R_Process" "end"

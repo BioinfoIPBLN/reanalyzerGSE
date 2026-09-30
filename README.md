@@ -69,6 +69,16 @@ Three optional steps run after the DEG tables are annotated, and are off by defa
 
 Pick a biosample close to your tissue: `encode_regulatory.py --list-biosamples` prints the ENCODE rE2G biosamples available. One HTTP round trip per genomic region dominates the runtime, so the number of regions is capped (`--max-regions`) and every region is cached, meaning a re-run only fetches what is new. Results land in `<results>/orthologs_human/` and `<results>/DGE/encode/`, and get their own section in the final report.
 
+### Sample outliers and leave-out runs
+
+Every run checks each sample against the other samples of its condition: the median Pearson correlation of the log2-CPM as a robust z-score (flagged 'outlier' at z <= -3, 'check' at z <= -2), and the number of genes at least 2x or 4x above the highest, or below the lowest, of the other replicates. The table is in the report and in `QC_and_others/sample_outliers/`. No sample is removed automatically; `-pR`/`pattern_to_remove` does that.
+
+To see how much a sample drives the results before removing it, `-los`/`leave_out_samples` repeats the differential expression without each non-empty combination of the samples given (2^n - 1 runs, at most 63, so up to 6 samples), with the same engine, filter, covariates and comparisons. `auto` takes the samples flagged by the check above. The main run is never changed. For each run and comparison, `DGE/leave_out/` holds the DEGs up/down, the DEGs lost and gained against the main run with their gene tables, the logFC correlation with it, and the DEGs that stay significant in every run; the report gets a section with the same tables.
+
+```
+leave_out_samples: "auto"                    # or e.g. "S1_Rep1,S2_Rep3"
+```
+
 An updated version of [miARma-seq](https://github.com/eandresleon/miARma-seq) has been included in reanalyzerGSE [here](https://github.com/BioinfoIPBLN/reanalyzerGSE/tree/main/external_software/miARma-seq).
 
 Please refer to the help ('-h') or contact us for any further clarification.
@@ -76,8 +86,8 @@ Please refer to the help ('-h') or contact us for any further clarification.
 ## Output
 Everything is written into `OUTPUT_FOLDER/PROJECT_NAME/`. Two places cover most needs:
 
-* **`final_report.html`**, inside the results folder below together with the `sphinx_report/` folder it links to, is the entry point to the run. It is an HTML report, with sections you can fold, linking to the sample and design summary, a sample outlier check, the per-sample alignment summary, the count matrices, the DEG tables, volcano plots and Venn diagrams, the functional enrichment report (plus a lighter tables-only version, `functional_enrichment_report_minimal.html`, for runs with many comparisons), the QC PDFs and the MultiQC/Qualimap reports, the pipeline timing and Gantt chart, and the objects for interactive exploration. It uses relative links, so keep it next to `sphinx_report/` (move or archive the whole results folder if you need to share it).
-* **`final_results_reanalysis0_<OUTPUT_FOLDER_NAME>/`** is the results folder itself, holding the final report, the count matrices plus `QC_and_others/` (QC PDF, a `README_QC_*.txt` describing each block of it, the tables behind every figure in `tables/` (and `tables_adjusted/` for the batch-adjusted QC PDF), and `sample_outliers/`: per-sample correlation z-scores and the genes 2x/4x above or below the other replicates of the condition) and `DGE/` (differential expression, functional enrichment and network analyses).
+* **`final_report.html`**, inside the results folder below together with the `sphinx_report/` folder it links to, is the entry point to the run. It is an HTML report, with sections you can fold, linking to the sample and design summary, a sample outlier check, the per-sample alignment summary, the count matrices, the DEG tables, volcano plots and Venn diagrams, the leave-out runs when requested, the functional enrichment report (plus a lighter tables-only version, `functional_enrichment_report_minimal.html`, for runs with many comparisons), the QC PDFs and the MultiQC/Qualimap reports, the pipeline timing and Gantt chart, and the objects for interactive exploration. It uses relative links, so keep it next to `sphinx_report/` (move or archive the whole results folder if you need to share it).
+* **`final_results_reanalysis0_<OUTPUT_FOLDER_NAME>/`** is the results folder itself, holding the final report, the count matrices plus `QC_and_others/` (QC PDF, a `README_QC_*.txt` describing each block of it, the tables behind every figure in `tables/` (and `tables_adjusted/` for the batch-adjusted QC PDF), and `sample_outliers/`: per-sample correlation z-scores and the genes 2x/4x above or below the other replicates of the condition) and `DGE/` (differential expression, functional enrichment and network analyses, and `leave_out/` when `leave_out_samples` is set).
 
 Microarray and single-cell studies follow a shorter route that stops after a template script, so they produce a smaller `final_results_reanalysis/` and no `final_report.html`.
 

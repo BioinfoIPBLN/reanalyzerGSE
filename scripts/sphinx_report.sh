@@ -107,7 +107,9 @@ cat > _static/rgse_fold.js <<'FOLDJS'
       if (head) fold(sec, head);
     });
     root.querySelectorAll("div.rgse-fold").forEach(function (blk) {
-      if (blk.firstElementChild) fold(blk, blk.firstElementChild);
+      if (!blk.firstElementChild) return;
+      fold(blk, blk.firstElementChild);
+      if (blk.classList.contains("rgse-fold-closed")) blk.classList.add("rgse-folded");
     });
     var first = root.querySelector(".rgse-foldable");
     if (first) {
@@ -803,6 +805,85 @@ OUTPY
 )
 
 
+######### Leave-out section (R_leave_out.R wrote DGE/leave_out/ when -leave_out_samples was given).
+######### Stays empty when the option was off.
+leave_out_section_rst=$(python3 - "$path/$final_dir_name/DGE/leave_out" <<'LOOPY'
+import csv, os, re, sys
+
+lo = sys.argv[1]
+info_file = os.path.join(lo, "leave_out_info.txt")
+if not os.path.isfile(info_file):
+    sys.exit(0)
+info = dict(l.rstrip("\n").split("=", 1) for l in open(info_file, encoding="utf-8", errors="replace") if "=" in l)
+
+print("\n\nLeave-out analysis\n" + "-" * 84)
+print("For comparison only: every result above comes from the main run, which this analysis does not change.")
+if info.get("status") != "done":
+    print("\n" + info.get("message", "The leave-out runs did not produce results.").replace("*", "\\*"))
+    print("\n.. index:: Leave-out")
+    sys.exit(0)
+
+samples = info.get("samples", "").replace(",", ", ")
+auto = " (flagged 'outlier' or 'check' by the sample outlier check)" if info.get("mode") == "auto" else ""
+print(f"The differential expression was repeated without each non-empty combination of {samples}{auto}, "
+      f"{info.get('runs', '?')} runs, with the same engine, filter, covariates and comparisons as the main run. "
+      "Lost and gained genes are counted against the main run's DEGs (FDR < 0.05); 'r DEGs' is the Pearson "
+      "correlation of the logFC with the main run over its DEGs. 'In comparison' tells whether a left-out sample "
+      "belongs to one of the two conditions compared; if not, the comparison changes only through the gene "
+      "filter, the normalisation and the dispersion estimate. Click a count of lost or gained genes for the list.")
+
+stable = list(csv.DictReader(open(os.path.join(lo, "stable_DEGs_summary.tsv")), delimiter="\t"))
+print("\n.. list-table:: DEGs of the main run that stay significant in every leave-out run")
+print("   :header-rows: 1\n")
+hdr = ["Comparison", "Contrast", "Main-run DEGs", "Runs tested", "Stable DEGs"]
+print("   * - " + hdr[0])
+for c in hdr[1:]:
+    print("     - " + c)
+for r in stable:
+    f = f"stable_DEGs_{r['Comparison']}.tsv"
+    st = r["Stable_DEGs"] or "-"
+    if os.path.isfile(os.path.join(lo, f)):
+        st = f"`{st} <leave_out/{f}>`__"
+    print("   * - " + r["Comparison"])
+    for c in (r["Contrast"], r["Main_DEGs"], r["Runs_tested"], st):
+        print("     - " + (c or "-"))
+
+rows = list(csv.DictReader(open(os.path.join(lo, "leave_out_summary.tsv")), delimiter="\t"))
+stable_by = {r["Comparison"]: r for r in stable}
+for comp in dict.fromkeys(r["Comparison"] for r in rows):
+    sub = [r for r in rows if r["Comparison"] == comp]
+    s = stable_by.get(comp, {})
+    print("\n.. container:: rgse-fold rgse-fold-closed\n")
+    print(f"   **{comp} ({sub[0]['Contrast']})**: {s.get('Main_DEGs', '?')} DEGs in the main run, "
+          f"{s.get('Stable_DEGs') or 0} of them significant in all {s.get('Runs_tested', '?')} runs where the comparison could be tested.\n")
+    print("   .. list-table::")
+    print("      :header-rows: 1\n")
+    hdr = ["Left out", "In comparison", "Samples", "DEGs (up / down)", "Lost", "Gained", "Sign flips", "r all", "r DEGs"]
+    print("      * - " + hdr[0])
+    for c in hdr[1:]:
+        print("        - " + c)
+    for r in sub:
+        link = f"leave_out/{r['Run']}/{comp}_changes.tsv"
+        has = os.path.isfile(os.path.join(lo, r["Run"], f"{comp}_changes.tsv"))
+        def cnt(v):
+            return f"`{v} <{link}>`__" if has and v not in ("", "0") else (v or "-")
+        if r["Status"] == "ok":
+            cells = (r["In_comparison"], r["Samples"], f"{r['DEGs']} ({r['Up']} / {r['Down']})", cnt(r["Lost"]), cnt(r["Gained"]),
+                     r["Sign_flips"], r["r_logFC_all"] or "-", r["r_logFC_main_DEGs"] or "-")
+        else:
+            cells = (r["In_comparison"], r["Samples"], r["Status"], "-", "-", "-", "-", "-")
+        print("      * - " + r["Left_out"].replace(",", ", "))
+        for c in cells:
+            print("        - " + c)
+
+print("\nFull tables: `leave_out_summary.tsv <leave_out/leave_out_summary.tsv>`__, "
+      "`stable_DEGs_summary.tsv <leave_out/stable_DEGs_summary.tsv>`__; "
+      "column definitions: `README_leave_out.txt <leave_out/README_leave_out.txt>`__.")
+print("\n.. index:: Leave-out")
+LOOPY
+)
+
+
 ######### Venn diagrams section (R_process_reanalyzer_GSE.R tarred them into DGE/venn_diagrams.tar).
 ######### Images are shown only when there are few; the archive is always linked.
 venn_section_rst=""
@@ -942,6 +1023,7 @@ DEGs:
 
 .. include_matching_files:: DGE_analysis_comp*.txt ../$final_dir_name/DGE/ degs
 .. index:: DEGs
+$leave_out_section_rst
 
 
 
@@ -1092,6 +1174,7 @@ if [ -f "$path/sphinx_report/html/index.html" ]; then
 	sed -i 's,href="functional_enrichment_report,href="sphinx_report/html/functional_enrichment_report,g' $path/final_report.html
 	sed -i 's,href="sample_outliers/,href="sphinx_report/html/sample_outliers/,g' $path/final_report.html
 	sed -i 's,href="venn_diagrams,href="sphinx_report/html/venn_diagrams,g' $path/final_report.html
+	sed -i 's,href="leave_out/,href="sphinx_report/html/leave_out/,g' $path/final_report.html
 	sed -i 's,src="_static/,src="sphinx_report/html/_static/,g' $path/final_report.html
 	sed -i 's,src="_images/,src="sphinx_report/html/_images/,g' $path/final_report.html
 else
