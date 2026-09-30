@@ -1775,14 +1775,14 @@ _log_step "Step_3b_miARma" "start"
 				if [ -d "$_f" ]; then
 					# bamqc/rnaseqqc folders hold one subfolder per sample, and samples are disjoint
 					mkdir -p $merged_dir/$aligner_results_dir/$_b
-					for _s in $(find $_f -maxdepth 1 -mindepth 1 2>/dev/null); do ln -sfn $_s $merged_dir/$aligner_results_dir/$_b/$(basename $_s); done
+					for _s in $(find $_f -maxdepth 1 -mindepth 1 2>/dev/null); do ln -sfnr $_s $merged_dir/$aligner_results_dir/$_b/$(basename $_s); done
 				else
-					ln -sf $_f $merged_dir/$aligner_results_dir/$_b
+					ln -sfr $_f $merged_dir/$aligner_results_dir/$_b
 				fi
 			done
 			for _f in $(find ${unit_out[index]}/Pre_fastqc_results -maxdepth 1 -type f 2>/dev/null); do
 				[ "$(basename $_f)" == "list_of_files.txt" ] && continue
-				ln -sf $_f $merged_dir/Pre_fastqc_results/$(basename $_f)
+				ln -sfr $_f $merged_dir/Pre_fastqc_results/$(basename $_f)
 			done
 			cat ${unit_out[index]}/Pre_fastqc_results/list_of_files.txt >> $merged_dir/Pre_fastqc_results/list_of_files.txt 2>/dev/null
 		done
@@ -2821,7 +2821,7 @@ _log_step "Step_9_Cleanup" "start"
 			find $output_folder/$name/miARma_out0/${aligner}_results -xtype l -delete 2>/dev/null
 			for index in "${!unit_out[@]}"; do
 				for _f in $(find ${unit_out[index]}/${aligner}_results -maxdepth 1 -type f -name "*.cram" 2>/dev/null); do
-					ln -sf $_f $output_folder/$name/miARma_out0/${aligner}_results/$(basename $_f)
+					ln -sfr $_f $output_folder/$name/miARma_out0/${aligner}_results/$(basename $_f)
 				done
 			done
 		fi

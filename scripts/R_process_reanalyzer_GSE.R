@@ -1088,7 +1088,7 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
         edgeR_object <- filter(filter=filter_option,edgeR_object) # Make sure of use bin to capture Cort and the lower expressed genes
         #edgeR_object_norm <- calcNormFactors(edgeR_object)
         #edgeR_object_norm <- estimateCommonDisp(edgeR_object_norm, robust=TRUE)
-        edgeR_object_norm <- normLibSizes(edgeR_object_norm)
+        edgeR_object_norm <- normLibSizes(edgeR_object)
         edgeR_object_norm <- estimateDisp(edgeR_object_norm, robust=TRUE)
         if (is.na(edgeR_object_norm$common.dispersion)){
           edgeR_object_norm$common.dispersion <- 0.4 ^ 2
@@ -1139,7 +1139,8 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
         } else {
           if (diff_soft == "DESeq2"){
             dge_results <- DESeq2_compare(comp=list_combinations[[i]],object=edgeR_object_norm_temp_to_process,
-                                          covariab=covariab, covariab_format=covariab_format)
+                                          covariab=if (covariab != "none") paste(as.character(Time), collapse=",") else covariab,
+                                          covariab_format=covariab_format)
             colnames(dge_results$table)[3] <- paste0(colnames(dge_results$table)[3],paste(sub("__","",list_combinations[[i]]),collapse = "__VS__"))
             if (venn_volcano!="no"){
               myLabel1=gsub("^_","",gsub("_+","_",gsub("[^[:alnum:]_]+", "_", paste(list_combinations[[i]], collapse = '_vs_'))))

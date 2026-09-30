@@ -70,9 +70,12 @@ html_css_files = [\"rgse_fold.css\"]
 rm -rf aligner_qc; mkdir -p aligner_qc
 for aligner_dir in "$path/miARma_out0"/*_results; do
 	for qc_sub in rnaseqqc_results bamqc_results; do
-		if [ -d "$aligner_dir/$qc_sub" ]; then
-			ln -sfn "$(readlink -f "$aligner_dir/$qc_sub")" "aligner_qc/$qc_sub"
-		fi
+		for qc_entry in "$aligner_dir/$qc_sub"/*; do
+			if [ -e "$qc_entry" ]; then
+				mkdir -p "aligner_qc/$qc_sub"
+				ln -sfn "$(readlink -f "$qc_entry")" "aligner_qc/$qc_sub/$(basename "$qc_entry")"
+			fi
+		done
 	done
 done
 

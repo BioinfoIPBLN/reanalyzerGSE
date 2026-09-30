@@ -283,7 +283,7 @@ def main():
         sys.exit(0)
 
     parent_dir = os.path.dirname(tables_dir)
-    out_pdf_standalone = os.path.join(parent_dir, "QC_AI_commentary_slides.pdf")
+    out_pdf_standalone = os.path.join(parent_dir, "QC_AI_commentary_slides%s.pdf" % os.path.basename(tables_dir)[len("tables"):])
 
     secrets = llm_common.secret_values(endpoint=cfg.llm_endpoint, api_key=cfg.llm_api_key)
 
