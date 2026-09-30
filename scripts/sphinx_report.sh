@@ -54,15 +54,97 @@ html_extra_path = [
     \"../${final_dir_name}/QC_and_others\",
     \"../${final_dir_name}/QC_and_others/qualimap_rnaseqqc_results\",
     \"../${final_dir_name}/DGE\",
-    \"../${final_dir_name}\"
+    \"../${final_dir_name}\",
+    \"aligner_qc\"
 ]
-html_extra_path.extend(glob.glob(\"../miARma_out0/*_results\"))
 html_extra_path.extend(glob.glob(\"../miARma_out0/*_results/multibamqc_results\"))
-html_extra_path.extend(glob.glob(\"../miARma_out0/*_results/rnaseqqc_results\"))
-html_extra_path.extend(glob.glob(\"../miARma_out0/*_results/bamqc_results\"))
 html_extra_path.extend(glob.glob(\"../preliminar_rrna_qc\"))
 html_extra_path = [p for p in html_extra_path if os.path.exists(p)]
+exclude_patterns = exclude_patterns + [\"aligner_qc\"]
+
+html_static_path = [\"_static\"]
+html_js_files = [\"rgse_fold.js\"]
+html_css_files = [\"rgse_fold.css\"]
 " >> conf.py
+
+rm -rf aligner_qc; mkdir -p aligner_qc
+for aligner_dir in "$path/miARma_out0"/*_results; do
+	for qc_sub in rnaseqqc_results bamqc_results; do
+		if [ -d "$aligner_dir/$qc_sub" ]; then
+			ln -sfn "$(readlink -f "$aligner_dir/$qc_sub")" "aligner_qc/$qc_sub"
+		fi
+	done
+done
+
+mkdir -p _static
+cat > _static/rgse_fold.js <<'FOLDJS'
+(function () {
+  function fold(el, head) {
+    var body = document.createElement("div");
+    body.className = "rgse-fold-body";
+    while (head.nextSibling) body.appendChild(head.nextSibling);
+    el.appendChild(body);
+    el.classList.add("rgse-foldable");
+    if (/^H3$/.test(head.tagName)) el.classList.add("rgse-fold-top");
+    head.classList.add("rgse-fold-head");
+    head.addEventListener("click", function (e) {
+      if (e.target.closest("a")) return;
+      el.classList.toggle("rgse-folded");
+    });
+  }
+  function openTo(id) {
+    var t = id ? document.getElementById(id) : null;
+    for (; t; t = t.parentElement) if (t.classList) t.classList.remove("rgse-folded");
+  }
+  function hashId(href) {
+    var i = href.indexOf("#");
+    return i < 0 ? "" : decodeURIComponent(href.slice(i + 1));
+  }
+  document.addEventListener("DOMContentLoaded", function () {
+    var root = document.querySelector("div.body") || document.body;
+    root.querySelectorAll("section, div.section").forEach(function (sec) {
+      var head = Array.prototype.find.call(sec.children, function (c) { return /^H[3-6]$/.test(c.tagName); });
+      if (head) fold(sec, head);
+    });
+    root.querySelectorAll("div.rgse-fold").forEach(function (blk) {
+      if (blk.firstElementChild) fold(blk, blk.firstElementChild);
+    });
+    var first = root.querySelector(".rgse-foldable");
+    if (first) {
+      var bar = document.createElement("div");
+      bar.className = "rgse-fold-bar";
+      [["Collapse all sections", ".rgse-fold-top", true], ["Expand all", ".rgse-foldable", false]].forEach(function (b) {
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = b[0];
+        btn.addEventListener("click", function () {
+          root.querySelectorAll(b[1]).forEach(function (el) { el.classList.toggle("rgse-folded", b[2]); });
+        });
+        bar.appendChild(btn);
+      });
+      first.parentNode.insertBefore(bar, first);
+    }
+    document.addEventListener("click", function (e) {
+      var a = e.target.closest ? e.target.closest("a[href*='#']") : null;
+      if (a && (a.getAttribute("href").charAt(0) === "#" || a.pathname === location.pathname)) openTo(hashId(a.getAttribute("href")));
+    });
+    window.addEventListener("hashchange", function () { openTo(hashId(location.hash)); });
+    openTo(hashId(location.hash));
+  });
+})();
+FOLDJS
+cat > _static/rgse_fold.css <<'FOLDCSS'
+.rgse-fold-head { cursor: pointer; }
+.rgse-fold-head::before { content: "\25BE"; display: inline-block; width: 1.1em; color: #7a7a7a; }
+.rgse-folded > .rgse-fold-head::before { content: "\25B8"; }
+.rgse-folded > .rgse-fold-body { display: none; }
+.rgse-fold-bar { margin: 0 0 14px; }
+.rgse-fold-bar button { margin-right: 6px; padding: 2px 10px; font-size: 12px; cursor: pointer; }
+@media print {
+  .rgse-folded > .rgse-fold-body { display: block; }
+  .rgse-fold-bar { display: none; }
+}
+FOLDCSS
 
 echo -e "\n
 from docutils import nodes
@@ -271,7 +353,9 @@ class IncludeMatchingFiles(SphinxDirective):
         except Exception:
             pass
 
-        return deg_nodes
+        block = nodes.container(classes=[\"rgse-fold\"])
+        block.extend(deg_nodes)
+        return [block]
 
     def process_text(self, file_path, file_name):
         \"\"\"Process text files.\"\"\"
@@ -651,6 +735,136 @@ fi
 covar_inc=""
 [ -f "$path/reads_study_info/covariables.txt" ] && covar_inc=".. literalinclude:: ../reads_study_info/covariables.txt"
 
+
+######### Sample outlier check section (R_qc_figs.R wrote QC_and_others/sample_outliers/
+######### sample_outlier_summary_<norm|adjusted>.tsv). Stays empty when the tables are absent.
+outlier_section_rst=$(python3 - "$path/$final_dir_name/QC_and_others/sample_outliers" <<'OUTPY'
+import csv, os, re, sys
+
+so = sys.argv[1]
+variants = [(v, t) for v, t in (("norm", "Normalised counts"), ("adjusted", "Batch-adjusted counts"))
+            if os.path.isfile(os.path.join(so, f"sample_outlier_summary_{v}.tsv"))]
+if not variants:
+    sys.exit(0)
+
+print("\n\nSample outlier check\n" + "-" * 84)
+print("For each sample, the median Pearson correlation of its log2-CPM with the other samples of the same "
+      "condition, turned into a robust z-score (median and MAD): 'outlier' at z <= -3, 'check' at z <= -2. "
+      "The last two columns count the genes at least 2x / 4x above the highest (up) or below the lowest (down) "
+      "of the other replicates of the condition, as a pointer to expression outliers; click a count for the "
+      "genes. Compare those counts within a condition, since larger conditions give smaller counts. "
+      "No sample is removed automatically: use the 'pattern_to_remove' option and re-run to drop one.")
+if len(variants) > 1:
+    print("\nA sample flagged with the normalised counts only points to a batch effect; one flagged with the "
+          "batch-adjusted counts too is an outlier of its own.")
+
+
+def counts(r, a, b, link):
+    if r[a] in ("", "NA"):
+        return "-"
+    text = f"{r[a]} / {r[b]}"
+    return f"`{text} <{link}>`__" if link and (r[a] != "0" or r[b] != "0") else text
+
+
+for v, title in variants:
+    rows = list(csv.DictReader(open(os.path.join(so, f"sample_outlier_summary_{v}.tsv")), delimiter="\t"))
+    flagged = [r for r in rows if r["Flag"] in ("outlier", "check")]
+    if flagged:
+        print(f"\n**{title}**: {len(flagged)} of {len(rows)} samples flagged: "
+              + ", ".join(f"{r['Sample']} ({r['Flag']}, z = {r['z_within']})" for r in flagged) + ".")
+    else:
+        print(f"\n**{title}**: no sample flagged ({len(rows)} samples).")
+    small = sorted({r["Condition"] for r in rows if r["Flag"].startswith("not assessable")})
+    if small:
+        print(f"Conditions with fewer than 3 samples cannot be scored within the condition: {', '.join(small)}.")
+    low = [r["Sample"] for r in rows if "low vs all samples" in r["Flag"]]
+    if low:
+        print(f"Of those, low correlation with all samples: {', '.join(low)}.")
+
+    print(f"\n.. list-table:: {title}")
+    print("   :header-rows: 1\n")
+    hdr = ["Sample", "Condition", "n", "r within", "z within", "z global", "Flag", "Up 2x / 4x", "Down 2x / 4x"]
+    print("   * - " + hdr[0])
+    for c in hdr[1:]:
+        print("     - " + c)
+    for r in rows:
+        gfile = f"genes_{v}/" + re.sub(r"[^A-Za-z0-9._-]", "_", r["Sample"]) + "_expression_outliers.tsv"
+        link = f"sample_outliers/{gfile}" if os.path.isfile(os.path.join(so, gfile)) else ""
+        flag = f"**{r['Flag']}**" if r["Flag"] in ("outlier", "check") else r["Flag"]
+        print("   * - " + r["Sample"])
+        for c in (r["Condition"], r["n_condition"], r["r_within"], r["z_within"], r["z_global"], flag,
+                  counts(r, "Genes_up_2x", "Genes_up_4x", link), counts(r, "Genes_down_2x", "Genes_down_4x", link)):
+            print("     - " + (c if c not in ("", "NA") else "-"))
+    print(f"\nFull table: `sample_outlier_summary_{v}.tsv <sample_outliers/sample_outlier_summary_{v}.tsv>`__; "
+          f"column definitions: `README_sample_outliers_{v}.txt <sample_outliers/README_sample_outliers_{v}.txt>`__.")
+
+print("\n.. index:: Sample outliers")
+OUTPY
+)
+
+
+######### Venn diagrams section (R_process_reanalyzer_GSE.R tarred them into DGE/venn_diagrams.tar).
+######### Images are shown only when there are few; the archive is always linked.
+venn_section_rst=""
+venn_tar="$path/$final_dir_name/DGE/venn_diagrams.tar"
+if [ -s "$venn_tar" ] && tar tf "$venn_tar" 2>/dev/null | grep -q '^Venn_diagram'; then
+	rm -rf venn; mkdir -p venn
+	venn_n=$(tar tf "$venn_tar" | grep -c '^Venn_diagram_combn_[0-9]*\.png$')
+	if [ "$venn_n" -le 6 ]; then
+		tar xf "$venn_tar" -C venn 2>/dev/null
+	else
+		tar xf "$venn_tar" -C venn --wildcards 'Venn_diagram_complete*' 2>/dev/null
+	fi
+	venn_section_rst=$(python3 - "$path/$final_dir_name/DGE" "$final_dir_name" "$venn_n" <<'VENNPY'
+import glob, os, re, sys
+
+dge, final_dir, n_png = sys.argv[1], sys.argv[2], int(sys.argv[3])
+labels = {}
+for f in glob.glob(os.path.join(dge, "DGE_analysis_comp*.txt")):
+    m = re.fullmatch(r"DGE_analysis_(comp\d+)\.txt", os.path.basename(f))
+    if not m:
+        continue
+    with open(f, encoding="utf-8", errors="replace") as fh:
+        header = [c.strip('"') for c in fh.readline().rstrip("\n").split("\t")]
+    lfc = next((c for c in header if c.startswith("logFC") and "__VS__" in c), "")
+    if lfc:
+        labels[m.group(1)] = " vs ".join(p[2:] if p.startswith("__") else p for p in lfc[len("logFC"):].split("__VS__"))
+combn = {}
+lc = os.path.join(dge, "list_combn.txt")
+if os.path.isfile(lc):
+    for line in open(lc, encoding="utf-8", errors="replace"):
+        m = re.match(r"Comparison number (\d+): (.*)", line.strip())
+        if m:
+            combn[int(m.group(1))] = [s.strip() for s in m.group(2).split("//")]
+
+print("\n\nVenn diagrams\n" + "-" * 84)
+print("Overlap of the differentially expressed genes (FDR < 0.05) between comparisons. The diagrams name each "
+      "comparison by its number:\n")
+for c in sorted(labels, key=lambda k: int(k[4:])):
+    print(f"* {c}: {labels[c]}")
+if os.path.isfile("venn/Venn_diagram_complete.svg"):
+    print("\n.. figure:: venn/Venn_diagram_complete.svg\n   :width: 640px\n")
+    txt = " The genes in each region are listed in :download:`Venn_diagram_complete.txt <venn/Venn_diagram_complete.txt>`." \
+        if os.path.isfile("venn/Venn_diagram_complete.txt") else ""
+    print(f"   All comparisons together (nVennR).{txt}")
+else:
+    print("\nThe diagram of all comparisons together is only drawn for up to 7 comparisons.")
+if n_png and n_png <= 6:
+    for i in range(1, n_png + 1):
+        if not os.path.isfile(f"venn/Venn_diagram_combn_{i}.png"):
+            continue
+        sets = ", ".join(combn.get(i, [])) or f"diagram {i}"
+        print(f"\n.. figure:: venn/Venn_diagram_combn_{i}.png\n   :width: 380px\n\n   {sets}")
+elif n_png:
+    print(f"\nThere are {n_png} diagrams of four comparisons each (every combination of four), too many to show "
+          f"here; they are in the archive below, and :download:`list_combn.txt <../{final_dir}/DGE/list_combn.txt>` "
+          f"gives the comparisons in each one.")
+print("\n.. raw:: html\n\n   <a href=\"venn_diagrams.tar\" download>Download all Venn diagrams (tar archive)</a><br>")
+print("\n.. index:: Venn")
+VENNPY
+)
+fi
+
 ######### Modify index.rst
 echo "
 Welcome to $project_name report!
@@ -673,6 +887,7 @@ Summary of samples and experimental conditions
 .. literalinclude:: ../$final_dir_name/QC_and_others/reads_numbers.txt
 .. literalinclude:: ../miARma_out0/Pre_fastqc_results/list_of_files.txt
 .. index:: Samples
+$outlier_section_rst
 
 
 
@@ -736,6 +951,7 @@ Volcano plots
 .. include_matching_files:: Volcano_plot_*.pdf ../$final_dir_name/DGE/
 
 .. index:: Volcano
+$venn_section_rst
 
 
 Functional enrichment analyses
@@ -853,6 +1069,7 @@ $enc_section_rst
 
 ######### Build
 sphinx-build -M html . . &>> sphinx.log
+rm -rf aligner_qc venn
 
 ######### Compress the report:
 # tar cf - $path/sphinx_report/ | pigz --best > $path/sphinx_report.tar.gz && rm -rf $path/sphinx_report/
@@ -873,7 +1090,10 @@ if [ -f "$path/sphinx_report/html/index.html" ]; then
 	sed -i 's,href="CPM,href="sphinx_report/html/CPM,g' $path/final_report.html
 	sed -i 's,href="DGE_analysis_comp,href="sphinx_report/html/DGE_analysis_comp,g' $path/final_report.html
 	sed -i 's,href="functional_enrichment_report,href="sphinx_report/html/functional_enrichment_report,g' $path/final_report.html
+	sed -i 's,href="sample_outliers/,href="sphinx_report/html/sample_outliers/,g' $path/final_report.html
+	sed -i 's,href="venn_diagrams,href="sphinx_report/html/venn_diagrams,g' $path/final_report.html
 	sed -i 's,src="_static/,src="sphinx_report/html/_static/,g' $path/final_report.html
+	sed -i 's,src="_images/,src="sphinx_report/html/_images/,g' $path/final_report.html
 else
 	echo "WARNING: Sphinx build did not produce index.html. Check sphinx_report/sphinx.log for details."
 fi

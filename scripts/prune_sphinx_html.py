@@ -7,7 +7,8 @@ holding a second copy of most of the analysis, and the report links only a fract
 Two passes, neither of which can lose data: a file is only ever touched when the same
 file still exists elsewhere in the run folder.
 
-  1. delete copies that no built page references
+  1. delete copies that no built page references, and every copy of an alignment file
+     (BAM/CRAM and their indexes), which the report never serves
   2. replace each referenced copy with a hard link to its original
 
 Files with no counterpart outside html/ are always kept, whether linked or not.
@@ -26,6 +27,7 @@ KEEP_EXT = {
     ".woff", ".woff2", ".ttf", ".eot", ".otf", ".inv",
 }
 SCAN_EXT = {".html", ".htm", ".js", ".css"}
+NEVER_KEEP_EXT = {".bam", ".bai", ".cram", ".crai", ".csi"}
 
 ATTR_RE = re.compile(
     rb"""(?:href|src|data-src|data-href|srcset|action|content)\s*=\s*["']([^"'>]+)["']""",
@@ -178,8 +180,9 @@ def main():
                 unique += 1
                 continue
 
-            keep = (is_generated(rel) or os.path.splitext(fn)[1].lower() in KEEP_EXT
-                    or is_referenced(rel, fn, refs))
+            ext = os.path.splitext(fn)[1].lower()
+            keep = ext not in NEVER_KEEP_EXT and (is_generated(rel) or ext in KEEP_EXT
+                                                  or is_referenced(rel, fn, refs))
             if not keep:
                 removed += 1
                 removed_bytes += st.st_size

@@ -129,7 +129,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   names(col.group) <- sample_names_for_col
 
 ### QC figures:
-  tables_dir <- file.path(output_dir, "QC_and_others", "tables")
+  tables_dir <- file.path(output_dir, "QC_and_others", if (label2 == "norm") "tables" else paste0("tables_", label2))
   dir.create(tables_dir, recursive = TRUE, showWarnings = FALSE)
   tryCatch({
     clean_targets <- as.data.frame(targets)
@@ -1152,3 +1152,77 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
    if (split_sections == "yes") qc_readme_lines <- c(qc_readme_lines, "- AI commentary: when the AI annotation of this PDF succeeds, a page with the LLM's interpretation follows each block; always check it against the plots.")
    writeLines(qc_readme_lines, file.path(output_dir, "QC_and_others", paste0("README_QC_", label, "_", label2, ".txt")))
  }, error = function(e) cat(paste("\nCould not write the QC README:", e$message, "\n")))
+
+ ### Sample outlier check:
+ cat("\n[QC] Sample outlier check\n")
+ tryCatch({
+   so_dir <- file.path(output_dir, "QC_and_others", "sample_outliers")
+   so_genes_dir <- file.path(so_dir, paste0("genes_", label2))
+   unlink(so_genes_dir, recursive = TRUE)
+   dir.create(so_genes_dir, recursive = TRUE, showWarnings = FALSE)
+   so_lcpm <- lcpm2
+   so_cpm <- lcpm2_no_log
+   so_samples <- rgse_resolve_collisions(rgse_sample_id(colnames(so_lcpm)), colnames(so_lcpm), "count column names")
+   so_genes <- if (!is.null(x2$genes$Gene_ID)) as.character(x2$genes$Gene_ID) else rownames(so_lcpm)
+   so_group <- as.character(x2$samples$group)
+   so_n <- as.integer(table(so_group)[so_group])
+   so_peers <- lapply(seq_along(so_samples), function(i) setdiff(which(so_group == so_group[i]), i))
+
+   so_fz <- atanh(pmin(cor(so_lcpm, method = "pearson"), 0.999999))
+   diag(so_fz) <- NA
+   so_r_within <- sapply(seq_along(so_samples), function(i) if (length(so_peers[[i]]) == 0) NA_real_ else median(so_fz[i, so_peers[[i]]]))
+   so_r_all <- apply(so_fz, 1, median, na.rm = TRUE)
+   so_dev <- sapply(seq_along(so_samples), function(i) if (so_n[i] < 3) NA_real_ else so_r_within[i] - median(so_r_within[so_peers[[i]]]))
+   so_z_within <- so_dev / max(1.4826 * median(abs(so_dev), na.rm = TRUE), 1e-3)
+   so_z_all <- (so_r_all - median(so_r_all)) / max(mad(so_r_all), 1e-3)
+   so_flag <- ifelse(so_n < 3, paste0("not assessable (n=", so_n, ")"),
+                     ifelse(so_z_within <= -3, "outlier", ifelse(so_z_within <= -2, "check", "ok")))
+   so_flag <- ifelse(so_n < 3 & !is.na(so_z_all) & so_z_all <= -3, paste0(so_flag, "; low vs all samples"), so_flag)
+
+   so_cut <- lcpm.cutoff
+   so_counts <- matrix(NA_integer_, nrow = length(so_samples), ncol = 4,
+                       dimnames = list(NULL, c("Genes_up_2x", "Genes_up_4x", "Genes_down_2x", "Genes_down_4x")))
+   for (i in seq_along(so_samples)) {
+     peers <- so_peers[[i]]
+     if (length(peers) == 0) next
+     other_max <- do.call(pmax, lapply(peers, function(j) so_lcpm[, j]))
+     other_min <- do.call(pmin, lapply(peers, function(j) so_lcpm[, j]))
+     up <- so_lcpm[, i] - other_max
+     down <- so_lcpm[, i] - other_min
+     is_up <- up >= 1 & so_lcpm[, i] >= so_cut
+     is_down <- down <= -1 & other_min >= so_cut
+     so_counts[i, ] <- c(sum(is_up), sum(is_up & up >= 2), sum(is_down), sum(is_down & down <= -2))
+     hits <- which(is_up | is_down)
+     if (length(hits) == 0) next
+     ratio <- ifelse(is_up[hits], up[hits], down[hits])
+     other_cpm <- ifelse(is_up[hits],
+                         do.call(pmax, lapply(peers, function(j) so_cpm[hits, j])),
+                         do.call(pmin, lapply(peers, function(j) so_cpm[hits, j])))
+     tab <- data.frame(Gene_ID = so_genes[hits], Condition = so_group[i],
+                       Direction = ifelse(is_up[hits], "up", "down"),
+                       Sample_CPM = round(so_cpm[hits, i], 3), Other_replicates_CPM = round(other_cpm, 3),
+                       log2_ratio = round(ratio, 3), At_least_4x = ifelse(abs(ratio) >= 2, "yes", "no"))
+     tab <- tab[order(-abs(tab$log2_ratio)), ]
+     write.table(tab, file = file.path(so_genes_dir, paste0(gsub("[^A-Za-z0-9._-]", "_", so_samples[i]), "_expression_outliers.tsv")),
+                 sep = "\t", quote = FALSE, row.names = FALSE)
+   }
+
+   so_summary <- data.frame(Sample = so_samples, Condition = so_group, n_condition = so_n,
+                            r_within = round(tanh(so_r_within), 4), z_within = round(so_z_within, 2),
+                            r_all = round(tanh(so_r_all), 4), z_global = round(so_z_all, 2),
+                            Flag = so_flag, so_counts, check.names = FALSE)
+   so_summary <- so_summary[order(so_summary$Condition, so_summary$Sample), ]
+   so_file <- file.path(so_dir, paste0("sample_outlier_summary_", label2, ".tsv"))
+   write.table(so_summary, file = so_file, sep = "\t", quote = FALSE, row.names = FALSE)
+   writeLines(c(
+     paste0("Sample outlier check on the ", label2, " counts (sample_outlier_summary_", label2, ".tsv), one row per sample:"), "",
+     "- r_within: median Pearson correlation of the log2-CPM (prior count 2, normalised, genes kept by the expression filter) with the other samples of the same condition.",
+     "- z_within: robust z-score of r_within on the Fisher z scale: its distance to the median of the other samples of the condition, divided by 1.4826 times the median absolute distance pooled over every condition with 3 or more samples. Flag: 'outlier' if z_within <= -3, 'check' if z_within <= -2.",
+     "- r_all, z_global: the same against all samples, as a robust z-score (median and MAD) over the whole run. A whole condition can score low here only because it differs from the rest, so it enters the flag only for conditions with fewer than 3 samples ('low vs all samples' if z_global <= -3).",
+     paste0("- Genes_up_2x / Genes_up_4x: genes whose log2-CPM in the sample is at least 1 / 2 above the highest of the other replicates of its condition, with the sample above the log-CPM cutoff of ", round(so_cut, 2), " (about 10 reads at the median library size). Genes_down_2x / Genes_down_4x: at least 1 / 2 below the lowest of the other replicates, with those replicates above that cutoff. The 2x counts include the 4x genes."),
+     "- With more replicates the highest and lowest of the other replicates are more extreme, so compare these gene counts within a condition, not across conditions.",
+     paste0("- genes_", label2, "/<sample>_expression_outliers.tsv: the genes behind those counts, with the sample's normalised CPM, the CPM of the highest (up) or lowest (down) other replicate and the log2 ratio used for the call.")
+   ), file.path(so_dir, paste0("README_sample_outliers_", label2, ".txt")))
+   cat(paste0("Sample outlier summary: ", so_file, "\n"))
+   print(so_summary[so_summary$Flag != "ok", , drop = FALSE])
+ }, error = function(e) cat(paste("\nCould not compute the sample outlier check:", e$message, "\n")))

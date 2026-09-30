@@ -2666,15 +2666,20 @@ if run_step step8; then
 				echo "Annotating QC figures PDF with AI insights..."
 				_label=$(basename "$output_folder/$name")
 				# Process each edgeR variant's sections directory independently
-				for edger_suffix in "norm" "norm_adjusted"; do
+				for edger_suffix in "norm" "adjusted"; do
 					sections_dir="$ai_fdir/QC_and_others/sections_${edger_suffix}"
 					_qc_pdf="$ai_fdir/QC_and_others/${_label}_${edger_suffix}_QC.pdf"
+					if [ "$edger_suffix" = "norm" ]; then
+						_qc_tables="$ai_fdir/QC_and_others/tables"
+					else
+						_qc_tables="$ai_fdir/QC_and_others/tables_${edger_suffix}"
+					fi
 					if [ -d "$sections_dir" ]; then
 						# Per-section mode: R created per-section PDFs, Python assembles + interleaves
-						qc_pdf_ai.py --tables-dir "$ai_fdir/QC_and_others/tables" --pdf "$_qc_pdf" --sections-dir "$sections_dir" >> "$ai_log" 2>&1 || true
+						qc_pdf_ai.py --tables-dir "$_qc_tables" --pdf "$_qc_pdf" --sections-dir "$sections_dir" >> "$ai_log" 2>&1 || true
 					elif [ -f "$_qc_pdf" ]; then
 						# Fallback: monolithic PDF exists, append AI slides at end
-						qc_pdf_ai.py --tables-dir "$ai_fdir/QC_and_others/tables" --pdf "$_qc_pdf" >> "$ai_log" 2>&1 || true
+						qc_pdf_ai.py --tables-dir "$_qc_tables" --pdf "$_qc_pdf" >> "$ai_log" 2>&1 || true
 					fi
 				done
 			fi
