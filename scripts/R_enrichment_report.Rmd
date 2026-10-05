@@ -6,6 +6,7 @@ params:
   project_name: "Project"
   organism: "Unknown"
   minimal: false
+  cp_universe: ""
 output:
   html_document:
     toc: true
@@ -102,16 +103,152 @@ deg_counts <- function(comp, thresholds = c(0.05, 0.01)) {
 }
 
 select_cols <- function(df) {
-  prio <- c("ONTOLOGY","Description","term.label","Term",
-            "ID","GeneRatio","BgRatio","FoldEnrichment","RichFactor","zScore",
-            "Count","number_in_list",
-            "pvalue","p.adjust","FDR","fdr","Adjusted.P.value",
+  prio <- c("ONTOLOGY","category","Description","description","term.label","Term","term",
+            "ID","term.id","Overlap","GeneRatio","BgRatio","setSize",
+            "FoldEnrichment","RichFactor","zScore","Odds.Ratio","Combined.Score",
+            "NES","enrichmentScore",
+            "Count","number_in_list","number_in_reference","expected",
+            "number_of_genes","number_of_genes_in_background",
+            "pvalue","P.value","pValue","p_value","p.adjust","FDR","fdr","Adjusted.P.value",
             "fold_enrichment","plus_minus",
             "Gene_ID_up_num","Gene_ID_down_num","Gene_ID_num",
-            "geneID","Gene_ID","summary_up","summary_down")
+            "geneID","Genes","preferredNames","Gene_ID","summary_up","summary_down")
   avail <- intersect(prio, names(df))
+  if ("preferredNames" %in% avail) avail <- setdiff(avail, "geneID")
   if (length(avail) < 2) avail <- names(df)[seq_len(min(10, ncol(df)))]
   df[, avail, with = FALSE]
+}
+
+csv_name <- function(prefix, f) {
+  b <- sub("\\.(txt|tsv)$", ".csv", basename(f))
+  if (startsWith(b, prefix)) b else paste0(prefix, "_", b)
+}
+
+read_kv <- function(path) {
+  if (!file.exists(path)) return(list())
+  l <- readLines(path, warn = FALSE)
+  l <- l[grepl("=", l, fixed = TRUE)]
+  setNames(as.list(sub("^[^=]*=", "", l)), sub("=.*$", "", l))
+}
+
+fmt_n <- function(x) format(as.numeric(x), big.mark = ",", scientific = FALSE, trim = TRUE)
+
+background_note <- function(text) {
+  cat(sprintf('<p style="color:#555;font-size:0.92em;margin:4px 0 10px;"><strong>Background:</strong> %s</p>\n\n', text))
+}
+
+cp_background_text <- function(cp_dir) {
+  u <- read_kv(file.path(cp_dir, "universe.txt"))
+  mode <- if (!is.null(u$mode)) u$mode else params$cp_universe
+  if (identical(mode, "detected")) {
+    n <- if (!is.null(u$genes)) sprintf("the %s genes", fmt_n(u$genes)) else "the genes"
+    sprintf("%s tested in this comparison (<code>clusterProfiler_universe: detected</code>).", n)
+  } else if (identical(mode, "all")) {
+    "every gene annotated in the organism database (<code>clusterProfiler_universe: all</code>)."
+  } else {
+    "not recorded for this run."
+  }
+}
+
+dir_background_n <- function(pd) {
+  n <- suppressWarnings(as.numeric(read_kv(file.path(pd, "enrichment_background.txt"))$detected_genes))
+  if (length(n) == 0) NA_real_ else n
+}
+
+deg_set_label <- function(name, thr = "FDR < 0.05") {
+  if (grepl("logpos|_UP$", name))      sprintf("Up-regulated DEGs (%s, logFC > 0)", thr)
+  else if (grepl("logneg|_DOWN$", name)) sprintf("Down-regulated DEGs (%s, logFC < 0)", thr)
+  else                                  sprintf("All DEGs (%s)", thr)
+}
+
+panther_test_label <- c(
+  fisher_whole_back = "Fisher's exact test, whole-genome reference",
+  fisher_expr_back  = "Fisher's exact test, expressed-genes reference",
+  binom_whole_back  = "Binomial test, whole-genome reference",
+  binom_expr_back   = "Binomial test, expressed-genes reference"
+)
+
+render_autogo_panther <- function(pd, level, csv_prefix) {
+  h <- strrep("#", level)
+  n_bg <- dir_background_n(pd)
+  autogo_dirs <- list.dirs(pd, recursive = TRUE, full.names = TRUE)
+  autogo_dirs <- autogo_dirs[grepl("_autoGO$", autogo_dirs)]
+  if (length(autogo_dirs) > 0) {
+    cat(sprintf("\n%s autoGO / Enrichr\n\n", h))
+    background_note(if (is.na(n_bg)) "not recorded for this run."
+                    else if (n_bg > 0) sprintf("the %s genes tested in this comparison, sent to Enrichr as a custom background.", fmt_n(n_bg))
+                    else "Enrichr's default background (the genes of each Enrichr library).")
+    for (agd in autogo_dirs) {
+      tsvs <- list.files(agd, pattern = "\\.tsv$", full.names = TRUE)
+      for (f in tsvs) {
+        df <- safe_read(f); sig <- filter_sig(df)
+        n_sig <- if (!is.null(sig)) nrow(sig) else 0
+        n_tot <- if (!is.null(df)) nrow(df) else 0
+        cat(sprintf("\n**%s** — %d of %d terms at adjusted p < 0.05\n\n",
+                    basename(f), n_sig, n_tot))
+        make_table(df, csv_name(csv_prefix, f), max_rows = 15)
+      }
+      bplots <- list.files(agd, pattern = "_barplot\\.png$", full.names = TRUE)
+      for (p in bplots) embed_png(p, basename(p), max_width = "600px")
+      lplots <- list.files(agd, pattern = "_lolliplot\\.png$", full.names = TRUE)
+      for (p in lplots) embed_png(p, basename(p), max_width = "600px")
+    }
+  }
+
+  panther_files <- list.files(pd, pattern = "^enriched_.*_panther\\.txt$", full.names = TRUE)
+  panther_files <- panther_files[!grepl("_err\\.txt$", panther_files)]
+  if (length(panther_files) > 0) {
+    tabs <- level < 6
+    cat(sprintf("\n%s Panther enrichment%s\n\n", h, if (tabs) " {.tabset}" else ""))
+    for (test_type in names(panther_test_label)) {
+      pf <- panther_files[startsWith(basename(panther_files), paste0("enriched_", test_type, "_"))]
+      if (length(pf) == 0) next
+      if (tabs) cat(sprintf("\n%s %s\n\n", strrep("#", level + 1), panther_test_label[[test_type]]))
+      else cat(sprintf("\n*%s*\n\n", panther_test_label[[test_type]]))
+      background_note(if (grepl("whole", test_type)) "all genes of the organism in PANTHER."
+                      else if (!is.na(n_bg) && n_bg > 0) sprintf("the %s genes tested in this comparison.", fmt_n(n_bg))
+                      else "the genes tested in this comparison.")
+      for (f in pf) {
+        df <- safe_read(f)
+        if (is.null(df) || nrow(df) == 0) next
+        sig <- filter_sig(df)
+        n_sig <- if (!is.null(sig)) nrow(sig) else 0
+        set_name <- sub(paste0("^enriched_", test_type, "_(.*)_panther\\.txt$"), "\\1", basename(f))
+        cat(sprintf("**%s** — %d significant results\n\n", set_name, n_sig))
+        make_table(df, csv_name(csv_prefix, f), max_rows = 15)
+      }
+    }
+  }
+}
+
+net_gsea_files <- function(comp, metric) {
+  d <- file.path(network_dir, "GSEA", metric)
+  if (!dir.exists(d)) return(character(0))
+  list.files(d, pattern = paste0("^GSEA_.*_", comp, "_", metric, "\\.txt$"), full.names = TRUE)
+}
+
+render_network_gsea <- function(comp) {
+  metrics <- c(FDR = "signed FDR", log2FC = "log2FC")
+  files <- lapply(setNames(names(metrics), names(metrics)), function(m) net_gsea_files(comp, m))
+  if (length(unlist(files)) == 0) return(invisible(FALSE))
+  cat("\n## GSEA (ranked gene list) {.tabset}\n\n")
+  cat("Gene set enrichment analysis on every gene tested in this comparison, run in the network step; it does not depend on a DEG threshold.\n\n")
+  for (m in names(metrics)) {
+    if (length(files[[m]]) == 0) next
+    cat(sprintf("\n### Ranked by %s {.tabset}\n\n", metrics[[m]]))
+    background_note(if (m == "FDR") "all genes tested in this comparison, ranked by -log10(FDR) multiplied by the sign of log2FC."
+                    else "all genes tested in this comparison, ranked by log2FC.")
+    for (f in files[[m]]) {
+      db <- sub(paste0("^GSEA_(.*)_", comp, "_", m, "\\.txt$"), "\\1", basename(f))
+      cat(sprintf("\n#### %s\n\n", gsub("_", " ", db)))
+      df <- safe_read(f); n_total <- if (is.null(df)) 0 else nrow(df)
+      sig <- filter_sig(df); n_sig <- if (!is.null(sig)) nrow(sig) else 0
+      cat(sprintf("**%d** gene sets (**%d** significant, adjusted p < 0.05)\n\n", n_total, n_sig))
+      make_table(df, csv_name(comp, f))
+      embed_png(sub("\\.txt$", ".png", f), sub("\\.txt$", ".png", basename(f)))
+    }
+  }
+  invisible(TRUE)
 }
 
 make_table <- function(df, filename = NULL, max_rows = NULL) {
@@ -122,7 +259,8 @@ make_table <- function(df, filename = NULL, max_rows = NULL) {
   df <- add_fold_enrichment(df)
   display <- as.data.frame(select_cols(df))
   # Round enrichment/score columns for on-screen readability (CSV keeps full precision)
-  for (nm in intersect(c("FoldEnrichment","RichFactor","zScore"), names(display)))
+  for (nm in intersect(c("FoldEnrichment","RichFactor","zScore","Odds.Ratio","Combined.Score",
+                         "NES","enrichmentScore","fold_enrichment","expected"), names(display)))
     display[[nm]] <- round(suppressWarnings(as.numeric(display[[nm]])), 2)
 
   n_total     <- nrow(display)
@@ -243,9 +381,7 @@ threshold_label <- function(tok) {
   thr <- if (grepl("^fdr_05", tok)) "FDR < 0.05"
          else if (grepl("^fdr_01", tok)) "FDR < 0.01"
          else return(tok)
-  if (grepl("_logpos$", tok))      sprintf("Up-regulated DEGs (%s)", thr)
-  else if (grepl("_logneg$", tok)) sprintf("Down-regulated DEGs (%s)", thr)
-  else                             sprintf("All DEGs (%s)", thr)
+  deg_set_label(tok, thr)
 }
 
 # Render the clusterProfiler ORA + GSEA sections for ONE DEG-input threshold
@@ -253,7 +389,7 @@ threshold_label <- function(tok) {
 # level-2 threshold tab. `primary` (the FDR<0.05 tab) is where shared, non
 # threshold-specific pathway images (KEGG / Reactome snapshots) are embedded, so
 # they are not duplicated across both threshold tabs.
-render_cp_threshold <- function(cp_dir, comp, tok, full_mode_ran, primary) {
+render_cp_threshold <- function(cp_dir, comp, tok, full_mode_ran, primary, net_gsea = FALSE) {
   full_mode_note <- function(what) {
     if (full_mode_ran) { cat("*Not available*\n\n"); return(invisible()) }
     cat(sprintf(paste0('<div class="alert alert-secondary" ',
@@ -277,6 +413,7 @@ render_cp_threshold <- function(cp_dir, comp, tok, full_mode_ran, primary) {
   }
 
   cat("\n### ORA (clusterProfiler) {.tabset}\n\n")
+  background_note(cp_background_text(cp_dir))
 
   # -- Gene Ontology --
   cat("\n#### Gene Ontology {.tabset}\n\n")
@@ -356,7 +493,7 @@ render_cp_threshold <- function(cp_dir, comp, tok, full_mode_ran, primary) {
       df <- safe_read(f); n_total <- if (is.null(df)) 0 else nrow(df)
       sig <- filter_sig(df); n_sig <- if (!is.null(sig)) nrow(sig) else 0
       cat(sprintf("**%d** terms (**%d** significant, adjusted p < 0.05)\n\n", n_total, n_sig))
-      make_table(df, paste0(bname, ".csv"))
+      make_table(df, csv_name(comp, f))
     }
   } else {
     cat("\n#### Disease Ontology\n\n")
@@ -368,14 +505,16 @@ render_cp_threshold <- function(cp_dir, comp, tok, full_mode_ran, primary) {
   gsea <- gsea[!grepl("_err\\.txt$|_aPEAR|_clusters|_similarity", gsea)]
   gsea <- gsea[which(vapply(gsea, threshold_token, character(1)) == tok)]
   if (!length(gsea)) {
-    cat("\n### GSEA\n\n"); full_mode_note("Gene Set Enrichment Analysis (GSEA)")
+    cat("\n### GSEA\n\n")
+    if (net_gsea) cat("clusterProfiler's own GSEA runs only with <code>clusterProfiler_full: yes</code>. The GSEA from the network step, on all genes tested in this comparison, is in this comparison's <strong>GSEA (ranked gene list)</strong> tab.\n\n")
+    else full_mode_note("Gene Set Enrichment Analysis (GSEA)")
   } else {
     cat("\n### GSEA {.tabset}\n\n")
     gsea_one <- function(f) {
       df <- safe_read(f); n_total <- if (is.null(df)) 0 else nrow(df)
       sig <- filter_sig(df); n_sig <- if (!is.null(sig)) nrow(sig) else 0
       cat(sprintf("**%s** (%d rows, %d significant)\n\n", basename(f), n_total, n_sig))
-      make_table(df, gsub("\\.txt$", ".csv", basename(f)))
+      make_table(df, csv_name(comp, f))
     }
     go_gsea <- gsea[grepl("^GO_GSEA_", basename(gsea))]
     if (length(go_gsea)) {
@@ -509,6 +648,18 @@ if (file.exists(list_comp_file)) {
 
 network_dir <- file.path(dge_dir, "network_analyses")
 has_network  <- dir.exists(network_dir) && length(list.files(network_dir)) > 0
+
+wgcna_dir  <- file.path(network_dir, "WGCNA")
+string_dir <- file.path(network_dir, "STRINGdb")
+bonobo_dir <- file.path(network_dir, "BONOBO")
+has_wgcna  <- dir.exists(wgcna_dir) && length(list.files(wgcna_dir)) > 0
+string_files <- if (dir.exists(string_dir)) list.files(string_dir, pattern = "^(STRINGdb_|String_network)",
+                                                       recursive = TRUE, full.names = TRUE) else character(0)
+string_files <- string_files[!grepl("_funct_enrichment", string_files)]
+has_string <- length(string_files) > 0
+has_bonobo <- dir.exists(bonobo_dir) && length(list.files(bonobo_dir, recursive = TRUE)) > 0
+net_gsea_any <- dir.exists(file.path(network_dir, "GSEA")) &&
+  length(list.files(file.path(network_dir, "GSEA"), pattern = "^GSEA_.*\\.txt$", recursive = TRUE)) > 0
 ```
 
 ```{r dt-init, echo=FALSE}
@@ -654,23 +805,24 @@ if (file.exists(list_comp_file)) {
 cat("\n**Analyses detected:**\n\n")
 if (length(cp_dirs) > 0) cat("- \u2705 clusterProfiler (ORA)\n")
 gsea_found <- length(list.files(cp_dirs, pattern = "GSEA_", recursive = FALSE)) > 0
-if (gsea_found)          cat("- \u2705 Gene Set Enrichment Analysis (GSEA)\n")
+gsea_from <- c("clusterProfiler", "network step")[c(gsea_found, net_gsea_any)]
+if (length(gsea_from))   cat(sprintf("- \u2705 Gene Set Enrichment Analysis (GSEA: %s)\n", paste(gsea_from, collapse = " + ")))
 if (has_enrichr)         cat("- \u2705 clusterProfiler enrichr (custom GO annotation)\n")
-if (length(panther_dirs_all) > 0) {
-  cat("- \u2705 autoGO / Enrichr\n")
-  cat("- \u2705 Panther\n")
-}
+autogo_found  <- length(unlist(lapply(panther_dirs_all, list.files, pattern = "\\.tsv$", recursive = TRUE))) > 0
+panther_found <- length(unlist(lapply(panther_dirs_all, list.files, pattern = "^enriched_.*_panther\\.txt$"))) > 0
+if (autogo_found)        cat("- \u2705 autoGO / Enrichr\n")
+if (panther_found)       cat("- \u2705 Panther\n")
 apear_found <- length(list.files(cp_dirs, pattern = "_aPEAR", recursive = FALSE)) > 0
 if (apear_found)         cat("- \u2705 aPEAR pathway clustering\n")
 if (has_enrichr) {
   apear_enrichr <- length(list.files(enrichr_dir, pattern = "_aPEAR", recursive = FALSE)) > 0
   if (apear_enrichr) cat("- \u2705 aPEAR pathway clustering (enrichr)\n")
 }
-if (has_network) {
-  cat("- \u2705 Network analyses (WGCNA")
-  if (dir.exists(file.path(network_dir, "STRINGdb"))) cat(" + STRINGdb")
-  if (dir.exists(file.path(network_dir, "BONOBO")))   cat(" + BONOBO")
-  cat(")\n")
+net_parts <- c(WGCNA = has_wgcna, STRINGdb = has_string, BONOBO = has_bonobo)
+if (any(net_parts)) {
+  cat(sprintf("- \u2705 Network analyses (%s)\n", paste(names(net_parts)[net_parts], collapse = " + ")))
+} else if (has_network) {
+  cat("- \u26a0\ufe0f Network analyses ran, but no WGCNA, STRINGdb or BONOBO results were found\n")
 }
 cat("\n")
 
@@ -717,6 +869,7 @@ for (idx in seq_along(comp_names)) {
   cp_dir <- cp_dirs[idx]  # may be NA if only panther exists
 
   comp_num <- gsub("\\D", "", comp)
+  has_net_gsea <- length(net_gsea_files(comp, "FDR")) + length(net_gsea_files(comp, "log2FC")) > 0
   cat(sprintf("\n\n# Comparison %s {.tabset .tabset-pills}\n\n", comp_num))
 
   # Optional AI narrative for this comparison (above the tabs; absent unless enabled),
@@ -740,7 +893,8 @@ for (idx in seq_along(comp_names)) {
     if (length(cp_toks) == 0) cp_toks <- c("fdr_05", "fdr_01")
     for (tok in cp_toks) {
       cat(sprintf("\n## %s {.tabset}\n\n", threshold_label(tok)))
-      render_cp_threshold(cp_dir, comp, tok, full_mode_ran, primary = identical(tok, "fdr_05"))
+      render_cp_threshold(cp_dir, comp, tok, full_mode_ran, primary = identical(tok, "fdr_05"),
+                          net_gsea = has_net_gsea)
     }
 
     # aPEAR pathway clusters (shared across thresholds; kept at comparison level)
@@ -753,7 +907,7 @@ for (idx in seq_along(comp_names)) {
         df <- safe_read(f)
         if (!is.null(df) && nrow(df) > 0) {
           cat(sprintf("\n**%s** — %d clusters\n\n", bname, length(unique(df$Cluster))))
-          make_table(df, gsub("\\.txt$", ".csv", bname), max_rows = 30)
+          make_table(df, csv_name(comp, f), max_rows = 30)
         }
       }
       apear_pdfs <- list.files(cp_dir, pattern = "_aPEAR\\.pdf$", full.names = TRUE)
@@ -863,75 +1017,15 @@ for (idx in seq_along(comp_names)) {
     cat("\n*clusterProfiler results not found for this comparison*\n\n")
   }
 
+  render_network_gsea(comp)
+
   # ── autoGO / Enrichr ────────────────────────────────────────────────────────
   pant_dirs <- panther_dirs_all[grepl(paste0("^", comp, "_"), basename(panther_dirs_all))]
   if (length(pant_dirs) > 0) {
     cat("\n## autoGO & Panther {.tabset}\n\n")
-
     for (pd in pant_dirs) {
-      pd_label <- basename(pd)
-      # Determine if this is all DEGs, up, or down
-      if (grepl("logpos", pd_label)) pd_label_nice <- "Up-regulated DEGs"
-      else if (grepl("logneg", pd_label)) pd_label_nice <- "Down-regulated DEGs"
-      else pd_label_nice <- "All DEGs (FDR < 0.05)"
-
-      cat(sprintf("\n### %s {.tabset}\n\n", pd_label_nice))
-
-      # autoGO results
-      autogo_dirs <- list.dirs(pd, recursive = TRUE, full.names = TRUE)
-      autogo_dirs <- autogo_dirs[grepl("_autoGO$", autogo_dirs)]
-      if (length(autogo_dirs) > 0) {
-        cat("\n#### autoGO / Enrichr\n\n")
-        for (agd in autogo_dirs) {
-          # Tables first — one per Enrichr database that returned results (ALL of
-          # them). Databases that were queried but had no enriched terms simply
-          # have no file here (e.g. Cellular Component when nothing was enriched).
-          tsvs <- list.files(agd, pattern = "\\.tsv$", full.names = TRUE)
-          for (f in tsvs) {
-            df <- safe_read(f); sig <- filter_sig(df)
-            n_sig <- if (!is.null(sig)) nrow(sig) else 0
-            n_tot <- if (!is.null(df)) nrow(df) else 0
-            # Significance is by ADJUSTED p-value (< 0.05); the table itself is
-            # sorted by raw p-value, so rows with raw p < 0.05 may still show as
-            # "0 ... at adjusted p < 0.05".
-            cat(sprintf("\n**%s** — %d of %d terms at adjusted p < 0.05\n\n",
-                        basename(f), n_sig, n_tot))
-            make_table(df, gsub("\\.tsv$", ".csv", basename(f)), max_rows = 15)
-          }
-          # Then the plots — ALL databases, not just the first few: bar plots
-          # first, then the matching lolliplots.
-          bplots <- list.files(agd, pattern = "_barplot\\.png$", full.names = TRUE)
-          for (p in bplots) embed_png(p, basename(p), max_width = "600px")
-          lplots <- list.files(agd, pattern = "_lolliplot\\.png$", full.names = TRUE)
-          for (p in lplots) embed_png(p, basename(p), max_width = "600px")
-        }
-      }
-
-      # Panther results
-      panther_files <- list.files(pd, pattern = "^enriched_.*_panther\\.txt$", full.names = TRUE)
-      panther_files <- panther_files[!grepl("_err\\.txt$", panther_files)]
-      if (length(panther_files) > 0) {
-        cat("\n#### Panther enrichment {.tabset}\n\n")
-
-        # Group by test type (fisher/binom) and background (whole/expr)
-        for (test_type in c("fisher_whole_back", "fisher_expr_back",
-                            "binom_whole_back", "binom_expr_back")) {
-          pf <- panther_files[grepl(test_type, panther_files)]
-          if (length(pf) == 0) next
-
-          test_label <- gsub("_", " ", tools::toTitleCase(gsub("_", " ", test_type)))
-          cat(sprintf("\n##### %s\n\n", test_label))
-
-          for (f in head(pf, 5)) {
-            df <- safe_read(f)
-            if (is.null(df) || nrow(df) == 0) next
-            sig <- filter_sig(df)
-            n_sig <- if (!is.null(sig)) nrow(sig) else 0
-            cat(sprintf("**%s** — %d significant results\n\n", basename(f), n_sig))
-            make_table(df, gsub("\\.txt$", ".csv", basename(f)), max_rows = 15)
-          }
-        }
-      }
+      cat(sprintf("\n### %s {.tabset}\n\n", deg_set_label(basename(pd))))
+      render_autogo_panther(pd, level = 4, csv_prefix = basename(pd))
     }
   }
 
@@ -955,14 +1049,6 @@ for (idx in seq_along(comp_names)) {
 ```{r network, results='asis'}
 if (has_network) {
   cat("\n\n# Network Analyses {.tabset}\n\n")
-
-  wgcna_dir  <- file.path(network_dir, "WGCNA")
-  string_dir <- file.path(network_dir, "STRINGdb")
-  bonobo_dir <- file.path(network_dir, "BONOBO")
-
-  has_wgcna  <- dir.exists(wgcna_dir) && length(list.files(wgcna_dir)) > 0
-  has_string <- dir.exists(string_dir) && length(list.files(string_dir)) > 0
-  has_bonobo <- dir.exists(bonobo_dir) && length(list.files(bonobo_dir, recursive = TRUE)) > 0
 
   # ── WGCNA ──────────────────────────────────────────────────────────────────
   if (has_wgcna) {
@@ -1042,50 +1128,74 @@ if (has_network) {
   # ── STRINGdb ───────────────────────────────────────────────────────────────
   if (has_string) {
     cat("\n## STRINGdb {.tabset}\n\n")
-    cat("Protein-protein interaction network analysis via STRINGdb (score threshold ≥ 400):\n\n")
+    cat("Protein-protein interactions among the DEGs of each comparison (STRING v12, combined score of at least 400), for all DEGs and for the up- and down-regulated ones separately. Clusters of at least 10 genes are also tested for enrichment with autoGO and PANTHER.\n\n")
+    string_sets <- c(all = "ALL", up = "UP", down = "DOWN")
+    key_re <- "^(?:STRINGdb_(?:PPI_enrichment_test|all_modules|functional_enrichment|interactions)|String_network(?:_colored)?)_(.+)_(?:ALL|UP|DOWN)\\.(?:txt|pdf)$"
+    bn <- basename(string_files)
+    labs <- unique(sub(key_re, "\\1", bn[grepl(key_re, bn, perl = TRUE)], perl = TRUE))
+    labs <- labs[order(suppressWarnings(as.numeric(gsub("\\D", "", labs))), labs)]
+    for (lab in labs) {
+      cat(sprintf("\n### %s {.tabset}\n\n",
+                  if (grepl("^DGE_analysis_comp[0-9]+$", lab)) paste("Comparison", gsub("\\D", "", lab)) else lab))
+      for (dd in names(string_sets)) {
+        set_up <- string_sets[[dd]]
+        sd <- file.path(string_dir, dd)
+        f_of <- function(prefix, ext = "txt") file.path(sd, sprintf("%s_%s_%s.%s", prefix, lab, set_up, ext))
+        ppi_f <- f_of("STRINGdb_PPI_enrichment_test")
+        mod_f <- f_of("STRINGdb_all_modules")
+        enr_f <- f_of("STRINGdb_functional_enrichment")
+        if (!any(file.exists(c(ppi_f, mod_f, enr_f)))) next
+        cat(sprintf("\n#### %s {.tabset}\n\n", deg_set_label(paste0("_", set_up))))
 
-    # PPI enrichment test
-    ppi_files <- list.files(string_dir, pattern = "STRINGdb_PPI_enrichment_test_", full.names = TRUE)
-    for (f in ppi_files) {
-      df <- safe_read(f)
-      if (!is.null(df) && nrow(df) > 0) {
-        cat(sprintf("**PPI enrichment test** (%s):\n\n", gsub("STRINGdb_PPI_enrichment_test_|\\.txt$", "", basename(f))))
-        make_table(df, gsub("\\.txt$", ".csv", basename(f)))
-      }
-    }
+        cat("\n##### Network\n\n")
+        ppi <- safe_read(ppi_f)
+        if (!is.null(ppi) && all(c("metric", "value") %in% names(ppi))) {
+          v <- setNames(as.character(ppi$value), ppi$metric)
+          p_num <- suppressWarnings(as.numeric(v["enrichment"]))
+          p_txt <- if (is.na(p_num)) "NA" else if (p_num == 0) "< 1e-16" else format(p_num, digits = 3)
+          cat(sprintf("**%s** interactions observed, **%s** expected at random; PPI enrichment p-value %s.\n\n",
+                      ifelse(is.na(v["edges"]), "NA", v["edges"]), ifelse(is.na(v["lambda"]), "NA", v["lambda"]), p_txt))
+        }
+        embed_pdf(f_of("String_network", "pdf"), "STRING network")
+        embed_pdf(f_of("String_network_colored", "pdf"), "STRING network, coloured by cluster")
 
-    # Functional enrichment from STRING
-    enrich_files <- list.files(string_dir, pattern = "STRINGdb_functional_enrichment_", full.names = TRUE)
-    if (length(enrich_files) > 0) {
-      cat("\n### Functional Enrichment\n\n")
-      for (f in enrich_files) {
-        df <- safe_read(f); sig <- filter_sig(df)
-        n_sig <- if (!is.null(sig)) nrow(sig) else 0
-        cat(sprintf("**%s** — %d significant terms\n\n", basename(f), n_sig))
-        make_table(df, gsub("\\.txt$", ".csv", basename(f)))
-      }
-    }
+        mods <- safe_read(mod_f)
+        if (!is.null(mods) && all(c("Gene_ID", "clusters") %in% names(mods))) {
+          cat("\n##### Clusters\n\n")
+          sizes <- table(mods$clusters)
+          cl_tab <- data.table::data.table(
+            cluster = as.integer(names(sizes)),
+            genes   = as.integer(sizes),
+            Gene_ID = vapply(names(sizes), function(k) paste(mods$Gene_ID[mods$clusters == k], collapse = ", "), character(1)))
+          cl_tab <- cl_tab[order(-cl_tab$genes, cl_tab$cluster)]
+          n_single <- sum(cl_tab$genes == 1)
+          cat(sprintf("**%d** clusters from %d genes; %d of them are single genes and are not listed.\n\n",
+                      nrow(cl_tab), nrow(mods), n_single))
+          make_table(cl_tab[cl_tab$genes > 1], sub("\\.txt$", ".csv", basename(mod_f)))
+        }
 
-    # Cluster assignments
-    cluster_files <- list.files(string_dir, pattern = "STRINGdb_all_modules_", full.names = TRUE)
-    if (length(cluster_files) > 0) {
-      cat("\n### Network Clusters\n\n")
-      for (f in cluster_files) {
-        df <- safe_read(f)
-        if (!is.null(df) && nrow(df) > 0) {
-          cat(sprintf("**%s** — %d clusters\n\n", basename(f), length(unique(df$clusters))))
-          make_table(df, gsub("\\.txt$", ".csv", basename(f)), max_rows = 20)
+        if (file.exists(enr_f)) {
+          cat("\n##### Functional enrichment (STRING)\n\n")
+          df <- safe_read(enr_f); sig <- filter_sig(df)
+          cat(sprintf("**%d** terms (**%d** at FDR < 0.05)\n\n", if (is.null(df)) 0 else nrow(df), if (is.null(sig)) 0 else nrow(sig)))
+          make_table(df, sub("\\.txt$", ".csv", basename(enr_f)))
+        }
+
+        enr_dirs <- list.dirs(sd, recursive = FALSE, full.names = TRUE)
+        enr_dirs <- enr_dirs[grepl(sprintf("^STRINGdb_modules_%s_%s_cluster[0-9]+_Gene_IDs_funct_enrichment_panther$", lab, set_up),
+                                   basename(enr_dirs))]
+        if (length(enr_dirs) > 0) {
+          cat("\n##### Cluster enrichment\n\n")
+          enr_dirs <- enr_dirs[order(as.integer(sub(".*_cluster([0-9]+)_Gene_IDs.*", "\\1", basename(enr_dirs))))]
+          for (ed in enr_dirs) {
+            cl <- sub(".*_cluster([0-9]+)_Gene_IDs.*", "\\1", basename(ed))
+            gl <- file.path(sd, sub("_funct_enrichment_panther$", ".txt", basename(ed)))
+            n_g <- if (file.exists(gl)) length(unique(readLines(gl, warn = FALSE))) else NA
+            cat(sprintf("\n**Cluster %s**%s\n\n", cl, if (is.na(n_g)) "" else sprintf(" (%d genes)", n_g)))
+            render_autogo_panther(ed, level = 6, csv_prefix = basename(ed))
+          }
         }
       }
-    }
-
-    # Network plots
-    string_pdfs <- list.files(string_dir, pattern = "\\.pdf$", full.names = TRUE)
-    if (show_plots && length(string_pdfs) > 0) {
-      cat("\n### Network Plots\n\n")
-      for (p in head(string_pdfs, 5)) embed_pdf(p, basename(p))
-      if (length(string_pdfs) > 5)
-        cat(sprintf("*...and %d more network plots in the archive*\n\n", length(string_pdfs) - 5))
     }
   }
 
@@ -1111,7 +1221,8 @@ if (has_network) {
   }
 
   if (!has_wgcna && !has_string && !has_bonobo) {
-    cat("*Network analyses were requested but no output files were found.*\n\n")
+    cat(sprintf("*No WGCNA, STRINGdb or BONOBO results were found.%s*\n\n",
+                if (net_gsea_any) " The GSEA from the network step is shown in each comparison." else ""))
   }
 }
 ```

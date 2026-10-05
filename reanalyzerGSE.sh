@@ -2493,7 +2493,8 @@ PYEOF
 					"$output_folder/$name/final_results_reanalysis$index/DGE" \
 					"$name" \
 					"$organism" \
-					"$report_mode" &> "$output_folder/$name/final_results_reanalysis$index/DGE/$report_log"
+					"$report_mode" \
+					"$clusterProfiler_universe" &> "$output_folder/$name/final_results_reanalysis$index/DGE/$report_log"
 				if [ $? -eq 0 ] && [ -f "$output_folder/$name/final_results_reanalysis$index/DGE/$report_html" ]; then
 					echo "Done! Report: $output_folder/$name/final_results_reanalysis$index/DGE/$report_html"
 				else

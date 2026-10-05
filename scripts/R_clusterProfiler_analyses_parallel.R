@@ -373,7 +373,9 @@ process_file <- function(file){
     } else if (uni=="all"){
       universe <- unname(as.character(eval(parse(text=paste0(gsub(".db","",orgDB),"SYMBOL")))))
       universe_2 <- entrez_ids_keys$ENTREZID
-    }  
+    }
+    writeLines(c(paste0("mode=", uni), paste0("genes=", length(unique(universe))), paste0("entrez=", length(unique(universe_2)))),
+               file.path(path2, "universe.txt"))
 
     if(all_analyses == "yes" || all_analyses == "no") {
       print(paste0("Processing ",file,"_",name_internal,"... Gene classification based on GO distribution at a specific level (2-6)"))

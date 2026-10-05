@@ -24,6 +24,7 @@ source(file.path(script_dir, "R_net_config.R"))
 .rgse_net_configure()
 
 .rgse_min_enrich_genes <- 5
+.rgse_min_cluster_genes <- 10
 
 .rgse_enrichr_tables <- function(genes, dbs, background = NULL, attempts = 6, empty_plausible_below = .rgse_min_enrich_genes) {
   if (length(genes) < empty_plausible_below) attempts <- 1L
@@ -392,9 +393,14 @@ process_file <- function(file){
   dir.create(path2, showWarnings = FALSE);setwd(path2);invisible(file.copy(file,paste0(path2,basename(file))))
   print(paste0("Processing autoGO for ",file2," and ",length(read.table(file,head=F)$V1)," genes..."))
   .bk_idx <- grep(file2,key_files$new_files)
+  if (length(.bk_idx) == 0) {
+    .bk_comp <- regmatches(file2, regexpr("DGE_analysis_comp[0-9]+", file2))
+    if (length(.bk_comp) == 1) .bk_idx <- which(basename(key_files$old_file) == paste0(.bk_comp, ".txt"))
+  }
   if (length(.bk_idx) == 0) print(paste0("No registered background for ",file2,"; falling back to the Enrichr default background, and Panther reference-gene analyses skipped"))
   expr_back <- if (length(.bk_idx) > 0 && file.exists(key_files$old_file[.bk_idx[1]])) convert_ids(read.table(key_files$old_file[.bk_idx[1]])$V1) else character(0)
   expr_back <- unique(expr_back[nzchar(expr_back) & expr_back != "Gene_ID"])
+  writeLines(paste0("detected_genes=", length(expr_back)), file.path(path2, "enrichment_background.txt"))
   
   # autoGO:
   Sys.sleep(runif(1, 0.5, 3.5))
@@ -463,7 +469,7 @@ process_file <- function(file){
                                        test_type = "FISHER",
                                        correction = padjustmethod,
                                        cutoff = 0.05)
-        if (dim(enriched_fisher_whole_back$result)[1]!=0){
+        if (NROW(enriched_fisher_whole_back$result) > 0){
           write.table(enriched_fisher_whole_back$result,file=paste0("enriched_fisher_whole_back_",annot_panther2,"_",padjustmethod,"_panther.txt"),col.names = T,row.names = F,quote = F,sep="\t")      
         }
       }, error = function(e) {
@@ -476,12 +482,13 @@ process_file <- function(file){
                                        test_type = "BINOMIAL",
                                        correction = padjustmethod,
                                        cutoff = 0.05)
-        if (dim(enriched_binom_whole_back$result)[1]!=0){
+        if (NROW(enriched_binom_whole_back$result) > 0){
           write.table(enriched_binom_whole_back$result,file=paste0("enriched_binom_whole_back_",annot_panther2,"_",padjustmethod,"_panther.txt"),col.names = T,row.names = F,quote = F,sep="\t")      
         }
       }, error = function(e) {
           writeLines(as.character(e),paste0("enriched_binom_whole_back_",annot_panther2,"_",padjustmethod,"_panther_err.txt"))
       })
+      if (length(expr_back) == 0) next
       tryCatch({
         enriched_fisher_expr_back <- rba_panther_enrich(genes = dataset,
                                        organism = org_panther,
@@ -491,7 +498,7 @@ process_file <- function(file){
                                        cutoff = 0.05,
                                        ref_genes = expr_back,
                                        ref_organism = org_panther)
-        if (dim(enriched_fisher_expr_back$result)[1]!=0){
+        if (NROW(enriched_fisher_expr_back$result) > 0){
           write.table(enriched_fisher_expr_back$result,file=paste0("enriched_fisher_expr_back_",annot_panther2,"_",padjustmethod,"_panther.txt"),col.names = T,row.names = F,quote = F,sep="\t")      
         }
       }, error = function(e) {
@@ -506,7 +513,7 @@ process_file <- function(file){
                                        cutoff = 0.05,
                                        ref_genes = expr_back,
                                        ref_organism = org_panther)
-        if (dim(enriched_binom_expr_back$result)[1]!=0){
+        if (NROW(enriched_binom_expr_back$result) > 0){
           write.table(enriched_binom_expr_back$result,file=paste0("enriched_binom_expr_back_",annot_panther2,"_",padjustmethod,"_panther.txt"),col.names = T,row.names = F,quote = F,sep="\t")      
         }
       }, error = function(e) {
@@ -524,10 +531,20 @@ process_file <- function(file){
 }
 
 if (separate_per_log=="yes"){
-  final_files_list <- grep(tools::file_path_sans_ext(pattern_search),list.files(path = path, pattern = "_Gene_IDs\\.txt$",recursive=T,full=T),val=T)
+  final_files_list <- grep(paste0(tools::file_path_sans_ext(pattern_search), "_"),list.files(path = path, pattern = "_Gene_IDs\\.txt$",recursive=T,full=T),val=T,fixed=T)
 } else {
-  final_files_list <- grep("log",grep(tools::file_path_sans_ext(pattern_search),list.files(path = path, pattern = "_Gene_IDs\\.txt$",recursive=T,full=T),val=T),invert=T,val=T)
+  final_files_list <- grep("log",grep(paste0(tools::file_path_sans_ext(pattern_search), "_"),list.files(path = path, pattern = "_Gene_IDs\\.txt$",recursive=T,full=T),val=T,fixed=T),invert=T,val=T)
 }
+
+.rgse_cluster_list <- grepl("/network_analyses/", final_files_list) | grepl("_cluster[0-9]+_Gene_IDs\\.txt$", basename(final_files_list))
+.rgse_list_size <- vapply(final_files_list, function(f) {
+  l <- tryCatch(readLines(f, warn = FALSE), error = function(e) character(0))
+  length(unique(l[nzchar(trimws(l))]))
+}, integer(1))
+.rgse_small <- .rgse_cluster_list & .rgse_list_size < .rgse_min_cluster_genes
+if (any(.rgse_small)) print(paste0("Skipping ", sum(.rgse_small), " network cluster gene list(s) with fewer than ",
+                                   .rgse_min_cluster_genes, " genes (enriching ", sum(.rgse_cluster_list & !.rgse_small), " cluster list(s))"))
+final_files_list <- final_files_list[!.rgse_small]
 
 mclapply(
     mc.cores = cores,

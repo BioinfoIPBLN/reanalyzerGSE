@@ -1,6 +1,6 @@
 #!/usr/bin/env Rscript
 # render_enrichment_report.R
-# Usage: render_enrichment_report.R <dge_dir> <project_name> <organism> [full|minimal]
+# Usage: render_enrichment_report.R <dge_dir> <project_name> <organism> [full|minimal] [cp_universe]
 #
 # Renders the functional enrichment RMarkdown report into a self-contained HTML
 # file inside the DGE directory (minimal: tables only, no images or plots). Will
@@ -8,13 +8,14 @@
 
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args) < 3) {
-  stop("Usage: render_enrichment_report.R <dge_dir> <project_name> <organism> [full|minimal]")
+  stop("Usage: render_enrichment_report.R <dge_dir> <project_name> <organism> [full|minimal] [cp_universe]")
 }
 
 dge_dir      <- args[1]
 project_name <- args[2]
 organism     <- args[3]
 mode         <- if (length(args) >= 4) args[4] else "full"
+cp_universe  <- if (length(args) >= 5) args[5] else ""
 if (!mode %in% c("full", "minimal"))
   stop(paste0("ERROR: unknown report mode '", mode, "', use full or minimal"))
 
@@ -42,7 +43,8 @@ rmarkdown::render(
     dge_dir      = normalizePath(dge_dir),
     project_name = project_name,
     organism     = organism,
-    minimal      = mode == "minimal"
+    minimal      = mode == "minimal",
+    cp_universe  = cp_universe
   ),
   envir = new.env(parent = globalenv()),
   quiet = FALSE
