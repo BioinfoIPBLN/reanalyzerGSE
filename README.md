@@ -2,7 +2,7 @@
 reanalyzerGSE is a pipeline to assist with and streamline transcriptomic analyses of various datasets (i.e. microarrays, RNA-seq, scRNA-seq) by automatically reanalyzing raw data submitted to public databases like [GEO](https://www.ncbi.nlm.nih.gov/geo/), [ENA](https://www.ebi.ac.uk/ena/browser/home) or [SRA](https://www.ncbi.nlm.nih.gov/sra). Local data can also be provided by the user. The pipeline is based on several steps implementing standard tools and novel scripts. (i.e. data download, quality control, alignment to reference genome, quantification, differential gene expression analyses, functional enrichment analyses...)
 
 ## Installation
-reanalyzerGSE is distributed as an Apptainer/Singularity container (~6 GB), which is the recommended and supported way to install it. You can either:
+reanalyzerGSE is distributed as an Apptainer/Singularity container (~2 GB), which is the recommended and supported way to install it. You can either:
 
 1) Use the .def file to create the .sif image by executing:
 ```
