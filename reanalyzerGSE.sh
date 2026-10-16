@@ -2308,7 +2308,7 @@ if run_step step6; then
 				cd $output_folder/$name/final_results_reanalysis$index/DGE/
 				echo -e "\nSTEP 6d: Functional enrichment completed: $(echo $files_to_process | wc -w) result file(s) produced. Formatting...\nCurrent date/time: $(date)\n"
 				_log_step "Step_6d_Format" "start"
-				printf '%s\n' $files_to_process | parallel --joblog R_enrich_format_analyses_parallel_log_parallel.txt -j $cores "file={}; R_enrich_format.R \"\$file\" \$(echo \"\$file\" | sed 's,DGE/.*,DGE/,g')\$(echo \"\$file\" | sed 's,.*DGE_analysis_comp,DGE_analysis_comp,g;s,_pval.*,,g;s,_fdr.*,,g;s,_funct.*,,g;s,_cluster.*,,g' | sed 's,.txt,,g').txt $organism $rev_thr" &> $PWD/enrichment_format.log
+				printf '%s\n' $files_to_process | parallel --joblog R_enrich_format_analyses_parallel_log_parallel.txt -j $cores "cd \"$output_folder/$name/final_results_reanalysis$index\" || exit 1; file={}; R_enrich_format.R \"\$file\" \$(echo \"\$file\" | sed 's,DGE/.*,DGE/,g')\$(echo \"\$file\" | sed 's,.*DGE_analysis_comp,DGE_analysis_comp,g;s,_pval.*,,g;s,_fdr.*,,g;s,_funct.*,,g;s,_cluster.*,,g' | sed 's,.txt,,g').txt $organism $rev_thr" &> $PWD/enrichment_format.log
 				_log_step "Step_6d_Format" "end"
 				echo -e "\nSTEP 6d: DONE\nCurrent date/time: $(date)\n"
 			else
