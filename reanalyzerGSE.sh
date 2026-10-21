@@ -299,7 +299,7 @@ if run_step step1; then
 		echo "ERROR: -o/-output_folder resolves to '/'. Refusing to wipe it. Exiting..."; exit 1
 	fi
 	mkdir -p "$output_folder"
-	rm -rf "$output_folder"/*
+	rm -rf "${output_folder:?}/${name:?}"
 	# Re-create step_times.tsv after rm -rf (which deletes it)
 	if [[ $debug_step == "all" ]]; then
 		mkdir -p "$output_folder/$name"
@@ -1890,6 +1890,7 @@ _log_step "Step_4_R_Process" "start"
 			_pre_go_outdir=$output_folder/$name/final_results_reanalysis$index/DGE
 			mkdir -p "$_pre_go_outdir"
 			_pre_go_outfile="$_pre_go_outdir/$(basename $_pre_go_annot).automatically_extracted_GO_terms.txt"
+			_pre_kegg_outfile="$_pre_go_outdir/$(basename $_pre_go_annot).automatically_extracted_KEGG_terms.txt"
 			if [ ! -f "$_pre_go_outfile" ]; then
 				echo "Pre-extracting GO and functional terms from $_pre_go_annot for merged tables..."
 				python3 $CURRENT_DIR/scripts/parse_functional_annotation.py \
@@ -1918,8 +1919,7 @@ _log_step "Step_4_R_Process" "start"
 		fi
     		echo 'R_qc_figs.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index "edgeR_object_prefilter" "edgeR_object" "edgeR_object_norm" $pattern_to_remove $annotation_file $fc_feat_type $split_sections' > $output_folder/$name/R_qc_figs.log
 			# Determine if per-section PDF splitting is needed for AI interleaving
-			_ai_val="${ai_insights:-all}"
-			if [ -n "$LLM_ENDPOINT" ] && [ "$_ai_val" != "no" ] && [ "$_ai_val" != "enrichment" ] && [ "$_ai_val" != "dge" ] && [ "$_ai_val" != "counts" ] && command -v qc_pdf_ai.py >/dev/null 2>&1; then
+			if [ -n "$LLM_ENDPOINT" ] && [ "${ai_do_qc_pdf:-0}" = 1 ] && command -v qc_pdf_ai.py >/dev/null 2>&1; then
 				split_sections="yes"
 			else
 				split_sections="no"
@@ -1944,7 +1944,7 @@ _log_step "Step_4_R_Process" "start"
 					"$output_folder/$name/reads_study_info/samples_info.txt" \
 					"$final_dir/DGE/list_comp.txt" \
 					"$final_dir/DGE" \
-					"^DGE_analysis_comp[0-9].txt$" \
+					"^DGE_analysis_comp[0-9]+\\.txt$" \
 					"$name" \
 					"$organism" \
 					"${_pre_go_outfile:-$non_reference_funct_enrichm}" 2>&1 | tee -a "$final_dir/DGE/deResults_prepare_SE.log"
@@ -2359,7 +2359,7 @@ if run_step step6; then
 					{ echo "# organism";     cat "$ai_rsi/organism.txt" 2>/dev/null
 					  echo; echo "# comparisons"; cat "$ai_dge_dir/list_comp.txt" 2>/dev/null
 					  echo; echo "# covariables / potential batch effects"
-					  cat "$ai_rsi/covariables.txt" "$ai_rsi/batch_vector.txt" "$ai_rsi/batch_biological_variable.txt" 2>/dev/null
+					  cat "$ai_rsi/covariables.txt" "$ai_rsi/batch_vector.txt" "$ai_rsi/batch_biological_variables.txt" 2>/dev/null
 					  echo; echo "# library layout";  cat "$output_folder/$name/library_layout_info.txt" 2>/dev/null
 					  echo; echo "# strandedness";    cat "$output_folder/$name/strand_info.txt" 2>/dev/null
 					  echo; echo "# samples (name, condition, batch)"; cat "$ai_sinfo"; } > "$ai_tmp"
@@ -2656,13 +2656,7 @@ if run_step step8; then
 	_log_step "Step_8_Report" "start"
 
 	# AI Insights for Qualimap and QC PDFs (only when LLM endpoint is provided)
-	ai_insights_val="${ai_insights:-all}"
-	if [ -n "$LLM_ENDPOINT" ] && [ "$ai_insights_val" != "no" ] && command -v llm_insight.py >/dev/null 2>&1; then
-		ai_do_qualimap=1
-		ai_do_qc_pdf=1
-		case "$ai_insights_val" in
-			enrichment|dge|counts) ai_do_qualimap=0; ai_do_qc_pdf=0 ;;
-		esac
+	if [ -n "$LLM_ENDPOINT" ] && [ $(( ${ai_do_qualimap:-0} + ${ai_do_qc_pdf:-0} )) -gt 0 ] && command -v llm_insight.py >/dev/null 2>&1; then
 
 		for index in "${!array[@]}"; do
 			ai_fdir="$output_folder/$name/final_results_reanalysis$index"

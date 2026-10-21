@@ -406,8 +406,10 @@ if [ -z "$name" ]; then
 		arrIN=(${input//,/ }); name=$(for a in "${arrIN[@]}"; do echo "$a"; done | sort | tr '\n' '_' | sed 's,_$,,g')
 	elif [[ $input == /* ]]; then
 		name=$(basename $input)
+	elif [[ $input =~ ^(PRJ(EB|NA|DB)|[EDS]RP|SAM[DEN]|[EDS]R[SXR])[0-9] ]]; then
+		name=$(echo "$input" | tr ',' '_')
 	else
-		echo "Please double check you have provided either a GEO ID (GSEXXXXXX) or a full pathway to input folder (/path/folder_name/) as the argument '-i'"; exit 1
+		echo "Please double check you have provided a GEO ID (GSEXXXXXX), an ENA/SRA accession (e.g. PRJNA..., SRP..., SRR...) or a full pathway to input folder (/path/folder_name/) as the argument '-i'"; exit 1
 	fi
 else
 	if [[ $input == G* ]]; then

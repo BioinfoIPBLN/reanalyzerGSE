@@ -23,7 +23,7 @@ if (length(unique(b)) == 1){
 	    isTRUE(all.equal(e[, i], e[, j]))
 	  }))
 	})
-	columns_to_discard <- unique(c("column_label",grep("AWS|ena_fastq|http|url",colnames(e),val=T),names(e)[dup_cols]))
+	columns_to_discard <- unique(c("column_label",grep("AWS|ena_fastq|http|url",colnames(e),val=T),names(e)[c(FALSE, dup_cols)]))
 	f <- e[,!(colnames(e) %in% columns_to_discard)]
 	
 	write.table(f,

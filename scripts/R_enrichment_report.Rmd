@@ -227,15 +227,27 @@ net_gsea_files <- function(comp, metric) {
   list.files(d, pattern = paste0("^GSEA_.*_", comp, "_", metric, "\\.txt$"), full.names = TRUE)
 }
 
-render_network_gsea <- function(comp) {
+cp_ranked_gsea <- function(cp_dir) {
+  if (is.na(cp_dir) || !dir.exists(cp_dir)) return(character(0))
+  f <- list.files(cp_dir, pattern = "_GSEA_readlist_fc_backg_.*\\.txt$", full.names = TRUE)
+  f[!grepl("_err\\.txt$|_aPEAR|_clusters|_similarity", f)]
+}
+
+render_gsea_ranked <- function(comp, cp_dir) {
+  cp_files <- cp_ranked_gsea(cp_dir)
   metrics <- c(FDR = "signed FDR", log2FC = "log2FC")
   files <- lapply(setNames(names(metrics), names(metrics)), function(m) net_gsea_files(comp, m))
-  if (length(unlist(files)) == 0) return(invisible(FALSE))
+  if (length(cp_files) == 0 && length(unlist(files)) == 0) return(invisible(FALSE))
   cat("\n## GSEA (ranked gene list) {.tabset}\n\n")
-  cat("Gene set enrichment analysis on every gene tested in this comparison, run in the network step; it does not depend on a DEG threshold.\n\n")
+  cat("Gene set enrichment analysis on every gene tested in this comparison; it does not depend on a DEG threshold.\n\n")
+  if (length(cp_files) > 0) {
+    cat("\n### clusterProfiler {.tabset}\n\n")
+    background_note("all genes tested in this comparison, ranked by log2FC.")
+    render_cp_gsea_groups(cp_files, comp)
+  }
   for (m in names(metrics)) {
     if (length(files[[m]]) == 0) next
-    cat(sprintf("\n### Ranked by %s {.tabset}\n\n", metrics[[m]]))
+    cat(sprintf("\n### Network step, ranked by %s {.tabset}\n\n", metrics[[m]]))
     background_note(if (m == "FDR") "all genes tested in this comparison, ranked by -log10(FDR) multiplied by the sign of log2FC."
                     else "all genes tested in this comparison, ranked by log2FC.")
     for (f in files[[m]]) {
@@ -389,6 +401,33 @@ threshold_label <- function(tok) {
 # level-2 threshold tab. `primary` (the FDR<0.05 tab) is where shared, non
 # threshold-specific pathway images (KEGG / Reactome snapshots) are embedded, so
 # they are not duplicated across both threshold tabs.
+render_cp_gsea_groups <- function(gsea, comp) {
+  gsea_one <- function(f) {
+    df <- safe_read(f); n_total <- if (is.null(df)) 0 else nrow(df)
+    sig <- filter_sig(df); n_sig <- if (!is.null(sig)) nrow(sig) else 0
+    cat(sprintf("**%s** (%d rows, %d significant)\n\n", basename(f), n_total, n_sig))
+    make_table(df, csv_name(comp, f))
+  }
+  go_gsea <- gsea[grepl("^GO_GSEA_", basename(gsea))]
+  if (length(go_gsea)) {
+    cat("\n#### GO GSEA {.tabset}\n\n")
+    for (g in list(list(f = go_gsea[grepl("_BP\\.", basename(go_gsea))],  l = "GO BP GSEA"),
+                   list(f = go_gsea[grepl("_MF\\.", basename(go_gsea))],  l = "GO MF GSEA"),
+                   list(f = go_gsea[grepl("_CC\\.", basename(go_gsea))],  l = "GO CC GSEA"),
+                   list(f = go_gsea[!grepl("_BP\\.|_MF\\.|_CC\\.", basename(go_gsea))], l = "GO ALL GSEA"))) {
+      if (length(g$f)) { cat(sprintf("\n##### %s\n\n", g$l)); for (f in head(g$f, 2)) gsea_one(f) }
+    }
+  }
+  blk <- function(sel, title, n = 2) {
+    if (length(sel)) { cat(sprintf("\n#### %s\n\n", title)); for (f in head(sel, n)) gsea_one(f) }
+  }
+  blk(gsea[grepl("^KEGG_GSEA_|^KEGG_DOSE_", basename(gsea))], "KEGG GSEA")
+  blk(gsea[grepl("^MKEGG_GSEA_", basename(gsea))], "KEGG Module GSEA")
+  blk(gsea[grepl("^WP_GSEA_", basename(gsea))], "WikiPathways GSEA")
+  blk(gsea[grepl("^REACT_GSEA_", basename(gsea))], "Reactome GSEA")
+  blk(gsea[grepl("^DO_GSEA_|^NCG_GSEA_|^DGN_GSEA_", basename(gsea))], "Disease Ontology GSEA", 4)
+}
+
 render_cp_threshold <- function(cp_dir, comp, tok, full_mode_ran, primary, net_gsea = FALSE) {
   full_mode_note <- function(what) {
     if (full_mode_ran) { cat("*Not available*\n\n"); return(invisible()) }
@@ -505,35 +544,10 @@ render_cp_threshold <- function(cp_dir, comp, tok, full_mode_ran, primary, net_g
   gsea <- gsea[!grepl("_err\\.txt$|_aPEAR|_clusters|_similarity", gsea)]
   gsea <- gsea[which(vapply(gsea, threshold_token, character(1)) == tok)]
   if (!length(gsea)) {
-    cat("\n### GSEA\n\n")
-    if (net_gsea) cat("clusterProfiler's own GSEA runs only with <code>clusterProfiler_full: yes</code>. The GSEA from the network step, on all genes tested in this comparison, is in this comparison's <strong>GSEA (ranked gene list)</strong> tab.\n\n")
-    else full_mode_note("Gene Set Enrichment Analysis (GSEA)")
+    if (!net_gsea) { cat("\n### GSEA\n\n"); full_mode_note("Gene Set Enrichment Analysis (GSEA)") }
   } else {
     cat("\n### GSEA {.tabset}\n\n")
-    gsea_one <- function(f) {
-      df <- safe_read(f); n_total <- if (is.null(df)) 0 else nrow(df)
-      sig <- filter_sig(df); n_sig <- if (!is.null(sig)) nrow(sig) else 0
-      cat(sprintf("**%s** (%d rows, %d significant)\n\n", basename(f), n_total, n_sig))
-      make_table(df, csv_name(comp, f))
-    }
-    go_gsea <- gsea[grepl("^GO_GSEA_", basename(gsea))]
-    if (length(go_gsea)) {
-      cat("\n#### GO GSEA {.tabset}\n\n")
-      for (g in list(list(f = go_gsea[grepl("_BP\\.", basename(go_gsea))],  l = "GO BP GSEA"),
-                     list(f = go_gsea[grepl("_MF\\.", basename(go_gsea))],  l = "GO MF GSEA"),
-                     list(f = go_gsea[grepl("_CC\\.", basename(go_gsea))],  l = "GO CC GSEA"),
-                     list(f = go_gsea[!grepl("_BP\\.|_MF\\.|_CC\\.", basename(go_gsea))], l = "GO ALL GSEA"))) {
-        if (length(g$f)) { cat(sprintf("\n##### %s\n\n", g$l)); for (f in head(g$f, 2)) gsea_one(f) }
-      }
-    }
-    blk <- function(sel, title, n = 2) {
-      if (length(sel)) { cat(sprintf("\n#### %s\n\n", title)); for (f in head(sel, n)) gsea_one(f) }
-    }
-    blk(gsea[grepl("^KEGG_GSEA_|^KEGG_DOSE_", basename(gsea))], "KEGG GSEA")
-    blk(gsea[grepl("^MKEGG_GSEA_", basename(gsea))], "KEGG Module GSEA")
-    blk(gsea[grepl("^WP_GSEA_", basename(gsea))], "WikiPathways GSEA")
-    blk(gsea[grepl("^REACT_GSEA_", basename(gsea))], "Reactome GSEA")
-    blk(gsea[grepl("^DO_GSEA_|^NCG_GSEA_|^DGN_GSEA_", basename(gsea))], "Disease Ontology GSEA", 4)
+    render_cp_gsea_groups(gsea, comp)
   }
   invisible()
 }
@@ -869,7 +883,7 @@ for (idx in seq_along(comp_names)) {
   cp_dir <- cp_dirs[idx]  # may be NA if only panther exists
 
   comp_num <- gsub("\\D", "", comp)
-  has_net_gsea <- length(net_gsea_files(comp, "FDR")) + length(net_gsea_files(comp, "log2FC")) > 0
+  has_net_gsea <- length(cp_ranked_gsea(cp_dirs[idx])) + length(net_gsea_files(comp, "FDR")) + length(net_gsea_files(comp, "log2FC")) > 0
   cat(sprintf("\n\n# Comparison %s {.tabset .tabset-pills}\n\n", comp_num))
 
   # Optional AI narrative for this comparison (above the tabs; absent unless enabled),
@@ -1017,7 +1031,7 @@ for (idx in seq_along(comp_names)) {
     cat("\n*clusterProfiler results not found for this comparison*\n\n")
   }
 
-  render_network_gsea(comp)
+  render_gsea_ranked(comp, cp_dir)
 
   # ── autoGO / Enrichr ────────────────────────────────────────────────────────
   pant_dirs <- panther_dirs_all[grepl(paste0("^", comp, "_"), basename(panther_dirs_all))]

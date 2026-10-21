@@ -2802,7 +2802,7 @@ sub hisat2{
 			my $memorylimit_div = int($memorylimit / ($parallelnumber + 2));
 			my $memorylimit_div_mb = int($memorylimit_in_mb / ($parallelnumber + 2));
 			my $threads_sort = int($threads / 2);
-			my $memorylimit_div_mb_sort_cores = int($memorylimit_div_mb / ($threads / 2));
+			my $memorylimit_div_mb_sort_cores = int($memorylimit_div_mb / ($threads >= 2 ? $threads / 2 : 1));
 			
 			# Build pipeline command for PE
 			my $filter_part = "";
@@ -2908,7 +2908,7 @@ sub hisat2{
 			my $memorylimit_div = int($memorylimit / ($parallelnumber + 2));
 			my $memorylimit_div_mb = int($memorylimit_in_mb / ($parallelnumber + 2));
 			my $threads_sort = int($threads / 2);
-			my $memorylimit_div_mb_sort_cores = int($memorylimit_div_mb / ($threads / 2));
+			my $memorylimit_div_mb_sort_cores = int($memorylimit_div_mb / ($threads >= 2 ? $threads / 2 : 1));
 			if(lc($strand) eq "reverse"){
 				$hisatpardef.= " --rna-strandness R";
 			}
@@ -3333,7 +3333,7 @@ sub star{
 		my $memorylimit_div = int($memorylimit / ($parallelnumber + 2));
 		my $memorylimit_div_mb = int($memorylimit_in_mb / ($parallelnumber + 2));
 		my $threads_sort = int($threads / 2);
-		my $memorylimit_div_mb_sort_cores = int($memorylimit_div_mb / ($threads / 2));
+		my $memorylimit_div_mb_sort_cores = int($memorylimit_div_mb / ($threads >= 2 ? $threads / 2 : 1));
 		
 		# Build pipeline command for STAR PE
 		my $filter_part = " | samtools view -h -S "; # Start with samtools view -S for SAM input
@@ -3471,7 +3471,7 @@ sub star{
 			my $memorylimit_div = int($memorylimit / ($parallelnumber + 2));
 			my $memorylimit_div_mb = int($memorylimit_in_mb / ($parallelnumber + 2));
 			my $threads_sort = int($threads / 2);
-			my $memorylimit_div_mb_sort_cores = int($memorylimit_div_mb / ($threads / 2));
+			my $memorylimit_div_mb_sort_cores = int($memorylimit_div_mb / ($threads >= 2 ? $threads / 2 : 1));
 			print STDOUT "\tSTAR :: ".date()." Checking $file for star (single-end) analysis\n" if($verbose);
 			if($file =~ /\.gz$/){
 				$starpardef.= " --readFilesCommand gunzip -c ";

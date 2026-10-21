@@ -127,6 +127,11 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   # Name the color vector by normalized sample name for correct mapping after reordering (e.g. corrplot AOE)
   sample_names_for_col <- rgse_resolve_collisions(rgse_sample_id(colnames(x$counts)), colnames(x$counts), "count column names")
   names(col.group) <- sample_names_for_col
+  leaf_colours <- function(hc) {
+    cols <- unname(col.group[hc$labels[hc$order]])
+    cols[is.na(cols)] <- "black"
+    cols
+  }
 
 ### QC figures:
   tables_dir <- file.path(output_dir, "QC_and_others", if (label2 == "norm") "tables" else paste0("tables_", label2))
@@ -600,17 +605,16 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   ### 6. PCA
   cat("\n[7/12] PCA plots\n")
   open_section_pdf("07_pca")
-  data_pca <- as.matrix(x)
-  data_pca <- as.data.frame(t(data_pca))
+  data_pca <- as.data.frame(t(lcpm2))
   rownames(data_pca) <- targets$Name
   data_pca.PC = prcomp(data_pca)
   data_pca$Type <- targets$Type
   data_pca$Filename <- targets$Filename
   data_pca$Name <- targets$Name
-  autoplot(data_pca.PC,label=T,data=data_pca,colour=col.group,xlim = c(-0.8,0.8),label.size=3,label.repel=T) + theme_minimal() + ggtitle("PCA")
+  print(suppressWarnings(autoplot(data_pca.PC,label=T,data=data_pca,colour=col.group,label.size=3,label.repel=T) + theme_minimal() + ggtitle("PCA (log2-CPM)")))
   
   rownames(data_pca) <- data_pca$Filename
-  print(suppressWarnings(autoplot(data_pca.PC,label=T,data=data_pca,colour=col.group,xlim = c(-0.8,0.8),label.size=3,label.repel=T) + theme_minimal() + ggtitle("PCA")))
+  print(suppressWarnings(autoplot(data_pca.PC,label=T,data=data_pca,colour=col.group,label.size=3,label.repel=T) + theme_minimal() + ggtitle("PCA (log2-CPM)")))
 
   tryCatch({
     write.table(cor_sp, file = file.path(tables_dir, "05_spearman_correlation.tsv"), sep = "\t", quote = FALSE)
@@ -628,13 +632,13 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   ### 7. Heatmap 250 most differential entities
   cat("\n[8/12] Heatmap (top 250 most variable)\n")
   open_section_pdf("08_heatmap")
-  rsd <- rowSds(as.matrix(x))
-  sel <- order(rsd, decreasing=TRUE)[1:250]
+  rsd <- rowSds(lcpm2)
+  sel <- order(rsd, decreasing=TRUE)[seq_len(min(250, nrow(lcpm2)))]
   
-  heatmap(na.omit(as.matrix(x[sel,])),margins=c(10,8),main="Heatmap 250 most diff entities raw counts",cexRow=0.01,cexCol=0.5,labCol=rgse_sample_id(rownames(x$samples)))
+  heatmap(na.omit(lcpm2[sel, , drop = FALSE]),margins=c(10,8),main="Heatmap of the 250 most variable genes (log2-CPM)",cexRow=0.01,cexCol=0.5,labCol=rgse_sample_id(rownames(x2$samples)))
 
   tryCatch({
-    top250_df <- data.frame(Gene = rownames(x)[sel], StandardDev = rsd[sel])
+    top250_df <- data.frame(Gene = rownames(lcpm2)[sel], StandardDev = rsd[sel])
     write.table(top250_df, file = file.path(tables_dir, "08_top250_variable_genes.tsv"), sep = "\t", quote = FALSE, row.names = FALSE)
   }, error = function(e) NULL)
   
@@ -647,9 +651,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of normalized counts all genes from samples of ", label, sep=""), cex=0.5)
   
   ### 8.2. Dendogram cluster raw norm colored
-  groups <- as.factor(x$samples$group)
-  group_index <- as.numeric(groups[pr.hc.c$order])
-  suppressWarnings(print(ggdendrogram(pr.hc.c, rotate = FALSE, theme_dendro=F) + theme_minimal() + theme(axis.text.x = element_text(face="bold", color=unique(col.group)[group_index])) + 
+  suppressWarnings(print(ggdendrogram(pr.hc.c, rotate = FALSE, theme_dendro=F) + theme_minimal() + theme(axis.text.x = element_text(face="bold", color=leaf_colours(pr.hc.c))) + 
     labs(title=paste("Hierarchical Clustering of normalized counts from samples of ", label, sep=""), y="Height",x="Samples") + ggpubr::rotate_x_text() + ylim(c(min(pr.hc.c$height),tail(sort(pr.hc.c$height),2)[1]))))
   
   ### 8.3. Dendogram cluster raw norm log
@@ -659,9 +661,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   plot(pr.hc.c, xlab="Sample Distance",main=paste("Hierarchical Clustering of log2 normalized counts all genes from samples of ", label, sep=""), cex=0.5)
   
   ### 8.4. Dendogram cluster raw norm log colored
-  groups <- as.factor(x$samples$group)
-  group_index <- as.numeric(groups[pr.hc.c$order])
-  suppressWarnings(print(ggdendrogram(pr.hc.c, rotate = FALSE, theme_dendro=F) + theme_minimal() + theme(axis.text.x = element_text(face="bold", color=unique(col.group)[group_index])) +
+  suppressWarnings(print(ggdendrogram(pr.hc.c, rotate = FALSE, theme_dendro=F) + theme_minimal() + theme(axis.text.x = element_text(face="bold", color=leaf_colours(pr.hc.c))) +
     labs(title=paste("Hierarchical Clustering of normalized counts from samples of ", label, sep=""), y="Height",x="Samples") + ggpubr::rotate_x_text() + ylim(c(min(pr.hc.c$height),tail(sort(pr.hc.c$height),2)[1]))))
 
   tryCatch({
@@ -822,12 +822,10 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
            cex = 0.5)
 
       # ggdendro colored version
-      groups_top <- as.factor(x$samples$group)
-      group_index_top <- as.numeric(groups_top[hc_top$order])
       p_dend <- suppressWarnings(ggdendrogram(hc_top, rotate = FALSE, theme_dendro = FALSE) +
         theme_minimal() +
         theme(axis.text.x = element_text(face = "bold",
-                                         color = unique(col.group)[group_index_top])) +
+                                         color = leaf_colours(hc_top))) +
         labs(title = paste0("Clustering top ", n_top, " genes (ward.D2)"),
              y = "Height", x = "Samples") +
         ggpubr::rotate_x_text() +
@@ -1042,7 +1040,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
           }
 
           # Setup parallel environment
-          num_workers <- length(bam_files)
+          num_workers <- max(1L, min(length(bam_files), suppressWarnings(as.integer(Sys.getenv("RGSE_CORES", unset = "4"))), na.rm = TRUE), na.rm = TRUE)
           bpparam <- MulticoreParam(workers = num_workers)
           
           bin_mat_list <- bplapply(bam_files, function(bfile) {
@@ -1138,8 +1136,8 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
    "04_alignment_categories" = if (qc_alignment_kind == "kallisto") "Pseudoalignment: reads per sample and the percentage pseudoaligned by kallisto." else "Reads and alignment: reads in the FASTQ and BAM files of each sample (with the BAM/FASTQ percentage) and the aligner's read categories (e.g. uniquely mapped, multi-mapped, unmapped) as counts and proportions; each part appears only when its statistics were available.",
    "05_correlation" = "Sample correlation: Spearman and Pearson correlation of the normalised expression between every pair of samples, as ordered colour matrices and with the coefficients printed.",
    "06_mds_pcoa" = "MDS (PCoA): distances between samples from the normalised expression, on linear and log2 scale, labelled by sample name and by file name; replicates of a condition should group together.",
-   "07_pca" = "PCA: the samples on the first two principal components of the gene counts, coloured by condition and labelled by sample name and by file name.",
-   "08_heatmap" = "Heatmap: counts of the 250 most variable genes, with genes and samples clustered.",
+   "07_pca" = "PCA: the samples on the first two principal components of the normalised log2-CPM, coloured by condition and labelled by sample name and by file name.",
+   "08_heatmap" = "Heatmap: normalised log2-CPM of the 250 most variable genes, with genes and samples clustered.",
    "09_dendrograms" = "Hierarchical clustering: sample dendrograms from the Euclidean distance between the normalised counts, on linear and log2 scale.",
    "10_top_overrepresented" = "Most abundant genes: share of each sample's reads taken by its top 5 and top 10 genes, to spot libraries dominated by a few genes (e.g. rRNA or mitochondrial).",
    "11_top100_correlation" = "Correlation on the 100 most variable genes: Spearman and Pearson matrices and a Ward.D2 dendrogram, from the log2 normalised CPM of those genes.",

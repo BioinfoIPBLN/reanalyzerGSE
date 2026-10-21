@@ -117,10 +117,13 @@ if (gene_ids_are_ensembl) {
 cat("\n\n[3/6] Reading DE results and comparisons...")
 list_comps <- read_tsv(input_list_comp, col_names = F, show_col_types = FALSE)
 deg_results_files <- list.files(input_path_deg_results, pattern_deg_results, full.names = T)
+comp_numbers <- suppressWarnings(as.integer(sub(".*comp([0-9]+)\\.txt$", "\\1", basename(deg_results_files))))
+deg_results_files <- deg_results_files[order(comp_numbers)]
+comp_numbers <- comp_numbers[order(comp_numbers)]
 
 # Parse comparison names and filter out empty/blank ones
-comparisons <- lapply(1:length(deg_results_files), function(i) {
-  paste(grep(paste0("Comparison number ", i), list_comps$X1, value = TRUE) %>% gsub(".*__", "", .), collapse = "__")
+comparisons <- lapply(seq_along(deg_results_files), function(i) {
+  paste(grep(paste0("^\\s*Comparison number ", comp_numbers[i], ": "), list_comps$X1, value = TRUE) %>% gsub(".*__", "", .), collapse = "__")
 }) %>% unlist
 # Filter out empty comparison names (from trailing empty entries in list_comp.txt)
 valid_comps <- nchar(trimws(comparisons)) > 0

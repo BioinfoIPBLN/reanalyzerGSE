@@ -127,8 +127,22 @@ server <- function(input, output, session) {
     return(fai_path)
   }
   
-  read_bw_as_bedgraph <- function(bw_path) {
-    bw <- as.data.frame(rtracklayer::import(bw_path))
+  locus_region <- function(locus) {
+    if (is.null(locus)) return(NULL)
+    locus_clean <- gsub(",", "", locus)
+    chrom  <- sub(":.*", "", locus_clean)
+    coords <- sub(".*:", "", locus_clean)
+    start  <- suppressWarnings(as.integer(sub("-.*", "", coords)))
+    end    <- suppressWarnings(as.integer(sub(".*-", "", coords)))
+    if (!nzchar(chrom) || is.na(start) || is.na(end) || end < start) return(NULL)
+    width <- end - start + 1
+    GenomicRanges::GRanges(chrom, IRanges::IRanges(max(1, start - width), end + width))
+  }
+
+  read_bw_as_bedgraph <- function(bw_path, locus = NULL) {
+    region <- locus_region(locus)
+    bw <- if (is.null(region)) rtracklayer::import(bw_path) else rtracklayer::import(bw_path, which = region)
+    bw <- as.data.frame(bw)
     data.frame(
       chrom = as.character(bw$seqnames),
       start = bw$start - 1,
@@ -263,24 +277,20 @@ server <- function(input, output, session) {
     runjs("$('#main').css('width', '100%');")
   })
   
-  observeEvent(input$igvReady, {
-    req(loaded$bws)
-    message("IGV ready - loading tracks")
-    
-    load_annotation(loaded$locus)
-    
+  load_bigwigs <- function(locus) {
     bws    <- loaded$bws
     colors <- colorRampPalette(c("#2166AC", "#F46D43", "#4DAC26",
                                  "#8B008B", "#FF8C00"))(length(bws))
-    
+    track_names <- sub("\\.bam\\.bw$|\\.bw$", "", basename(bws))
+    try(removeTracksByName(session, "igvShiny_0", track_names), silent = TRUE)
     for (i in seq_along(bws)) {
       tryCatch({
         message("Loading BigWig: ", basename(bws[i]))
-        tbl.bw <- read_bw_as_bedgraph(bws[i])
+        tbl.bw <- read_bw_as_bedgraph(bws[i], locus)
         loadBedGraphTrack(
           session,
           id        = "igvShiny_0",
-          trackName = sub("\\.bam\\.bw$|\\.bw$", "", basename(bws[i])),
+          trackName = track_names[i],
           tbl       = tbl.bw,
           color     = colors[i],
           autoscale = TRUE
@@ -292,9 +302,17 @@ server <- function(input, output, session) {
                          type = "error")
       })
     }
+  }
+
+  observeEvent(input$igvReady, {
+    req(loaded$bws)
+    message("IGV ready - loading tracks")
+    
+    load_annotation(loaded$locus)
+    load_bigwigs(loaded$locus)
     
     showNotification(
-      paste0("Loaded annotation + ", length(bws), " BigWig file(s)!"),
+      paste0("Loaded annotation + ", length(loaded$bws), " BigWig file(s)!"),
       type = "message", duration = 5
     )
   })
@@ -303,8 +321,9 @@ server <- function(input, output, session) {
     req(loaded$gtf)
     newLoc <- input[[sprintf("currentGenomicRegion.%s", "igvShiny_0")]]
     loaded$locus <- newLoc
-    message("Region changed to: ", newLoc, " - reloading annotation")
+    message("Region changed to: ", newLoc, " - reloading annotation and coverage")
     load_annotation(newLoc)
+    if (length(loaded$bws)) load_bigwigs(newLoc)
   })
 }
 

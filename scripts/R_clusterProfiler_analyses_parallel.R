@@ -652,7 +652,7 @@ process_file <- function(file){
                 ggsave(p, filename = paste0("KEGG_enrich_",i,"_",geneset,"_aPEAR.pdf"),width=15, height=15)
                 suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0("KEGG_enrich_",i,"_",geneset,"_aPEAR.html"),selfcontained = TRUE))
                 write.table(clusters$clusters,file=paste0("KEGG_enrich_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-                write.table(clusters$similarity,file=paste0("KEGG_enrich_",i,"_",geneset,"_aPEAR_clusters.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                write.table(clusters$similarity,file=paste0("KEGG_enrich_",i,"_",geneset,"_aPEAR_similarity.txt"),col.names = T,row.names = F,quote = F,sep="\t")
               }
           }, error = function(e) {
               writeLines(as.character(e), paste0("KEGG_enrich_",i,"_",geneset,"_err.txt"))
@@ -733,9 +733,9 @@ process_file <- function(file){
       ###### 7. Gene Set Enrichment Analysis of Gene Ontology:
           while(dev.cur() > 1) dev.off()
           Sys.sleep(sample(1:5, size = 1))
-          if(geneset=="fdr_05" || geneset=="fdr_01"){
-              f <- paste0("readlist_fc_",geneset)
-              b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- convert_ids(gsub(paste0(f,"."),"",names(b)),mode)
+          if(identical(geneset, .rgse_gsea_unit)){
+              f <- "readlist_fc_backg"
+              b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- convert_ids(gsub(paste0(f,"."),"",names(b)),mode); b <- b[!is.na(names(b)) & nzchar(names(b)) & !duplicated(names(b))]
               tryCatch({
                         gse_enrich <- c(); Sys.sleep(sample(1:5, size = 1))
                         gse_enrich <- suppressMessages(gseGO(geneList= b,                                           
@@ -787,8 +787,8 @@ process_file <- function(file){
                         write.table(df,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_BP.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                         suppressMessages(ggsave(goplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_BP.pdf"),width=15, height=15))
                         suppressMessages(ggsave(dotplot(gse_enrich, showCategory=20), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_BP_dotplot.pdf"),width=15, height=15))
-                        suppressMessages(ggsave(cnetplot(gse_enrich,foldChange=sort(eval(parse(text=f)),decreasing = T)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_BP_cnetplot.pdf"),width=15, height=15))
-                        suppressMessages(ggsave(heatplot(gse_enrich, showCategory=20,foldChange=sort(eval(parse(text=f)),decreasing = T)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_BP_heatplot.pdf"),width=15, height=15))
+                        suppressMessages(ggsave(cnetplot(gse_enrich,foldChange=b), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_BP_cnetplot.pdf"),width=15, height=15))
+                        suppressMessages(ggsave(heatplot(gse_enrich, showCategory=20,foldChange=b), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_BP_heatplot.pdf"),width=15, height=15))
                         suppressMessages(ggsave(treeplot(pairwise_termsim(gse_enrich)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_BP_treeplot.pdf"),width=15, height=15))
                         suppressMessages(ggsave(emapplot(pairwise_termsim(gse_enrich)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_BP_emapplot.pdf"),width=15, height=15))
                         suppressMessages(ggsave(upsetplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_BP_upsetplot.pdf"),width=15, height=15))
@@ -826,8 +826,8 @@ process_file <- function(file){
                         write.table(df,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_MF.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                         suppressMessages(ggsave(goplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_MF.pdf"),width=15, height=15))
                         suppressMessages(ggsave(dotplot(gse_enrich, showCategory=20), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_MF_dotplot.pdf"),width=15, height=15))
-                        suppressMessages(ggsave(cnetplot(gse_enrich,foldChange=sort(eval(parse(text=f)),decreasing = T)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_MF_cnetplot.pdf"),width=15, height=15))
-                        suppressMessages(ggsave(heatplot(gse_enrich, showCategory=20,foldChange=sort(eval(parse(text=f)),decreasing = T)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_MF_heatplot.pdf"),width=15, height=15))
+                        suppressMessages(ggsave(cnetplot(gse_enrich,foldChange=b), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_MF_cnetplot.pdf"),width=15, height=15))
+                        suppressMessages(ggsave(heatplot(gse_enrich, showCategory=20,foldChange=b), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_MF_heatplot.pdf"),width=15, height=15))
                         suppressMessages(ggsave(treeplot(pairwise_termsim(gse_enrich)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_MF_treeplot.pdf"),width=15, height=15))
                         suppressMessages(ggsave(emapplot(pairwise_termsim(gse_enrich)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_MF_emapplot.pdf"),width=15, height=15))
                         suppressMessages(ggsave(upsetplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_MF_upsetplot.pdf"),width=15, height=15))
@@ -865,8 +865,8 @@ process_file <- function(file){
                         write.table(df,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_CC.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                         suppressMessages(ggsave(goplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_CC.pdf"),width=15, height=15))
                         suppressMessages(ggsave(dotplot(gse_enrich, showCategory=20), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_CC_dotplot.pdf"),width=15, height=15))
-                        suppressMessages(ggsave(cnetplot(gse_enrich,foldChange=sort(eval(parse(text=f)),decreasing = T)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_CC_cnetplot.pdf"),width=15, height=15))
-                        suppressMessages(ggsave(heatplot(gse_enrich, showCategory=20,foldChange=sort(eval(parse(text=f)),decreasing = T)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_CC_heatplot.pdf"),width=15, height=15))
+                        suppressMessages(ggsave(cnetplot(gse_enrich,foldChange=b), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_CC_cnetplot.pdf"),width=15, height=15))
+                        suppressMessages(ggsave(heatplot(gse_enrich, showCategory=20,foldChange=b), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_CC_heatplot.pdf"),width=15, height=15))
                         suppressMessages(ggsave(treeplot(pairwise_termsim(gse_enrich)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_CC_treeplot.pdf"),width=15, height=15))
                         suppressMessages(ggsave(emapplot(pairwise_termsim(gse_enrich)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_CC_emapplot.pdf"),width=15, height=15))
                         suppressMessages(ggsave(upsetplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_CC_upsetplot.pdf"),width=15, height=15))
@@ -936,8 +936,8 @@ process_file <- function(file){
                         write.table(df,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_BP.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                         suppressMessages(ggsave(goplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_BP.pdf"),width=15, height=15))
                         suppressMessages(ggsave(dotplot(gse_enrich, showCategory=20), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_BP_dotplot.pdf"),width=15, height=15))
-                        suppressMessages(ggsave(cnetplot(gse_enrich,foldChange=sort(eval(parse(text=f)),decreasing = T)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_BP_cnetplot.pdf"),width=15, height=15))
-                        suppressMessages(ggsave(heatplot(gse_enrich, showCategory=20,foldChange=sort(eval(parse(text=f)),decreasing = T)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_BP_heatplot.pdf"),width=15, height=15))
+                        suppressMessages(ggsave(cnetplot(gse_enrich,foldChange=b), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_BP_cnetplot.pdf"),width=15, height=15))
+                        suppressMessages(ggsave(heatplot(gse_enrich, showCategory=20,foldChange=b), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_BP_heatplot.pdf"),width=15, height=15))
                         suppressMessages(ggsave(treeplot(pairwise_termsim(gse_enrich)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_BP_treeplot.pdf"),width=15, height=15))
                         suppressMessages(ggsave(emapplot(pairwise_termsim(gse_enrich)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_BP_emapplot.pdf"),width=15, height=15))
                         suppressMessages(ggsave(upsetplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_BP_upsetplot.pdf"),width=15, height=15))
@@ -976,8 +976,8 @@ process_file <- function(file){
                         write.table(df,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_MF.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                         suppressMessages(ggsave(goplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_MF.pdf"),width=15, height=15))
                         suppressMessages(ggsave(dotplot(gse_enrich, showCategory=20), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_MF_dotplot.pdf"),width=15, height=15))
-                        suppressMessages(ggsave(cnetplot(gse_enrich,foldChange=sort(eval(parse(text=f)),decreasing = T)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_MF_cnetplot.pdf"),width=15, height=15))
-                        suppressMessages(ggsave(heatplot(gse_enrich, showCategory=20,foldChange=sort(eval(parse(text=f)),decreasing = T)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_MF_heatplot.pdf"),width=15, height=15))
+                        suppressMessages(ggsave(cnetplot(gse_enrich,foldChange=b), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_MF_cnetplot.pdf"),width=15, height=15))
+                        suppressMessages(ggsave(heatplot(gse_enrich, showCategory=20,foldChange=b), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_MF_heatplot.pdf"),width=15, height=15))
                         suppressMessages(ggsave(treeplot(pairwise_termsim(gse_enrich)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_MF_treeplot.pdf"),width=15, height=15))
                         suppressMessages(ggsave(emapplot(pairwise_termsim(gse_enrich)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_MF_emapplot.pdf"),width=15, height=15))
                         suppressMessages(ggsave(upsetplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_MF_upsetplot.pdf"),width=15, height=15))
@@ -1016,8 +1016,8 @@ process_file <- function(file){
                         write.table(df,file=paste0("GO_GSEA_",f,"_",i,"_DOSE_CC.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                         suppressMessages(ggsave(goplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_CC.pdf"),width=15, height=15))
                         suppressMessages(ggsave(dotplot(gse_enrich, showCategory=20), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_CC_dotplot.pdf"),width=15, height=15))
-                        suppressMessages(ggsave(cnetplot(gse_enrich,foldChange=sort(eval(parse(text=f)),decreasing = T)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_CC_cnetplot.pdf"),width=15, height=15))
-                        suppressMessages(ggsave(heatplot(gse_enrich, showCategory=20,foldChange=sort(eval(parse(text=f)),decreasing = T)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_CC_heatplot.pdf"),width=15, height=15))
+                        suppressMessages(ggsave(cnetplot(gse_enrich,foldChange=b), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_CC_cnetplot.pdf"),width=15, height=15))
+                        suppressMessages(ggsave(heatplot(gse_enrich, showCategory=20,foldChange=b), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_CC_heatplot.pdf"),width=15, height=15))
                         suppressMessages(ggsave(treeplot(pairwise_termsim(gse_enrich)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_CC_treeplot.pdf"),width=15, height=15))
                         suppressMessages(ggsave(emapplot(pairwise_termsim(gse_enrich)), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_CC_emapplot.pdf"),width=15, height=15))
                         suppressMessages(ggsave(upsetplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_DOSE_CC_upsetplot.pdf"),width=15, height=15))
@@ -1038,10 +1038,10 @@ process_file <- function(file){
                 
         ###### 8. Gene Set Enrichment Analysis of KEGG:
           while(dev.cur() > 1) dev.off()
-          if(geneset=="fdr_05" || geneset=="fdr_01"){
+          if(identical(geneset, .rgse_gsea_unit)){
               print(paste0("Processing ",file,"_",name_internal,"... Gene Set Enrichment Analysis of KEGG"))
-              f <- paste0("readlist_fc_",geneset)
-              b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- convert_ids(gsub(paste0(f,"."),"",names(b)),mode)
+              f <- "readlist_fc_backg"
+              b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- convert_ids(gsub(paste0(f,"."),"",names(b)),mode); b <- b[!is.na(names(b)) & nzchar(names(b)) & !duplicated(names(b))]
               b <- b[names(b) %in% entrez_ids_keys$SYMBOL]; names(b) <- entrez_ids_keys$ENTREZID[match(names(b),entrez_ids_keys$SYMBOL)]
               tryCatch({
                       gse_enrich <- c(); Sys.sleep(sample(1:5, size = 1))
@@ -1150,10 +1150,10 @@ process_file <- function(file){
         
         ###### 10. Gene Set Enrichment Analysis of KEGG modules:
           while(dev.cur() > 1) dev.off()
-          if(geneset=="fdr_05" || geneset=="fdr_01"){
+          if(identical(geneset, .rgse_gsea_unit)){
                 print(paste0("Processing ",file,"_",name_internal,"... Gene Set Enrichment Analysis of KEGG modules"))
-                f <- paste0("readlist_fc_",geneset)
-                b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- convert_ids(gsub(paste0(f,"."),"",names(b)),mode)
+                f <- "readlist_fc_backg"
+                b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- convert_ids(gsub(paste0(f,"."),"",names(b)),mode); b <- b[!is.na(names(b)) & nzchar(names(b)) & !duplicated(names(b))]
                 b <- b[names(b) %in% entrez_ids_keys$SYMBOL]; names(b) <- entrez_ids_keys$ENTREZID[match(names(b),entrez_ids_keys$SYMBOL)]
                 tryCatch({
                       gse_enrich <- c(); Sys.sleep(sample(1:5, size = 1))
@@ -1256,10 +1256,10 @@ process_file <- function(file){
         
         ###### 12. Gene set enrichment analyses of WikiPathways:
           while(dev.cur() > 1) dev.off()
-          if(geneset=="fdr_05" || geneset=="fdr_01"){
+          if(identical(geneset, .rgse_gsea_unit)){
             print(paste0("Processing ",file,"_",name_internal,"... Gene set enrichment analyses of WikiPathways"))
-            f <- paste0("readlist_fc_",geneset)
-            b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- convert_ids(gsub(paste0(f,"."),"",names(b)),mode)
+            f <- "readlist_fc_backg"
+            b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- convert_ids(gsub(paste0(f,"."),"",names(b)),mode); b <- b[!is.na(names(b)) & nzchar(names(b)) & !duplicated(names(b))]
             b <- b[names(b) %in% entrez_ids_keys$SYMBOL]; names(b) <- entrez_ids_keys$ENTREZID[match(names(b),entrez_ids_keys$SYMBOL)]
             tryCatch({
                     gse_enrich <- c(); Sys.sleep(sample(1:5, size = 1))
@@ -1326,10 +1326,10 @@ process_file <- function(file){
         
         ###### 13. Gene set enrichment analyses of Reactome:
           while(dev.cur() > 1) dev.off()
-          if(geneset=="fdr_05" || geneset=="fdr_01"){
+          if(identical(geneset, .rgse_gsea_unit)){
                   print(paste0("Processing ",file,"_",name_internal,"... Gene set enrichment analyses of Reactome"))
-                  f <- paste0("readlist_fc_",geneset)
-                  b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- convert_ids(gsub(paste0(f,"."),"",names(b)),mode)
+                  f <- "readlist_fc_backg"
+                  b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- convert_ids(gsub(paste0(f,"."),"",names(b)),mode); b <- b[!is.na(names(b)) & nzchar(names(b)) & !duplicated(names(b))]
                   b <- b[names(b) %in% entrez_ids_keys$SYMBOL]; names(b) <- entrez_ids_keys$ENTREZID[match(names(b),entrez_ids_keys$SYMBOL)]
                   tryCatch({
                     gse_enrich <- c(); Sys.sleep(sample(1:5, size = 1))
@@ -1463,13 +1463,13 @@ process_file <- function(file){
                   })
                        
                 
-                  if(geneset=="fdr_05" || geneset=="fdr_01"){
-                    f <- paste0("readlist_fc_",geneset)
-                    b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- convert_ids(gsub(paste0(f,"."),"",names(b)),mode)
+                  if(identical(geneset, .rgse_gsea_unit)){
+                    f <- "readlist_fc_backg"
+                    b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- convert_ids(gsub(paste0(f,"."),"",names(b)),mode); b <- b[!is.na(names(b)) & nzchar(names(b)) & !duplicated(names(b))]
                     b <- b[names(b) %in% entrez_ids_keys$SYMBOL]; names(b) <- entrez_ids_keys$ENTREZID[match(names(b),entrez_ids_keys$SYMBOL)]
                     tryCatch({
                           gse_enrich <- c(); Sys.sleep(sample(1:5, size = 1))
-                          gse_enrich <- suppressMessages(gseDO(geneList= sort(eval(parse(text=f)),decreasing=T)[!is.na(names(sort(eval(parse(text=f)),decreasing=T)))],
+                          gse_enrich <- suppressMessages(gseDO(geneList= b,
                                                                     minGSSize = minGS,
                                                                     maxGSSize = maxGS,
                                                                     pvalueCutoff = 1,
@@ -1482,7 +1482,7 @@ process_file <- function(file){
                     })
                     tryCatch({
                           gse_enrich <- c(); Sys.sleep(sample(1:5, size = 1))  
-                          gse_enrich <- suppressMessages(gseDO(geneList= sort(eval(parse(text=f)),decreasing=T)[!is.na(names(sort(eval(parse(text=f)),decreasing=T)))],
+                          gse_enrich <- suppressMessages(gseDO(geneList= b,
                                                                     minGSSize = minGS,
                                                                     maxGSSize = maxGS,
                                                                     pvalueCutoff = 1,
@@ -1497,7 +1497,7 @@ process_file <- function(file){
                     
                     tryCatch({
                           gse_enrich <- c(); Sys.sleep(sample(1:5, size = 1))  
-                          gse_enrich <- suppressMessages(gseNCG(geneList= sort(eval(parse(text=f)),decreasing=T)[!is.na(names(sort(eval(parse(text=f)),decreasing=T)))],
+                          gse_enrich <- suppressMessages(gseNCG(geneList= b,
                                                                minGSSize = minGS,
                                                                maxGSSize = maxGS,
                                                                pvalueCutoff = 1,
@@ -1510,7 +1510,7 @@ process_file <- function(file){
                     })
                     tryCatch({
                           gse_enrich <- c(); Sys.sleep(sample(1:5, size = 1))  
-                          gse_enrich <- suppressMessages(gseNCG(geneList= sort(eval(parse(text=f)),decreasing=T)[!is.na(names(sort(eval(parse(text=f)),decreasing=T)))],
+                          gse_enrich <- suppressMessages(gseNCG(geneList= b,
                                                                minGSSize = minGS,
                                                                maxGSSize = maxGS,
                                                                pvalueCutoff = 1,
@@ -1525,7 +1525,7 @@ process_file <- function(file){
                     
                     tryCatch({
                           gse_enrich <- c(); Sys.sleep(sample(1:5, size = 1))  
-                          gse_enrich <- suppressMessages(gseDGN(geneList= sort(eval(parse(text=f)),decreasing=T)[!is.na(names(sort(eval(parse(text=f)),decreasing=T)))],
+                          gse_enrich <- suppressMessages(gseDGN(geneList= b,
                                                                 minGSSize = minGS,
                                                                 maxGSSize = maxGS,
                                                                 pvalueCutoff = 1,
@@ -1534,11 +1534,11 @@ process_file <- function(file){
                                                                 by="fgsea"))
                           write.table(gse_enrich@result,file=paste0("DGN_GSEA_",f,"_",i,"_fgsea.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                     }, error = function(e) {
-                      writeLines(as.character(e), paste0("DGN_GSEA_",f,"_",i,"_fgsea.txt"))
+                      writeLines(as.character(e), paste0("DGN_GSEA_",f,"_",i,"_fgsea_err.txt"))
                     })
                     tryCatch({
                           gse_enrich <- c(); Sys.sleep(sample(1:5, size = 1))  
-                          gse_enrich <- suppressMessages(gseDGN(geneList= sort(eval(parse(text=f)),decreasing=T)[!is.na(names(sort(eval(parse(text=f)),decreasing=T)))],
+                          gse_enrich <- suppressMessages(gseDGN(geneList= b,
                                                                 minGSSize = minGS,
                                                                 maxGSSize = maxGS,
                                                                 pvalueCutoff = 1,
@@ -1556,6 +1556,7 @@ process_file <- function(file){
     }
     cores_2 <- max(1, as.integer(cores))
     .rgse_units <- grep("_backg",grep("readlist_",names(genes_of_interest),invert=T,val=T),invert=T,val=T)
+    .rgse_gsea_unit <- .rgse_units[1]
     .rgse_inner_cores <- max(1, floor(cores_2 / max(1, length(.rgse_units))))
     mclapply(
       mc.cores = min(cores_2, max(1, length(.rgse_units))),

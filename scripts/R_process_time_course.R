@@ -99,16 +99,18 @@ eset <- eval(parse(text=object))
 	  f <- factor(targets$Type, levels=lev)
 	  design <- model.matrix(~0+f)
 	  colnames(design) <- lev
-	  fit <- lmFit(as.matrix(eset), design)
+	  v_eset <- limma::voom(eset, design)
+	  v_eset$genes <- NULL
+	  fit <- lmFit(v_eset, design)
 
 	  pairs_list <- split(combn(lev, 2), col(combn(lev, 2)))
 	  for (i in 1:length(pairs_list)){
 	    	print(paste0(paste(pairs_list[[i]],collapse="_vs_"),"..."))
 		    contrast_formula <- paste(pairs_list[[i]][1], "-", pairs_list[[i]][2])
-			cont <- makeContrasts(contrast_formula, levels=design)
+			cont <- makeContrasts(contrasts = contrast_formula, levels = design)
 			fit2 <- contrasts.fit(fit, cont)
 			fit2 <- eBayes(fit2)
-			df <- topTable(fit2, adjust="BH"); df$Gene_ID <- rownames(df)
+			df <- topTable(fit2, adjust="BH", number=Inf); df$Gene_ID <- rownames(df)
 			colnames(df)[c(4,5)] <- c("PValue","FDR")
 			write.table(df[,c(7,3,1,2,4,5)],file=paste0("DGE_limma_timecourse_",pairs_list[[i]][1],"_vs_",pairs_list[[i]][2],".txt"),col.names = T,row.names = F,quote = F,sep="\t")
 	  }
@@ -124,10 +126,11 @@ if(length(list.files(path=paste0(path,"/time_course_analyses"),full.names=T,patt
 	  # Media de las réplicas de los time-points:
 	  groups_reps <- sapply(levels(eset$samples$group),function(x){rownames(eset$samples)[eset$samples$group==x]})
 	  print("Detected replicates and groups are:"); print(groups_reps); print("Obtaining the mean expression per condition...");
+	  expr_mat <- edgeR::cpm(eset, log = TRUE)
 	  if(class(groups_reps)[1]=="list"){
-	  	df_mfuzz <- as.data.frame(lapply(groups_reps,function(x){rowMeans(as.matrix(eset)[,colnames(as.matrix(eset)) %in% as.character(x)])}))
+	  	df_mfuzz <- as.data.frame(lapply(groups_reps,function(x){rowMeans(expr_mat[,colnames(expr_mat) %in% as.character(x), drop = FALSE])}))
 	  } else if(class(groups_reps)[1]=="matrix"){
-	  	df_mfuzz <- as.data.frame(apply(groups_reps,2,function(x){rowMeans(as.matrix(eset)[,colnames(as.matrix(eset)) %in% as.character(x)])}))
+	  	df_mfuzz <- as.data.frame(apply(groups_reps,2,function(x){rowMeans(expr_mat[,colnames(expr_mat) %in% as.character(x), drop = FALSE])}))
 	  }
 
 	  # I have to remove columns with 0 variance

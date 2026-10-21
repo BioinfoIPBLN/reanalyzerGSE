@@ -368,12 +368,13 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
     }
   }
   quantile.normalize <- function(x, target){
-    sort(target)[rank(x)]
+    sort(target)[rank(x, ties.method = "first")]
   }
   # Before writing the counts, quantile normalization for the adjusted counts if negative values present:
-  if (exists("adjusted_counts")){  
-    if(any(adjusted_counts<0)){
-        counts.quant <- matrix(0, nrow=nrow(count_matrix), ncol=ncol(count_matrix))
+  if (exists("adjusted_counts")){
+    adjusted_on_log <- covariab != "none" && !file.exists(paste0(path,"/reads_study_info/batch_vector.txt"))
+    if(adjusted_on_log || any(adjusted_counts<0)){
+        counts.quant <- matrix(0, nrow=nrow(count_matrix), ncol=ncol(count_matrix), dimnames=dimnames(adjusted_counts))
         for (i in 1:ncol(counts.quant)){
           counts.quant[,i] <- quantile.normalize(adjusted_counts[,i], count_matrix[,i])
         }
@@ -688,27 +689,28 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
       system(paste0("sed -i -e 's/[^a-zA-Z0-9]/_/g' -e '/^$/s//_/' ",z))
       cat("\n\nPerforming figures for "); print(i); cat("\n\nDesign:"); print(z); print(read.table(z)$V1) # Deal with the designs, also dealing with special characters
       if (i %in% gene_counts_rpkm_to_plot$Gene_ID){
-        a <- gene_counts_rpkm_to_plot[gene_counts_rpkm_to_plot$Gene_ID==i,-grep("Gene_ID",colnames(gene_counts_rpkm_to_plot))]
-        a <- a[,gtools::mixedsort(colnames(a))]
-        df <- data.frame(sample=names(a),
-                         expr_RPKM=as.numeric(unname(a)),
-                         condition=gtools::mixedsort(read.table(z,head=F,blank.lines.skip=FALSE)$V1))
+        plot_samples <- grep("Gene_ID", colnames(gene_counts_rpkm_to_plot), invert = TRUE, value = TRUE)
+        cond_all <- read.table(z, head = F, blank.lines.skip = FALSE)$V1
+        if (length(cond_all) != length(plot_samples) && exists("keep_samples") && length(cond_all) == length(keep_samples)) cond_all <- cond_all[keep_samples]
+        if (length(cond_all) != length(plot_samples)) {
+          cat(paste0("\nSkipping the plots of ", i, " for ", basename(z), ": ", length(cond_all), " conditions for ", length(plot_samples), " samples\n"))
+          next
+        }
+        names(cond_all) <- plot_samples
       ### If the user has requested to analyze only some of the samples/column based on the GSMXXXXX, filter and restrict here.
       if (file.exists(paste0(path,"/reads_study_info/gsm_manual_filter.txt"))){
           gsm_manual_filter <- data.table::fread(paste0(path,"/reads_study_info/gsm_manual_filter.txt"),head=F,sep="*")$V1
-          idxs_gsm_manual <- which(unlist(lapply(strsplit(gtools::mixedsort(colnames(gene_counts_rpkm)),"_"),function(x){any(x %in% unlist(strsplit(gsm_manual_filter,",")))})))
-          gene_counts_rpkm_to_plot <- gene_counts_rpkm[,gtools::mixedsort(colnames(gene_counts_rpkm))]
-          gene_counts_rpkm_to_plot <- gene_counts_rpkm_to_plot[,
-                                                        c(idxs_gsm_manual,which(colnames(gene_counts_rpkm_to_plot)=="Gene_ID"))]
-          a <- gene_counts_rpkm_to_plot[gene_counts_rpkm_to_plot$Gene_ID==i,-grep("Gene_ID",colnames(gene_counts_rpkm_to_plot))]
-          a <- a[,gtools::mixedsort(colnames(a))]
-          df <- data.frame(sample=names(a),
-                    expr_RPKM=as.numeric(unname(a)),
-                    condition=gtools::mixedsort(read.table(z,head=F,blank.lines.skip=FALSE)$V1)[idxs_gsm_manual])
-        if (length(unique(read.table(z,head=F,blank.lines.skip=FALSE)$V1[idxs_gsm_manual])) == 1){
+          idxs_gsm_manual <- which(vapply(strsplit(plot_samples, "_"), function(x) any(x %in% unlist(strsplit(gsm_manual_filter, ","))), logical(1)))
+          plot_samples <- plot_samples[idxs_gsm_manual]
+        if (length(unique(cond_all[plot_samples])) == 1){
           next
         }
       }
+        plot_samples <- plot_samples[gtools::mixedorder(plot_samples)]
+        a <- gene_counts_rpkm_to_plot[gene_counts_rpkm_to_plot$Gene_ID == i, plot_samples, drop = FALSE]
+        df <- data.frame(sample = plot_samples,
+                         expr_RPKM = as.numeric(unlist(a[1, ])),
+                         condition = unname(cond_all[plot_samples]))
       print("Please double check that the order betwen the columns is correct and association between conditions and samples in the rows is correct:"); print(df)
         df[[expr_col]] <- round(log2(df$expr_RPKM + PSEUDOCOUNT),2)
         lab_title <- tryCatch({
@@ -1203,12 +1205,11 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
           # instead of re-deriving from column names (the regex heuristic fails for
           # samples like pea_pgm3_01_hisat2.bam → pea_pgm3_01 instead of PGM).
           # If pattern_to_remove filtered some columns, subset targets accordingly.
-          if (pattern_to_remove != "none" && ncol(RPKM) < length(targets$Type)) {
-            kept_idx <- grep(pattern_to_remove, bakktarget$Filename, invert = TRUE)
-            target_hk <- data.frame(Type = targets$Type[kept_idx])
-          } else {
-            target_hk <- data.frame(Type = targets$Type)
+          hk_idx <- match(rgse_sample_id(colnames(RPKM)), rgse_sample_id(targets$Filename))
+          if (anyNA(hk_idx)) {
+            hk_idx <- if (pattern_to_remove != "none" && ncol(RPKM) < length(targets$Type)) grep(pattern_to_remove, targets$Filename, invert = TRUE) else seq_along(targets$Type)
           }
+          target_hk <- data.frame(Type = targets$Type[hk_idx])
           rownames(target_hk) <- colnames(RPKM)
           write.table(target_hk,
                       file="temp_targets.txt",quote = F,row.names = T, col.names = T,sep = "\t")
