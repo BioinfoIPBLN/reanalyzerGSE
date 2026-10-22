@@ -1066,7 +1066,7 @@ if (has_network) {
   # ── WGCNA ──────────────────────────────────────────────────────────────────
   if (has_wgcna) {
     cat("\n## WGCNA {.tabset}\n\n")
-    cat("Weighted Gene Co-expression Network Analysis — module detection via `blockwiseModules()`:\n\n")
+    cat("Weighted Gene Co-expression Network Analysis — module detection via `blockwiseModules()` on the most variable genes (`wgcna_max_genes`, 5000 by default):\n\n")
 
     # Module-condition heatmap (PNG)
     heatmaps <- list.files(wgcna_dir, pattern = "WGCNA_module_type_.*\\.png$", full.names = TRUE)

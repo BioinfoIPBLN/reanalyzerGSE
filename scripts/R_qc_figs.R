@@ -424,9 +424,14 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
     aln <- aln[, cols_to_keep, drop = FALSE]
   }
   
+  aln$Sample <- as.character(aln$Sample)
+  aln_samples <- sort(unique(aln$Sample))
+  aln_axis_cols <- unname(col.group[rgse_sample_id(aln_samples)])
+  aln_axis_cols[is.na(aln_axis_cols)] <- "black"
   aln_long <- aln %>%
     tidyr::pivot_longer(cols = -Sample, names_to = "category", values_to = "count") %>%
-    mutate(category = factor(category, levels = colnames(aln)[-1]))
+    mutate(category = factor(category, levels = colnames(aln)[-1]),
+           Sample = factor(Sample, levels = aln_samples))
  
    n_cats <- length(levels(aln_long$category))
    aln_colors <- setNames(
@@ -443,7 +448,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
     scale_y_continuous(labels = function(x) paste0(x, "M")) +
     labs(title = "Alignment categories total", x = "sample", y = "Count", fill = "") +
     theme_minimal() +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 7, color=col.group),
+    theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 7, color=aln_axis_cols),
           legend.position = "right")
   
   # Proportions
@@ -458,7 +463,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
     scale_fill_manual(values = aln_colors) +
     labs(title = "Alignment categories proportions", x = "sample", y = "Proportion", fill = "") +
     theme_minimal() +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 7, color=col.group),
+    theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 7, color=aln_axis_cols),
           legend.position = "right")
   
   p1; p2

@@ -1359,18 +1359,21 @@ sub check_input_format{
 				if($real_file !~ /^\./){
 					my $error=0;
 					my $compressed_file=0;
+					my @decompress=();
 					if($real_file =~ /.*\.gz/){
-						my $file_tmp="gunzip -d -f -c $file |";
-						$file=$file_tmp;
+						@decompress=("gunzip","-d","-f","-c",$file);
 						$compressed_file=1;
 					}
 					elsif($real_file =~ /.*\.bz2/){
-						my $file_tmp="bunzip2 -f -d -c $file |";
-						$file=$file_tmp;
+						@decompress=("bunzip2","-f","-d","-c",$file);
 						$compressed_file=1;
 					}
-					#print STDERR "$file <> $real_file\n";
-					open IN,$file or die "Cannot open FASTQ file ($file)\n";
+					if(@decompress){
+						open(IN,"-|",@decompress) or die "Cannot open FASTQ file ($file)\n";
+					}
+					else{
+						open(IN,"<",$file) or die "Cannot open FASTQ file ($file)\n";
+					}
 					my $i=0;
 					my $mes="Please make sure your file ($real_file) is in accordance with the FASTQ format specifications";
 					while(<IN>){
@@ -1403,7 +1406,7 @@ sub check_input_format{
 				
 					if($error == 0){
 						#No error, so they are fastq files, but is the extension correct ?
-						if($real_file =~ /.*\.fastq$/ and $real_file =~ /.*\.fastq\.lane\.clean$/ and $real_file =~ /.*\.fastq.gz$/ and $real_file =~ /.*\.fq$/ and $real_file =~ /.*\.fq.gz$/ and $real_file =~ /.*\.fq\.bz2$/ and $real_file =~ /.*\.fastq\.bz2$/){
+						if($real_file !~ /.*\.fastq$/ and $real_file !~ /.*\.fastq\.lane\.clean$/ and $real_file !~ /.*\.fastq\.gz$/ and $real_file !~ /.*\.fq$/ and $real_file !~ /.*\.fq\.gz$/ and $real_file !~ /.*\.fq\.bz2$/ and $real_file !~ /.*\.fastq\.bz2$/){
 							print STDERR date(). " $real_file is a fastq file, but due to cutadapt and other softwares, this file should include a fastq/fq extension. [Comppresed are also valid as .fq.gz]\n";
 							$exit=1;
 						}

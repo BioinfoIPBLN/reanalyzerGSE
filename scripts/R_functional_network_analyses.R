@@ -387,6 +387,14 @@ run_wgcna <- function(nexpr_mat, new_path, label, orgdb = NULL, all_gene_ids = N
                    sum(!gsg$goodSamples), " sample(s) with zero variance or too many missing values\n"))
         t_exprs <- t_exprs[gsg$goodSamples, gsg$goodGenes, drop = FALSE]
     }
+    max_genes <- suppressWarnings(as.integer(Sys.getenv("RGSE_WGCNA_MAX_GENES", "5000")))
+    if (!is.na(max_genes) && max_genes > 0 && ncol(t_exprs) > max_genes) {
+        gene_var <- apply(t_exprs, 2, var)
+        t_exprs <- t_exprs[, order(gene_var, decreasing = TRUE)[seq_len(max_genes)], drop = FALSE]
+        cat(paste0("WGCNA for ", label, ": using the ", max_genes, " most variable genes out of ", length(gene_var),
+                   " (wgcna_max_genes); they are also the background of the module enrichment\n"))
+        all_gene_ids <- colnames(t_exprs)
+    }
     if (ncol(t_exprs) < minSize) {
         cat(paste0("Skipping WGCNA for ", label, ": only ", ncol(t_exprs),
                    " genes left after QC (minimum ", minSize, " required)\n"))

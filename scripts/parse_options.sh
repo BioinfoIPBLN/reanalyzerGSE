@@ -74,6 +74,7 @@ for argument in "${arguments[@]}"; do
 	        -bnb | -bonobo # Whether to add BONOBO single-sample gene regulatory networks to the network analyses ('yes' or 'no', by default). Requires '-Na yes' and netzoopy. BONOBO writes one dense gene-by-gene network per sample, so on a few thousand DEGs it produces several GB per sample and tens of GB per comparison; leave it off unless single-sample networks are the point of the analysis
 	        -Na | -network_analyses # Whether to perform network analyses ('yes' or 'no', by default). WGCNA is organism-agnostic; STRINGdb supports any organism with a valid taxon ID
 	        -Wm | -wgcna_mode # WGCNA mode: 'all' (canonical, runs on all expressed genes, by default) or 'degs' (runs on DEGs only, per comparison)
+	        -Wg | -wgcna_max_genes # Number of most variable genes (variance of the variance-stabilised counts) that WGCNA uses (5000 by default, or 0 for all of them). Co-expression modules from tens of thousands of mostly noisy genes and a few samples are unstable, and 5000 also keeps blockwiseModules in a single block; the module enrichment then uses these genes as background
 	        -apl | -auto_panther_log # Whether to perform additional autoGO and Panther analyses for DEGs separated by log2Fc positive or negative ('yes' or 'no', by default)
 	        -eDe | -exploreDE_se # Whether to generate a SummarizedExperiment object (.qs2) for the exploreLocalDE Shiny app (https://shiny-public.fgcz.uzh.ch/app/exploreLocalDE) ('yes' or 'no', by default). Human, Mouse and Rat get the full annotation/enrichment suite; any other organism gets a basic GO over-representation route built from the file given in '-nrf'
 	        -sO | -splicing_option # Splicing analysis method: 'no' (default), 'saser' (differential splicing via saseR with adapted offsets in edgeR), or 'isoformswitchr' (isoform switch analysis via IsoformSwitchAnalyzeR, requires transcript-level quantification from Kallisto or Salmon)
@@ -249,6 +250,7 @@ for argument in "${arguments[@]}"; do
 		-Na) network_analyses=${arguments[index]} ;;
 		-bnb | -bonobo) bonobo=${arguments[index]} ;;
 		-Wm) wgcna_mode=${arguments[index]} ;;
+		-Wg | -wgcna_max_genes) wgcna_max_genes=${arguments[index]} ;;
 		-fp) fastp_mode=${arguments[index]} ;;
 		-fpa) fastp_adapter=${arguments[index]} ;;
 		-fpt) fastp_trimming=${arguments[index]} ;;
@@ -646,6 +648,13 @@ export RGSE_BONOBO="$bonobo"
 if [ -z "$wgcna_mode" ]; then
 	wgcna_mode="all"
 fi
+if [ -z "$wgcna_max_genes" ]; then
+	wgcna_max_genes=5000
+fi
+if ! [[ "$wgcna_max_genes" =~ ^[0-9]+$ ]]; then
+	echo "Error: -Wg/-wgcna_max_genes must be a whole number (0 for all genes). You provided: $wgcna_max_genes"; exit 1
+fi
+export RGSE_WGCNA_MAX_GENES="$wgcna_max_genes"
 if [ -z "$clusterProfiler_universe" ]; then
 	clusterProfiler_universe="detected"
 fi

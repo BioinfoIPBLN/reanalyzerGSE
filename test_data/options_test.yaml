@@ -46,8 +46,8 @@ number_reads_to_subsample: ""          # Path to reads_numbers.txt and target li
 batch_vector: ""                       # Comma-separated batch vector for Combat-seq
 batch_biological_covariates: ""        # Comma-separated biological covariables for Combat-seq
 batch_format: "fact"                   # Format of batch variables ('num' or 'fact')
-covariables: "none"                    # Covariable for limma/edgeR model (comma-separated)
-covariables_format: "num"              # Format of covariables ('num' or 'fact')
+covariables: "none"                    # Covariables of the DE model, one comma list per covariable, several separated by ';'
+covariables_format: "num"              # Format of each covariable ('num' or 'fact'), ';'-separated in the same order
 target: "no"                           # Target file for DGE analyses
 
 # === Activate alternative modes ===
@@ -71,6 +71,7 @@ convert_tables_excel: "yes"            # Convert tables to .xlsx ('yes' or 'no')
 time_course: "no"                      # Time-course analyses ('yes' or 'no')
 network_analyses: "no"                 # Network analyses: WGCNA + STRINGdb + BONOBO ('yes' or 'no')
 wgcna_mode: "all"                      # WGCNA mode: 'all' (canonical, all expressed genes) or 'degs' (DEGs only, per comparison)
+wgcna_max_genes: 5000                  # WGCNA uses only this many most variable genes (0 = all); also the module enrichment background
 auto_panther_log: "no"                 # Additional autoGO/Panther by log2Fc ('yes' or 'no')
 exploreDE_se: "no"                     # Generate SummarizedExperiment (.qs2) for the exploreLocalDE app ('yes' or 'no')
                                        # https://shiny-public.fgcz.uzh.ch/app/exploreLocalDE
@@ -91,11 +92,14 @@ literature_args: "--genes-per-sense 5 --papers-per-gene 5"   # Args passed to li
 
 # === Processing parameters ===
 strand: "reverse"                      # Strandness ('yes', 'no', 'reverse'; predicted by salmon if empty)
-filter: "standard"                     # Gene count threshold ('bin', 'filterbyexpr', 'standard' or 'standard,X' to set min_group, or a numeric value for absolute raw count threshold per group)
+filter: "filterbyexpr"                 # Gene filter: 'filterbyexpr' (edgeR's filterByExpr, default), 'standard' (CPM > 1 in 3 samples, or 'standard,X'), 'bin' (any count), or a number (raw count sum per group)
 optionsFeatureCounts_feat: "exon"      # featureCounts feature type
 optionsFeatureCounts_seq: "gene_name"  # featureCounts seqid type
 aligner: "star"                        # Aligner ('hisat2' or 'star') or 'kallisto'
-differential_expr_soft: "edgeR"        # DGE software ('edgeR' or 'DESeq2')
+differential_expr_soft: "edgeR"        # DGE software: 'edgeR', 'DESeq2', 'limma' (voom) or 'wilcoxon' (rank-sum on TMM CPM, for ~8+ samples per condition)
+edger_test: "ql"                       # edgeR test: 'ql' (quasi-likelihood F-test) or 'exact' (exactTest, the default up to v4.1.0)
+lfc_threshold: 0                       # Minimum |log2FC| tested against (glmTreat / DESeq2 lfcThreshold / limma treat); 0 = any change
+lfc_shrink: "no"                       # DESeq2 only: add a shrunkLFC column from lfcShrink ('yes' or 'no')
 fastp_mode: "no"                       # Quality filtering by fastp ('yes' or 'no')
 fastp_adapter: "no"                    # Adapter trimming by fastp ('yes', 'no', or path to fasta)
 fastp_trimming: "none"                 # Trimming by fastp ('none' or 'front,tail' as numbers)
@@ -122,6 +126,7 @@ revigo_threshold_similarity: 0.7       # Revigo similarity threshold (0.4-0.9)
 bam_mapq_threshold: 0                  # Min MAPQ for samtools view -q and featureCounts -Q (0 = use default)
 bam_exclude_flags: ""                  # samtools -F flags to exclude, e.g. "4" (unmapped), "256" (secondary), "2308" (unmapped+secondary+supplementary)
 bam_require_flags: ""                  # samtools -f flags to require. SUGGESTION: use "2" for Paired-End to keep properly paired reads, or leave as "" (or "4") for Single-End.
+bam_filter_pairs: "yes"                # Paired-end: keep a fragment only if both mates pass the filters above ('yes') or filter each alignment alone ('no')
 bam_dedup: "no"                        # Duplicate removal: 'no', 'samtools', 'picard', 'picard_optical' (see below)
                                        #   no             = no deduplication
                                        #   samtools       = samtools markdup -r (remove all duplicates)
@@ -134,7 +139,9 @@ save_unaligned: "no"                   # Save unaligned reads from hisat2/STAR t
                                        # option per aligner: only the one matching 'aligner' above is used,
                                        # so a preset valid for one aligner can never leak into another.
                                        # Empty them to run the aligner with no extra arguments.
-hisat2_extra_args: "--very-sensitive"  # e.g. "--very-sensitive --no-mixed --no-discordant --maxins 800"
+hisat2_extra_args: "--very-sensitive --no-softclip"  # e.g. "--very-sensitive --no-softclip --no-mixed --no-discordant --maxins 800"
+                                       # keep --no-softclip with --very-sensitive: otherwise short chance anchors align
+spliced_alignment: "auto"              # 'auto' turns spliced alignment off for intronless annotations (<1% multi-exon transcripts), 'yes', or 'no' 
 star_extra_args: ""                    # e.g. "--outSAMmultNmax 1 --alignIntronMax 100000"
 kallisto_extra_args: "--pseudobam"     # writes a per-sample pseudoalignments.bam of the
                                        # transcriptome pseudoalignments next to the abundance
