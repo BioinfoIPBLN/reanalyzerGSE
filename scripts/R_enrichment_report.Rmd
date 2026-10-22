@@ -237,7 +237,17 @@ render_gsea_ranked <- function(comp, cp_dir) {
   cp_files <- cp_ranked_gsea(cp_dir)
   metrics <- c(FDR = "signed FDR", log2FC = "log2FC")
   files <- lapply(setNames(names(metrics), names(metrics)), function(m) net_gsea_files(comp, m))
-  if (length(cp_files) == 0 && length(unlist(files)) == 0) return(invisible(FALSE))
+  has_cp <- !is.na(cp_dir) && dir.exists(cp_dir)
+  if (length(cp_files) == 0 && length(unlist(files)) == 0) {
+    if (!has_cp) return(invisible(FALSE))
+    cat("\n## GSEA (ranked gene list)\n\n")
+    cp_full <- length(list.files(cp_dir, pattern = "GSEA_|^MKEGG_|^WP_|^DO_|^NCG_|^DGN_")) > 0
+    if (cp_full) cat("*No GSEA results for this comparison.*\n\n")
+    else cat(paste0('<div class="alert alert-secondary" style="border-left:4px solid #999;padding:10px;margin:8px 0;">',
+                    '<em>Not run.</em> GSEA runs with <code>clusterProfiler_full: yes</code> (clusterProfiler) ',
+                    'or <code>network_analyses: yes</code> (network step).</div>\n\n'))
+    return(invisible(FALSE))
+  }
   cat("\n## GSEA (ranked gene list) {.tabset}\n\n")
   cat("Gene set enrichment analysis on every gene tested in this comparison; it does not depend on a DEG threshold.\n\n")
   if (length(cp_files) > 0) {
@@ -396,7 +406,7 @@ threshold_label <- function(tok) {
   deg_set_label(tok, thr)
 }
 
-# Render the clusterProfiler ORA + GSEA sections for ONE DEG-input threshold
+# Render the clusterProfiler ORA sections for ONE DEG-input threshold
 # ("fdr_05" or "fdr_01"). Headings start at level 3 (### ORA) so they nest under a
 # level-2 threshold tab. `primary` (the FDR<0.05 tab) is where shared, non
 # threshold-specific pathway images (KEGG / Reactome snapshots) are embedded, so
@@ -428,7 +438,7 @@ render_cp_gsea_groups <- function(gsea, comp) {
   blk(gsea[grepl("^DO_GSEA_|^NCG_GSEA_|^DGN_GSEA_", basename(gsea))], "Disease Ontology GSEA", 4)
 }
 
-render_cp_threshold <- function(cp_dir, comp, tok, full_mode_ran, primary, net_gsea = FALSE) {
+render_cp_threshold <- function(cp_dir, comp, tok, full_mode_ran, primary) {
   full_mode_note <- function(what) {
     if (full_mode_ran) { cat("*Not available*\n\n"); return(invisible()) }
     cat(sprintf(paste0('<div class="alert alert-secondary" ',
@@ -487,13 +497,14 @@ render_cp_threshold <- function(cp_dir, comp, tok, full_mode_ran, primary, net_g
   cat("\n##### KEGG Enrichment\n\n")
   section(list.files(cp_dir, pattern = "^KEGG_enrich_.*\\.txt$", full.names = TRUE),
           "KEGG pathways", sprintf("%s_KEGG_ORA", comp),
-    figs_fn = if (!primary) NULL else function() {
+    figs_fn = function() {
       snap <- file.path(cp_dir, "kegg_paths_snapshots")
-      if (dir.exists(snap)) {
-        for (p in head(list.files(snap, pattern = "\\.png$", full.names = TRUE), 5)) embed_png(p, basename(p))
-        for (p in head(list.files(snap, pattern = "KEGG.*barplot", full.names = TRUE), 1)) embed_pdf(p, "KEGG - Barplot")
-        for (p in head(list.files(snap, pattern = "KEGG.*dotplot", full.names = TRUE), 1)) embed_pdf(p, "KEGG - Dotplot")
-      }
+      if (!dir.exists(snap)) return(invisible())
+      pv <- list.files(snap, pattern = paste0("_", tok, "\\.pathview\\.png$"), full.names = TRUE)
+      if (length(pv)) for (p in head(pv, 5)) embed_png(p, basename(p))
+      else if (primary) for (p in head(list.files(snap, pattern = "^[a-z]+[0-9]+\\.png$", full.names = TRUE), 5)) embed_png(p, basename(p))
+      for (p in head(list.files(snap, pattern = paste0("^KEGG_overrepresentation_test.*_", tok, "_barplot\\.pdf$"), full.names = TRUE), 1)) embed_pdf(p, "KEGG - Barplot")
+      for (p in head(list.files(snap, pattern = paste0("^KEGG_overrepresentation_test.*_", tok, "_dotplot\\.pdf$"), full.names = TRUE), 1)) embed_pdf(p, "KEGG - Dotplot")
     })
   cat("\n##### KEGG Modules\n\n")
   mk <- list.files(cp_dir, pattern = "^MKEGG_.*\\.txt$", full.names = TRUE)
@@ -539,16 +550,6 @@ render_cp_threshold <- function(cp_dir, comp, tok, full_mode_ran, primary, net_g
     full_mode_note("Disease Ontology (DO / NCG / DGN) over-representation")
   }
 
-  # -- GSEA --
-  gsea <- list.files(cp_dir, pattern = "GSEA_.*\\.txt$", full.names = TRUE)
-  gsea <- gsea[!grepl("_err\\.txt$|_aPEAR|_clusters|_similarity", gsea)]
-  gsea <- gsea[which(vapply(gsea, threshold_token, character(1)) == tok)]
-  if (!length(gsea)) {
-    if (!net_gsea) { cat("\n### GSEA\n\n"); full_mode_note("Gene Set Enrichment Analysis (GSEA)") }
-  } else {
-    cat("\n### GSEA {.tabset}\n\n")
-    render_cp_gsea_groups(gsea, comp)
-  }
   invisible()
 }
 
@@ -883,7 +884,6 @@ for (idx in seq_along(comp_names)) {
   cp_dir <- cp_dirs[idx]  # may be NA if only panther exists
 
   comp_num <- gsub("\\D", "", comp)
-  has_net_gsea <- length(cp_ranked_gsea(cp_dirs[idx])) + length(net_gsea_files(comp, "FDR")) + length(net_gsea_files(comp, "log2FC")) > 0
   cat(sprintf("\n\n# Comparison %s {.tabset .tabset-pills}\n\n", comp_num))
 
   # Optional AI narrative for this comparison (above the tabs; absent unless enabled),
@@ -907,8 +907,7 @@ for (idx in seq_along(comp_names)) {
     if (length(cp_toks) == 0) cp_toks <- c("fdr_05", "fdr_01")
     for (tok in cp_toks) {
       cat(sprintf("\n## %s {.tabset}\n\n", threshold_label(tok)))
-      render_cp_threshold(cp_dir, comp, tok, full_mode_ran, primary = identical(tok, "fdr_05"),
-                          net_gsea = has_net_gsea)
+      render_cp_threshold(cp_dir, comp, tok, full_mode_ran, primary = identical(tok, "fdr_05"))
     }
 
     # aPEAR pathway clusters (shared across thresholds; kept at comparison level)
@@ -1077,7 +1076,7 @@ if (has_network) {
     hub_files <- list.files(wgcna_dir, pattern = "WGCNA_top10_hub_genes_", full.names = TRUE)
     if (length(hub_files) > 0) {
       cat("\n### Hub Genes\n\n")
-      cat("Top 10 hub genes per module ranked by intramodular connectivity (kWithin):\n\n")
+      cat("Top 10 hub genes per module ranked by intramodular connectivity (kWithin); kME is the correlation with the module eigengene. The grey module holds the genes not assigned to any module and has no hubs:\n\n")
       for (f in hub_files) {
         df <- safe_read(f)
         if (!is.null(df) && nrow(df) > 0) {

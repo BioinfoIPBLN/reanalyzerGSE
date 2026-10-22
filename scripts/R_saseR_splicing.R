@@ -48,8 +48,8 @@ suppressPackageStartupMessages({
 cat("Building targets from BAM files and sample metadata...\n")
 
 bam_files <- list.files(bam_dir, pattern = "\\.bam$", full.names = TRUE)
-bam_files <- bam_files[file.exists(paste0(bam_files, ".csi")) |
-                         file.exists(sub("\\.bam$", ".csi", bam_files))]
+bam_files <- bam_files[file.exists(paste0(bam_files, ".csi")) | file.exists(sub("\\.bam$", ".csi", bam_files)) |
+                       file.exists(paste0(bam_files, ".bai")) | file.exists(sub("\\.bam$", ".bai", bam_files))]
 if (length(bam_files) == 0) {
   stop("No indexed BAM files found in ", bam_dir)
 }

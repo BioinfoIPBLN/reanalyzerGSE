@@ -724,6 +724,7 @@ sub run_miARma{
 						bam_mapq_threshold=>$cfg->val("Aligner","bam_mapq_threshold") || undef,
 						bam_dedup=>$cfg->val("Aligner","bam_dedup") || "no",
 						bam_custom_filter=>$cfg->val("Aligner","bam_custom_filter") || undef,
+						bam_filter_pairs=>$cfg->val("Aligner","bam_filter_pairs") || "yes",
 						bam_normalization=>$cfg->val("Aligner","bam_normalization") || "BPM",
 						bigwig_binsize=>$cfg->val("Aligner","bigwig_binsize") || 10,
 						save_unaligned=>$cfg->val("Aligner","save_unaligned") || "no",

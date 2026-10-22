@@ -329,9 +329,11 @@ sub ReadAligment{
 	my $bam_mapq_threshold=$args{"bam_mapq_threshold"};
 	my $bam_dedup=$args{"bam_dedup"};
 	my $bam_custom_filter=$args{"bam_custom_filter"};
+	my $bam_filter_pairs=$args{"bam_filter_pairs"} || "yes";
 	my $bam_normalization=$args{"bam_normalization"};
 	my $bigwig_binsize=$args{"bigwig_binsize"} || 10;
 	my $totalcores=$args{"totalcores"} || 0;
+	my $save_unaligned=$args{"save_unaligned"} || "no";
 	#Declaring the variables to collect the path of the new files
 	my $output_file1;
 	my $output_file2;
@@ -825,8 +827,10 @@ sub ReadAligment{
 					bam_mapq_threshold=>$bam_mapq_threshold,
 					bam_dedup=>$bam_dedup,
 					bam_custom_filter=>$bam_custom_filter,
+					bam_filter_pairs=>$bam_filter_pairs,
 					bam_normalization=>$bam_normalization,
 					bigwig_binsize=>$bigwig_binsize,
+					save_unaligned=>$save_unaligned,
 					totalcores=>$totalcores
 		  		);
 		  		return($output_file2);
@@ -879,8 +883,10 @@ sub ReadAligment{
 					bam_mapq_threshold=>$bam_mapq_threshold,
 					bam_dedup=>$bam_dedup,
 					bam_custom_filter=>$bam_custom_filter,
+					bam_filter_pairs=>$bam_filter_pairs,
 					bam_normalization=>$bam_normalization,
 					bigwig_binsize=>$bigwig_binsize,
+					save_unaligned=>$save_unaligned,
 					totalcores=>$totalcores
 		  		);
 		  		return($output_file2);
@@ -2729,6 +2735,7 @@ sub hisat2{
 	my $bam_mapq_threshold=$args{"bam_mapq_threshold"};
 	my $bam_dedup=$args{"bam_dedup"};
 	my $bam_custom_filter=$args{"bam_custom_filter"};
+	my $bam_filter_pairs=$args{"bam_filter_pairs"} || "yes";
 	my $bam_normalization=$args{"bam_normalization"};
 	my $bigwig_binsize=$args{"bigwig_binsize"} || 10;
 	my $totalcores=$args{"totalcores"} || 0;
@@ -2818,20 +2825,24 @@ sub hisat2{
 				(my $escaped = $bam_custom_filter) =~ s/'/'\\''/g;
 				$custom_filter_part = " | $escaped ";
 			}
+			my $pair_part = "";
+			if (lc($bam_filter_pairs) ne "no" && ($filter_part || $custom_filter_part)) {
+				$pair_part = " | samtools collate -O --output-fmt SAM -@ $threads_sort - {}_pairs_tmp | sam_keep_pairs.sh ";
+			}
 			
 			my $samtools_pipeline_pe = "";
 			if (defined $bam_dedup && $bam_dedup eq "samtools") {
-				$samtools_pipeline_pe = $custom_filter_part . $filter_part . " | samtools sort -n -@ $threads_sort -T {}_nsort_tmp -m ${memorylimit_div_mb_sort_cores}M - " .
+				$samtools_pipeline_pe = $custom_filter_part . $filter_part . $pair_part . " | samtools sort -n -@ $threads_sort -T {}_nsort_tmp -m ${memorylimit_div_mb_sort_cores}M - " .
 					" | samtools fixmate -m - - " .
 					" | samtools sort -@ $threads_sort -T {}_csort_tmp -m ${memorylimit_div_mb_sort_cores}M - " .
 					" | samtools markdup -r --write-index - {}_hisat2.bam##idx##{}_hisat2.bam.csi ";
 			} elsif (defined $bam_dedup && ($bam_dedup eq "picard" || $bam_dedup eq "picard_optical")) {
 				my $p_opts = ($bam_dedup eq "picard_optical") ? "REMOVE_SEQUENCING_DUPLICATES=true" : "REMOVE_DUPLICATES=true";
-				$samtools_pipeline_pe = $custom_filter_part . $filter_part . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_hisat2.bam##idx##{}_hisat2.bam.csi - && " .
+				$samtools_pipeline_pe = $custom_filter_part . $filter_part . $pair_part . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_hisat2.bam##idx##{}_hisat2.bam.csi - && " .
 					" picard MarkDuplicates I={}_hisat2.bam O={}_hisat2.dedup.bam M={}_hisat2.dup_metrics.txt $p_opts VALIDATION_STRINGENCY=LENIENT QUIET=true && " .
 					" mv {}_hisat2.dedup.bam {}_hisat2.bam && samtools index -c {}_hisat2.bam";
 			} else {
-				$samtools_pipeline_pe = $custom_filter_part . $filter_part . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_hisat2.bam##idx##{}_hisat2.bam.csi - ";
+				$samtools_pipeline_pe = $custom_filter_part . $filter_part . $pair_part . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_hisat2.bam##idx##{}_hisat2.bam.csi - ";
 			}
    			
 			if($file =~ /.*_R?1\.f.*/){
@@ -3283,6 +3294,7 @@ sub star{
 	my $bam_mapq_threshold=$args{"bam_mapq_threshold"};
 	my $bam_dedup=$args{"bam_dedup"};
 	my $bam_custom_filter=$args{"bam_custom_filter"};
+	my $bam_filter_pairs=$args{"bam_filter_pairs"} || "yes";
 	my $bam_normalization=$args{"bam_normalization"};
 	my $bigwig_binsize=$args{"bigwig_binsize"} || 10;
 	my $totalcores=$args{"totalcores"} || 0;
@@ -3307,6 +3319,11 @@ sub star{
 	if(defined($args{"starparameters"})){
 		my $starparameters=$args{"starparameters"};
 		$starpardef.=" $starparameters";
+	}
+	my $star_unmapped_gzip = "";
+	if (lc($args{"save_unaligned"} || "no") eq "yes") {
+		$starpardef.=" --outReadsUnmapped Fastx";
+		$star_unmapped_gzip = " && for u in {}_STAR_Unmapped.out.mate*; do if [ -e \"\$u\" ]; then gzip -f \"\$u\"; fi; done";
 	}
 	#Number of threads can be provided by the user
 	if($threads>0){
@@ -3348,20 +3365,24 @@ sub star{
 			(my $escaped = $bam_custom_filter) =~ s/'/'\\''/g;
 			$custom_filter_part = " | $escaped ";
 		}
+		my $pair_part = "";
+		if (lc($bam_filter_pairs) ne "no" && ($bam_require_flags || $bam_exclude_flags || $bam_mapq_threshold || $custom_filter_part)) {
+			$pair_part = " | samtools collate -O --output-fmt SAM -@ $threads_sort - {}_pairs_tmp | sam_keep_pairs.sh ";
+		}
 		
 		my $samtools_pipeline_pe = "";
 		if (defined $bam_dedup && $bam_dedup eq "samtools") {
-			$samtools_pipeline_pe = $filter_part . $custom_filter_part . " | samtools sort -n -@ $threads_sort -T {}_nsort_tmp -m ${memorylimit_div_mb_sort_cores}M - " .
+			$samtools_pipeline_pe = $filter_part . $custom_filter_part . $pair_part . " | samtools sort -n -@ $threads_sort -T {}_nsort_tmp -m ${memorylimit_div_mb_sort_cores}M - " .
 				" | samtools fixmate -m - - " .
 				" | samtools sort -@ $threads_sort -T {}_csort_tmp -m ${memorylimit_div_mb_sort_cores}M - " .
 				" | samtools markdup -r --write-index - {}_STAR.bam##idx##{}_STAR.bam.csi ";
 		} elsif (defined $bam_dedup && ($bam_dedup eq "picard" || $bam_dedup eq "picard_optical")) {
 			my $p_opts = ($bam_dedup eq "picard_optical") ? "REMOVE_SEQUENCING_DUPLICATES=true" : "REMOVE_DUPLICATES=true";
-			$samtools_pipeline_pe = $filter_part . $custom_filter_part . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_STAR.bam##idx##{}_STAR.bam.csi - && " .
+			$samtools_pipeline_pe = $filter_part . $custom_filter_part . $pair_part . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_STAR.bam##idx##{}_STAR.bam.csi - && " .
 				" picard MarkDuplicates I={}_STAR.bam O={}_STAR.dedup.bam M={}_STAR.dup_metrics.txt $p_opts VALIDATION_STRINGENCY=LENIENT QUIET=true && " .
 				" mv {}_STAR.dedup.bam {}_STAR.bam && samtools index -c {}_STAR.bam";
 		} else {
-			$samtools_pipeline_pe = $filter_part . $custom_filter_part . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_STAR.bam##idx##{}_STAR.bam.csi - ";
+			$samtools_pipeline_pe = $filter_part . $custom_filter_part . $pair_part . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_STAR.bam##idx##{}_STAR.bam.csi - ";
 		}
 		
 		my $command;
@@ -3425,7 +3446,7 @@ sub star{
 					                          mkdir -p $projectdir$output_dir && cd $projectdir$output_dir && export PARALLEL_SHELL=/bin/bash
 					                          name_lists=\$(cat $tmp_file | sed -E 's,_(R)?[12]\.fastq.*,,g' | sort | uniq | awk -F '/' '{ print \$NF }') && unset DISPLAY
 					                          STAR --runThreadN $indexthreads --genomeDir $staridx_final --genomeLoad LoadAndExit --outFileNamePrefix $projectdir${output_dir}genomeloading.tmp2 && rm -rf $projectdir${output_dir}genomeloading.tmp*
-					                          parallel --halt-on-error 2 --verbose --joblog ${projectdir}/star_log_parallel.txt -j $parallelnumber 'set -o pipefail; STAR --runMode alignReads --genomeDir $staridx_final --genomeLoad LoadAndKeep --readFilesIn \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \$(cat $tmp_file | xargs dirname | uniq)/{}_2.fastq.gz --outFileNamePrefix $projectdir${output_dir}{}_STAR_ $starpardef --outStd SAM $samtools_pipeline_pe && echo && echo Done...{}_STAR.bam' ::: \$(echo \$name_lists)
+					                          parallel --halt-on-error 2 --verbose --joblog ${projectdir}/star_log_parallel.txt -j $parallelnumber 'set -o pipefail; STAR --runMode alignReads --genomeDir $staridx_final --genomeLoad LoadAndKeep --readFilesIn \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \$(cat $tmp_file | xargs dirname | uniq)/{}_2.fastq.gz --outFileNamePrefix $projectdir${output_dir}{}_STAR_ $starpardef --outStd SAM $samtools_pipeline_pe && echo && echo Done...{}_STAR.bam${star_unmapped_gzip}' ::: \$(echo \$name_lists)
 					                          STAR --runThreadN $indexthreads --genomeDir $staridx_final --genomeLoad Remove --outFileNamePrefix $projectdir${output_dir}genomeremoval.tmp >/dev/null 2>&1 || true; rm -rf $projectdir${output_dir}genomeremoval.tmp*
 					                          parallel --halt-on-error 2 --verbose --joblog ${projectdir}/starprocess_log_parallel.txt -j $parallelnumber 'export _JAVA_OPTIONS="-Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD" && qualimap bamqc -bam $projectdir${output_dir}/{}_STAR.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_STAR.bam --java-mem-size="${memorylimit_div_mb}m" >> qc1.log 2>&1 || true
 					                          bamCoverage -b {}_STAR.bam -o {}_STAR.bam.bw -of bigwig -bs $bigwig_binsize -p $threads $norm_cmd' ::: \$(echo \$name_lists)
@@ -3516,7 +3537,7 @@ sub star{
 		                          mkdir -p $projectdir$output_dir && cd $projectdir$output_dir
 		                          name_lists=\$(cat $tmp_file | awk -F '/' '{ print \$NF }') && unset DISPLAY && export PARALLEL_SHELL=/bin/bash
 		                          STAR --runThreadN $indexthreads --genomeDir $staridx_final --genomeLoad LoadAndExit --outFileNamePrefix $projectdir${output_dir}genomeloading.tmp2 && rm -rf $projectdir${output_dir}genomeloading.tmp*
-					  parallel --halt-on-error 2 --verbose --joblog ${projectdir}/star_log_parallel.txt -j $parallelnumber 'set -o pipefail; STAR --runMode alignReads --genomeDir $staridx_final --genomeLoad LoadAndKeep --readFilesIn \$(cat $tmp_file | xargs dirname | uniq)/{} --outFileNamePrefix $projectdir${output_dir}{}_STAR_ $starpardef --outStd SAM $samtools_pipeline_se && echo && echo Done...{}_STAR.bam' ::: \$(echo \$name_lists)
+					  parallel --halt-on-error 2 --verbose --joblog ${projectdir}/star_log_parallel.txt -j $parallelnumber 'set -o pipefail; STAR --runMode alignReads --genomeDir $staridx_final --genomeLoad LoadAndKeep --readFilesIn \$(cat $tmp_file | xargs dirname | uniq)/{} --outFileNamePrefix $projectdir${output_dir}{}_STAR_ $starpardef --outStd SAM $samtools_pipeline_se && echo && echo Done...{}_STAR.bam${star_unmapped_gzip}' ::: \$(echo \$name_lists)
 					  STAR --runThreadN $indexthreads --genomeDir $staridx_final --genomeLoad Remove --outFileNamePrefix $projectdir${output_dir}genomeremoval.tmp >/dev/null 2>&1 || true; rm -rf $projectdir${output_dir}genomeremoval.tmp*
 					  parallel --halt-on-error 2 --verbose --joblog ${projectdir}/starprocess_log_parallel.txt -j $parallelnumber 'export _JAVA_OPTIONS="-Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD" && qualimap bamqc -bam $projectdir${output_dir}/{}_STAR.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_STAR.bam --java-mem-size="${memorylimit_div_mb}m" >> qc1.log 2>&1 || true
 		                          bamCoverage -b {}_STAR.bam -o {}_STAR.bam.bw -of bigwig -bs $bigwig_binsize -p $threads $norm_cmd' ::: \$(echo \$name_lists)

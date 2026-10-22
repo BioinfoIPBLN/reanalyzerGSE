@@ -27,6 +27,9 @@ bulk_expression_matrix <- args[22] # bulk expression matrix path, or "none"
 .rgse_scripts_dir <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[1])))
 source(file.path(.rgse_scripts_dir, "R_qs_helpers.R"))
 source(file.path(.rgse_scripts_dir, "R_gene_id_helpers.R"))
+source(file.path(.rgse_scripts_dir, "R_de_helpers.R"))
+de_settings <- rgse_de_settings()
+covs_all <- rgse_parse_covariates(covariab, covariab_format)
 
 PSEUDOCOUNT <- 1
 PSEUDO_TAG  <- paste0("log2_", PSEUDOCOUNT)
@@ -319,13 +322,8 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
   # If batch has also been provided, then it will be overwritten immediately below, as ComBat_seq is the preferred method
   if(covariab != "none"){
     count_matrix <- as.matrix(gene_counts[,grep("Gene_ID|Length",colnames(gene_counts),invert=T)])
-    if(covariab_format == "fact"){
-      cov <- as.factor(unlist(strsplit(as.character(covariab),",")))
-      cov <- model.matrix(~ cov)
-    } else if(covariab_format == "num"){
-      cov <- as.numeric(unlist(strsplit(as.character(covariab),",")))      
-    }    
-    cat("\nProcessing counts (log2-CPM, prior.count=2) with limma::removeBatchEffect...\nApplied the covariates and group:\n"); print(data.frame(group=pheno$condition,covar=cov))
+    cov <- rgse_covariates_for_batch_removal(covs_all)
+    cat("\nProcessing counts (log2-CPM, prior.count=2) with limma::removeBatchEffect...\nApplied the covariates and group:\n"); print(data.frame(group=pheno$condition,covs_all,check.names=FALSE))
     adjusted_counts <- limma::removeBatchEffect(x=edgeR::cpm(count_matrix, log=TRUE, prior.count=2),covariates=cov, group=pheno$condition)
   }
   if (file.exists(paste0(path,"/reads_study_info/batch_vector.txt")) && !file.exists(paste0(path,"/reads_study_info/batch_biological_variables.txt"))){
@@ -460,39 +458,27 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
   # edgeR_object_norm <- calcNormFactors(edgeR_object)
   edgeR_object_norm <- normLibSizes(edgeR_object)
 
-  if(covariab == "none"){
-    #edgeR_object_norm <- estimateCommonDisp(edgeR_object_norm, robust=TRUE)
+  covs_global <- covs_all
+  if (exists("keep_samples")) covs_global <- rgse_subset_covariates(covs_global, keep_samples)
+  if(is.null(covs_global)){
     edgeR_object_norm <- estimateDisp(edgeR_object_norm, robust=TRUE)
     if (is.na(edgeR_object_norm$common.dispersion)){
       edgeR_object_norm$common.dispersion <- 0.4 ^ 2
       cat("\nEstimating Dispersion... Errors or warnings? Likely because no replicates, addressing providing a fixed value for dispersion, but do not trust comparative analyses because it's likely not accurate. Please consult the vignette for further information...\n")
     }
-    #edgeR_object_norm <- estimateTagwiseDisp(edgeR_object_norm)
-  } else { 
+  } else {
+    cd_global <- rgse_covariate_design(edgeR_object$samples$group, covs_global, "all samples")
+    design <- cd_global$design
+    if (length(cd_global$notes)) cat(paste0("\nCovariables, all samples: ", cd_global$notes, "\n"))
     if(filter_option == "filterbyexpr"){
       print("Applying filterByExpr by edgeR together with the covariables in the model...Overwriting previous application...")
       edgeR_object <- edgeR_object_prefilter
-      Treat <- edgeR_object$samples$group
-      if(covariab_format == "fact"){
-        Time <- as.factor(unlist(strsplit(as.character(covariab),",")))
-      } else if(covariab_format == "num"){
-        Time <- as.numeric(unlist(strsplit(as.character(covariab),",")))
-      }      
-      design <- model.matrix(~0+Treat+Time)
       keep <- filterByExpr(edgeR_object,design)
       edgeR_object <- edgeR_object[keep,,keep.lib.sizes=FALSE]
       edgeR_object_norm <- normLibSizes(edgeR_object)
-    } else {
-      Treat <- edgeR_object$samples$group
-      if(covariab_format == "fact"){
-        Time <- as.factor(unlist(strsplit(as.character(covariab),",")))
-      } else if(covariab_format == "num"){
-        Time <- as.numeric(unlist(strsplit(as.character(covariab),",")))
-      }      
-      design <- model.matrix(~0+Treat+Time)
-      rownames(design) <- colnames(edgeR_object_norm)
-      edgeR_object_norm <- estimateDisp(edgeR_object_norm, design, robust=TRUE) # Preparing for one covariable following edgeR vignette new methods Nov2023
     }
+    rownames(design) <- colnames(edgeR_object_norm)
+    edgeR_object_norm <- estimateDisp(edgeR_object_norm, design, robust=TRUE)
   }
 
   gene_counts_rpkm <- as.data.frame(rpkm(edgeR_object_norm,normalized.lib.sizes=TRUE))
@@ -874,70 +860,6 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
       warning(paste0("EnhancedVolcano plot could not be generated: ", e$message))
     })
   }
-  DGE <- function(comp,object=edgeR_object_norm, organism="mouse", myFDR=0.05, myFC=0){
-    et <- exactTest(object,pair = rev(comp))
-    #Extracting the statistical data order by p-value
-    top1 <- topTags(et, n=nrow(et), adjust.method="BH",sort.by="PValue")
-    print(summary(decideTests(et)))
-    print(nrow(top1$table[top1$table$FDR<=myFDR & abs(top1$table$logFC)>= myFC,]))
-    print(comp); print("Top 10 results (each sense log2FC):"); top2 <- top1[top1$table$FDR<=myFDR,3:6]
-    if(dim(top2)[1] > 20){
-      print(as.data.frame(top2)[order(as.data.frame(top2)$logFC)[c(as.numeric(dim(top2)[1]):as.numeric(dim(top2)[1]-10),1:10)],])
-    } else {
-      print(as.data.frame(top2)[order(as.data.frame(top2)$logFC),])
-    }   
-    cat("\n")
-    if (venn_volcano!="no"){
-      myLabel1=gsub("^_","",gsub("_+","_",gsub("[^[:alnum:]_]+", "_", paste(comp, collapse = '_vs_'))))
-      Volcano(top1,paste(output_dir,"/DGE/Volcano_plot_",myLabel1,".pdf", sep=""),myLabel1)
-    }
-    # myLabel2=paste(myLabel1, "FDR", myFDR, "FC", myFC, sep="_")
-    # createExcel(top1$table,paste("DEG_",myLabel1,".xlsx", sep=""),organism = organism)
-    # my_enrichment(top1$table,FA_label=myLabel2,cutoff=0.05,organism = organism, FDR=myFDR,FC=myFC)
-    
-    return(top1)
-  }
-
-  # DESeq2 counterpart of DGE(): same inputs, same table layout, so every downstream
-  # consumer (Volcano, Venn, enrichment, report) is agnostic to the engine used.
-  DESeq2_compare <- function(comp, object, covariab="none", covariab_format="num", myFDR=0.05){
-    cond_num <- sub("__","",comp[1]); cond_den <- sub("__","",comp[2])
-    counts_mat <- as.matrix(object$counts)
-    counts_mat <- round(counts_mat); mode(counts_mat) <- "integer"
-    coldata <- data.frame(condition=factor(sub("__","",as.character(object$samples$group))),
-                          row.names=colnames(counts_mat))
-    if (covariab != "none"){
-      if (covariab_format == "fact"){
-        coldata$covariable <- as.factor(unlist(strsplit(as.character(covariab),",")))
-      } else {
-        coldata$covariable <- as.numeric(unlist(strsplit(as.character(covariab),",")))
-      }
-      dds <- DESeqDataSetFromMatrix(countData=counts_mat, colData=coldata, design=~ covariable + condition)
-    } else {
-      dds <- DESeqDataSetFromMatrix(countData=counts_mat, colData=coldata, design=~ condition)
-    }
-    dds <- DESeq(dds, quiet=TRUE)
-    res <- as.data.frame(results(dds, contrast=c("condition", cond_num, cond_den)))
-    tab <- data.frame(Gene_ID = object$genes$Gene_ID,
-                      Length  = object$genes$Length,
-                      logFC   = res$log2FoldChange,
-                      logCPM  = edgeR::aveLogCPM(counts_mat),
-                      PValue  = res$pvalue,
-                      FDR     = res$padj)
-    rownames(tab) <- rownames(counts_mat)
-    # DESeq2 returns NA for independently-filtered genes; edgeR never does, and the
-    # downstream filters compare with < / <= , so carry them as non-significant.
-    tab$PValue[is.na(tab$PValue)] <- 1
-    tab$FDR[is.na(tab$FDR)] <- 1
-    tab <- tab[order(tab$PValue),]
-    cat(paste0("DESeq2: ", cond_num, " vs ", cond_den, " (positive log2FC = higher in ", cond_num, ")\n"))
-    cat(paste0("  genes tested: ", nrow(tab), " | FDR<=", myFDR, ": ", sum(tab$FDR <= myFDR, na.rm=TRUE),
-               " (up: ", sum(tab$FDR <= myFDR & tab$logFC > 0, na.rm=TRUE),
-               ", down: ", sum(tab$FDR <= myFDR & tab$logFC < 0, na.rm=TRUE), ")\n"))
-    return(list(table = tab))
-  }
-
-
 
   ## Create targets:
     x <- edgeR_object
@@ -985,6 +907,7 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
     print("Attempting differential gene expression analyses between the conditions:")
     dir.create(paste0(output_dir,"/DGE"),showWarnings=F)
     files_designs <- list.files(pattern = "design_possible_full", recursive = TRUE, full.names=T, path=paste0(path,"/reads_study_info"))
+    batch_vector_file <- paste0(path,"/reads_study_info/batch_vector.txt")
     for (n in 1:length(files_designs)){
       z <- files_designs[n]
       
@@ -1011,35 +934,46 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
         condition <- condition[de_keep]
       }
 
-      # Create edgeR_objects for each grouping/design if required:
+      covs_de <- covs_all
+      if (exists("keep_samples")) covs_de <- rgse_subset_covariates(covs_de, keep_samples)
+      covs_de <- rgse_subset_covariates(covs_de, de_keep)
+      if (is.null(covs_de) && file.exists(batch_vector_file)) {
+        batch_all <- unlist(strsplit(data.table::fread(batch_vector_file, head=F, sep="*")$V1, ","))
+        batch_de <- batch_all
+        if (exists("keep_samples") && length(batch_de) == length(keep_samples)) batch_de <- batch_de[keep_samples]
+        if (length(batch_de) == length(de_keep)) batch_de <- batch_de[de_keep]
+        if (length(batch_de) == length(condition) && length(unique(batch_de)) > 1) {
+          batch_design <- model.matrix(~0 + factor(condition) + factor(batch_de))
+          if (qr(batch_design)$rank == ncol(batch_design)) {
+            covs_de <- data.frame(Batch = factor(batch_de))
+            cat(paste0("\nNo covariable given: the batch vector (", paste(unique(batch_de), collapse = ", "), ") is used as a factor covariate of the differential expression model for ", basename(z), "\n"))
+          } else {
+            cat(paste0("\nThe batch vector is confounded with the condition in ", basename(z), ", so it is not used in the differential expression model\n"))
+          }
+        }
+      }
+
       edgeR_object_tmp <- DGEList(counts=gene_counts[,de_count_cols[de_keep]],
                                		group=condition,
                                		genes=gene_counts[,c(grep("Gene_ID",colnames(gene_counts)),grep("Length",colnames(gene_counts)))])
       edgeR_object_tmp <- filter(filter=filter_option,edgeR_object_tmp)
       edgeR_object_norm_temp <- normLibSizes(edgeR_object_tmp)
-      # edgeR_object_norm_temp <- calcNormFactors(edgeR_object_tmp)      
-      if(covariab == "none"){
-          #edgeR_object_norm_temp <- estimateCommonDisp(edgeR_object_norm_temp, robust=TRUE)
+      cd_de <- rgse_covariate_design(edgeR_object_tmp$samples$group, covs_de, basename(z))
+      if (length(cd_de$notes)) cat(paste0("\nCovariables, ", basename(z), ": ", cd_de$notes, "\n"))
+      covs_de <- cd_de$covs
+      design <- cd_de$design
+      rownames(design) <- colnames(edgeR_object_norm_temp)
+      if(is.null(covs_de)){
           edgeR_object_norm_temp <- estimateDisp(edgeR_object_norm_temp, robust=TRUE)
           if (is.na(edgeR_object_norm_temp$common.dispersion)){
             edgeR_object_norm_temp$common.dispersion <- 0.4 ^ 2
             cat("\nEstimating Dispersion... Errors or warnings? Likely because no replicates, addressing providing a fixed value for dispersion, but do not trust comparative analyses because it's likely not accurate. Please consult the vignette for further information...\n")
           }
-          #edgeR_object_norm_temp <- estimateTagwiseDisp(edgeR_object_norm_temp)
-      } else { 
-          Treat <- edgeR_object_tmp$samples$group
-          if(covariab_format == "fact"){
-            Time <- as.factor(unlist(strsplit(as.character(covariab),",")))
-          } else if(covariab_format == "num"){
-            Time <- as.numeric(unlist(strsplit(as.character(covariab),",")))
-          }
-          if (exists("keep_samples") && length(Time) == length(keep_samples)) Time <- Time[keep_samples]
-          if (length(Time) == length(de_keep)) Time <- Time[de_keep]
-          design <- model.matrix(~0+Treat+Time)
-          rownames(design) <- colnames(edgeR_object_norm_temp)
-          edgeR_object_norm_temp <- estimateDisp(edgeR_object_norm_temp, design, robust=TRUE) # Preparing for one covariable following edgeR vignette new methods Nov2023          
+      } else {
+          cat(paste0("\nCovariables in the differential expression model for ", basename(z), ":\n")); print(data.frame(sample=colnames(edgeR_object_norm_temp), condition=condition, covs_de, check.names=FALSE), row.names=FALSE)
+          edgeR_object_norm_temp <- estimateDisp(edgeR_object_norm_temp, design, robust=TRUE)
       }
-      
+
       edgeR_object_norm_temp_to_process <- edgeR_object_norm_temp
 
       # Process each combination
@@ -1139,36 +1073,24 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
           dge_results <- list(table = manual_table)
           colnames(dge_results$table)[3] <- paste0("logFC",paste(sub("__","",list_combinations[[i]]),collapse = "__VS__"))
         } else {
-          if (diff_soft == "DESeq2"){
-            dge_results <- DESeq2_compare(comp=list_combinations[[i]],object=edgeR_object_norm_temp_to_process,
-                                          covariab=if (covariab != "none") paste(as.character(Time), collapse=",") else covariab,
-                                          covariab_format=covariab_format)
-            colnames(dge_results$table)[3] <- paste0(colnames(dge_results$table)[3],paste(sub("__","",list_combinations[[i]]),collapse = "__VS__"))
-            if (venn_volcano!="no"){
-              myLabel1=gsub("^_","",gsub("_+","_",gsub("[^[:alnum:]_]+", "_", paste(list_combinations[[i]], collapse = '_vs_'))))
-              Volcano(dge_results,paste(output_dir,"/DGE/Volcano_plot_",myLabel1,".pdf", sep=""),myLabel1)
-            }
-          } else if(covariab == "none"){
-            dge_results <- DGE(comp=list_combinations[[i]],object=edgeR_object_norm_temp_to_process)
-            colnames(dge_results$table)[3] <- paste0(colnames(dge_results$table)[3],paste(sub("__","",list_combinations[[i]]),collapse = "__VS__"))
-          } else {
-            fit <- glmQLFit(edgeR_object_norm_temp_to_process, design, robust=TRUE)
-            contrast <- rep(0,dim(design)[2])
-            idxs_design <- rev(match(paste0("Treat", sub("__","",list_combinations[[i]])), colnames(design)))
-            if(length(idxs_design)!=2 || anyNA(idxs_design)){cat(paste0("\n\nSomething is WRONG as one of your contrasts has been required to compare ",length(idxs_design)," conditions. Probably conflicting naming of biological conditions...\n\n"));stop("Exiting, please review the naming of the conditions...")}
-            contrast[idxs_design] <- c(-1,1)
-            qlf <- glmQLFTest(fit,contrast=contrast)
-            dge_results <- topTags(qlf,n=nrow(qlf),adjust.method="BH",sort.by="PValue")
-            print(summary(decideTests(qlf)))
-            print(nrow(dge_results$table[dge_results$table$FDR<=0.05 & abs(dge_results$table$logFC)>= 0,]))
-            print(list_combinations[[i]]); print("Top 10 results (each sense):")
-            print(as.data.frame(dge_results)[order(as.data.frame(dge_results)$logFC)[c(as.numeric(dim(dge_results)[1]):as.numeric(dim(dge_results)[1]-10),1:10)],3:6])
-            colnames(dge_results$table)[3] <- paste0(colnames(dge_results$table)[3],paste(sub("__","",list_combinations[[i]]),collapse = "__VS__"))
-            if (venn_volcano!="no"){
-              myLabel1=paste(list_combinations[[i]], collapse = '_vs_')
-              myLabel1=gsub("^_","",gsub("_+","_",gsub("[^[:alnum:]_]+", "_", myLabel1)))
-              Volcano(dge_results,paste(output_dir,"/DGE/Volcano_plot_",myLabel1,".pdf", sep=""),myLabel1)
-            }
+          de_res <- rgse_de_test(edgeR_object_norm_temp_to_process, list_combinations[[i]], covs_de, diff_soft, de_settings)
+          dge_results <- list(table = de_res$table)
+          de_method <- de_res$method
+          if (length(de_res$notes)) cat(paste0("Covariables, comparison ", i+existing, ": ", de_res$notes, "\n"))
+          tab <- dge_results$table
+          cat(paste0("\n", paste(sub("^__","",list_combinations[[i]]), collapse=" vs "), " (positive log2FC = higher in ", sub("^__","",cond1), "): ", de_method, "\n",
+                     "  genes tested: ", nrow(tab), " | FDR<=0.05: ", sum(tab$FDR <= 0.05, na.rm=TRUE),
+                     " (up: ", sum(tab$FDR <= 0.05 & tab$logFC > 0, na.rm=TRUE), ", down: ", sum(tab$FDR <= 0.05 & tab$logFC < 0, na.rm=TRUE), ")\n"))
+          top2 <- tab[!is.na(tab$FDR) & tab$FDR <= 0.05, intersect(c("Gene_ID","logFC","logCPM","PValue","FDR"), colnames(tab))]
+          if (nrow(top2) > 0) print(head(top2[order(-abs(top2$logFC)), ], 20), row.names=FALSE)
+          de_methods_file <- paste0(output_dir,"/DGE/de_methods.txt")
+          if (!file.exists(de_methods_file)) writeLines("Comparison\tContrast\tMethod\tFilter\tSamples", de_methods_file)
+          write(paste(paste0("comp", i+existing), paste(sub("^__","",list_combinations[[i]]), collapse=" vs "), de_method, filter_option,
+                      paste0(group_counts[cond1], " vs ", group_counts[cond2]), sep="\t"), file=de_methods_file, append=TRUE)
+          colnames(dge_results$table)[3] <- paste0("logFC",paste(sub("__","",list_combinations[[i]]),collapse = "__VS__"))
+          if (venn_volcano!="no"){
+            myLabel1=gsub("^_","",gsub("_+","_",gsub("[^[:alnum:]_]+", "_", paste(list_combinations[[i]], collapse = '_vs_'))))
+            Volcano(dge_results,paste(output_dir,"/DGE/Volcano_plot_",myLabel1,".pdf", sep=""),myLabel1)
           }
         }
         conflicts <- intersect(ls(envir = environment()), ls(envir = .GlobalEnv))

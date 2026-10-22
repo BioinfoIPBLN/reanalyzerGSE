@@ -1,0 +1,56 @@
+name: checks
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  static:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install interpreters and Perl modules
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -qy --no-install-recommends r-base-core libconfig-inifiles-perl libstatistics-r-perl libdatetime-perl libwww-perl python3-yaml
+
+      - name: Bash syntax
+        run: |
+          for f in reanalyzerGSE.sh scripts/*.sh; do
+            bash -n "$f" || { echo "::error file=$f::bash syntax error"; exit 1; }
+          done
+
+      - name: Help text prints to the end
+        run: |
+          bash reanalyzerGSE.sh -h > help.txt 2>&1 || true
+          grep -q -- "-K | -Kraken2_fast" help.txt || { echo "::error file=scripts/parse_options.sh::the -h help stops early, probably an unescaped double quote"; tail -5 help.txt; exit 1; }
+
+      - name: R syntax
+        run: |
+          Rscript -e 'bad <- character(0); for (f in Sys.glob(c("scripts/*.R", "external_software/miARma-seq/lib/CbBio/RNASeq/R-Scripts/*.R"))) tryCatch(parse(f), error = function(e) { message(f, ": ", conditionMessage(e)); bad <<- c(bad, f) }); if (length(bad)) quit(status = 1)'
+
+      - name: Python syntax
+        run: python3 -m py_compile scripts/*.py
+
+      - name: Perl syntax
+        run: |
+          for f in external_software/miARma-seq/lib/CbBio/RNASeq/*.pm; do
+            perl -Iexternal_software/miARma-seq/lib -c "$f" || exit 1
+          done
+
+      - name: YAML keys are pipeline options
+        run: |
+          python3 - <<'PY'
+          import re, sys, yaml
+          src = open("scripts/parse_options.sh").read()
+          keys = set(re.findall(r"^\s*-[^)\n]*\)\s*([A-Za-z_][A-Za-z0-9_]*)=\$\{arguments\[index\]\}", src, re.M)) | {"debug_step", "organism"}
+          bad = []
+          for f in ["scripts/config_template.yaml", "test_data/options_test.yaml", "test_data/options_test_GEO.yaml"]:
+              for k in (yaml.safe_load(open(f)) or {}):
+                  if k not in keys:
+                      bad.append(f"{f}: {k}")
+          if bad:
+              print("Keys that parse_options.sh would ignore:\n  " + "\n  ".join(bad))
+              sys.exit(1)
+          PY

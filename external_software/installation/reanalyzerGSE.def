@@ -1,6 +1,9 @@
 Bootstrap: docker
 From: ubuntu:24.04
 
+%arguments
+    REANALYZERGSE_REF=main
+
 %post
     # --------------------------------------------------------------------------
     # 1. System Setup & Dependencies
@@ -227,7 +230,7 @@ install.packages("pak", quiet = T)
 library(pak); options(pak.timeout = 1200); pak_cleanup(force = TRUE)
 
 pkgs <- c(
-  "abind", "affy", "annotate", "AnnotationDbi", "AnnotationFilter", "AnnotationHub", "ape", "aplot", "arules", "askpass",
+  "abind", "affy", "annotate", "AnnotationDbi", "AnnotationFilter", "AnnotationHub", "ape", "aplot", "arules", "ashr", "askpass",
   "ASpli", "assorthead", "autoGO", "backports", "base64enc", "bbmle", "beachmat", "BH", "Biobase", "BiocBaseUtils",
   "BiocFileCache", "BiocGenerics", "BiocIO", "BiocManager", "BiocParallel", "BiocSingular", "BiocStyle", "BiocVersion", "biomaRt", "Biostrings",
   "biovizBase", "bit", "bit64", "bitops", "blob", "bookdown", "brew", "brio", "broom", "BSgenome",
@@ -610,12 +613,18 @@ EOF
     # --------------------------------------------------------------------------
     # 6. Pipeline Installation & Cleanup
     # --------------------------------------------------------------------------
-    pipeline_commit=$(git ls-remote https://github.com/BioinfoIPBLN/reanalyzerGSE refs/heads/main | cut -f1)
-    [ -n "$pipeline_commit" ] || { echo "Could not resolve the reanalyzerGSE main commit" >&2; exit 1; }
+    pipeline_ref="{{ REANALYZERGSE_REF }}"
+    if printf '%s' "$pipeline_ref" | grep -Eqx '[0-9a-f]{40}'; then
+      pipeline_commit=$pipeline_ref
+    else
+      pipeline_commit=$(git ls-remote https://github.com/BioinfoIPBLN/reanalyzerGSE | awk -v r="$pipeline_ref" '$2 == "refs/tags/" r "^{}" {p = $1} $2 == "refs/tags/" r {t = $1} $2 == "refs/heads/" r {h = $1} END {print (p ? p : (t ? t : h))}')
+    fi
+    [ -n "$pipeline_commit" ] || { echo "Could not resolve the reanalyzerGSE ref '$pipeline_ref' (a tag, a branch or a full commit)" >&2; exit 1; }
     curl -fsSL --retry 10 https://codeload.github.com/BioinfoIPBLN/reanalyzerGSE/tar.gz/$pipeline_commit -o pipeline.tar.gz
     mkdir -p /reanalyzerGSE
     tar xzf pipeline.tar.gz -C /reanalyzerGSE --strip-components=1
     echo "$pipeline_commit" > /reanalyzerGSE/COMMIT
+    echo "$pipeline_ref" > /reanalyzerGSE/BUILD_REF
     rm -f pipeline.tar.gz
     chmod +x /reanalyzerGSE/reanalyzerGSE.sh
     chmod +x /reanalyzerGSE/scripts/*

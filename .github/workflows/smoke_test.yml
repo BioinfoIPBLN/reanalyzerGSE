@@ -1,0 +1,89 @@
+name: smoke-test
+
+on:
+  workflow_dispatch:
+    inputs:
+      sif_url:
+        description: "Apptainer image to run the checked-out code in"
+        default: "https://bit.ly/reanalyzerGSE_sif"
+      aligner:
+        description: "hisat2 or star"
+        default: "hisat2"
+
+jobs:
+  test_data:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Apptainer
+        run: |
+          sudo add-apt-repository -y ppa:apptainer/ppa
+          sudo apt-get update -qq
+          sudo apt-get install -qy apptainer
+
+      - name: Cache the image
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/reanalyzerGSE.sif
+          key: sif-${{ inputs.sif_url }}
+
+      - name: Download the image and a one-chromosome mouse reference
+        run: |
+          cd "$RUNNER_TEMP"
+          [ -s reanalyzerGSE.sif ] || wget -q "${{ inputs.sif_url }}" -O reanalyzerGSE.sif
+          mkdir -p ref in
+          wget -q https://ftp.ensembl.org/pub/release-114/fasta/mus_musculus/dna/Mus_musculus.GRCm39.dna.chromosome.19.fa.gz -O - | gunzip > ref/chr19.fa
+          wget -q https://ftp.ensembl.org/pub/release-114/gtf/mus_musculus/Mus_musculus.GRCm39.114.gtf.gz -O - | gunzip | awk -F'\t' '/^#/ || $1 == "19"' > ref/chr19.gtf
+          cp -r "$GITHUB_WORKSPACE/test_data/seqs" in/seqs
+
+      - name: Write the configuration
+        run: |
+          cat > "$RUNNER_TEMP/smoke.yaml" <<EOF
+          input: "$RUNNER_TEMP/in/seqs"
+          name: "smoke"
+          output_folder: "$RUNNER_TEMP/out"
+          reference_genome: "$RUNNER_TEMP/ref/chr19.fa"
+          annotation: "$RUNNER_TEMP/ref/chr19.gtf"
+          design_custom_local: "A,A,B,B"
+          organism: "Mus_musculus"
+          strand: "reverse"
+          aligner: "${{ inputs.aligner }}"
+          functional_enrichment_analyses: "no"
+          network_analyses: "no"
+          cores: 4
+          cores_index: 4
+          number_parallel: 2
+          memory_max: 12000000000
+          aligner_index_cache: "no"
+          EOF
+
+      - name: Run reanalyzerGSE
+        run: |
+          cd "$RUNNER_TEMP"
+          apptainer exec --bind "$GITHUB_WORKSPACE":/reanalyzerGSE --bind "$RUNNER_TEMP" reanalyzerGSE.sif \
+            reanalyzerGSE.sh -options "$RUNNER_TEMP/smoke.yaml" 2>&1 | tee smoke.log
+          exit "${PIPESTATUS[0]}"
+
+      - name: Check the outputs
+        run: |
+          cd "$RUNNER_TEMP/out/smoke"
+          for pattern in "DGE_analysis_comp1.txt" "de_methods.txt" "final_report.html" "run_parameters_latest.yaml" "tool_versions.txt"; do
+            hit=$(find . -name "$pattern" | head -1)
+            [ -n "$hit" ] || { echo "::error::$pattern was not produced"; exit 1; }
+            echo "found $hit"
+          done
+          comp=$(find . -name "DGE_analysis_comp1.txt" | head -1)
+          [ "$(wc -l < "$comp")" -gt 100 ] || { echo "::error::$comp has fewer than 100 genes"; exit 1; }
+
+      - name: Keep the log and the report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-test
+          path: |
+            ${{ runner.temp }}/smoke.log
+            ${{ runner.temp }}/out/smoke/final_report.html
+            ${{ runner.temp }}/out/smoke/provenance
+          if-no-files-found: ignore

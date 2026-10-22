@@ -10,6 +10,7 @@ git clone https://github.com/BioinfoIPBLN/reanalyzerGSE
 # May need to set or clean APPTAINER_TMPDIR or APPTAINER_CACHEDIR
 apptainer build reanalyzerGSE.sif reanalyzerGSE/external_software/installation/reanalyzerGSE.def | tee -a reanalyzerGSE.sif.build.log
 ```
+The image packs the latest commit of the main branch. To pack a release instead, which is what a publication should cite, pass its tag (or a full commit hash): `apptainer build --build-arg REANALYZERGSE_REF=v4.1.0 reanalyzerGSE.sif ...`. The commit used is written into the image, and every run records it in `provenance/` (see Output).
 2) Download the ready-to-use .sif image:
 ```
 wget -q https://bit.ly/reanalyzerGSE_sif -O reanalyzerGSE.sif
@@ -69,6 +70,16 @@ Three optional steps run after the DEG tables are annotated, and are off by defa
 
 Pick a biosample close to your tissue: `encode_regulatory.py --list-biosamples` prints the ENCODE rE2G biosamples available. One HTTP round trip per genomic region dominates the runtime, so the number of regions is capped (`--max-regions`) and every region is cached, meaning a re-run only fetches what is new. Results land in `<results>/orthologs_human/` and `<results>/DGE/encode/`, and get their own section in the final report.
 
+### Differential expression
+
+`-Des`/`differential_expr_software` chooses the engine: `edgeR` (default, quasi-likelihood F-test), `DESeq2` (Wald test), `limma` (voom with robust empirical Bayes) or `wilcoxon` (rank-sum test on TMM-normalised CPM, meant for population-scale cohorts of roughly 8 or more samples per condition, where the negative-binomial models can report too many false positives). All of them see the same filtered counts, design and comparisons and write the same tables, so everything downstream is unchanged. `-eT exact` brings back edgeR's exactTest, which was used without covariables up to v4.1.0.
+
+Genes are filtered with edgeR's `filterByExpr` by default (`-f`), which adapts the threshold to the library sizes and to the smallest group. `-lfc`/`lfc_threshold` tests against a minimum fold change (edgeR glmTreat, DESeq2 `lfcThreshold`, limma treat), which is the valid way to require one, and `-lfS yes` adds DESeq2's shrunk fold changes as an extra column. `-C`/`covariables` takes several covariables separated by `;` (e.g. `"1,1,2,2;F,M,F,M"` with `-Cf "num;fact"`); without `-C`, a batch vector given with `-b yes` is used as the covariable unless it is confounded with the condition. `DGE/de_methods.txt` and the report state the test, filter and samples of every comparison.
+
+### Alignment of intronless genomes and BAM filters
+
+With `spliced_alignment: auto` (default), hisat2 and STAR stop looking for introns when fewer than 1% of the annotated transcripts have more than one exon (bacteria, trypanosomatids), since spurious introns there join reads or mates of neighbouring genes and paralogs. In paired-end runs the BAM filters (`-mQ`, `-Fex`, `-Freq`, `-Fcust`) keep a fragment only when both mates pass (`bam_filter_pairs`), so no orphan mate is left flagged as properly paired. With hisat2, keep `--no-softclip` next to `--very-sensitive` (as in the template): that preset otherwise accepts alignments anchored on 10-25 bp, which lets reads of other organisms align by chance.
+
 ### Sample outliers and leave-out runs
 
 Every run checks each sample against the other samples of its condition: the median Pearson correlation of the log2-CPM as a robust z-score (flagged 'outlier' at z <= -3, 'check' at z <= -2), and the number of genes at least 2x or 4x above the highest, or below the lowest, of the other replicates. The table is in the report and in `QC_and_others/sample_outliers/`. No sample is removed automatically; `-pR`/`pattern_to_remove` does that.
@@ -88,6 +99,8 @@ Everything is written into `OUTPUT_FOLDER/PROJECT_NAME/`. Two places cover most 
 
 * **`final_report.html`**, inside the results folder below together with the `sphinx_report/` folder it links to, is the entry point to the run. It is an HTML report, with sections you can fold, linking to the sample and design summary, a sample outlier check, the per-sample alignment summary, the count matrices, the DEG tables, volcano plots and Venn diagrams, the leave-out runs when requested, the functional enrichment report (plus a lighter tables-only version, `functional_enrichment_report_minimal.html`, for runs with many comparisons), the QC PDFs and the MultiQC/Qualimap reports, the pipeline timing and Gantt chart, and the objects for interactive exploration. It uses relative links, so keep it next to `sphinx_report/` (move or archive the whole results folder if you need to share it).
 * **`final_results_reanalysis0_<OUTPUT_FOLDER_NAME>/`** is the results folder itself, holding the final report, the count matrices plus `QC_and_others/` (QC PDF, a `README_QC_*.txt` describing each block of it, the tables behind every figure in `tables/` (and `tables_adjusted/` for the batch-adjusted QC PDF), and `sample_outliers/`: per-sample correlation z-scores and the genes 2x/4x above or below the other replicates of the condition) and `DGE/` (differential expression, functional enrichment and network analyses, and `leave_out/` when `leave_out_samples` is set).
+
+* **`provenance/`** records how the results were produced: the options of every invocation as a YAML file that `-options` accepts back, the pipeline version, commit and container, tool and package versions, and the checksums of the reference files. It is summarised in the Provenance section of the report.
 
 Microarray and single-cell studies follow a shorter route that stops after a template script, so they produce a smaller `final_results_reanalysis/` and no `final_report.html`.
 

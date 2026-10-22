@@ -145,6 +145,7 @@ if(!check) {
 # For ENSEMBL IDs: match via ensgene (stripping versions) instead of symbol
 de_results_list <- lapply(1:length(deg_results_files), function(i) {
   de_results <- read_tsv(deg_results_files[i], show_col_types = FALSE)
+  de_results <- de_results[, c("Gene_ID", "Length", grep("^logFC", colnames(de_results), value = TRUE)[1], "logCPM", "PValue", "FDR")]
   colnames(de_results) <- c("gene_name", "gene_length", "log2Ratio", "logCPM", "pValue", "fdr")
   de_results$gene_name <- toupper(de_results$gene_name)
   de_results <- de_results[match(rownames(tpm_counts), de_results$gene_name),]

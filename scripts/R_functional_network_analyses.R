@@ -356,6 +356,18 @@ run_gsea <- function(deg_df, label, gsea_base_dir, orgdb, kegg_org, species_labe
 ################################################################################
 #### Helper: run WGCNA analysis
 ################################################################################
+block_connectivity <- function(datExpr, power) {
+    n <- ncol(datExpr)
+    block <- max(1L, min(1500L, as.integer(1e8 / n)))
+    k <- numeric(n)
+    for (start in seq(1L, n, by = block)) {
+        idx <- start:min(start + block - 1L, n)
+        adj <- adjacency(datExpr, selectCols = idx, type = "signed", power = power)
+        k[idx] <- colSums(adj, na.rm = TRUE) - 1
+    }
+    k
+}
+
 run_wgcna <- function(nexpr_mat, new_path, label, orgdb = NULL, all_gene_ids = NULL, minSize = 30, MEDissThres = 0.25) {
     nexpr_mat <- nexpr_mat[rowSums(nexpr_mat, na.rm = TRUE) > 0, , drop = FALSE]
     if (nrow(nexpr_mat) < minSize) {
@@ -523,19 +535,28 @@ run_wgcna <- function(nexpr_mat, new_path, label, orgdb = NULL, all_gene_ids = N
 
     ## Hub gene identification
     tryCatch({
-        connectivity <- intramodularConnectivity.fromExpr(t_exprs, colors = netwk$colors,
-                                                          networkType = "signed", power = power,
-                                                          ignoreColors = character(0))
-        connectivity$Gene_ID <- names(netwk$colors)
-        connectivity$module <- netwk$colors
-        connectivity <- connectivity[order(-connectivity$kWithin), ]
+        colors <- netwk$colors[colnames(t_exprs)]
+        kTotal <- block_connectivity(t_exprs, power)
+        kWithin <- rep(NA_real_, length(colors))
+        for (mod in setdiff(unique(colors), "grey")) {
+            sel <- which(colors == mod)
+            kWithin[sel] <- if (length(sel) < 3) 0 else block_connectivity(t_exprs[, sel, drop = FALSE], power)
+        }
+        kme <- signedKME(t_exprs, netwk$MEs)
+        kME <- as.matrix(kme)[cbind(seq_along(colors), match(paste0("kME", colors), colnames(kme)))]
+        connectivity <- data.frame(Gene_ID = colnames(t_exprs), module = colors,
+                                   kTotal = kTotal, kWithin = kWithin, kOut = kTotal - kWithin,
+                                   kDiff = kWithin - (kTotal - kWithin), kME = kME,
+                                   stringsAsFactors = FALSE)
+        connectivity <- connectivity[order(connectivity$module == "grey", -connectivity$kWithin), ]
         write.table(connectivity,
                     file = paste0(new_path, "WGCNA_hub_genes_connectivity_", label, ".txt"),
                     sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)
-        hub_genes <- do.call(rbind, lapply(unique(netwk$colors), function(mod) {
+        hub_genes <- do.call(rbind, lapply(setdiff(unique(colors), "grey"), function(mod) {
             mod_conn <- connectivity[connectivity$module == mod, ]
-            head(mod_conn[order(-mod_conn$kWithin), c("Gene_ID", "module", "kTotal", "kWithin", "kOut", "kDiff")], 10)
+            head(mod_conn[order(-mod_conn$kWithin), ], 10)
         }))
+        if (is.null(hub_genes)) stop("no module other than grey")
         write.table(hub_genes,
                     file = paste0(new_path, "WGCNA_top10_hub_genes_", label, ".txt"),
                     sep = "\t", row.names = FALSE, col.names = TRUE, quote = FALSE)

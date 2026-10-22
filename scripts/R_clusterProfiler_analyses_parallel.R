@@ -360,6 +360,7 @@ process_file <- function(file){
     tryCatch(invisible(biomaRt::biomartCacheClear()), error = function(e) NULL)
     print(paste0("Processing ",file,"_",name_internal))
     geneset <- name_internal
+    ora_unit <- !identical(geneset, "ranked")
     i <- padjustmethod
     entrez_ids <- entrez_ids_keys$ENTREZID[entrez_ids_keys$SYMBOL %in% convert_ids(genes_of_interest[[geneset]],mode)]
     entrez_ids_backg <- entrez_ids_keys$ENTREZID[entrez_ids_keys$SYMBOL %in% convert_ids(genes_of_interest[["genes_backg"]],mode)]
@@ -377,7 +378,7 @@ process_file <- function(file){
     writeLines(c(paste0("mode=", uni), paste0("genes=", length(unique(universe))), paste0("entrez=", length(unique(universe_2)))),
                file.path(path2, "universe.txt"))
 
-    if(all_analyses == "yes" || all_analyses == "no") {
+    if((all_analyses == "yes" || all_analyses == "no") && ora_unit) {
       print(paste0("Processing ",file,"_",name_internal,"... Gene classification based on GO distribution at a specific level (2-6)"))
       ###### 1. Gene classification based on GO distribution at a specific level:
         while(dev.cur() > 1) dev.off()
@@ -461,6 +462,7 @@ process_file <- function(file){
         })
       
     }
+    if (ora_unit) {
     ###### 2. GO over-representation analyses:
       while(dev.cur() > 1) dev.off()
       print(paste0("Processing ",file,"_",name_internal,"... GO over-representation analyses"))
@@ -662,14 +664,22 @@ process_file <- function(file){
               while(dev.cur() > 1) dev.off()
               Sys.sleep(sample(1:5, size = 1))
               print(paste0("Processing ",file,"_",name_internal,"... KEGG pathways visualization"))
-              paths_list <- unique(unlist(lapply(list.files(path = getwd(), pattern = "^KEGG", full.names = TRUE), function(x){
+              paths_list <- unique(unlist(lapply(list.files(path = getwd(), pattern = paste0("^KEGG_enrich_", i, "_", geneset, "\\.txt$"), full.names = TRUE), function(x){
                 data <- read.delim(x)
                 data_filtered <- data$ID[data$pvalue < 0.05]
               })))
+              .kegg_fc <- genes_of_interest[["readlist_fc_backg"]]
+              .kegg_fc <- .kegg_fc[names(.kegg_fc) %in% genes_of_interest[[geneset]]]
+              names(.kegg_fc) <- convert_ids(names(.kegg_fc), mode)
+              .kegg_fc <- .kegg_fc[names(.kegg_fc) %in% entrez_ids_keys$SYMBOL]
+              names(.kegg_fc) <- entrez_ids_keys$ENTREZID[match(names(.kegg_fc), entrez_ids_keys$SYMBOL)]
+              .kegg_fc <- .kegg_fc[!is.na(names(.kegg_fc)) & !duplicated(names(.kegg_fc))]
               .kegg_wd <- getwd()
               .rgse_mclapply_timeout(paths_list, .rgse_inner_cores, 3600, function(f){
                 tryCatch({
-                  safe_pathview(gene.data=kk@result,pathway.id=f,species=org,keep_kegg_copy=paste0(.kegg_wd,"/kegg_paths_snapshots"))
+                  safe_pathview(gene.data=.kegg_fc,pathway.id=f,species=org,
+                                out_file=paste0(.kegg_wd,"/kegg_paths_snapshots/",f,"_",geneset,".pathview.png"),
+                                keep_kegg_copy=paste0(.kegg_wd,"/kegg_paths_snapshots"))
                 }, error = function(e) {
                   writeLines(as.character(e), paste0(.kegg_wd,"/kegg_paths_snapshots/err.txt"))
                 })
@@ -726,6 +736,7 @@ process_file <- function(file){
               writeLines(as.character(e), paste0(.react_wd,"/reactome_paths_snapshots/",gsub(" ","_",substr(f,0,40)),"_Reactome_err.txt"))
             })
           })        
+    }
 
     if(all_analyses=="yes"){
         print(paste0("Processing ",file,"_",name_internal,"... Gene Set Enrichment Analysis of Gene Ontology"))
@@ -1117,7 +1128,7 @@ process_file <- function(file){
         ###### 9. KEGG Module over-representation:
           while(dev.cur() > 1) dev.off()
           print(paste0("Processing ",file,"_",name_internal,"... KEGG Module over-representation"))
-          tryCatch({
+          if (ora_unit) tryCatch({
                 gse_enrich <- c(); Sys.sleep(sample(1:5, size = 1))
                 gse_enrich <- suppressMessages(enrichMKEGG(gene= entrez_ids,
                                                            universe = universe_2,
@@ -1222,7 +1233,7 @@ process_file <- function(file){
         ###### 11. WikiPathways over-representation:
           while(dev.cur() > 1) dev.off()
           print(paste0("Processing ",file,"_",name_internal,"... WikiPathways over-representation"))
-          tryCatch({
+          if (ora_unit) tryCatch({
             gse_enrich <- c(); Sys.sleep(sample(1:5, size = 1))
             gse_enrich <- suppressMessages(enrichWP(gene= entrez_ids,
                                                        universe = universe_2,
@@ -1399,6 +1410,7 @@ process_file <- function(file){
           while(dev.cur() > 1) dev.off()
           if(organism_cp=="Homo sapiens"){
                   print(paste0("Processing ",file,"_",name_internal,"... Over-representation analyses for human databases (DO, NCG and DGN)"))
+                  if (ora_unit) {
                   tryCatch({
                     ego <- c(); Sys.sleep(sample(1:5, size = 1))
                     ego <- enrichDO(gene          = entrez_ids,
@@ -1461,6 +1473,7 @@ process_file <- function(file){
                   }, error = function(e) {
                     writeLines(as.character(e), paste0("DGN_overrepresentation_test_",i,"_",geneset,"_err.txt"))
                   })
+                  }
                        
                 
                   if(identical(geneset, .rgse_gsea_unit)){
@@ -1556,7 +1569,8 @@ process_file <- function(file){
     }
     cores_2 <- max(1, as.integer(cores))
     .rgse_units <- grep("_backg",grep("readlist_",names(genes_of_interest),invert=T,val=T),invert=T,val=T)
-    .rgse_gsea_unit <- .rgse_units[1]
+    if (all_analyses == "yes") .rgse_units <- c(.rgse_units, "ranked")
+    .rgse_gsea_unit <- "ranked"
     .rgse_inner_cores <- max(1, floor(cores_2 / max(1, length(.rgse_units))))
     mclapply(
       mc.cores = min(cores_2, max(1, length(.rgse_units))),

@@ -13,6 +13,10 @@ source $CURRENT_DIR/scripts/parse_options.sh
 if [ $? -ne 0 ]; then
 	echo "Exiting..."; exit 1
 fi
+source $CURRENT_DIR/scripts/provenance.sh
+if [ "$debug_step" != "all" ] && [ "$debug_step" != "step1" ]; then
+	record_run_parameters
+fi
 mkdir -p $TMPDIR
 
 # Initialize step timing log for Gantt chart (only on full runs, preserve on resume)
@@ -128,6 +132,22 @@ detect_annot_style() {
 	else
 		echo "gff3"
 	fi
+}
+annotation_multi_exon_counts() {
+	zcat -f "$1" 2>/dev/null | awk -F'\t' '
+		!/^#/ && NF >= 9 && ($3 == "exon" || $3 == "CDS") {
+			id = ""
+			if (match($9, /transcript_id "[^"]+"/)) id = substr($9, RSTART + 15, RLENGTH - 16)
+			else if (match($9, /Parent=[^;]+/)) id = substr($9, RSTART + 7, RLENGTH - 7)
+			if (id == "") next
+			if ($3 == "exon") { ex[id]++; has_exon = 1 } else cds[id]++
+		}
+		END {
+			n = 0; m = 0
+			if (has_exon) { for (k in ex) { n++; if (ex[k] > 1) m++ } }
+			else { for (k in cds) { n++; if (cds[k] > 1) m++ } }
+			if (n == 0) print "NA"; else print m, n
+		}'
 }
 expand_annotations_per_unit() {
 	local _a=(); local _g=(); local _n; local _i
@@ -308,6 +328,7 @@ if run_step step1; then
 		mkdir -p "$output_folder/$name"
 		copy_options_file_redacted "$options_file" "$output_folder/$name"
 	fi
+	record_run_parameters
 	_log_step "Step_1_Download" "start"
 	if [[ $input == G* ]]; then
 		echo -e "\n\nSTEP 1: Starting...\nCurrent date/time: $(date)\n\n"
@@ -783,7 +804,7 @@ if run_step step1d; then
 		echo $batch_biological_covariates > $output_folder/$name/reads_study_info/batch_biological_variables.txt
 		echo -e "\nThe comma-separated list for the vector of biological covariable for batch separation is $batch_biological_covariates\n"
 	fi
-	if [ ! -z "$covariables" ]; then
+	if [ ! -z "$covariables" ] && [ "$covariables" != "none" ]; then
  		echo $covariables > $output_folder/$name/reads_study_info/covariables.txt
   	fi
 	export debug_step="all"
@@ -1643,6 +1664,9 @@ _log_step "Step_3a_Prepare" "start"
 			if [ "$save_unaligned" == "yes" ]; then
 				sed -i "s,save_unaligned=no,save_unaligned=yes,g" ${unit_ini[index]}
 			fi
+			if [ "$bam_filter_pairs" == "no" ]; then
+				sed -i "s,bam_filter_pairs=yes,bam_filter_pairs=no,g" ${unit_ini[index]}
+			fi
 			if [ ! -z "$featureCounts_extra_args" ]; then
 				fc_extra_escaped=$(sed_escape "$featureCounts_extra_args")
 				sed -i "s,parameters=-M -O -C -B,parameters=$fc_extra_escaped,g" ${unit_ini[index]}
@@ -1657,6 +1681,32 @@ _log_step "Step_3a_Prepare" "start"
 				aligner_extra_args_used="$kallisto_extra_args"
 			else
 				aligner_extra_args_used=""
+			fi
+			if [[ "$aligner" == "hisat2" || "$aligner" == "star" ]] && [ "$spliced_alignment" != "yes" ]; then
+				_no_splice="no"
+				if [ "$spliced_alignment" == "no" ]; then
+					_no_splice="yes"
+				elif [ -f "$gff" ]; then
+					_mx=$(annotation_multi_exon_counts "$gff")
+					if [ "$_mx" == "NA" ]; then
+						echo -e "\nspliced_alignment 'auto': no exon or CDS feature with a transcript_id or Parent in $(basename $gff), so spliced alignment is kept. Set 'spliced_alignment: no' if this genome has no introns (e.g. bacteria, trypanosomatids).\n"
+					else
+						read -r _mx_multi _mx_total <<< "$_mx"
+						echo -e "\nspliced_alignment 'auto': $_mx_multi of $_mx_total transcripts in $(basename $gff) have more than one exon."
+						if [ $(( _mx_multi * 100 )) -lt "$_mx_total" ]; then _no_splice="yes"; fi
+					fi
+				fi
+				if [ "$_no_splice" == "yes" ]; then
+					if [[ "$aligner" == "hisat2" && " $aligner_extra_args_used " != *" --no-spliced-alignment "* ]]; then
+						aligner_extra_args_used="$aligner_extra_args_used --no-spliced-alignment"
+					elif [[ "$aligner" == "star" && " $aligner_extra_args_used " != *" --alignIntronMax "* ]]; then
+						aligner_extra_args_used="$aligner_extra_args_used --alignIntronMax 1"
+					fi
+					echo -e "Intronless annotation (or 'spliced_alignment: no'): spliced alignment is switched off for $(basename ${unit_fasta[index]}), so a read or pair can no longer bridge two genes through a spurious intron. Set 'spliced_alignment: yes' to keep it.\n"
+				fi
+			fi
+			if [[ "$aligner" == "hisat2" && " $aligner_extra_args_used " == *" --very-sensitive "* && " $aligner_extra_args_used " != *" --no-softclip "* ]]; then
+				echo -e "\nNOTE: hisat2_extra_args has '--very-sensitive' without '--no-softclip'. With that preset hisat2 accepts alignments that keep only a ~10-25 bp anchor and soft-clip the rest, so reads from other organisms (contaminants, the partner species of a co-culture) can align by chance. Add '--no-softclip' unless the reads carry untrimmed adapters.\n"
 			fi
 			if [ ! -z "$aligner_extra_args_used" ]; then
 				ae_escaped=$(sed_escape "$aligner_extra_args_used")
@@ -1862,6 +1912,13 @@ if run_step step4; then
 _log_step "Step_4_R_Process" "start"
  	echo -e "Processing output of miARma-seq, QC figures, plots, DGE if requested..."
 	IFS=', ' read -r -a array2 <<< "$filter"
+	if [ ${#array2[@]} -gt ${#array[@]} ]; then
+		_filters=()
+		for _f in "${array2[@]}"; do
+			if [[ "$_f" =~ ^[0-9]+$ ]] && [ ${#_filters[@]} -gt 0 ] && [ "${_filters[-1]}" == "standard" ]; then _filters[-1]="standard,$_f"; else _filters+=("$_f"); fi
+		done
+		array2=("${_filters[@]}")
+	fi
 	for index in "${!array[@]}"; do
 		annotation_file=${array[index]}
 		fc_seq_key=${optionsFeatureCounts_seq:-gene_name}
@@ -1926,7 +1983,7 @@ _log_step "Step_4_R_Process" "start"
 			fi
 			R_qc_figs.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index "edgeR_object_prefilter" "edgeR_object" "edgeR_object_norm" $pattern_to_remove $annotation_file $fc_feat_type $split_sections | tee -a $output_folder/$name/R_qc_figs.log
 		if [[ -e "$output_folder/$name/final_results_reanalysis$index/counts_adjusted.txt" ]]; then
-			echo -e "\n\nRemember that batch effect correction/covariables have been only provided to Combat-Seq/limma for visualization purposes, to include covariables in the DGE model after checking the visualization the argument -C will be used\n\n\nQC_PDF adjusted counts\n\nRemember that you have requested batch effect correction/count adjustment, so you have to mind the figures in this QC_PDF from ComBat-seq/limma counts...\n"
+			echo -e "\n\nRemember that the ComBat-seq/limma adjusted counts are used for visualization only. The DGE model adjusts for the covariable given with -C or, without -C, for the batch vector unless it is confounded with the condition (see R_process_reanalyzer.log)\n\n\nQC_PDF adjusted counts\n\nRemember that you have requested batch effect correction/count adjustment, so you have to mind the figures in this QC_PDF from ComBat-seq/limma counts...\n"
 			echo -e 'R_qc_figs.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index "edgeR_object_prefilter_adjusted" "edgeR_object_adjusted" "edgeR_object_norm_adjusted" $pattern_to_remove $annotation_file $fc_feat_type $split_sections' > $output_folder/$name/R_qc_figs_adjusted.log
 			R_qc_figs.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index "edgeR_object_prefilter_adjusted" "edgeR_object_adjusted" "edgeR_object_norm_adjusted" $pattern_to_remove $annotation_file $fc_feat_type $split_sections | tee -a $output_folder/$name/R_qc_figs_adjusted.log
 		fi
@@ -2710,6 +2767,8 @@ if run_step step8; then
 	for _old_report in "$output_folder/$name"/final_results_reanalysis0*/sphinx_report "$output_folder/$name"/final_results_reanalysis0*/final_report.html; do
 		[ -e "$_old_report" ] && rm -rf "$_old_report"
 	done
+	echo -e "\nRecording tool versions and reference checksums in $output_folder/$name/provenance..."
+	write_provenance
 	sphinx_report.sh $output_folder/$name $name
 	export debug_step="all"
 _log_step "Step_8_Report" "end"

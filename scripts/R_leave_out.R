@@ -1,6 +1,7 @@
 #!/usr/bin/env Rscript
 .rgse_scripts_dir <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[1])))
 source(file.path(.rgse_scripts_dir, "R_qs_helpers.R"))
+source(file.path(.rgse_scripts_dir, "R_de_helpers.R"))
 
 args <- commandArgs(trailingOnly = TRUE)
 output_dir <- args[1]
@@ -35,20 +36,19 @@ comps <- list()
 for (k in comp_ids) {
   e <- new.env()
   rgse_load_env(file.path(dge_dir, paste0("DGE_analysis_comp", k, ".qs2")), envir = e)
-  if (is.null(e$de_count_cols) || is.null(e$de_keep)) {
+  if (is.null(e$de_count_cols) || is.null(e$de_keep) || !exists("de_settings", envir = e, inherits = FALSE)) {
     finish("error", paste0("DGE_analysis_comp", k, ".qs2 was written by an older version of the pipeline; re-run step 4 to use the leave-out runs."), code = 1)
   }
   if (is.null(gene_counts)) {
     gene_counts <- e$gene_counts
     filter <- e$filter
-    DESeq2_compare <- e$DESeq2_compare
   }
   prim <- read.delim(file.path(dge_dir, paste0("DGE_analysis_comp", k, ".txt")), check.names = FALSE, stringsAsFactors = FALSE)
   lfc_name <- colnames(prim)[3]
   contrast <- paste(sapply(strsplit(sub("^logFC", "", lfc_name), "__VS__", fixed = TRUE)[[1]], function(p) sub("^__", "", p)), collapse = " vs ")
   comps[[length(comps) + 1]] <- list(
     id = k, comp = e$list_combinations[[e$i]], samples = e$de_count_cols[e$de_keep], condition = as.character(e$condition),
-    time = if (!is.null(e$covariab) && e$covariab != "none") e$Time else NULL, covariab_format = e$covariab_format,
+    covs = e$covs_de, settings = e$de_settings,
     diff_soft = e$diff_soft, filter_option = e$filter_option, contrast = contrast,
     lfc = setNames(prim[[3]], prim$Gene_ID), fdr = setNames(prim$FDR, prim$Gene_ID))
   rm(e); invisible(gc())
@@ -92,34 +92,11 @@ run_comp <- function(cp, drop) {
   grp <- if (all(!startsWith(cond, "__"))) paste0("__", cond) else cond
   n <- c(sum(grp == cp$comp[1]), sum(grp == cp$comp[2]))
   if (any(n < 2)) return(list(status = paste0("skipped (n<2 in ", sub("^__", "", cp$comp[which(n < 2)[1]]), ")"), n = n))
-  obj <- DGEList(counts = gene_counts[, cp$samples[keep]], group = cond, genes = gene_counts[, gene_cols])
+  obj <- DGEList(counts = gene_counts[, cp$samples[keep]], group = grp, genes = gene_counts[, gene_cols])
   obj <- filter(filter = cp$filter_option, obj)
   obj <- normLibSizes(obj)
-  if (is.null(cp$time)) {
-    obj <- estimateDisp(obj, robust = TRUE)
-    if (is.na(obj$common.dispersion)) obj$common.dispersion <- 0.4^2
-  } else {
-    Treat <- obj$samples$group
-    Time <- cp$time[keep]
-    if (is.factor(Time)) Time <- droplevels(Time)
-    design <- model.matrix(~0 + Treat + Time)
-    rownames(design) <- colnames(obj)
-    obj <- estimateDisp(obj, design, robust = TRUE)
-  }
-  if (all(!startsWith(as.character(obj$samples$group), "__"))) obj$samples$group <- as.factor(paste0("__", obj$samples$group))
-  if (cp$diff_soft == "DESeq2") {
-    tab <- DESeq2_compare(comp = cp$comp, object = obj, covariab = if (is.null(cp$time)) "none" else paste(as.character(Time), collapse = ","),
-                          covariab_format = cp$covariab_format)$table
-  } else if (is.null(cp$time)) {
-    tab <- topTags(exactTest(obj, pair = rev(cp$comp)), n = nrow(obj), adjust.method = "BH", sort.by = "PValue")$table
-  } else {
-    fit <- glmQLFit(obj, design, robust = TRUE)
-    contrast <- rep(0, ncol(design))
-    idx <- rev(match(paste0("Treat", sub("__", "", cp$comp)), colnames(design)))
-    if (length(idx) != 2 || anyNA(idx)) stop("the contrast could not be matched to the design")
-    contrast[idx] <- c(-1, 1)
-    tab <- topTags(glmQLFTest(fit, contrast = contrast), n = nrow(obj), adjust.method = "BH", sort.by = "PValue")$table
-  }
+  covs <- if (is.null(cp$covs)) NULL else cp$covs[keep, , drop = FALSE]
+  tab <- rgse_de_test(obj, cp$comp, covs, cp$diff_soft, cp$settings)$table
   list(status = "ok", n = n, lfc = setNames(tab[[3]], tab$Gene_ID), fdr = setNames(tab$FDR, tab$Gene_ID))
 }
 

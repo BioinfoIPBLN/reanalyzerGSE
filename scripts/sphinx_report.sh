@@ -949,6 +949,40 @@ VENNPY
 )
 fi
 
+provenance_rst=""
+if [ -d "$path/provenance" ]; then
+	provenance_rst="
+Provenance
+------------------------------------------------------------------------------------
+How this report was produced: pipeline version and commit, container and host, tool and package versions, and checksums of the reference files. The options in effect at each invocation of the pipeline are kept as YAML files that can be given back to '-options' to repeat the analysis.
+"
+	[ -s "$path/provenance/run_parameters_latest.yaml" ] && provenance_rst="$provenance_rst
+Options of the latest invocation: :download:\`run_parameters_latest.yaml <../provenance/run_parameters_latest.yaml>\`
+"
+	[ -s "$path/provenance/run_history.tsv" ] && provenance_rst="$provenance_rst
+.. literalinclude:: ../provenance/run_history.tsv
+   :caption: Invocations of the pipeline on this folder (a resumed run starts at From_step)
+"
+	[ -s "$path/provenance/tool_versions.txt" ] && provenance_rst="$provenance_rst
+.. literalinclude:: ../provenance/tool_versions.txt
+   :caption: Pipeline and tool versions
+"
+	[ -s "$path/provenance/R_packages.txt" ] && provenance_rst="$provenance_rst
+.. literalinclude:: ../provenance/R_packages.txt
+   :caption: R and main R packages
+"
+	[ -s "$path/provenance/reference_checksums.tsv" ] && provenance_rst="$provenance_rst
+.. literalinclude:: ../provenance/reference_checksums.tsv
+   :caption: Reference files (MD5, size in bytes, path)
+"
+	[ -s "$path/provenance/python_packages.txt" ] && provenance_rst="$provenance_rst
+All Python packages: :download:\`python_packages.txt <../provenance/python_packages.txt>\`
+"
+	provenance_rst="$provenance_rst
+.. index:: Provenance
+"
+fi
+
 ######### Modify index.rst
 echo "
 Welcome to $project_name report!
@@ -1020,6 +1054,11 @@ List of comparisons:
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. include_matching_files:: list_comp.txt ../$final_dir_name/DGE/
+$(if [ -f "$path/$final_dir_name/DGE/de_methods.txt" ]; then echo "
+Test, gene filter and samples per condition of each comparison:
+
+.. literalinclude:: ../$final_dir_name/DGE/de_methods.txt
+"; fi)
 
 DEGs:
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1114,6 +1153,7 @@ A Gantt chart of the same timeline is also available:
 
 .. index:: Pipeline timing
 "; fi)
+$provenance_rst
 
 
 Genome browser visualization (IGV)

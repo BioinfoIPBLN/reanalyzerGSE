@@ -12,7 +12,7 @@ for argument in "${arguments[@]}"; do
 
 ### Gather the parameters, default values, exit if essential not provided...
 	case $argument in
-		-h*) echo "reanalyzerGSE v${REANALYZER_VERSION} - usage: reanalyzerGSE.sh [options]
+		-h | -help) echo "reanalyzerGSE v${REANALYZER_VERSION} - usage: reanalyzerGSE.sh [options]
 	        -h | -help # Type this to get help
 	        -options | Provide a YAML configuration file containing the parameters to be used. You can adapt the file 'config_template.yaml' provided in the scripts folder. CLI arguments override values from the YAML file.)
 
@@ -47,8 +47,8 @@ for argument in "${arguments[@]}"; do
 	        -bv | -batch_vector # Comma-separated list of numbers for use as batch vector with Combat-seq
 	        -bc | -batch_biological_covariable # Comma-separated list of numbers for use as batch vector of covariables of biological interest with Combat-seq
 			    -bf | -batch_format # Format of the provided batch variables ('num' for numeric/vector variables or 'fact' for factors, by default)
-	        -C | -covariables # Please input a comma-separated list for the covariable that should be included in the limma model for removeBatchEffect or in the edgeR model for DGE (for now only one covariable allowed, for example an expected batch effect)
-	        -Cf | -covariables_format # Format of the provided covariate ('num' by default for numeric covariables, or 'fact' for factors)
+	        -C | -covariables # Covariables to include in the differential expression model (and in limma's removeBatchEffect for the adjusted counts): one comma-separated list per covariable, with one value per sample in the order of samples_info.txt, and several covariables separated by ';' (e.g. '1,1,2,2;F,M,F,M'). In each design, a covariable that is constant over the samples analysed or confounded with the condition (or with the covariables before it) is left out of that design, with a note in R_process_reanalyzer.log. If not given and '-b yes', the batch vector is used as a factor covariable, unless it is confounded with the condition
+	        -Cf | -covariables_format # Format of each covariable in '-C', in the same order and separated by ';' ('num' for numeric, by default, or 'fact' for factors, e.g. 'num;fact'). A single value applies to every covariable
 	        -T | -target # Protopical target file for attempts to differential gene expression analyses (containing filenames and covariates, automatically built if not provided)
 
 	        #### Activate alternative modes:
@@ -59,7 +59,7 @@ for argument in "${arguments[@]}"; do
 	        -fe | -functional_enrichment_analyses # Whether to perform functional enrichment analyses ('no' or 'yes', by default)
 	        -cPf | -clusterProfiler_full # Whether to perform additional functional enrichment analyses with multiple databases using clusterProfiler, by default only ORA for GO BP, GO MF and GO CC, and KEGG and REACTOME enrichment, will be performed, as additional analyses may be slow if many significant DEGs or multiple number of comparisons ('yes' or 'no', by default)
 	        -cPc | -clusterProfiler_cores # Number of gene lists to enrich concurrently within each comparison (3 by default). The ceiling here is KEGG, not CPU: enrichKEGG/gseKEGG and the pathview snapshots query rest.kegg.jp, so every unit of concurrency multiplies the request rate against a shared public service. Raise it only when '-cPf no' (which removes the GSEA-KEGG and module-KEGG calls) or when KEGG enrichment is not needed
-	        -b | -batch # Batch effect present? (no by default, yes if correction through Combat-seq and model is to be performed, and info is going to be required in other arguments or prompts)
+	        -b | -batch # Batch effect present? (no by default, yes if correction through Combat-seq and model is to be performed, and info is going to be required in other arguments or prompts). The ComBat-seq counts are used for the QC figures only; the differential expression adjusts for the batch through the model, with '-C' or, if '-C' is not given, with the batch vector itself
 	        -B | -bed_mode # Whether to convert list of files to bed format so they can be visualized in genome browsers ('yes' or 'no', by default)
 	        -Dc | -deconvolution # Deconvolution method for bulk RNA-seq data: 'no' (default), 'CDSeq' (unsupervised, may take hours), or 'BisqueRNA' (reference-based, requires -scM, -scP, and -bulkM)
 	        -scM | -sc_count_matrix # Path to sc/snRNA count matrix for BisqueRNA deconvolution (tab-delimited, first column 'Gene', remaining columns are cells, values are counts)
@@ -90,11 +90,14 @@ for argument in "${arguments[@]}"; do
 
 	        #### Processing parameters:
 	        -s | -strand # Strandness of the library ('yes, 'no', 'reverse'). If not provided and '-t' used, this would be predicted by salmon. Please use this parameter if prediction not correct, see explanations in for example in bit.ly/strandness0 and bit.ly/strandness
-	        -f | -filter # Threshold of gene counts to use ('bin' to capture the lower expressed genes, 'filterbyexpr' to use the edgeR solution, 'standard' by default (can be customized via 'standard,X', e.g. 'standard,5', defaults to 3), or a numeric value for an absolute raw count threshold applied per group). Please provide a comma separated list with the filters to use at each quantification if multiple annotation are provided
+	        -f | -filter # Gene filter applied before normalisation and differential expression: 'filterbyexpr' (default, edgeR's filterByExpr, which keeps the genes with about 10 reads in at least as many samples as the smallest group, so the threshold follows the library sizes and the design), 'standard' (CPM > 1 in at least 3 samples, or in X samples with 'standard,X', e.g. 'standard,5'), 'bin' (any count, to keep the lowest expressed genes), or a number for an absolute raw count threshold applied per group. Please provide a comma separated list with the filters to use at each quantification if multiple annotation are provided
 	        -Of | -options_featureCounts_feat # The feature type to use to count in featureCounts (default 'exon')
 	        -Os | -options_featureCounts_seq # The seqid type to use to count in featureCounts (default 'gene_name')
 	        -A | -aligner # Aligner software to use ('hisat2' or 'star', by default)
-	        -Des | -differential_expr_software # Software for the differential expression analyses: 'edgeR' (default) or 'DESeq2'. Both engines are fed exactly the same filtered and normalised count matrix, the same experimental design and the same comparisons, and both write the same files (DGE_analysis_comp<N>.txt, volcano plots, and the objects consumed by the report), so functional enrichment, Venn diagrams, network analyses and the report behave identically either way. edgeR uses exactTest when there are no covariables and glmQLFTest when '-c' is provided; DESeq2 uses the negative-binomial Wald test on the design '~ condition' (or '~ covariable + condition' when '-c' is provided). Genes that DESeq2 removes by independent filtering are reported with PValue and FDR of 1 rather than NA, so that the downstream significance filters treat them as non-significant
+	        -Des | -differential_expr_software # Software for the differential expression analyses: 'edgeR' (default), 'DESeq2', 'limma' or 'wilcoxon'. Every engine is fed exactly the same filtered and normalised count matrix, the same experimental design and the same comparisons, and writes the same files (DGE_analysis_comp<N>.txt, volcano plots, and the objects consumed by the report), so functional enrichment, Venn diagrams, network analyses and the report behave identically either way. edgeR uses the quasi-likelihood F-test on '~0 + condition (+ covariables)' (see '-eT'); DESeq2 the negative-binomial Wald test on '~ covariables + condition'; limma voom with robust empirical Bayes on '~0 + condition (+ covariables)'. Genes that DESeq2 removes by independent filtering are reported with PValue and FDR of 1 rather than NA, so that the downstream significance filters treat them as non-significant. 'wilcoxon' is the Wilcoxon rank-sum test on TMM-normalised CPM with BH correction, which keeps the false discovery rate under control in large population-scale cohorts (roughly 8 or more samples per condition) where the negative-binomial models can be anticonservative; it ignores covariables and '-lfc', and has almost no power with few replicates
+	        -eT | -edger_test # Test used by edgeR: 'ql' (default, quasi-likelihood F-test, the method edgeR recommends, also used whenever there are covariables or '-lfc' is above 0) or 'exact' (the classic exactTest, which reanalyzerGSE used without covariables up to v4.1.0; keep it to reproduce older results)
+	        -lfc | -lfc_threshold # Minimum absolute log2 fold change to test against (0 by default, i.e. any change). Above 0 the null hypothesis becomes |log2FC| <= threshold, tested with edgeR glmTreat, DESeq2 results(lfcThreshold) or limma treat, so the FDR refers to changes larger than the threshold; this is the valid way to require a minimum fold change, unlike filtering the DEGs by logFC after testing. Not applied with 'wilcoxon'
+	        -lfS | -lfc_shrink # Whether to add a shrunkLFC column with DESeq2's lfcShrink (type 'ashr' if installed, 'normal' otherwise) to the DESeq2 tables ('yes' or 'no', by default). Shrunk fold changes do not inflate for low counts, so they are the better effect size for ranking and plotting; the logFC column and the p-values are not changed. Only used with '-Des DESeq2'
 	        -fp | -fastp_mode # Whether to perform quality filtering on the raw reads by fastp ('yes' or 'no', by default)
 	        -fpa | -fastp_adapter # Whether to perform adapter trimming on the raw reads by fastp ('yes' or 'no', by default, to perform automatic trimming, or a path to a fasta file to perform trimming of its sequences)
 	        -fpt | -fastp_trimming # Whether to trim the raw reads by fastp ('none' by default, if two numbers separated by comma, the indicated number of bases will be trimmed from the front and tail, respectively)
@@ -121,12 +124,14 @@ for argument in "${arguments[@]}"; do
 	        -mQ | -bam_mapq_threshold # Min MAPQ for samtools view -q when building the BAM (0 by default, meaning no filter). The featureCounts cutoff is no longer tied to this: it is the '-Q' inside '-Ofc/-featureCounts_extra_args'
 	        -Fex | -bam_exclude_flags # samtools -F flags to exclude, e.g. '4' (unmapped), '256' (secondary), '2308' (combined)
 	        -Freq | -bam_require_flags # samtools -f flags to require. Suggestion: use '2' for Paired-End (proper pair), leave empty or '4' for Single-End.
+	        -Fpair | -bam_filter_pairs # In paired-end runs, whether the BAM filters above ('-mQ', '-Fex', '-Freq', '-Fcust') keep a fragment only when both mates pass ('yes', by default) or test every alignment on its own ('no', the behaviour up to v4.1.0, which leaves orphan mates still flagged as properly paired). No effect without filters or in single-end runs
 	        -Fdup | -bam_dedup # Duplicate removal: 'no' (default), 'samtools' (markdup -r), 'picard' (REMOVE_DUPLICATES), 'picard_optical' (REMOVE_SEQUENCING_DUPLICATES)
 	        -Fcust | -bam_custom_filter # Custom shell command to pipe SAM text through post-alignment (e.g. \"grep -E '^@|\\<NM:i:0\\>'\" for perfect matches). Must preserve header lines (^@).
 	        -bN | -bam_normalization # Normalization method using deeptool's bamCoverage. Choices: RPKM, CPM, BPM, RPGC, None. ('BPM' by default)
 	        -bs | -bigwig_binsize # Bin size in bp for the bigwig coverage tracks built by deeptool's bamCoverage (10 by default). Larger bins are much faster to compute and much smaller on disk: 50 is ample for genome-browser inspection, and 10 is only worth its cost when near-base resolution is needed
 	        -Su | -save_unaligned # Save unaligned reads from hisat2/STAR ('no' by default, or 'yes'). When enabled, reads that did not align to the reference genome are written to compressed fastq files alongside the BAM files
-	        -Ah | -hisat2_extra_args # Extra arguments appended verbatim to the hisat2 command line (e.g. '--very-sensitive --no-mixed --no-discordant'). Only used when '-A hisat2'
+	        -Ah | -hisat2_extra_args # Extra arguments appended verbatim to the hisat2 command line (e.g. '--very-sensitive --no-softclip --no-mixed --no-discordant'). Only used when '-A hisat2'. With '--very-sensitive', add '--no-softclip': otherwise hisat2 accepts alignments that keep only a short anchor and soft-clip the rest, so reads from another organism can align by chance
+	        -Sa | -spliced_alignment # Whether hisat2 and STAR may align reads across introns: 'auto' (default) switches spliced alignment off ('--no-spliced-alignment' for hisat2, '--alignIntronMax 1' for STAR) when fewer than 1% of the transcripts in the annotation have more than one exon, as in bacteria or trypanosomatids, where the spurious introns join reads or mates of neighbouring genes and paralogs; 'yes' always allows it and 'no' always switches it off
 	        -As | -star_extra_args # Extra arguments appended verbatim to the STAR command line (e.g. '--outSAMmultNmax 1 --alignIntronMax 100000'). Only used when '-A star'
 	        -Ak | -kallisto_extra_args # Extra arguments appended verbatim to the kallisto command line ('--pseudobam' in the config template, which writes a per-sample 'pseudoalignments.bam' of the transcriptome pseudoalignments next to the abundance tables; nothing downstream consumes it, it is there to inspect). Other options: '--bias', '--fusion', '--genomebam --gtf FILE' (BAM projected to genome coordinates, needs a GTF). Leave empty to write no BAM. Only used when '-A kallisto'
 
@@ -198,6 +203,9 @@ for argument in "${arguments[@]}"; do
 		-rRq | -rrna_qc_databases) rrna_qc_databases=${arguments[index]} ;;
 		-rRs | -rrna_qc_min_score) rrna_qc_min_score=${arguments[index]} ;;
 		-Des) differential_expr_soft=${arguments[index]} ;;
+		-eT | -edger_test) edger_test=${arguments[index]} ;;
+		-lfc | -lfc_threshold) lfc_threshold=${arguments[index]} ;;
+		-lfS | -lfc_shrink) lfc_shrink=${arguments[index]} ;;
 		-Dm) debug_module=${arguments[index]} ;;
 		-Es | -end_step) end_step=${arguments[index]} ;;
 		-Dec) differential_expr_comparisons=${arguments[index]} ;;
@@ -253,11 +261,13 @@ for argument in "${arguments[@]}"; do
 		-Fex) bam_exclude_flags=${arguments[index]} ;;
 		-Freq) bam_require_flags=${arguments[index]} ;;
 		-Fdup) bam_dedup=${arguments[index]} ;;
+		-Fpair | -bam_filter_pairs) bam_filter_pairs=${arguments[index]} ;;
 		-Fcust) bam_custom_filter=${arguments[index]} ;;
 		-bN) bam_normalization=${arguments[index]} ;;
 		-bs | -bigwig_binsize) bigwig_binsize=${arguments[index]} ;;
 		-Su | -save_unaligned) save_unaligned=${arguments[index]} ;;
 		-Ah | -hisat2_extra_args) hisat2_extra_args=${arguments[index]} ;;
+		-Sa | -spliced_alignment) spliced_alignment=${arguments[index]} ;;
 		-As | -star_extra_args) star_extra_args=${arguments[index]} ;;
 		-Ak | -kallisto_extra_args) kallisto_extra_args=${arguments[index]} ;;
 		-Ofc) featureCounts_extra_args=${arguments[index]} ;;
@@ -479,7 +489,7 @@ if [ ! -z "$number_reads_to_subsample" ]; then
 	echo -e "\number_reads_to_subsample=$number_reads_to_subsample\n"
 fi
 if [ -z "$filter" ]; then
-	filter=standard
+	filter=filterbyexpr
 fi
 echo -e "\nfilter=$filter\n"
 if [ -z "$batch" ]; then
@@ -592,10 +602,27 @@ fi
 if [ -z "$differential_expr_soft" ]; then
 	differential_expr_soft="edgeR"
 fi
-if [ "$differential_expr_soft" != "edgeR" ] && [ "$differential_expr_soft" != "DESeq2" ]; then
-	echo "Error: -Des/-differential_expr_software must be either 'edgeR' or 'DESeq2'. You provided: $differential_expr_soft"; exit 1
+case "$differential_expr_soft" in
+	edgeR|DESeq2|limma|wilcoxon) : ;;
+	*) echo "Error: -Des/-differential_expr_software must be one of 'edgeR', 'DESeq2', 'limma' or 'wilcoxon'. You provided: $differential_expr_soft"; exit 1 ;;
+esac
+if [ -z "$edger_test" ]; then
+	edger_test="ql"
 fi
-echo -e "\ndifferential_expr_soft=$differential_expr_soft\n"
+if [ "$edger_test" != "ql" ] && [ "$edger_test" != "exact" ]; then
+	echo "Error: -eT/-edger_test must be 'ql' or 'exact'. You provided: $edger_test"; exit 1
+fi
+if [ -z "$lfc_threshold" ]; then
+	lfc_threshold=0
+fi
+if ! [[ "$lfc_threshold" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+	echo "Error: -lfc/-lfc_threshold must be a non-negative number (a log2 fold change). You provided: $lfc_threshold"; exit 1
+fi
+if [ -z "$lfc_shrink" ]; then
+	lfc_shrink="no"
+fi
+export RGSE_EDGER_TEST="$edger_test" RGSE_LFC_THRESHOLD="$lfc_threshold" RGSE_LFC_SHRINK="$lfc_shrink"
+echo -e "\ndifferential_expr_soft=$differential_expr_soft (edger_test=$edger_test, lfc_threshold=$lfc_threshold, lfc_shrink=$lfc_shrink)\n"
 if [ -z "$differential_expr_comparisons" ]; then
 	differential_expr_comparisons="no"
 fi
@@ -680,6 +707,16 @@ fi
 if [ -z "$bam_dedup" ]; then
 	bam_dedup="no"
 fi
+if [ -z "$bam_filter_pairs" ]; then
+	bam_filter_pairs="yes"
+fi
+if [ -z "$spliced_alignment" ]; then
+	spliced_alignment="auto"
+fi
+case "$spliced_alignment" in
+	auto|yes|no) : ;;
+	*) echo "Error: -Sa/-spliced_alignment must be 'auto', 'yes' or 'no'. You provided: $spliced_alignment"; exit 1 ;;
+esac
 if [ -z "$bam_custom_filter" ]; then
 	bam_custom_filter=""
 fi
