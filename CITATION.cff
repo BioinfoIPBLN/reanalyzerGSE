@@ -1,0 +1,46 @@
+cff-version: 1.2.0
+message: "If you use reanalyzerGSE, please cite the article below and the version of the software you used."
+title: reanalyzerGSE
+abstract: "Transcriptomic pipeline to automatically analyze entries from online databases or raw data."
+type: software
+version: 4.2.0
+date-released: "2026-10-22"
+license: GPL-3.0
+repository-code: "https://github.com/BioinfoIPBLN/reanalyzerGSE"
+authors:
+  - family-names: Ruiz
+    given-names: Jose L.
+  - family-names: Terrón-Camero
+    given-names: Laura Carmen
+  - family-names: Castillo-González
+    given-names: Julia
+  - family-names: Fernández-Rengel
+    given-names: Iván
+  - family-names: Delgado
+    given-names: Mario
+  - family-names: Gonzalez-Rey
+    given-names: Elena
+  - family-names: Andrés-León
+    given-names: Eduardo
+preferred-citation:
+  type: article
+  title: "reanalyzerGSE: tackling the everlasting lack of reproducibility and reanalyses in transcriptomics"
+  journal: bioRxiv
+  year: 2023
+  doi: 10.1101/2023.07.12.548663
+  url: "https://doi.org/10.1101/2023.07.12.548663"
+  authors:
+    - family-names: Ruiz
+      given-names: Jose L.
+    - family-names: Terrón-Camero
+      given-names: Laura Carmen
+    - family-names: Castillo-González
+      given-names: Julia
+    - family-names: Fernández-Rengel
+      given-names: Iván
+    - family-names: Delgado
+      given-names: Mario
+    - family-names: Gonzalez-Rey
+      given-names: Elena
+    - family-names: Andrés-León
+      given-names: Eduardo
