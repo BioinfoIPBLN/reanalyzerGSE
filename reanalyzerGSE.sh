@@ -300,20 +300,28 @@ pairs_in_sync() {
 	paste <(zcat -f "$1" | awk 'NR%4==1{print $1}') <(zcat -f "$2" | awk 'NR%4==1{print $1}') | awk -F'\t' '{a=$1; b=$2; sub(/\/[12]$/,"",a); sub(/\/[12]$/,"",b); if (a != b) exit 1}'
 }
 export -f pairs_in_sync
-repair_local_pairs() {
+reads_fingerprint() {
+	stat -L -c '%n %s %Y' "$1"/*_[12].fastq.gz 2>/dev/null
+}
+repair_read_pairs() {
 	cd "$seqs_location" || exit 1
-	local repair_dir="$output_folder/$name/repair_pairs" s n_single
+	local stage=$1 repair_dir="$output_folder/$name/repair_pairs" s n_single
 	local -a samples to_repair
 	mapfile -t samples < <(ls | egrep '_2\.fastq\.gz$' | sed 's,_2\.fastq\.gz$,,')
 	[ ${#samples[@]} -eq 0 ] && return
-	rm -rf "$repair_dir"; mkdir -p "$repair_dir"
+	mkdir -p "$repair_dir"
+	if [ "$(reads_fingerprint "$seqs_location")" == "$(cat "$repair_dir/checked_reads.txt" 2>/dev/null)" ]; then
+		echo -e "\nThe mates of the reads in $seqs_location are unchanged since they were last checked, so they are not checked again.\n"
+		return
+	fi
 	if [[ "$repair_pairs" == "yes" ]]; then
 		to_repair=("${samples[@]}")
 	else
-		echo -e "\nChecking that the _1 and _2 files of each sample list the same reads in the same order...\n"
+		echo -e "\nChecking that the _1 and _2 files of each sample list the same reads in the same order ($stage reads, in $seqs_location)...\n"
 		mapfile -t to_repair < <(printf '%s\n' "${samples[@]}" | parallel --keep-order -j $number_parallel 'pairs_in_sync {}_1.fastq.gz {}_2.fastq.gz || echo {}')
 		if [ ${#to_repair[@]} -eq 0 ]; then
 			echo -e "The mates of all the ${#samples[@]} paired-end samples are in sync.\n"
+			reads_fingerprint "$seqs_location" > "$repair_dir/checked_reads.txt"
 			return
 		fi
 		echo -e "Mates out of sync (different read names at the same position, or a different number of reads) in: ${to_repair[*]}\n"
@@ -322,20 +330,21 @@ repair_local_pairs() {
 		echo -e "\n\033[1;31mERROR:\033[0m the mates of ${to_repair[*]} have to be re-paired, but BBTools repair.sh is not available in this container. Please use a container that includes it, or re-pair the reads before running.\n" >&2
 		exit 1
 	fi
-	echo -e "sample\tsingletons_removed" > "$repair_dir/repair_summary.txt"
+	[ -s "$repair_dir/repair_summary.txt" ] || echo -e "stage\tsample\tsingletons_removed" > "$repair_dir/repair_summary.txt"
 	for s in "${to_repair[@]}"; do
 		echo "Re-pairing $s with BBTools repair.sh..."
-		if ! repair.sh -Xmx$(( memory_max * 85 / 100 / 1073741824 ))g -eoom in1="${s}_1.fastq.gz" in2="${s}_2.fastq.gz" out1="$repair_dir/${s}_1.fastq.gz" out2="$repair_dir/${s}_2.fastq.gz" outs="$repair_dir/${s}_singletons.fastq.gz" ain=t ziplevel=$compression_level threads=$cores &> "$repair_dir/${s}_repair.log"; then
-			echo -e "\n\033[1;31mERROR:\033[0m repair.sh failed for $s, see $repair_dir/${s}_repair.log\n" >&2
+		if ! repair.sh -Xmx$(( memory_max * 85 / 100 / 1073741824 ))g -eoom in1="${s}_1.fastq.gz" in2="${s}_2.fastq.gz" out1="$repair_dir/${s}_1.fastq.gz" out2="$repair_dir/${s}_2.fastq.gz" outs="$repair_dir/${s}_singletons.fastq.gz" ain=t ziplevel=$compression_level threads=$cores &> "$repair_dir/${s}_${stage}_repair.log"; then
+			echo -e "\n\033[1;31mERROR:\033[0m repair.sh failed for $s, see $repair_dir/${s}_${stage}_repair.log\n" >&2
 			exit 1
 		fi
 		n_single=$(zcat -f "$repair_dir/${s}_singletons.fastq.gz" | awk 'END{print NR/4}')
 		rm -f "$repair_dir/${s}_singletons.fastq.gz"
 		mv -f "$repair_dir/${s}_1.fastq.gz" "${s}_1.fastq.gz"
 		mv -f "$repair_dir/${s}_2.fastq.gz" "${s}_2.fastq.gz"
-		echo -e "${s}\t${n_single}" >> "$repair_dir/repair_summary.txt"
-		echo "$s re-paired: $n_single singletons removed (log: $repair_dir/${s}_repair.log)"
+		echo -e "${stage}\t${s}\t${n_single}" >> "$repair_dir/repair_summary.txt"
+		echo "$s re-paired: $n_single singletons removed (log: $repair_dir/${s}_${stage}_repair.log)"
 	done
+	reads_fingerprint "$seqs_location" > "$repair_dir/checked_reads.txt"
 }
 archive_and_remove_folders() {
 	local archive=$1; shift
@@ -677,7 +686,8 @@ if run_step step1b; then
 			fi
 		fi
 		if [[ "$repair_pairs" != "no" ]]; then
-			repair_local_pairs
+			rm -rf "$output_folder/$name/repair_pairs"
+			repair_read_pairs input
 		fi
 		if [ ! -z "$number_reads" ]; then
 			subsample_local_reads
@@ -1188,7 +1198,7 @@ _log_step "Step_2_Decontamination" "start"
 					--reads $seqs_location/{}_1.fastq.gz \
 					--reads $seqs_location/{}_2.fastq.gz \
 					--workdir $sortmerna_out/{}_sortmerna_workdir \
-					--fastx --threads $cores_sortmerna --out2 --index 0 --zip-out 1 \
+					--fastx --threads $cores_sortmerna --paired_in --out2 --index 0 --zip-out 1 \
 					--aligned $sortmerna_out/{}_rRNA \
 					--other $sortmerna_out/{}_no_rRNA \
 					-v &>> $sortmerna_out/{}_out.log"
@@ -1371,6 +1381,10 @@ _log_step "Step_3a_Prepare" "start"
 	if [ -z "$organism" ]; then
 		organism=$(cat $output_folder/$name/reads_study_info/organism.txt | sed 's, ,_,g;s,_+,_,g')
 	fi
+	if [[ "$repair_pairs" != "no" ]]; then
+		repair_read_pairs final
+		cd "$output_folder/$name/" || exit 1
+	fi
 
 	### Prepare the salmon index from the trancripts sequences if required and strandness prediction... (if the first miarma ini does not exist yet, pointing to a previous miarma run)
 	if [[ ! -e "$output_folder/$name/miarma0.ini" && ! -e "$output_folder/$name/miarma_genome0.ini" ]]; then
@@ -1407,10 +1421,14 @@ _log_step "Step_3a_Prepare" "start"
 				echo -e "\nPredicting strandedness with salmon on the first 1M reads of $_f\n"
 				if [[ "$layout" == "PAIRED" ]]; then
 					_mate=$(echo "$_f" | sed -E 's/_1\.(fastq|fq)\.gz$/_2.\1.gz/')
-					salmon quant -i $salmon_idx -l A -1 <(zcat -f "$seqs_location/$_f" | head -n 4000000) -2 <(zcat -f "$seqs_location/$_mate" | head -n 4000000) -p $cores -o "$_out" --skipQuant &> "$_out.log"
+					zcat -f "$seqs_location/$_f" | head -n 4000000 > "${_out}_1.fq"
+					zcat -f "$seqs_location/$_mate" | head -n 4000000 > "${_out}_2.fq"
+					salmon quant -i $salmon_idx -l A -1 "${_out}_1.fq" -2 "${_out}_2.fq" -p $cores -o "$_out" --skipQuant &> "$_out.log"
 				else
-					salmon quant -i $salmon_idx -l A -r <(zcat -f "$seqs_location/$_f" | head -n 4000000) -p $cores -o "$_out" --skipQuant &> "$_out.log"
+					zcat -f "$seqs_location/$_f" | head -n 4000000 > "${_out}_1.fq"
+					salmon quant -i $salmon_idx -l A -r "${_out}_1.fq" -p $cores -o "$_out" --skipQuant &> "$_out.log"
 				fi
+				rm -f "${_out}_1.fq" "${_out}_2.fq"
 				_type=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['library_types'][0])" "$_out/aux_info/meta_info.json" 2>/dev/null)
 				_ratio=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('compatible_fragment_ratio', 'N/A'))" "$_out/lib_format_counts.json" 2>/dev/null)
 				case "$_type" in
