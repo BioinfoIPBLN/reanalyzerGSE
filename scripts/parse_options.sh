@@ -36,7 +36,7 @@ for argument in "${arguments[@]}"; do
 	        -rRq | -rrna_qc_databases # Comma-separated list of rRNA reference FASTA paths for preliminary rRNA QC mapping (e.g. '/path/SILVA_138.2_LSURef_NR99_tax_silva.fasta.gz,/path/SILVA_138.2_SSURef_NR99_tax_silva.fasta.gz'). Any input here activates the Bowtie2-based rRNA mapping QC step. Output goes to preliminar_rrna_qc/
 	        -rRs | -rrna_qc_min_score # Min Bowtie2 alignment score for rRNA QC filtering (default -20)
 	        -Df | -databases_function # Comma-separated list of the EXACT databases to use for automatic functional enrichment of DEGs (autoGO/enrichR; see autoGO::choose_database()). This is the COMPLETE set — nothing is auto-added, so include pathway sets (e.g. Reactome_2022, KEGG_2021_Mouse, WikiPathways_2019_Mouse) yourself if you want them. Default: GO_Biological_Process_2025,GO_Molecular_Function_2025,GO_Cellular_Component_2025
-	        -nrf | -non_reference_funct_enrichm # Pathway to a file containing functional annotation (GAF, GMT, GFF, GTF, or a 2-column TSV/TXT mapping) to be used for functional enrichment. Required for Kallisto mode or when the organism is not Human or Mouse. If provided, this file is parsed for GO and KEGG terms, overriding the default behavior of searching the main reference annotation file.
+	        -nrf | -non_reference_funct_enrichm # Pathway to a file containing functional annotation (GAF, GMT, GFF, GTF, or a 2-column TSV/TXT mapping) to be used for functional enrichment. Required for Kallisto mode or when the organism is not Human or Mouse. If provided, this file is parsed for GO and KEGG terms, overriding the default behavior of searching the main reference annotation file. These terms are used for the over-representation of the DEGs and for GSEA of all the tested genes (ranked by -log10(p-value) times the sign of logFC), which also runs when there are no DEGs.
 
 	        #### Metadata and sample info:
 	        -D | -design_custom_local # Specifying here the experimental design for the local dataset (by default an interactive prompt will ask for a comma-separated list of the same length than the number of samples, if you want to avoid that manual input please provide the list in this argument. If no design, please provide a dummy one, e.g. with every sample in the same group or a separate one. If more than one design to provide, please input comma-separated list separated by a '/', without spaces. Please avoid naming that would match the same pattern in grep, e.g. XXXX and XXXX_TREAT. Use 'auto' to take each sample's condition from its name, dropping the '_Rep<N>' replicate suffix and everything after it (e.g. s1_Ctrl_Rep2 becomes s1_Ctrl); every sample must then carry such a suffix. Use 'llm' to have the LLM given in -llm_endpoint and -llm_model propose one condition per sample from the sample names (i.e. the files left after -regex and -regexExclude), printed in the log so it can be reused as an explicit design. The number of conditions must equal the number of samples, otherwise the run stops)
@@ -143,13 +143,14 @@ for argument in "${arguments[@]}"; do
 	        #### Performance:
 	        -regex | -input_filter_regex # Regex to keep only matching input files in local mode, removing the rest (e.g. \"Sample_A|Sample_B\")
 	        -regexExclude | -input_filter_regex_exclude # Regex to exclude matching input files in local mode, keeping the rest (e.g. \"Sample_Bad|Sample_Outlier\")
+	        -Rpair | -repair_pairs # Paired-end reads in local mode: 'auto' (default) compares the read names of the _1 and _2 files of every sample, record by record, and re-pairs with BBTools repair.sh the samples whose mates are out of order or missing (e.g. after rRNA filtering run on each mate separately); 'yes' re-pairs every sample without the check; 'no' skips both. The re-paired reads replace the input ones in the raw reads used and stored in the output folder (the input files are not modified), and the singletons are removed; counts and logs go to repair_pairs/
 	        -Ar | -alignment_removal # Fasta file to map against and remove aligned reads (e.g. host genome)
 	        -p | -cores # Number of cores
 	        -cR | -cores_reads_to_subsample # Cores to use in subsampling by seqtk (10 by default)
 	        -pi | -cores_index # Number of cores for genome indexing in aligning step (by default, same than -p)
 	        -M | -memory_max # Max RAM memory to be used by aligner or JAVA in bytes (by default 257698037760, or 240GB, used)
 	        -P | -number_parallel # Number of files to be processed in parallel (10 by default)
-	        -cG | -compression_level # Specify the compression level to gzip the downloaded fastq files from GEO (numeric '0' to '9', default '9')
+	        -cG | -compression_level # Specify the compression level to gzip the downloaded fastq files from GEO, and the local ones re-paired by -repair_pairs (numeric '0' to '9', default '9')
 	        -Ac | -aligner_index_cache # Whether to try and keep the genome index on the cache/loaded RAM so concurrent jobs do not have to reload it and can use it more easily ('no', which will empty cache at the end, or 'yes', by default)
 
 	        #### MultiQC AI annotation (optional; skipped unless -llm_endpoint is provided):
@@ -167,6 +168,7 @@ for argument in "${arguments[@]}"; do
 		-p) cores=${arguments[index]} ;;
                 -regex | -input_filter_regex) input_filter_regex=${arguments[index]} ;;
                 -regexExclude | -input_filter_regex_exclude) input_filter_regex_exclude=${arguments[index]} ;;
+                -Rpair | -repair_pairs) repair_pairs=${arguments[index]} ;;
                 -Ar | -alignment_removal) alignment_removal=${arguments[index]} ;;
 		-pi) cores_index=${arguments[index]} ;;
 		-M) memory_max=${arguments[index]} ;;
@@ -877,6 +879,13 @@ fi
 if [ -z "$input_filter_regex_exclude" ]; then
 	input_filter_regex_exclude=""
 fi
+if [ -z "$repair_pairs" ]; then
+	repair_pairs="auto"
+fi
+case "$repair_pairs" in
+	auto|yes|no) : ;;
+	*) echo "Error: -Rpair/-repair_pairs must be 'auto', 'yes' or 'no'. You provided: $repair_pairs"; exit 1 ;;
+esac
 if [ -z "$alignment_removal" ]; then
 	alignment_removal=""
 fi

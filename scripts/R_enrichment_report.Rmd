@@ -112,7 +112,7 @@ select_cols <- function(df) {
             "pvalue","P.value","pValue","p_value","p.adjust","FDR","fdr","Adjusted.P.value",
             "fold_enrichment","plus_minus",
             "Gene_ID_up_num","Gene_ID_down_num","Gene_ID_num",
-            "geneID","Genes","preferredNames","Gene_ID","summary_up","summary_down")
+            "geneID","core_enrichment","Genes","preferredNames","Gene_ID","summary_up","summary_down")
   avail <- intersect(prio, names(df))
   if ("preferredNames" %in% avail) avail <- setdiff(avail, "geneID")
   if (length(avail) < 2) avail <- names(df)[seq_len(min(10, ncol(df)))]
@@ -233,12 +233,26 @@ cp_ranked_gsea <- function(cp_dir) {
   f[!grepl("_err\\.txt$|_aPEAR|_clusters|_similarity", f)]
 }
 
+enrichr_ranked_gsea <- function(comp) {
+  if (!has_enrichr) return(character(0))
+  list.files(enrichr_dir, pattern = paste0("^", comp, "_functional_clusterProfiler_GSEA_.*\\.txt$"), full.names = TRUE)
+}
+
+render_gsea_file <- function(f, title, comp) {
+  cat(sprintf("\n#### %s\n\n", title))
+  df <- safe_read(f); n_total <- if (is.null(df)) 0 else nrow(df)
+  sig <- filter_sig(df); n_sig <- if (!is.null(sig)) nrow(sig) else 0
+  cat(sprintf("**%d** gene sets (**%d** significant, adjusted p < 0.05)\n\n", n_total, n_sig))
+  make_table(df, csv_name(comp, f))
+}
+
 render_gsea_ranked <- function(comp, cp_dir) {
   cp_files <- cp_ranked_gsea(cp_dir)
+  en_files <- enrichr_ranked_gsea(comp)
   metrics <- c(FDR = "signed FDR", log2FC = "log2FC")
   files <- lapply(setNames(names(metrics), names(metrics)), function(m) net_gsea_files(comp, m))
   has_cp <- !is.na(cp_dir) && dir.exists(cp_dir)
-  if (length(cp_files) == 0 && length(unlist(files)) == 0) {
+  if (length(cp_files) == 0 && length(en_files) == 0 && length(unlist(files)) == 0) {
     if (!has_cp) return(invisible(FALSE))
     cat("\n## GSEA (ranked gene list)\n\n")
     cp_full <- length(list.files(cp_dir, pattern = "GSEA_|^MKEGG_|^WP_|^DO_|^NCG_|^DGN_")) > 0
@@ -255,6 +269,14 @@ render_gsea_ranked <- function(comp, cp_dir) {
     background_note("all genes tested in this comparison, ranked by log2FC.")
     render_cp_gsea_groups(cp_files, comp)
   }
+  if (length(en_files) > 0) {
+    cat("\n### clusterProfiler, custom annotation {.tabset}\n\n")
+    background_note("all genes tested in this comparison, ranked by -log10(p-value) multiplied by the sign of log2FC; gene sets from the functional annotation provided (GO terms with their ancestors, and KEGG).")
+    for (f in en_files) {
+      set_name <- sub(paste0("^", comp, "_functional_clusterProfiler_GSEA_(.*)\\.txt$"), "\\1", basename(f))
+      render_gsea_file(f, gsub("_", " ", set_name), comp)
+    }
+  }
   for (m in names(metrics)) {
     if (length(files[[m]]) == 0) next
     cat(sprintf("\n### Network step, ranked by %s {.tabset}\n\n", metrics[[m]]))
@@ -262,11 +284,7 @@ render_gsea_ranked <- function(comp, cp_dir) {
                     else "all genes tested in this comparison, ranked by log2FC.")
     for (f in files[[m]]) {
       db <- sub(paste0("^GSEA_(.*)_", comp, "_", m, "\\.txt$"), "\\1", basename(f))
-      cat(sprintf("\n#### %s\n\n", gsub("_", " ", db)))
-      df <- safe_read(f); n_total <- if (is.null(df)) 0 else nrow(df)
-      sig <- filter_sig(df); n_sig <- if (!is.null(sig)) nrow(sig) else 0
-      cat(sprintf("**%d** gene sets (**%d** significant, adjusted p < 0.05)\n\n", n_total, n_sig))
-      make_table(df, csv_name(comp, f))
+      render_gsea_file(f, gsub("_", " ", db), comp)
       embed_png(sub("\\.txt$", ".png", f), sub("\\.txt$", ".png", basename(f)))
     }
   }
@@ -639,7 +657,7 @@ if (has_enrichr) {
   enrichr_files_all <- list.files(enrichr_dir, pattern = "\\.txt$", full.names = TRUE)
   enrichr_files_all <- enrichr_files_all[!grepl("_aPEAR|_similarity", enrichr_files_all)]
   # Derive comparison names from enrichr file names
-  enrichr_comp_names <- unique(gsub("_(fdr|pval)_0[15].*", "", basename(enrichr_files_all)))
+  enrichr_comp_names <- unique(gsub("_(fdr|pval)_0[15].*|_functional_clusterProfiler_GSEA_.*", "", basename(enrichr_files_all)))
   enrichr_comp_names <- enrichr_comp_names[grepl("^DGE_analysis_comp", enrichr_comp_names)]
   if (length(comp_names) == 0) comp_names <- enrichr_comp_names
 }
@@ -939,6 +957,8 @@ for (idx in seq_along(comp_names)) {
                    gsub("_Gene_IDs_functional_clusterProfiler_enrichr_.*", "", basename(all_enrichr_txt))))
     deg_sets <- deg_sets[grepl("^(fdr|pval)_", deg_sets)]
     deg_sets <- sort(unique(deg_sets))
+    if (length(deg_sets) == 0)
+      cat("*No over-representation results: no gene list at FDR or p-value < 0.05.*\n\n")
 
     # Create readable labels
     deg_label <- function(s) {

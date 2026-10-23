@@ -12,6 +12,7 @@ input: ""                              # GEO ID (GSEXXXXXX), folder with raw rea
 input_geo_reads: ""                    # Absolute path to combine GEO metadata download with existing reads
 input_filter_regex: ""                 # Regex to keep only matching input files in local mode (e.g. "Sample_A|Sample_B")
 input_filter_regex_exclude: ""         # Regex to exclude matching input files in local mode (e.g. "Sample_Bad|Sample_Outlier")
+repair_pairs: "auto"                   # Paired-end local input: re-pair out-of-sync mates with BBTools repair.sh after a read-name check ('auto'), always ('yes') or never ('no')
 name: ""                               # Name of the project/folder to create
 output_folder: ""                      # Destination folder
 genes: "none"                          # Genes to highlight in plots (comma-separated, no spaces)

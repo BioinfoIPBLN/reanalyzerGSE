@@ -5,6 +5,9 @@ expression <- args[2]
 path <- args[3]
 pattern_search <- args[4]
 kegg_annotation <- if (length(args) >= 5 && nchar(args[5]) > 0) args[5] else NULL
+run_ora <- length(args) < 6 || args[6] != "no"   # "no" skips the over-representation analyses
+minGS <- if (length(args) >= 7) as.numeric(args[7]) else 10
+maxGS <- if (length(args) >= 8) as.numeric(args[8]) else 500
 
 .rgse_scripts_dir <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[1])))
 source(file.path(.rgse_scripts_dir, "R_qs_helpers.R"))
@@ -61,7 +64,8 @@ setwd(path)
 expression_table <- as.data.frame(data.table::fread(paste0(expression),head=T))
 expression_table$Gene_ID <- gsub(":.*","",expression_table$Gene_ID)
 
-for (f in list.files(pattern = pattern_search)){
+dge_files <- list.files(pattern = pattern_search)
+for (f in if (run_ora) dge_files else character(0)){
   a <- as.data.frame(data.table::fread(paste0(f),head=T,fill=T))
   a$Gene_ID <- gsub(":.*","",a$Gene_ID)
   b <- a[a$FDR < 0.05,]
@@ -96,7 +100,7 @@ for (f in list.files(pattern = pattern_search)){
   }
 }
 
-for (file in list.files(path = path, pattern = "_Gene_IDs\\.txt$")){
+for (file in if (run_ora) list.files(path = path, pattern = "_Gene_IDs\\.txt$") else character(0)){
   print(paste0("Processing ",file," ..."))
   elements_interest <- data.table::fread(paste0(file),head=F)$V1
   elements_interest <- toupper(elements_interest)
@@ -386,9 +390,60 @@ for (file in list.files(path = path, pattern = "_Gene_IDs\\.txt$")){
   } # end KEGG
 }
 
+# --- GSEA on all the tested genes, ranked by sign(logFC) * -log10(PValue) ---
+gsea_sets <- list()
+if (nchar(annotation) > 0 && file.exists(annotation)) {
+  go <- as.data.frame(data.table::fread(paste0(annotation),head=T,fill=T)[,1:2])
+  colnames(go) <- c("source_id","GO_ID")
+  go$source_id <- toupper(gsub(":.*","",go$source_id))
+  go <- go[!is.na(go$GO_ID) & grepl("^GO:",go$GO_ID),]
+  go$Type <- get_go_names(go$GO_ID)$root_node
+  for (ont in c("BP","MF","CC")) {
+    t2g <- go[go$Type %in% c(BP="biological_process",MF="molecular_function",CC="cellular_component")[[ont]], c("GO_ID","source_id")]
+    if (nrow(t2g) > 0) gsea_sets[[paste0("GO_",ont)]] <- clusterProfiler::buildGOmap(t2g)
+  }
+}
+if (!is.null(kegg_annotation) && file.exists(kegg_annotation)) {
+  kegg <- as.data.frame(data.table::fread(kegg_annotation, head=T, fill=T)[,1:2])
+  colnames(kegg) <- c("source_id","KEGG_ID")
+  kegg$source_id <- toupper(gsub(":.*","",kegg$source_id))
+  kegg <- kegg[!is.na(kegg$KEGG_ID) & kegg$KEGG_ID != "", c("KEGG_ID","source_id")]
+  if (nrow(kegg) > 0) gsea_sets[["KEGG"]] <- kegg
+}
+match_source_ids <- function(sids, genes) {
+  if (length(intersect(sids, genes)) > 0) return(sids)
+  u <- unique(sids)
+  hit <- vapply(u, function(sid) { h <- genes[grep(sid, genes, fixed = TRUE)]; if (length(h) > 0) h[1] else sid }, character(1))
+  unname(setNames(hit, u)[sids])
+}
+for (f in if (length(gsea_sets) > 0) dge_files else character(0)) {
+  d <- as.data.frame(data.table::fread(paste0(f),head=T,fill=T))
+  fc <- suppressWarnings(as.numeric(d[[grep("^logFC", colnames(d), value = TRUE)[1]]]))
+  pv <- suppressWarnings(as.numeric(d$PValue))
+  ids <- toupper(gsub(":.*","",d$Gene_ID))
+  keep <- !is.na(fc) & !is.na(pv) & nzchar(ids) & !duplicated(ids)
+  ranked <- sort(setNames(sign(fc[keep]) * -log10(pmax(pv[keep], .Machine$double.xmin)), ids[keep]), decreasing = TRUE)
+  print(paste0("GSEA of ",f," on ",length(ranked)," ranked genes..."))
+  for (set_name in names(gsea_sets)) {
+    t2g <- gsea_sets[[set_name]]
+    t2g[[2]] <- match_source_ids(t2g[[2]], names(ranked))
+    t2n <- if (startsWith(set_name, "GO_")) data.frame(term = unique(t2g[[1]]), name = get_go_names(unique(t2g[[1]]))$go_name) else NA
+    tryCatch({
+      set.seed(123)
+      res <- clusterProfiler::GSEA(ranked, TERM2GENE = t2g, TERM2NAME = t2n, minGSSize = minGS, maxGSSize = maxGS, pvalueCutoff = 1, pAdjustMethod = "BH", eps = 0, verbose = FALSE)
+      if (is.null(res) || nrow(res@result) == 0) {
+        print(paste0("  ",set_name,": no gene set with ",minGS,"-",maxGS," ranked genes"))
+      } else {
+        write.table(as.data.frame(res@result),file=paste0(gsub(".txt","",f),"_functional_clusterProfiler_GSEA_",set_name,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
+        print(paste0("  ",set_name,": ",nrow(res@result)," gene sets, ",sum(res@result$p.adjust < 0.05)," with adjusted p < 0.05"))
+      }
+    }, error = function(e) print(paste0("  WARNING: GSEA ",set_name," failed for ",f,": ",conditionMessage(e))))
+  }
+}
+
 dir.create(file.path(getwd(), "enrichr_clusterProfiler")); rgse_save_env(file.path(getwd(), "enrichr_clusterProfiler/globalenvir.qs2"))
 # Move each file to the new directory
-for (file in list.files(path = getwd(), pattern = "_functional_clusterProfiler_enrichr_", full.names = TRUE)) {    
+for (file in list.files(path = getwd(), pattern = "_functional_clusterProfiler_(enrichr|GSEA)_", full.names = TRUE)) {
   file.rename(from = file, to = file.path(file.path(getwd(), "enrichr_clusterProfiler"), basename(file)))
 }
 

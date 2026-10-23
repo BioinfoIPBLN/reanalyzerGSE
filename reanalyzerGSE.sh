@@ -296,6 +296,47 @@ subsample_local_reads() {
 	pigz --best -p $cores *
 	echo -e "\nSubsampling (+-10%) completed...\n"
 }
+pairs_in_sync() {
+	paste <(zcat -f "$1" | awk 'NR%4==1{print $1}') <(zcat -f "$2" | awk 'NR%4==1{print $1}') | awk -F'\t' '{a=$1; b=$2; sub(/\/[12]$/,"",a); sub(/\/[12]$/,"",b); if (a != b) exit 1}'
+}
+export -f pairs_in_sync
+repair_local_pairs() {
+	cd "$seqs_location" || exit 1
+	local repair_dir="$output_folder/$name/repair_pairs" s n_single
+	local -a samples to_repair
+	mapfile -t samples < <(ls | egrep '_2\.fastq\.gz$' | sed 's,_2\.fastq\.gz$,,')
+	[ ${#samples[@]} -eq 0 ] && return
+	rm -rf "$repair_dir"; mkdir -p "$repair_dir"
+	if [[ "$repair_pairs" == "yes" ]]; then
+		to_repair=("${samples[@]}")
+	else
+		echo -e "\nChecking that the _1 and _2 files of each sample list the same reads in the same order...\n"
+		mapfile -t to_repair < <(printf '%s\n' "${samples[@]}" | parallel --keep-order -j $number_parallel 'pairs_in_sync {}_1.fastq.gz {}_2.fastq.gz || echo {}')
+		if [ ${#to_repair[@]} -eq 0 ]; then
+			echo -e "The mates of all the ${#samples[@]} paired-end samples are in sync.\n"
+			return
+		fi
+		echo -e "Mates out of sync (different read names at the same position, or a different number of reads) in: ${to_repair[*]}\n"
+	fi
+	if ! command -v repair.sh > /dev/null 2>&1; then
+		echo -e "\n\033[1;31mERROR:\033[0m the mates of ${to_repair[*]} have to be re-paired, but BBTools repair.sh is not available in this container. Please use a container that includes it, or re-pair the reads before running.\n" >&2
+		exit 1
+	fi
+	echo -e "sample\tsingletons_removed" > "$repair_dir/repair_summary.txt"
+	for s in "${to_repair[@]}"; do
+		echo "Re-pairing $s with BBTools repair.sh..."
+		if ! repair.sh -Xmx$(( memory_max * 85 / 100 / 1073741824 ))g -eoom in1="${s}_1.fastq.gz" in2="${s}_2.fastq.gz" out1="$repair_dir/${s}_1.fastq.gz" out2="$repair_dir/${s}_2.fastq.gz" outs="$repair_dir/${s}_singletons.fastq.gz" ain=t ziplevel=$compression_level threads=$cores &> "$repair_dir/${s}_repair.log"; then
+			echo -e "\n\033[1;31mERROR:\033[0m repair.sh failed for $s, see $repair_dir/${s}_repair.log\n" >&2
+			exit 1
+		fi
+		n_single=$(zcat -f "$repair_dir/${s}_singletons.fastq.gz" | awk 'END{print NR/4}')
+		rm -f "$repair_dir/${s}_singletons.fastq.gz"
+		mv -f "$repair_dir/${s}_1.fastq.gz" "${s}_1.fastq.gz"
+		mv -f "$repair_dir/${s}_2.fastq.gz" "${s}_2.fastq.gz"
+		echo -e "${s}\t${n_single}" >> "$repair_dir/repair_summary.txt"
+		echo "$s re-paired: $n_single singletons removed (log: $repair_dir/${s}_repair.log)"
+	done
+}
 archive_and_remove_folders() {
 	local archive=$1; shift
 	tar -cf - "$@" | pigz --best -p $cores > "$archive"
@@ -634,6 +675,9 @@ if run_step step1b; then
 			else
 				echo "SINGLE" > $output_folder/$name/library_layout_info.txt
 			fi
+		fi
+		if [[ "$repair_pairs" != "no" ]]; then
+			repair_local_pairs
 		fi
 		if [ ! -z "$number_reads" ]; then
 			subsample_local_reads
@@ -2206,19 +2250,14 @@ if run_step step6; then
 			' DGE_analysis_comp*.txt 2>/dev/null || echo 0)
 		fi
 
+		echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
+		_log_step "Step_6_Enrichment" "start"
 		if [ "$deg_count" -eq 0 ]; then
 			echo -e "\n=========================================================================="
 			echo "NOTICE: 0 significant DEGs (FDR < 0.05) found across all comparisons."
-			echo "Skipping Step 6 functional enrichment & network analyses for index $index."
-			echo "==========================================================================\n"
-			echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
-			_log_step "Step_6_Enrichment" "start"
-			_log_step "Step_6_Enrichment" "end"
-			continue
+			echo "Skipping the over-representation analyses (clusterProfiler ORA, autoGO, Panther) for index $index; GSEA on all the tested genes and the network analyses still run."
+			echo -e "==========================================================================\n"
 		fi
-
-		echo -e "\n\nSTEP 6: Starting...\nCurrent date/time: $(date)\n\n"
-		_log_step "Step_6_Enrichment" "start"
 
 		# Network analyses (WGCNA is organism-agnostic; STRINGdb supports any organism with a valid taxon ID)
 		if [[ $network_analyses == "yes" ]]; then
@@ -2238,25 +2277,31 @@ if run_step step6; then
     				echo -e "\nPerforming functional enrichment analyses for DEGs. The results up to this point are ready to use (including DEGs and expression table including gene_ids). This step of funtional enrichment analyses may take long if many significant DEGs, comparisons, or analyses...\n"
 				export ANNOTATION_FILE="${array[index]}"
 				cd $output_folder/$name/final_results_reanalysis$index/DGE/
-				echo -e "\nSTEP 6b: Performing clusterProfiler execution...\nCurrent date/time: $(date)\n"
-				_log_step "Step_6b_clusterProfiler" "start"
-				ls | egrep "^DGE_analysis_comp[0-9]+.txt$" | parallel --joblog R_clusterProfiler_analyses_parallel_log_parallel.txt -j $enrich_jobs --max-args 1 "R_clusterProfiler_analyses_parallel.R $PWD $organism "$clusterProfiler_cores" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution '^{}$' $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_{}_funct_enrichment.log"
-				_log_step "Step_6b_clusterProfiler" "end"
-				echo -e "\nSTEP 6b: DONE\nCurrent date/time: $(date)\n"
-				echo -e "\nSTEP 6c: Performing autoGO and Panther execution... this may take long if many genes or comparisons...\nCurrent date/time: $(date)\n"
-				_log_step "Step_6c_autoGO_Panther" "start"
-				ls | egrep "^DGE_analysis_comp[0-9]+.txt$" | parallel --joblog R_autoGO_panther_analyses_parallel_log_parallel.txt -j $enrich_jobs --max-args 1 "R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism "$clusterProfiler_cores" $databases_function {} $panther_method $auto_panther_log &> autoGO_panther_{}_funct_enrichment.log"
-				_log_step "Step_6c_autoGO_Panther" "end"
-				echo -e "\nSTEP 6c: DONE\nCurrent date/time: $(date)\n"
-				if [[ "$time_course" == "yes" ]]; then
-					cd $output_folder/$name/final_results_reanalysis$index/time_course_analyses
-					ls | egrep "^DGE_limma_timecourse.*.txt$" | parallel --joblog R_clusterProfiler_analyses_parallel_log_parallel.txt -j $enrich_jobs --max-args 1 "R_clusterProfiler_analyses_parallel.R $PWD $organism "$clusterProfiler_cores" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution '^{}$' $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_{}_funct_enrichment.log"
-					ls | egrep "^DGE_limma_timecourse.*.txt$" | parallel --joblog R_autoGO_panther_analyses_parallel_log_parallel.txt -j $enrich_jobs --max-args 1 "R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism "$clusterProfiler_cores" $databases_function {} $panther_method $auto_panther_log &> autoGO_panther_{}_funct_enrichment.log"
+				if [ "$deg_count" -gt 0 ] || [[ "$clusterProfiler_full" == "yes" ]]; then
+					echo -e "\nSTEP 6b: Performing clusterProfiler execution...\nCurrent date/time: $(date)\n"
+					_log_step "Step_6b_clusterProfiler" "start"
+					ls | egrep "^DGE_analysis_comp[0-9]+.txt$" | parallel --joblog R_clusterProfiler_analyses_parallel_log_parallel.txt -j $enrich_jobs --max-args 1 "R_clusterProfiler_analyses_parallel.R $PWD $organism "$clusterProfiler_cores" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution '^{}$' $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_{}_funct_enrichment.log"
+					_log_step "Step_6b_clusterProfiler" "end"
+					echo -e "\nSTEP 6b: DONE\nCurrent date/time: $(date)\n"
+				else
+					echo -e "\nSTEP 6b: skipped, there are no DEGs for over-representation and the clusterProfiler GSEA only runs with 'clusterProfiler_full: yes'\n"
+				fi
+				if [ "$deg_count" -gt 0 ]; then
+					echo -e "\nSTEP 6c: Performing autoGO and Panther execution... this may take long if many genes or comparisons...\nCurrent date/time: $(date)\n"
+					_log_step "Step_6c_autoGO_Panther" "start"
+					ls | egrep "^DGE_analysis_comp[0-9]+.txt$" | parallel --joblog R_autoGO_panther_analyses_parallel_log_parallel.txt -j $enrich_jobs --max-args 1 "R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism "$clusterProfiler_cores" $databases_function {} $panther_method $auto_panther_log &> autoGO_panther_{}_funct_enrichment.log"
+					_log_step "Step_6c_autoGO_Panther" "end"
+					echo -e "\nSTEP 6c: DONE\nCurrent date/time: $(date)\n"
+					if [[ "$time_course" == "yes" ]]; then
+						cd $output_folder/$name/final_results_reanalysis$index/time_course_analyses
+						ls | egrep "^DGE_limma_timecourse.*.txt$" | parallel --joblog R_clusterProfiler_analyses_parallel_log_parallel.txt -j $enrich_jobs --max-args 1 "R_clusterProfiler_analyses_parallel.R $PWD $organism "$clusterProfiler_cores" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution '^{}$' $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_{}_funct_enrichment.log"
+						ls | egrep "^DGE_limma_timecourse.*.txt$" | parallel --joblog R_autoGO_panther_analyses_parallel_log_parallel.txt -j $enrich_jobs --max-args 1 "R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism "$clusterProfiler_cores" $databases_function {} $panther_method $auto_panther_log &> autoGO_panther_{}_funct_enrichment.log"
+					fi
 				fi
 			else
-				echo -e "\nSTEP 6b: Performing non-model organism over-representation analyses...\nCurrent date/time: $(date)\n"
+				echo -e "\nSTEP 6b: Performing non-model organism over-representation and GSEA analyses...\nCurrent date/time: $(date)\n"
 				_log_step "Step_6b_NonModel_ORA" "start"
-   				echo "Organism '$organism' is not human/mouse, so functional enrichment support is limited: reanalyzerGSE will attempt GO/KEGG over-representation using terms extracted from the provided annotation (dedicated OrgDb-based analyses are human/mouse only)."
+   				echo "Organism '$organism' is not human/mouse, so functional enrichment support is limited: reanalyzerGSE will attempt GO/KEGG over-representation and GSEA using terms extracted from the provided annotation (dedicated OrgDb-based analyses are human/mouse only)."
 				# Determine which annotation file to use for functional enrichment
 				annot_enrichm=""
 				if [ ! -z "$non_reference_funct_enrichm" ]; then
@@ -2270,7 +2315,7 @@ if run_step step6; then
 				enrichment_results_found="no"
 				if [ ! -z "$annot_enrichm" ]; then
 					cd $output_folder/$name/final_results_reanalysis$index/DGE/
-					echo "Applying clusterProfiler enrichr with GO terms extracted from the provided annotation..."
+					echo "Applying clusterProfiler enrichr and GSEA with GO terms extracted from the provided annotation..."
 
 					# GO terms were already pre-extracted in Step 4 for merged tables.
 					# Just reference the existing file.
@@ -2292,7 +2337,7 @@ if run_step step6; then
 						echo "WARNING: Neither GO nor KEGG term extraction produced valid entries. The input file may have an unexpected format. Skipping enrichment."
 					else
 						if [ "$go_data_lines" -ge 2 ]; then
-							echo "Extracted $go_data_lines gene-GO associations. Running enrichr..."
+							echo "Extracted $go_data_lines gene-GO associations. Running enrichr and GSEA..."
 							# Add header if not already present (GAF extraction adds it directly)
 							if ! head -1 "$annotation_go" | grep -q "^source_id"; then
 								sed -i '1s/^/source_id\tComputed_GO_Process_IDs\n/' "$annotation_go"
@@ -2301,7 +2346,8 @@ if run_step step6; then
 							echo "No GO terms found, skipping GO enrichment."
 							annotation_go=""
 						fi
-						R_clusterProfiler_enrichr.R "$annotation_go" $output_folder/$name/final_results_reanalysis$index/RPKM_counts_genes.txt $output_folder/$name/final_results_reanalysis$index/DGE "^DGE_analysis_comp[0-9]+.txt$" "$annotation_kegg" &> clusterProfiler_enrichr_funct_enrichment.log
+						if [ "$deg_count" -gt 0 ]; then enrichr_ora="yes"; else enrichr_ora="no"; fi
+						R_clusterProfiler_enrichr.R "$annotation_go" $output_folder/$name/final_results_reanalysis$index/RPKM_counts_genes.txt $output_folder/$name/final_results_reanalysis$index/DGE "^DGE_analysis_comp[0-9]+.txt$" "$annotation_kegg" "$enrichr_ora" $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_enrichr_funct_enrichment.log
 						echo "enrichr finished (log: clusterProfiler_enrichr_funct_enrichment.log); status is summarised below."
 					fi
 				else

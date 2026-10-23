@@ -116,6 +116,13 @@ DPKGCFG
     tar -xzf subread.tar.gz
     mv subread*/bin/* /bin_external/
     
+    # BBTools (repair.sh)
+    curl -fsSL --retry 10 https://sourceforge.net/projects/bbmap/files/BBMap_40.05.tar.gz/download -o bbmap.tar.gz
+    tar xzf bbmap.tar.gz
+    mv bbmap /bin_external/bbmap
+    ln -s /bin_external/bbmap/repair.sh /bin_external/repair.sh
+    rm -f bbmap.tar.gz
+    
     # Qualimap
     curl -fsSL --retry 10 https://bitbucket.org/kokonech/qualimap/downloads/qualimap_v2.3.zip -o qualimap.zip
     unzip -qqo qualimap.zip
