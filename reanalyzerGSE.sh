@@ -1636,7 +1636,12 @@ _log_step "Step_3a_Prepare" "start"
 			sed -i "s,logfile=miARma_logfile.log,logfile=${unit_out[index]}/miARma_logfile$index.log,g" ${unit_ini[index]}
 			sed -i "s,strand=yes,strand=$strand,g" ${unit_ini[index]}
 			sed -i "s,fasta=,fasta=${unit_fasta[index]},g" ${unit_ini[index]}
-			sed -i "s,gtf=,gtf=$gff,g" ${unit_ini[index]}
+			gff_aligner=$gff
+			case "${gff,,}" in
+				*.gff|*.gtf|*.bed) ;;
+				*) gff_aligner=$output_folder/$name/indexes/$(basename "${gff%.*}").gff; ln -sf "$(readlink -f "$gff")" "$gff_aligner" ;;
+			esac
+			sed -i "s,gtf=,gtf=$gff_aligner,g" ${unit_ini[index]}
 			sed -i "s,database=,database=$gff,g" ${unit_ini[index]}
 			sed -i "s,seqtype=Paired,seqtype=$library_layout,g" ${unit_ini[index]}
 			sed -i "s,organism=mouse,organism=$organism,g" ${unit_ini[index]}
