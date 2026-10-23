@@ -70,7 +70,7 @@ def run_multiqc(cfg, analysis_dir, out_dir, builtin):
     tmp = os.path.join(os.getcwd(), ".multiqc_tmp")
     os.makedirs(tmp, exist_ok=True)
     env = dict(os.environ, TMPDIR=tmp)          # keep MultiQC's tempdir somewhere we own
-    cmd = ["multiqc", "--outdir", out_dir, "-f", analysis_dir]
+    cmd = ["multiqc", "--outdir", out_dir, "-f", analysis_dir, "--ignore", "miARma_stat*", "--ignore", "indexes"]
     if builtin:
         # MultiQC needs a key present even for a custom endpoint.
         env["OPENAI_API_KEY"] = cfg.api_key

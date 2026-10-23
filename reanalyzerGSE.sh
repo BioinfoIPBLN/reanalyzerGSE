@@ -1428,7 +1428,7 @@ _log_step "Step_3a_Prepare" "start"
 					zcat -f "$seqs_location/$_f" | head -n 4000000 > "${_out}_1.fq"
 					salmon quant -i $salmon_idx -l A -r "${_out}_1.fq" -p $cores -o "$_out" --skipQuant &> "$_out.log"
 				fi
-				rm -f "${_out}_1.fq" "${_out}_2.fq"
+				rm -f "${_out}_1.fq" "${_out}_2.fq" "$_out/intermediate_mappings.rad"
 				_type=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['library_types'][0])" "$_out/aux_info/meta_info.json" 2>/dev/null)
 				_ratio=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1])).get('compatible_fragment_ratio', 'N/A'))" "$_out/lib_format_counts.json" 2>/dev/null)
 				case "$_type" in
@@ -1914,9 +1914,9 @@ _log_step "Step_3b_miARma" "start"
 		if [ -n "$RGSE_DO_MULTIQC" ] && command -v multiqc_ai.py >/dev/null 2>&1; then
 			multiqc_ai.py --analysis-dir $output_folder/$name --out-dir $output_folder/$name/multiqc_out ${MULTIQC_AI_ARGS} > $output_folder/$name/multiqc_out/multiqc.log 2>&1 || {
 				echo "AI MultiQC failed - using standard MultiQC" >> $output_folder/$name/multiqc_out/multiqc.log
-				multiqc -f $output_folder/$name --ignore 'miARma_stat*' -n multiqc_report -o $output_folder/$name/multiqc_out -p -q >> $output_folder/$name/multiqc_out/multiqc.log 2>&1; }
+				multiqc -f $output_folder/$name --ignore 'miARma_stat*' --ignore indexes -n multiqc_report -o $output_folder/$name/multiqc_out -p -q >> $output_folder/$name/multiqc_out/multiqc.log 2>&1; }
 		else
-			multiqc -f $output_folder/$name --ignore 'miARma_stat*' -n multiqc_report -o $output_folder/$name/multiqc_out -p -q > $output_folder/$name/multiqc_out/multiqc.log 2>&1
+			multiqc -f $output_folder/$name --ignore 'miARma_stat*' --ignore indexes -n multiqc_report -o $output_folder/$name/multiqc_out -p -q > $output_folder/$name/multiqc_out/multiqc.log 2>&1
 		fi
 	fi
 

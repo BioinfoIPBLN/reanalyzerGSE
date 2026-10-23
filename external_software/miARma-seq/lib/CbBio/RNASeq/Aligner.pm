@@ -4234,7 +4234,7 @@ sub kallisto{
                                     fi
 	 			    cd $projectdir && mkdir -p \$PWD/../multiqc_out && if [ \$(ls \$PWD/../multiqc_out | wc -l) -eq 0 ]; then
        				       echo 'Gathering all QC reports with MultiQC'
-	     		       if [ -n "\$RGSE_DO_MULTIQC" ]; then echo 'MultiQC AI annotation enabled'; multiqc_ai.py --analysis-dir \$PWD/../../ --out-dir \$PWD/../multiqc_out \${MULTIQC_AI_ARGS} > \$PWD/../multiqc_out/multiqc.log 2>&1 || { echo 'AI MultiQC failed - using standard MultiQC' >> \$PWD/../multiqc_out/multiqc.log; multiqc -f \$PWD/../../ --ignore 'miARma_stat*' -n multiqc_report -o \$PWD/../multiqc_out -p -q >> \$PWD/../multiqc_out/multiqc.log 2>&1; }; else multiqc -f \$PWD/../../ --ignore 'miARma_stat*' -n multiqc_report -o \$PWD/../multiqc_out -p -q > \$PWD/../multiqc_out/multiqc.log 2>&1; fi
+	     		       if [ -n "\$RGSE_DO_MULTIQC" ]; then echo 'MultiQC AI annotation enabled'; multiqc_ai.py --analysis-dir \$PWD/../ --out-dir \$PWD/../multiqc_out \${MULTIQC_AI_ARGS} > \$PWD/../multiqc_out/multiqc.log 2>&1 || { echo 'AI MultiQC failed - using standard MultiQC' >> \$PWD/../multiqc_out/multiqc.log; multiqc -f \$PWD/../ --ignore 'miARma_stat*' --ignore indexes -n multiqc_report -o \$PWD/../multiqc_out -p -q >> \$PWD/../multiqc_out/multiqc.log 2>&1; }; else multiqc -f \$PWD/../ --ignore 'miARma_stat*' --ignore indexes -n multiqc_report -o \$PWD/../multiqc_out -p -q > \$PWD/../multiqc_out/multiqc.log 2>&1; fi
 	   			    fi};
 					}
 				}
@@ -4264,7 +4264,7 @@ sub kallisto{
                                 fi
 	 			    cd $projectdir && mkdir -p \$PWD/../multiqc_out && if [ \$(ls \$PWD/../multiqc_out | wc -l) -eq 0 ]; then
        				       echo 'Gathering all QC reports with MultiQC'
-	     		       if [ -n "\$RGSE_DO_MULTIQC" ]; then echo 'MultiQC AI annotation enabled'; multiqc_ai.py --analysis-dir \$PWD/../../ --out-dir \$PWD/../multiqc_out \${MULTIQC_AI_ARGS} > \$PWD/../multiqc_out/multiqc.log 2>&1 || { echo 'AI MultiQC failed - using standard MultiQC' >> \$PWD/../multiqc_out/multiqc.log; multiqc -f \$PWD/../../ --ignore 'miARma_stat*' -n multiqc_report -o \$PWD/../multiqc_out -p -q >> \$PWD/../multiqc_out/multiqc.log 2>&1; }; else multiqc -f \$PWD/../../ --ignore 'miARma_stat*' -n multiqc_report -o \$PWD/../multiqc_out -p -q > \$PWD/../multiqc_out/multiqc.log 2>&1; fi
+	     		       if [ -n "\$RGSE_DO_MULTIQC" ]; then echo 'MultiQC AI annotation enabled'; multiqc_ai.py --analysis-dir \$PWD/../ --out-dir \$PWD/../multiqc_out \${MULTIQC_AI_ARGS} > \$PWD/../multiqc_out/multiqc.log 2>&1 || { echo 'AI MultiQC failed - using standard MultiQC' >> \$PWD/../multiqc_out/multiqc.log; multiqc -f \$PWD/../ --ignore 'miARma_stat*' --ignore indexes -n multiqc_report -o \$PWD/../multiqc_out -p -q >> \$PWD/../multiqc_out/multiqc.log 2>&1; }; else multiqc -f \$PWD/../ --ignore 'miARma_stat*' --ignore indexes -n multiqc_report -o \$PWD/../multiqc_out -p -q > \$PWD/../multiqc_out/multiqc.log 2>&1; fi
 	   			    fi};
 		}
 		
