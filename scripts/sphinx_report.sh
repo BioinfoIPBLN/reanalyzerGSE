@@ -29,7 +29,7 @@ for aligner_dir in "$path/miARma_out0"/*_results; do
             if [ -f "$qrep" ]; then
                 sample_name=$(basename $(dirname "$qrep"))
                 display_name=$(echo "$sample_name" | sed -E 's/_(hisat2|STAR)\.bam//')
-                rnaseqqc_links="${rnaseqqc_links}   <a href=\"sphinx_report/html/rnaseqqc_results/${sample_name}/qualimapReport.html\" target=\"_blank\">Click to open RNASeq QC for ${display_name}</a><br>
+                rnaseqqc_links="${rnaseqqc_links}   <a href=\"rnaseqqc_results/${sample_name}/qualimapReport.html\" target=\"_blank\">Click to open RNASeq QC for ${display_name}</a><br>
 "
             fi
         done
@@ -39,7 +39,7 @@ for aligner_dir in "$path/miARma_out0"/*_results; do
             if [ -f "$qrep" ]; then
                 sample_name=$(basename $(dirname "$qrep"))
                 display_name=$(echo "$sample_name" | sed -E 's/_(hisat2|STAR)\.bam//')
-                bamqc_links="${bamqc_links}   <a href=\"sphinx_report/html/bamqc_results/${sample_name}/qualimapReport.html\" target=\"_blank\">Click to open BAM QC for ${display_name}</a><br>
+                bamqc_links="${bamqc_links}   <a href=\"bamqc_results/${sample_name}/qualimapReport.html\" target=\"_blank\">Click to open BAM QC for ${display_name}</a><br>
 "
             fi
         done
@@ -1070,9 +1070,9 @@ Please use the following links:
 
 .. raw:: html
    
-   <a href=\"sphinx_report/html/TPM_counts_genes_log2_1_categ.txt\" target=\"_blank\">Click to get TPM counts (log2 + 1)</a>$(if [ -f "$path/$final_dir_name/TPM_counts_genes_log2_1_categ.xlsx" ]; then echo ' (<a href="sphinx_report/html/TPM_counts_genes_log2_1_categ.xlsx" target="_blank">xlsx version</a>)'; fi)<br>
-   <a href=\"sphinx_report/html/RPKM_counts_genes_log2_1_categ.txt\" target=\"_blank\">Click to get RPKM counts (log2 + 1)</a>$(if [ -f "$path/$final_dir_name/RPKM_counts_genes_log2_1_categ.xlsx" ]; then echo ' (<a href="sphinx_report/html/RPKM_counts_genes_log2_1_categ.xlsx" target="_blank">xlsx version</a>)'; fi)<br>
-   <a href=\"sphinx_report/html/CPM_counts_genes_log2_1_categ.txt\" target=\"_blank\">Click to get CPM counts (log2 + 1)</a>$(if [ -f "$path/$final_dir_name/CPM_counts_genes_log2_1_categ.xlsx" ]; then echo ' (<a href="sphinx_report/html/CPM_counts_genes_log2_1_categ.xlsx" target="_blank">xlsx version</a>)'; fi)
+   <a href=\"TPM_counts_genes_log2_1_categ.txt\" target=\"_blank\">Click to get TPM counts (log2 + 1)</a>$(if [ -f "$path/$final_dir_name/TPM_counts_genes_log2_1_categ.xlsx" ]; then echo ' (<a href="TPM_counts_genes_log2_1_categ.xlsx" target="_blank">xlsx version</a>)'; fi)<br>
+   <a href=\"RPKM_counts_genes_log2_1_categ.txt\" target=\"_blank\">Click to get RPKM counts (log2 + 1)</a>$(if [ -f "$path/$final_dir_name/RPKM_counts_genes_log2_1_categ.xlsx" ]; then echo ' (<a href="RPKM_counts_genes_log2_1_categ.xlsx" target="_blank">xlsx version</a>)'; fi)<br>
+   <a href=\"CPM_counts_genes_log2_1_categ.txt\" target=\"_blank\">Click to get CPM counts (log2 + 1)</a>$(if [ -f "$path/$final_dir_name/CPM_counts_genes_log2_1_categ.xlsx" ]; then echo ' (<a href="CPM_counts_genes_log2_1_categ.xlsx" target="_blank">xlsx version</a>)'; fi)
 
 If requested, please go to \"$project_name/$final_dir_name/violin\" to check out the figures showing the transcriptional profiles of genes of interest. You may also find the tables \"_annotation.txt\" including the gene annotation available.$(if [ -f "$path/$final_dir_name/DGE/deResults.qs2" ]; then echo " The exploreLocalDE app may be also used (see below)."; fi)
 $ai_counts_rst
@@ -1145,9 +1145,9 @@ Please use the following links:
 
 .. raw:: html
    
-   <a href=\"sphinx_report/html/multiqc_report.html\" target=\"_blank\">Click to open report by MultiQC</a><br>
-${rnaseqqc_links}${bamqc_links}$(if [ -f "$path/miARma_out0/star_results/multibamqc_results/multisampleBamQcReport.html" ] || [ -f "$path/$final_dir_name/multisampleBamQcReport.html" ] || [ $(find "$path/miARma_out0" -name "multisampleBamQcReport.html" 2>/dev/null | wc -l) -gt 0 ]; then echo "   <a href=\"sphinx_report/html/multisampleBamQcReport.html\" target=\"_blank\">Click to open Multi-sample BAM QC by Qualimap</a><br>"; fi)$(if [ -f "$path/$final_dir_name/QC_and_others/${project_name}_norm_QC_commented.pdf" ]; then echo "   <a href=\"sphinx_report/html/${project_name}_norm_QC_commented.pdf\" target=\"_blank\">Click to open PDF with multiple QC figures (with AI commentary)</a><br>"; else echo "   <a href=\"sphinx_report/html/${project_name}_norm_QC.pdf\" target=\"_blank\">Click to open PDF with multiple QC figures</a>$(if [ -f "$path/$final_dir_name/QC_and_others/QC_AI_commentary_slides.pdf" ]; then echo " - <a href=\"sphinx_report/html/QC_AI_commentary_slides.pdf\" target=\"_blank\">AI commentary slides</a>"; fi)<br>"; fi)
-$(if [ -f "$path/$final_dir_name/QC_and_others/${project_name}_adjusted_QC_commented.pdf" ]; then echo "   <a href=\"sphinx_report/html/${project_name}_adjusted_QC_commented.pdf\" target=\"_blank\">Click to open PDF with multiple QC figures if batch correction/adjusted counts (with AI commentary)</a><br>"; elif [ -f "$path/$final_dir_name/QC_and_others/${project_name}_adjusted_QC.pdf" ]; then echo "   <a href=\"sphinx_report/html/${project_name}_adjusted_QC.pdf\" target=\"_blank\">Click to open PDF with multiple QC figures if batch correction/adjusted counts</a><br>"; fi)
+   <a href=\"multiqc_report.html\" target=\"_blank\">Click to open report by MultiQC</a><br>
+${rnaseqqc_links}${bamqc_links}$(if [ -f "$path/miARma_out0/star_results/multibamqc_results/multisampleBamQcReport.html" ] || [ -f "$path/$final_dir_name/multisampleBamQcReport.html" ] || [ $(find "$path/miARma_out0" -name "multisampleBamQcReport.html" 2>/dev/null | wc -l) -gt 0 ]; then echo "   <a href=\"multisampleBamQcReport.html\" target=\"_blank\">Click to open Multi-sample BAM QC by Qualimap</a><br>"; fi)$(if [ -f "$path/$final_dir_name/QC_and_others/${project_name}_norm_QC_commented.pdf" ]; then echo "   <a href=\"${project_name}_norm_QC_commented.pdf\" target=\"_blank\">Click to open PDF with multiple QC figures (with AI commentary)</a><br>"; else echo "   <a href=\"${project_name}_norm_QC.pdf\" target=\"_blank\">Click to open PDF with multiple QC figures</a>$(if [ -f "$path/$final_dir_name/QC_and_others/QC_AI_commentary_slides.pdf" ]; then echo " - <a href=\"QC_AI_commentary_slides.pdf\" target=\"_blank\">AI commentary slides</a>"; fi)<br>"; fi)
+$(if [ -f "$path/$final_dir_name/QC_and_others/${project_name}_adjusted_QC_commented.pdf" ]; then echo "   <a href=\"${project_name}_adjusted_QC_commented.pdf\" target=\"_blank\">Click to open PDF with multiple QC figures if batch correction/adjusted counts (with AI commentary)</a><br>"; elif [ -f "$path/$final_dir_name/QC_and_others/${project_name}_adjusted_QC.pdf" ]; then echo "   <a href=\"${project_name}_adjusted_QC.pdf\" target=\"_blank\">Click to open PDF with multiple QC figures if batch correction/adjusted counts</a><br>"; fi)
 
 .. index:: QC analyses
 
@@ -1160,7 +1160,7 @@ rRNA contamination was assessed by mapping R1 reads against rRNA reference datab
 
 .. raw:: html
 
-   <a href=\"sphinx_report/html/rRNA_mapping_barplot.html\" target=\"_blank\">Click to open interactive rRNA mapping barplot</a><br>
+   <a href=\"rRNA_mapping_barplot.html\" target=\"_blank\">Click to open interactive rRNA mapping barplot</a><br>
 
 .. literalinclude:: ../preliminar_rrna_qc/rRNA_mapping_summary_R1.tsv
 
@@ -1180,7 +1180,7 @@ A Gantt chart of the same timeline is also available:
 
 .. raw:: html
 
-   <a href=\"sphinx_report/html/pipeline_gantt_chart.pdf\" target=\"_blank\">Click to open Pipeline Gantt Chart (PDF)</a><br>
+   <a href=\"pipeline_gantt_chart.pdf\" target=\"_blank\">Click to open Pipeline Gantt Chart (PDF)</a><br>
 "; fi)
 
 .. index:: Pipeline timing
@@ -1250,6 +1250,11 @@ if [ -f "$path/sphinx_report/html/index.html" ]; then
 	sed -i 's,href="sample_outliers/,href="sphinx_report/html/sample_outliers/,g' $path/final_report.html
 	sed -i 's,href="venn_diagrams,href="sphinx_report/html/venn_diagrams,g' $path/final_report.html
 	sed -i 's,href="leave_out/,href="sphinx_report/html/leave_out/,g' $path/final_report.html
+	sed -i 's,href="rnaseqqc_results/,href="sphinx_report/html/rnaseqqc_results/,g' $path/final_report.html
+	sed -i 's,href="bamqc_results/,href="sphinx_report/html/bamqc_results/,g' $path/final_report.html
+	sed -i 's,href="QC_AI_commentary_slides,href="sphinx_report/html/QC_AI_commentary_slides,g' $path/final_report.html
+	sed -i 's,href="rRNA_mapping_barplot,href="sphinx_report/html/rRNA_mapping_barplot,g' $path/final_report.html
+	sed -i 's,href="pipeline_gantt_chart,href="sphinx_report/html/pipeline_gantt_chart,g' $path/final_report.html
 	sed -i 's,src="_static/,src="sphinx_report/html/_static/,g' $path/final_report.html
 	sed -i 's,src="_images/,src="sphinx_report/html/_images/,g' $path/final_report.html
 else
