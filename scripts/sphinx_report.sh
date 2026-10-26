@@ -297,8 +297,8 @@ class IncludeMatchingFiles(SphinxDirective):
             merged_files = glob.glob(merged_pattern)
             
             if merged_files:
-                # Prefer RPKM for the table preview, if multiple, else just take the first
-                preview_file_path = next((f for f in merged_files if \"RPKM\" in f), merged_files[0])
+                # Prefer TPM for the table preview, if multiple, else just take the first
+                preview_file_path = next((f for f in merged_files if \"TPM\" in f), merged_files[0])
                 try:
                     merged_data = pd.read_csv(preview_file_path, sep=\"\\\t\", header=0)
                     
@@ -349,6 +349,23 @@ class IncludeMatchingFiles(SphinxDirective):
 
                 except Exception as e:
                     deg_nodes.append(nodes.paragraph(text=f\"Error processing merged DEGs from {preview_file_path}: {e}\"))
+
+            # Nominal p-value footer from the headerless DGE_analysis_compX_pval_05.txt
+            # intermediate (gene_id, len, logFC at col 3, ...), written by R_clusterProfiler_enrichr.R.
+            pval_base = os.path.splitext(file_name)[0] + \"_pval_05.txt\"
+            pval_path = os.path.join(os.path.dirname(file_path), pval_base)
+            if os.path.isfile(pval_path):
+                try:
+                    pv = pd.read_csv(pval_path, sep=\"\\t\", header=None)
+                    pv[2] = pd.to_numeric(pv[2], errors=\"coerce\")
+                    pv = pv.dropna(subset=[2])
+                    _n_up = int((pv[2] > 0).sum())
+                    _n_dn = int((pv[2] < 0).sum())
+                    deg_nodes.append(nodes.paragraph(text=f\"Nominal p-value: {_n_up} DEGs up\"))
+                    deg_nodes.append(nodes.paragraph(text=f\"{_n_dn} DEGs down\"))
+                    deg_nodes.append(nodes.paragraph(text=f\"Total number of DEGs (nominal p): {_n_up + _n_dn}\"))
+                except Exception as e:
+                    deg_nodes.append(nodes.paragraph(text=f\"Error reading nominal p-value file {pval_base}: {e}\"))
 
         except Exception as e:
             error_node = nodes.paragraph(text=f\"Error processing DEGs in {file_name}: {e}\")
