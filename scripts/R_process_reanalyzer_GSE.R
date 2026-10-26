@@ -288,8 +288,9 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
           paste(cn,collapse=", "),"\n  samples_info: ",paste(si_id,collapse=", "),"\n",sep="")
       gene_counts <- gene_counts[,c(smp[match(si_id,cn)],meta)]
       ph <- as.character(pheno$sample)
-      if (setequal(rgse_sample_id(ph),si_id) && !anyDuplicated(ph)){
-        pheno <- pheno[match(si_id,rgse_sample_id(ph)),]
+      ph_id <- si_id[match(ph, as.character(si[[if (ncol(si) > 2) "V2" else "V1"]]))]
+      if (!anyNA(ph_id) && setequal(ph_id,si_id) && !anyDuplicated(ph)){
+        pheno <- pheno[match(si_id,ph_id),]
       } else {
         stop("Could not realign the phenotypic data to samples_info.txt: the sample names in 'pheno' (",
              paste(ph,collapse=", "),") do not match the count columns (",
