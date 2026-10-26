@@ -190,8 +190,14 @@ class IncludeMatchingFiles(SphinxDirective):
 
         file_nodes = []
         for file in matched_files:
-            # Ignore files containing \"annotation\" or \"Gene_IDs\" or \"fdr\" or \"merged\"
-            if \"annotation\" in file or \"Gene_IDs\" in file or \"fdr\" in file or \"merged\" in file:
+            # Ignore files containing \"annotation\" or \"Gene_IDs\" or \"fdr\" or \"pval\" or
+            # \"logpos\"/\"logneg\" or \"merged\". The _pval_05 / _fdr_05 / _logpos / _logneg
+            # files are headerless intermediate DEG subsets (written by
+            # R_clusterProfiler_enrichr.R); re-reading them via header=0 corrupts the count
+            # and just duplicates the per-comparison block, so only the canonical
+            # DGE_analysis_compN.txt is displayed.
+            if (\"annotation\" in file or \"Gene_IDs\" in file or \"fdr\" in file or
+                \"pval\" in file or \"logpos\" in file or \"logneg\" in file or \"merged\" in file):
                 continue
 
             file_path = os.path.join(directory, file)
@@ -227,31 +233,36 @@ class IncludeMatchingFiles(SphinxDirective):
             if lfc_name:
                 comparison = \" vs \".join(p[2:] if p.startswith(\"__\") else p for p in lfc_name[len(\"logFC\"):].split(\"__VS__\"))
 
-            # Ensure numeric conversion for columns 3 and 6 (index 2 and 5)
-            # Log2FoldChange is usually column 3, padj or FDR is usually column 6
-            data.iloc[:, 2] = pd.to_numeric(data.iloc[:, 2], errors=\"coerce\")
-            data.iloc[:, 5] = pd.to_numeric(data.iloc[:, 5], errors=\"coerce\")
+            # Resolve the logFC and significance columns by header name rather than by
+            # fixed position, so the counts are correct whatever the table layout
+            # (main DGE tables carry PValue at col 6 and FDR at col 7; other tools name
+            # the adjusted p-value adj.P.Val or padj).
+            lfc_col = next((i for i, c in enumerate(data.columns) if str(c).startswith(\"logFC\")), 2)
+            thresh_col = next((i for i, c in enumerate(data.columns) if str(c) in (\"FDR\", \"adj.P.Val\", \"padj\")), 6)
 
-            # Drop rows with invalid numeric values in columns 3 or 6
-            data = data.dropna(subset=[data.columns[2], data.columns[5]])
+            # Ensure numeric conversion of the logFC and significance columns
+            data.iloc[:, lfc_col] = pd.to_numeric(data.iloc[:, lfc_col], errors=\"coerce\")
+            data.iloc[:, thresh_col] = pd.to_numeric(data.iloc[:, thresh_col], errors=\"coerce\")
 
-            # Filter rows where the 6th column < 0.05
-            degs_filtered = data[data.iloc[:, 5] < 0.05]
+            # Drop rows with invalid numeric values in either column
+            data = data.dropna(subset=[data.columns[lfc_col], data.columns[thresh_col]])
 
-            # Up-regulated DEGs (3rd column > 0)
-            degs_up = degs_filtered[degs_filtered.iloc[:, 2] > 0]
+            # Filter rows where the (FDR) significance column < 0.05
+            degs_filtered = data[data.iloc[:, thresh_col] < 0.05]
+
+            # Up-regulated DEGs (logFC > 0) / down-regulated DEGs (logFC < 0)
+            degs_up = degs_filtered[degs_filtered.iloc[:, lfc_col] > 0]
             num_degs_up = len(degs_up)
 
-            # Down-regulated DEGs (3rd column < 0)
-            degs_down = degs_filtered[degs_filtered.iloc[:, 2] < 0]
+            degs_down = degs_filtered[degs_filtered.iloc[:, lfc_col] < 0]
             num_degs_down = len(degs_down)
 
             # Top 10 in EACH sense, taken from the separated up/down sets so an
             # empty sense stays empty. (Previously head(10)+tail(10) of the
             # combined set overlapped when there were < 20 DEGs, duplicating the
             # same rows for both senses, e.g. 2 up / 0 down shown as 2+2.)
-            top_down = degs_down.sort_values(by=data.columns[2]).head(10)
-            top_up   = degs_up.sort_values(by=data.columns[2]).tail(10)
+            top_down = degs_down.sort_values(by=data.columns[lfc_col]).head(10)
+            top_up   = degs_up.sort_values(by=data.columns[lfc_col]).tail(10)
             head_tail_degs = pd.concat([top_down, top_up])
 
             # Add information to nodes
