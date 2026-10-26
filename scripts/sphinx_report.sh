@@ -2,6 +2,7 @@
 
 path=$1
 project_name=$2
+options_file=$3
 
 final_dir_name=$(basename $(find $path -maxdepth 1 -type d \( -name "final_results_reanalysis0_*" -o -name "final_results_reanalysis0" \) | head -1) 2>/dev/null)
 
@@ -966,6 +967,9 @@ if [ -d "$path/provenance" ]; then
 Provenance
 ------------------------------------------------------------------------------------
 How this report was produced: pipeline version and commit, container and host, tool and package versions, and checksums of the reference files. The options in effect at each invocation of the pipeline are kept as YAML files that can be given back to '-options' to repeat the analysis.
+"
+	[ -n "$options_file" ] && [ -s "$path/$(basename "$options_file")" ] && provenance_rst="$provenance_rst
+Input YAML configuration used for this run: :download:\`$(basename "$options_file") <../$(basename "$options_file")>\`
 "
 	[ -s "$path/provenance/run_parameters_latest.yaml" ] && provenance_rst="$provenance_rst
 Options of the latest invocation: :download:\`run_parameters_latest.yaml <../provenance/run_parameters_latest.yaml>\`

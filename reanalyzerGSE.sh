@@ -2838,7 +2838,7 @@ if run_step step8; then
 	done
 	echo -e "\nRecording tool versions and reference checksums in $output_folder/$name/provenance..."
 	write_provenance
-	sphinx_report.sh $output_folder/$name $name
+	sphinx_report.sh $output_folder/$name $name ${options_file:-}
 	export debug_step="all"
 _log_step "Step_8_Report" "end"
  	echo -e "\n\nSTEP 8: Final report DONE\nCurrent date/time: $(date)\n\n"
