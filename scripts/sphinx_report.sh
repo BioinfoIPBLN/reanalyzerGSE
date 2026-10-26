@@ -1020,15 +1020,6 @@ echo "
 Welcome to $project_name report!
 ####################################################################################
 
-.. toctree::
-   :maxdepth: 2
-   :caption: Contents:
-
-
-Sections
-==================
-
-
 
 Summary of samples and experimental conditions
 ------------------------------------------------------------------------------------
@@ -1037,7 +1028,6 @@ Summary of samples and experimental conditions
 .. literalinclude:: ../$final_dir_name/QC_and_others/reads_numbers.txt
 .. literalinclude:: ../miARma_out0/Pre_fastqc_results/list_of_files.txt
 .. index:: Samples
-$outlier_section_rst
 
 
 
@@ -1050,6 +1040,7 @@ Covariables or potential batch effect:
 $batch_vec_inc
 $batch_bio_inc
 $covar_inc
+$ai_design_rst
 .. index:: Comparisons
 
 
@@ -1058,10 +1049,43 @@ Layout and strandedness
 ------------------------------------------------------------------------------------
 $layout_inc
 $strand_inc
-$ai_design_rst
 .. index:: Layout
 
+
+
+$(if [ -d "$path/preliminar_rrna_qc" ] && [ -f "$path/preliminar_rrna_qc/rRNA_mapping_summary_R1.tsv" ]; then echo "
+Preliminary rRNA QC
+------------------------------------------------------------------------------------
+rRNA contamination was assessed by mapping R1 reads against rRNA reference databases using Bowtie2.
+
+.. raw:: html
+
+   <a href=\"rRNA_mapping_barplot.html\" target=\"_blank\">Click to open interactive rRNA mapping barplot</a><br>
+
+.. literalinclude:: ../preliminar_rrna_qc/rRNA_mapping_summary_R1.tsv
+
+.. index:: rRNA QC
+"; fi)
 $align_section_rst
+
+
+
+QC analyses
+------------------------------------------------------------------------------------
+Please use the following links:
+
+.. raw:: html
+   
+   <a href=\"multiqc_report.html\" target=\"_blank\">Click to open report by MultiQC</a><br>
+${rnaseqqc_links}${bamqc_links}$(if [ -f "$path/miARma_out0/star_results/multibamqc_results/multisampleBamQcReport.html" ] || [ -f "$path/$final_dir_name/multisampleBamQcReport.html" ] || [ $(find "$path/miARma_out0" -name "multisampleBamQcReport.html" 2>/dev/null | wc -l) -gt 0 ]; then echo "   <a href=\"multisampleBamQcReport.html\" target=\"_blank\">Click to open Multi-sample BAM QC by Qualimap</a><br>"; fi)$(if [ -f "$path/$final_dir_name/QC_and_others/${project_name}_norm_QC_commented.pdf" ]; then echo "   <a href=\"${project_name}_norm_QC_commented.pdf\" target=\"_blank\">Click to open PDF with multiple QC figures (with AI commentary)</a><br>"; else echo "   <a href=\"${project_name}_norm_QC.pdf\" target=\"_blank\">Click to open PDF with multiple QC figures</a>$(if [ -f "$path/$final_dir_name/QC_and_others/QC_AI_commentary_slides.pdf" ]; then echo " - <a href=\"QC_AI_commentary_slides.pdf\" target=\"_blank\">AI commentary slides</a>"; fi)<br>"; fi)
+$(if [ -f "$path/$final_dir_name/QC_and_others/${project_name}_adjusted_QC_commented.pdf" ]; then echo "   <a href=\"${project_name}_adjusted_QC_commented.pdf\" target=\"_blank\">Click to open PDF with multiple QC figures if batch correction/adjusted counts (with AI commentary)</a><br>"; elif [ -f "$path/$final_dir_name/QC_and_others/${project_name}_adjusted_QC.pdf" ]; then echo "   <a href=\"${project_name}_adjusted_QC.pdf\" target=\"_blank\">Click to open PDF with multiple QC figures if batch correction/adjusted counts</a><br>"; fi)
+
+.. index:: QC analyses
+
+
+
+$outlier_section_rst
+
 
 
 Counts
@@ -1080,7 +1104,15 @@ $ai_counts_rst
 
 
 
-Differentally Expressed Genes
+Housekeeping genes
+------------------------------------------------------------------------------------
+.. include_matching_files:: HK_genes_*_10.txt ../$final_dir_name/DGE
+
+.. index:: Housekeeping genes
+
+
+
+Differentially Expressed Genes
 ------------------------------------------------------------------------------------
 List of comparisons: 
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -1097,7 +1129,6 @@ DEGs:
 
 .. include_matching_files:: DGE_analysis_comp*.txt ../$final_dir_name/DGE/ degs
 .. index:: DEGs
-$leave_out_section_rst
 
 
 
@@ -1108,6 +1139,8 @@ Volcano plots
 
 .. index:: Volcano
 $venn_section_rst
+$leave_out_section_rst
+
 
 
 Functional enrichment analyses
@@ -1127,65 +1160,25 @@ $(if [ ! -f "$path/$final_dir_name/DGE/functional_enrichment_report.html" ] && [
 $(capping_notes_rst "$path/$final_dir_name/DGE/analysis_capping_notes.txt")
 
 .. index:: Funct_enrich
+$lit_section_rst
+$enc_section_rst
 
 
 
-
-Housekeeping genes
+$(if [ -f "$path/$final_dir_name/DGE/deResults.qs2" ]; then echo "
+Interactive exploration
 ------------------------------------------------------------------------------------
-.. include_matching_files:: HK_genes_*_10.txt ../$final_dir_name/DGE
-
-.. index:: Housekeeping genes
-
-
-
-QC analyses
-------------------------------------------------------------------------------------
-Please use the following links:
-
-.. raw:: html
-   
-   <a href=\"multiqc_report.html\" target=\"_blank\">Click to open report by MultiQC</a><br>
-${rnaseqqc_links}${bamqc_links}$(if [ -f "$path/miARma_out0/star_results/multibamqc_results/multisampleBamQcReport.html" ] || [ -f "$path/$final_dir_name/multisampleBamQcReport.html" ] || [ $(find "$path/miARma_out0" -name "multisampleBamQcReport.html" 2>/dev/null | wc -l) -gt 0 ]; then echo "   <a href=\"multisampleBamQcReport.html\" target=\"_blank\">Click to open Multi-sample BAM QC by Qualimap</a><br>"; fi)$(if [ -f "$path/$final_dir_name/QC_and_others/${project_name}_norm_QC_commented.pdf" ]; then echo "   <a href=\"${project_name}_norm_QC_commented.pdf\" target=\"_blank\">Click to open PDF with multiple QC figures (with AI commentary)</a><br>"; else echo "   <a href=\"${project_name}_norm_QC.pdf\" target=\"_blank\">Click to open PDF with multiple QC figures</a>$(if [ -f "$path/$final_dir_name/QC_and_others/QC_AI_commentary_slides.pdf" ]; then echo " - <a href=\"QC_AI_commentary_slides.pdf\" target=\"_blank\">AI commentary slides</a>"; fi)<br>"; fi)
-$(if [ -f "$path/$final_dir_name/QC_and_others/${project_name}_adjusted_QC_commented.pdf" ]; then echo "   <a href=\"${project_name}_adjusted_QC_commented.pdf\" target=\"_blank\">Click to open PDF with multiple QC figures if batch correction/adjusted counts (with AI commentary)</a><br>"; elif [ -f "$path/$final_dir_name/QC_and_others/${project_name}_adjusted_QC.pdf" ]; then echo "   <a href=\"${project_name}_adjusted_QC.pdf\" target=\"_blank\">Click to open PDF with multiple QC figures if batch correction/adjusted counts</a><br>"; fi)
-
-.. index:: QC analyses
-
-
-
-$(if [ -d "$path/preliminar_rrna_qc" ] && [ -f "$path/preliminar_rrna_qc/rRNA_mapping_summary_R1.tsv" ]; then echo "
-Preliminary rRNA QC
-------------------------------------------------------------------------------------
-rRNA contamination was assessed by mapping R1 reads against rRNA reference databases using Bowtie2.
+A SummarizedExperiment object has been generated for this analysis, so you can interactively explore your differential expression results, pathway analyses and more in the exploreLocalDE Shiny app.
 
 .. raw:: html
 
-   <a href=\"rRNA_mapping_barplot.html\" target=\"_blank\">Click to open interactive rRNA mapping barplot</a><br>
+   <a href=\"https://shiny-public.fgcz.uzh.ch/app/exploreLocalDE\" target=\"_blank\">Open exploreLocalDE Shiny app</a>
 
-.. literalinclude:: ../preliminar_rrna_qc/rRNA_mapping_summary_R1.tsv
+Load the following object into the app: :download:\`deResults.qs2 <../$final_dir_name/DGE/deResults.qs2>\` (also available in the :file:\`${final_dir_name}/DGE/\` results folder).
 
-.. index:: rRNA QC
+.. index:: exploreLocalDE
 "; fi)
 
-$(if [ -f "$path/step_times.tsv" ]; then echo "
-Pipeline timing
-------------------------------------------------------------------------------------
-Wall-clock time per pipeline step:
-
-.. code-block:: text
-
-$timing_block
-$(if [ -f "$path/$final_dir_name/QC_and_others/pipeline_gantt_chart.pdf" ]; then echo "
-A Gantt chart of the same timeline is also available:
-
-.. raw:: html
-
-   <a href=\"pipeline_gantt_chart.pdf\" target=\"_blank\">Click to open Pipeline Gantt Chart (PDF)</a><br>
-"; fi)
-
-.. index:: Pipeline timing
-"; fi)
-$provenance_rst
 
 
 Genome browser visualization (IGV)
@@ -1207,21 +1200,25 @@ A local R Shiny app (``igvShinyApp.R``) has also been placed in your results fol
 
 
 
-$(if [ -f "$path/$final_dir_name/DGE/deResults.qs2" ]; then echo "
-Interactive exploration
+$(if [ -f "$path/step_times.tsv" ]; then echo "
+Pipeline timing
 ------------------------------------------------------------------------------------
-A SummarizedExperiment object has been generated for this analysis, so you can interactively explore your differential expression results, pathway analyses and more in the exploreLocalDE Shiny app.
+Wall-clock time per pipeline step:
+
+.. code-block:: text
+
+$timing_block
+$(if [ -f "$path/$final_dir_name/QC_and_others/pipeline_gantt_chart.pdf" ]; then echo "
+A Gantt chart of the same timeline is also available:
 
 .. raw:: html
 
-   <a href=\"https://shiny-public.fgcz.uzh.ch/app/exploreLocalDE\" target=\"_blank\">Open exploreLocalDE Shiny app</a>
-
-Load the following object into the app: :download:\`deResults.qs2 <../$final_dir_name/DGE/deResults.qs2>\` (also available in the :file:\`${final_dir_name}/DGE/\` results folder).
-
-.. index:: exploreLocalDE
+   <a href=\"pipeline_gantt_chart.pdf\" target=\"_blank\">Click to open Pipeline Gantt Chart (PDF)</a><br>
 "; fi)
-$lit_section_rst
-$enc_section_rst
+
+.. index:: Pipeline timing
+"; fi)
+$provenance_rst
 " > index.rst
 
 ######### Build
