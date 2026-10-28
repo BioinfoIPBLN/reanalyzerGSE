@@ -137,7 +137,7 @@ for argument in "${arguments[@]}"; do
 	        -Ak | -kallisto_extra_args # Extra arguments appended verbatim to the kallisto command line ('--pseudobam' in the config template, which writes a per-sample 'pseudoalignments.bam' of the transcriptome pseudoalignments next to the abundance tables; nothing downstream consumes it, it is there to inspect). Other options: '--bias', '--fusion', '--genomebam --gtf FILE' (BAM projected to genome coordinates, needs a GTF). Leave empty to write no BAM. Only used when '-A kallisto'
 
 	        #### Count-level options (quantification):
-	        -Ofc | -featureCounts_extra_args # Extra arguments to pass to featureCounts (default '-M -O -C -B -Q 10'). These are appended to the automatically built featureCounts command line after strand, feature type, seqid and threads. The MAPQ cutoff lives here too: '-Q 10' discards multi-mapping reads because STAR scores them 3 or below, so drop it (or lower it) to let '-M' actually count them, and note that removing '-Q' entirely applies no MAPQ filter at all
+	        -Ofc | -featureCounts_extra_args # Extra arguments to pass to featureCounts (default '-M -C -B -Q 10'). These are appended to the automatically built featureCounts command line after strand, feature type, seqid and threads. The MAPQ cutoff lives here too: '-Q 10' discards multi-mapping reads because STAR scores them 3 or below, so drop it (or lower it) to let '-M' actually count them, and note that removing '-Q' entirely applies no MAPQ filter at all. '-O' (no longer a default) counts a fragment overlapping several genes in full for each of them; add it with '--fraction' if overlapping genes must keep their reads
 	        -Fgene | -counts_custom_gene_filter # Shell command to filter gene rows from count tables before R processing (e.g. \"grep -v als\" to remove genes starting with 'als'). Applied to featureCounts .tab and Kallisto abundance.tsv files. Header is always preserved.
 
 	        #### Performance:
@@ -744,7 +744,7 @@ if [ -z "$save_unaligned" ]; then
 	save_unaligned="no"
 fi
 if [ -z "$featureCounts_extra_args" ]; then
-	featureCounts_extra_args="-M -O -C -B -Q 10"
+	featureCounts_extra_args="-M -C -B -Q 10"
 fi
 if [ -z "$counts_custom_gene_filter" ]; then
 	counts_custom_gene_filter=""
