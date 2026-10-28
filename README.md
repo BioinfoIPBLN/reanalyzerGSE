@@ -1,32 +1,38 @@
 # reanalyzerGSE
+
 reanalyzerGSE is a pipeline to assist with and streamline transcriptomic analyses of various datasets (i.e. microarrays, RNA-seq, scRNA-seq) by automatically reanalyzing raw data submitted to public databases like [GEO](https://www.ncbi.nlm.nih.gov/geo/), [ENA](https://www.ebi.ac.uk/ena/browser/home) or [SRA](https://www.ncbi.nlm.nih.gov/sra). Local data can also be provided by the user. The pipeline is based on several steps implementing standard tools and novel scripts. (i.e. data download, quality control, alignment to reference genome, quantification, differential gene expression analyses, functional enrichment analyses...)
 
 ## Installation
+
 reanalyzerGSE is distributed as an Apptainer/Singularity container (~2 GB), which is the recommended and supported way to install it. You can either:
 
-1) Use the .def file to create the .sif image by executing:
-```
-git clone https://github.com/BioinfoIPBLN/reanalyzerGSE
-# May need to set or clean APPTAINER_TMPDIR or APPTAINER_CACHEDIR
-apptainer build reanalyzerGSE.sif reanalyzerGSE/external_software/installation/reanalyzerGSE.def | tee -a reanalyzerGSE.sif.build.log
-```
-The image packs the latest commit of the main branch. To pack a release instead, which is what a publication should cite, pass its tag (or a full commit hash): `apptainer build --build-arg REANALYZERGSE_REF=v4.1.0 reanalyzerGSE.sif ...`. The commit used is written into the image, and every run records it in `provenance/` (see Output).
-2) Download the ready-to-use .sif image:
-```
-wget -q https://bit.ly/reanalyzerGSE_sif -O reanalyzerGSE.sif
-```
+1. Use the .def file to create the .sif image by executing:
 
+   ```
+   git clone https://github.com/BioinfoIPBLN/reanalyzerGSE
+   # May need to set or clean APPTAINER_TMPDIR or APPTAINER_CACHEDIR
+   apptainer build reanalyzerGSE.sif reanalyzerGSE/external_software/installation/reanalyzerGSE.def | tee -a reanalyzerGSE.sif.build.log
+   ```
+
+   The image packs the latest commit of the main branch. To pack a release instead, which is what a publication should cite, pass its tag (or a full commit hash): `apptainer build --build-arg REANALYZERGSE_REF=v4.1.0 reanalyzerGSE.sif ...`. The commit used is written into the image, and every run records it in `provenance/` (see Output).
+
+2. Download the ready-to-use .sif image:
+
+   ```
+   wget -q https://bit.ly/reanalyzerGSE_sif -O reanalyzerGSE.sif
+   ```
 
 Alternatively, and much less recommended, you can manually install the required software.
 If you want to manually install the software, check out the list of required tools in the .def file (Apptainer/Singularity) within the folder 'external_software/installation'. Please be aware that many scripts (bash, perl...) within the 'scripts' folder are also used, so you may need to manually change the interpreter in the corresponding statements (first line #!) to ensure that everything works in your system, and to make them executable ('chmod' command).
 
-
 ## Quick start / Minimal examples
+
 Please go to test_data/README and follow instructions.
 
-
 ## reanalyzerGSE arguments
+
 Please be aware that inline parameters can be provided (see 'reanalyzerGSE.sh -h' or the [options script](https://github.com/BioinfoIPBLN/reanalyzerGSE/blob/main/scripts/parse_options.sh)) or a yaml file with all arguments can be provided via '-options' (see [template](https://github.com/BioinfoIPBLN/reanalyzerGSE/blob/main/scripts/config_template.yaml))
+
 ```
 # Recommended execution:
 reanalyzerGSE.sh -options config.yaml | tee -a output.log
@@ -42,7 +48,7 @@ It is advisable to fine tune parameters such as the maximum RAM available, numbe
 
 ### Aligning different samples to different reference genomes
 
-By default, all samples are aligned to the single genome in `-r`, and a comma-separated list in `-a` produces one independent quantification per annotation. If instead you need different subsets of samples aligned to *different* genomes, use `-rG` with semicolon-separated `label:regex:fasta` triplets:
+By default, all samples are aligned to the single genome in `-r`, and a comma-separated list in `-a` produces one independent quantification per annotation. If instead you need different subsets of samples aligned to _different_ genomes, use `-rG` with semicolon-separated `label:regex:fasta` triplets:
 
 ```
 -r /ref/genomeA.fa -a /ref/annotation.gtf \
@@ -59,7 +65,7 @@ Two caveats. Genome groups require a single annotation and are incompatible with
 
 Three optional steps run after the DEG tables are annotated, and are off by default.
 
-`-faa`/`proteome_faa` takes the protein FASTA of the analysed organism. `-od`/`ortho_detection` then detects the **human orthologs** of those proteins, taking one of the values of the `ortho_detection` parameter of `orthologr::orthologs()`: `DIAMOND_RBH`, `DIAMOND_BH`, `RBH` or `BH` (`no` by default). The DIAMOND methods are the practical choice on a whole proteome; `RBH`/`BH` are the same logic on BLAST+ and are much slower. The human reference proteome is downloaded once from UniProt unless `-odH`/`ortho_human_proteome` points at one. This step is skipped when the organism already is *Homo sapiens*.
+`-faa`/`proteome_faa` takes the protein FASTA of the analysed organism. `-od`/`ortho_detection` then detects the **human orthologs** of those proteins, taking one of the values of the `ortho_detection` parameter of `orthologr::orthologs()`: `DIAMOND_RBH`, `DIAMOND_BH`, `RBH` or `BH` (`no` by default). The DIAMOND methods are the practical choice on a whole proteome; `RBH`/`BH` are the same logic on BLAST+ and are much slower. The human reference proteome is downloaded once from UniProt unless `-odH`/`ortho_human_proteome` points at one. This step is skipped when the organism already is _Homo sapiens_.
 
 `-enc`/`encode_regulatory` then looks the DEGs of each comparison up in [ENCODE](https://www.encodeproject.org): the ENCODE-rE2G element-gene links give each gene its candidate **regulatory regions** (promoter/enhancer class, distance to TSS, score), ENCODE TF ChIP-seq gives the **transcription factors** with a peak in those regions, and further assays over the same regions (DNase-seq, ATAC-seq, histone ChIP-seq) are recorded alongside. When the organism is not human the DEGs are translated through the orthologs above first, so `-enc` needs `-od` in that case. Each TF is finally checked against the differential expression table of the same comparison, so a TF whose own encoding gene (or its ortholog) is itself a DEG is flagged in the `TF_is_DEG` column.
 
@@ -95,21 +101,24 @@ An updated version of [miARma-seq](https://github.com/eandresleon/miARma-seq) ha
 Please refer to the help ('-h') or contact us for any further clarification.
 
 ## Output
+
 Everything is written into `OUTPUT_FOLDER/PROJECT_NAME/`. Two places cover most needs:
 
-* **`final_report.html`**, inside the results folder below together with the `sphinx_report/` folder it links to, is the entry point to the run. It is an HTML report, with sections you can fold, linking to the sample and design summary, a sample outlier check, the per-sample alignment summary, the count matrices, the DEG tables, volcano plots and Venn diagrams, the leave-out runs when requested, the functional enrichment report (plus a lighter tables-only version, `functional_enrichment_report_minimal.html`, for runs with many comparisons), the QC PDFs and the MultiQC/Qualimap reports, the pipeline timing and Gantt chart, and the objects for interactive exploration. It uses relative links, so keep it next to `sphinx_report/` (move or archive the whole results folder if you need to share it).
-* **`final_results_reanalysis0_<OUTPUT_FOLDER_NAME>/`** is the results folder itself, holding the final report, the count matrices plus `QC_and_others/` (QC PDF, a `README_QC_*.txt` describing each block of it, the tables behind every figure in `tables/` (and `tables_adjusted/` for the batch-adjusted QC PDF), and `sample_outliers/`: per-sample correlation z-scores and the genes 2x/4x above or below the other replicates of the condition) and `DGE/` (differential expression, functional enrichment and network analyses, and `leave_out/` when `leave_out_samples` is set).
+- **`final_report.html`**, inside the results folder below together with the `sphinx_report/` folder it links to, is the entry point to the run. It is an HTML report, with sections you can fold, linking to the sample and design summary, a sample outlier check, the per-sample alignment summary, the count matrices, the DEG tables, volcano plots and Venn diagrams, the leave-out runs when requested, the functional enrichment report (plus a lighter tables-only version, `functional_enrichment_report_minimal.html`, for runs with many comparisons), the QC PDFs and the MultiQC/Qualimap reports, the pipeline timing and Gantt chart, and the objects for interactive exploration. It uses relative links, so keep it next to `sphinx_report/` (move or archive the whole results folder if you need to share it).
+- **`final_results_reanalysis0_<OUTPUT_FOLDER_NAME>/`** is the results folder itself, holding the final report, the count matrices plus `QC_and_others/` (QC PDF, a `README_QC_*.txt` describing each block of it, the tables behind every figure in `tables/` (and `tables_adjusted/` for the batch-adjusted QC PDF), and `sample_outliers/`: per-sample correlation z-scores and the genes 2x/4x above or below the other replicates of the condition) and `DGE/` (differential expression, functional enrichment and network analyses, and `leave_out/` when `leave_out_samples` is set).
 
-* **`provenance/`** records how the results were produced: the options of every invocation as a YAML file that `-options` accepts back, the pipeline version, commit and container, tool and package versions, and the checksums of the reference files. It is summarised in the Provenance section of the report.
+- **`provenance/`** records how the results were produced: the options of every invocation as a YAML file that `-options` accepts back, the pipeline version, commit and container, tool and package versions, and the checksums of the reference files. It is summarised in the Provenance section of the report.
 
 Microarray and single-cell studies follow a shorter route that stops after a template script, so they produce a smaller `final_results_reanalysis/` and no `final_report.html`.
 
 Please refer to the [wiki](https://github.com/BioinfoIPBLN/reanalyzerGSE/wiki/Output-Structure) for the full directory structure, file by file, and for the output of a test run.
 
 ## AI-assisted development
+
 AI coding agents were used to assist with code refinement, comments, and documentation. The design and implementation of the software remain the responsibility of the authors, and all AI-assisted changes were reviewed and tested by the authors.
 
 ## Citation
+
 Please cite this reference when using reanalyzerGSE for your publications:
 
 > Ruiz, J. L., Terrón-Camero, L. C., Castillo-González, J., Fernández-Rengel, I., Delgado, M., Gonzalez-Rey, E., & Andrés-León, E. (2023). reanalyzerGSE: tackling the everlasting lack of reproducibility and reanalyses in transcriptomics. bioRxiv, 2023-07. https://doi.org/10.1101/2023.07.12.548663
@@ -129,4 +138,5 @@ Please cite this reference when using reanalyzerGSE for your publications:
 Please cite as well the tools used by the pipeline that have been relevant to your analyses.
 
 ## Support
+
 Please report any [issue](https://github.com/BioinfoIPBLN/reanalyzerGSE/issues) or [contact us](mailto:bioinformatica@ipb.csic.es?subject=[GitHub]%20Source%20reanalyzerGSE%20Support) to request support or any further clarification.

@@ -1,0 +1,3 @@
+external_software/
+scripts/config_template.yaml
+test_data/*.yaml
