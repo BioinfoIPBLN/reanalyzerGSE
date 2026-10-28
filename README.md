@@ -14,7 +14,7 @@ reanalyzerGSE is distributed as an Apptainer/Singularity container (~2 GB), whic
    apptainer build reanalyzerGSE.sif reanalyzerGSE/external_software/installation/reanalyzerGSE.def | tee -a reanalyzerGSE.sif.build.log
    ```
 
-   The image packs the latest commit of the main branch. To pack a release instead, which is what a publication should cite, pass its tag (or a full commit hash): `apptainer build --build-arg REANALYZERGSE_REF=v4.1.0 reanalyzerGSE.sif ...`. The commit used is written into the image, and every run records it in `provenance/` (see Output).
+   The image packs the latest commit of the main branch. To pack a release instead, which is what a publication should cite, pass its tag (or a full commit hash): `apptainer build --build-arg REANALYZERGSE_REF=v4.2.5 reanalyzerGSE.sif ...`. The commit used is written into the image, and every run records it in `provenance/` (see Output).
 
 2. Download the ready-to-use .sif image:
 
