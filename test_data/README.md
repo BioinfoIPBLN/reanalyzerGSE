@@ -8,7 +8,7 @@ It may depend on the machine, but the analyses should take ~30 min (reference ge
 Using the Apptainer image:
 
 ```
-# wget -q https://bit.ly/reanalyzer_appt_image -O reanalyzerGSE.sif # Download the Apptainer image or use the one you created (see Installation instructions in main README)
+# wget -q https://bit.ly/reanalyzerGSE_sif -O reanalyzerGSE.sif # Download the Apptainer image or use the one you created (see Installation instructions in main README)
 wget -q https://bit.ly/reana_test -O test_data.tar && tar xf test_data.tar && rm test_data.tar # Download test datasets
 
 wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M36/GRCm39.primary_assembly.genome.fa.gz # Download reference genome
@@ -27,7 +27,7 @@ This is a case example of the mouse transcriptomic dataset GSE118451, analyzed i
 Using the Apptainer image:
 
 ```
-# wget -q https://bit.ly/reanalyzer_appt_image -O reanalyzerGSE.sif # Download the Apptainer image or use the one you created (see Installation instructions in main README)
+# wget -q https://bit.ly/reanalyzerGSE_sif -O reanalyzerGSE.sif # Download the Apptainer image or use the one you created (see Installation instructions in main README)
 
 wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M36/GRCm39.primary_assembly.genome.fa.gz # Download reference genome
 wget -q https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_mouse/release_M36/gencode.vM36.primary_assembly.basic.annotation.gtf.gz # Download reference genome annotation
