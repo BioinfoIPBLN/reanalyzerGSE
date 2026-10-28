@@ -1162,7 +1162,7 @@ _log_step "Step_2_Decontamination" "end"
 	if [ ! -z "$sortmerna_databases" ]; then
 		echo -e "\n\nSTEP 2: Decontamination starting with sortmerna...\nCurrent date/time: $(date)\n\n"
 _log_step "Step_2_Decontamination" "start"
-		sortmerna_idx_dir=$output_folder/$name/indexes/$(basename $sortmerna_databases)_sortmerna7_index
+		sortmerna_idx_dir=$output_folder/$name/indexes/$(basename $sortmerna_databases)_sortmerna8_index
 		mkdir -p $seqs_location\_sortmerna $sortmerna_idx_dir
 		cd $seqs_location\_sortmerna
 

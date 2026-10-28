@@ -32,7 +32,7 @@ for argument in "${arguments[@]}"; do
 	        -t | -transcripts # Reference transcripts to be used (.fasta cDNA file, absolute pathway, only used if '-s' argument not provided so salmon prediction of strandness is required)
 	        -Dk | -kraken2_databases # Comma-separated list of Kraken2 database folders (e.g. '/path/to/core_nt,/path/to/gtdb'). Any input here activates the kraken2-based decontamination step. All DB+confidence combinations will be run for the reports; the reads are then filtered with the first database (which must contain a taxdump folder) and the first confidence, keeping only the reads assigned to the organism, its ancestors or its descendants, plus the unclassified ones, and those decontaminated reads are the ones used from then on
 	        -Kc | -kraken2_confidence # Comma-separated confidence scores for Kraken2 classification (default '0', e.g. '0,0.20,0.50'). Each score is run for each database
-	        -Ds | -sortmerna_databases # The database (absolute pathway) that should be used by SortMeRNA (any input here, e.g. '/path/to/rRNA_databases/smr_v4.3_sensitive_db.fasta', would activate the sortmerna-based rRNA removal step)
+	        -Ds | -sortmerna_databases # The database (absolute pathway) that should be used by SortMeRNA (any input here, e.g. '/path/to/rRNA_databases/smr_v6.0.2_sensitive_db.fasta', would activate the sortmerna-based rRNA removal step)
 	        -rRq | -rrna_qc_databases # Comma-separated list of rRNA reference FASTA paths for preliminary rRNA QC mapping (e.g. '/path/SILVA_138.2_LSURef_NR99_tax_silva.fasta.gz,/path/SILVA_138.2_SSURef_NR99_tax_silva.fasta.gz'). Any input here activates the Bowtie2-based rRNA mapping QC step. Output goes to preliminar_rrna_qc/
 	        -rRs | -rrna_qc_min_score # Min Bowtie2 alignment score for rRNA QC filtering (default -20)
 	        -Df | -databases_function # Comma-separated list of the EXACT databases to use for automatic functional enrichment of DEGs (autoGO/enrichR; see autoGO::choose_database()). This is the COMPLETE set — nothing is auto-added, so include pathway sets (e.g. Reactome_2022, KEGG_2021_Mouse, WikiPathways_2019_Mouse) yourself if you want them. Default: GO_Biological_Process_2025,GO_Molecular_Function_2025,GO_Cellular_Component_2025
@@ -952,9 +952,9 @@ if [ ! -z "$sortmerna_databases" ]; then
 	if [[ -f $sortmerna_databases ]]; then
 		echo -e "\nGood, apparently the required database for decontamination based on rRNA removal have been found in "$sortmerna_databases"\n"
 	else
-		echo -e "\The databases for sortmerna have to be downloaded. The software will exit until the following steps are performed. Please note 'wget' may not complete the download and then uncompressing would give errors. You would need to remove any incomplete file and restart download"
-		echo -e "The databases have to be downloaded by the user executing: mkdir -p $(dirname $sortmerna_databases) && cd $(dirname $sortmerna_databases) && wget https://github.com/sortmerna/sortmerna/releases/download/v7.0.0/smr_v4.3_sensitive_db.fasta.gz && gunzip smr_v4.3_sensitive_db.fasta.gz"
-		echo -e "That is the sensitive database. The same release also offers smr_v4.3_default_db, smr_v4.3_fast_db and smr_v4.3_sensitive_db_rfam_seeds if you prefer one of those"
+		echo -e "\nThe databases for sortmerna have to be downloaded. The software will exit until the following steps are performed. Please note 'wget' may not complete the download and then uncompressing would give errors. You would need to remove any incomplete file and restart download"
+		echo -e "The databases have to be downloaded by the user executing: mkdir -p $(dirname $sortmerna_databases) && cd $(dirname $sortmerna_databases) && wget https://github.com/sortmerna/sortmerna/releases/download/v8.0.0/smr_v6.0.2_sensitive_db.fasta.gz && gunzip smr_v6.0.2_sensitive_db.fasta.gz"
+		echo -e "That is the sensitive database. The same release also offers smr_v6.0.2_default_db and smr_v6.0.2_fast_db if you prefer one of those"
 		exit 1
 	fi
 fi

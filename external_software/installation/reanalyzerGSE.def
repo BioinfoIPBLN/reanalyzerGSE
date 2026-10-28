@@ -89,7 +89,7 @@ DPKGCFG
     mv taxonkit /bin_external/
     
     # Sortmerna
-    curl -fsSL --retry 10 https://github.com/sortmerna/sortmerna/releases/download/v7.0.0/sortmerna-7.0.0-Linux.tar.gz -o sortmerna.tar.gz
+    curl -fsSL --retry 10 https://github.com/sortmerna/sortmerna/releases/download/v8.0.0/sortmerna-8.0.0-Linux.tar.gz -o sortmerna.tar.gz
     tar xzf sortmerna.tar.gz
     mv sortmerna*/bin/* /bin_external/
     
