@@ -64,7 +64,7 @@ write_provenance() {
 			printf '%-14s %s\n' "$label" "$v"
 		done
 	} > "$dir/tool_versions.txt"
-	Rscript -e 'p <- c("edgeR","limma","DESeq2","ashr","sva","clusterProfiler","enrichplot","DOSE","ReactomePA","msigdbr","pathview","autoGO","rbioapi","WGCNA","STRINGdb","saseR","IsoformSwitchAnalyzeR","BisqueRNA","CDSeq","Mfuzz","GO.db","org.Hs.eg.db","org.Mm.eg.db","org.Rn.eg.db","qs2"); cat(R.version.string, "\n"); if (requireNamespace("BiocManager", quietly = TRUE)) cat("Bioconductor", as.character(BiocManager::version()), "\n"); for (x in p) cat(sprintf("%-22s %s\n", x, tryCatch(as.character(packageVersion(x)), error = function(e) "not installed")))' > "$dir/R_packages.txt" 2>/dev/null
+	Rscript -e 'p <- c("edgeR","limma","DESeq2","ashr","sva","clusterProfiler","enrichplot","DOSE","ReactomePA","msigdbr","pathview","autoGO","rbioapi","WGCNA","STRINGdb","saseR","IsoformSwitchAnalyzeR","BisqueRNA","CDSeq","Mfuzz","GO.db","org.Hs.eg.db","org.Mm.eg.db","org.Rn.eg.db","qs2","rhdf5","anndataR","exploreDE"); cat(R.version.string, "\n"); if (requireNamespace("BiocManager", quietly = TRUE)) cat("Bioconductor", as.character(BiocManager::version()), "\n"); for (x in p) cat(sprintf("%-22s %s\n", x, tryCatch(as.character(packageVersion(x)), error = function(e) "not installed")))' > "$dir/R_packages.txt" 2>/dev/null
 	python3 -m pip list --format=freeze > "$dir/python_packages.txt" 2>/dev/null
 	{
 		printf 'md5\tbytes\tfile\n'

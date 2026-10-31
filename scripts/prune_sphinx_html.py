@@ -35,7 +35,7 @@ ATTR_RE = re.compile(
 )
 URL_RE = re.compile(rb"""url\(\s*['"]?([^'")]+)""", re.IGNORECASE)
 EXT_RE = re.compile(
-    rb"""\.(?:txt|tsv|csv|xlsx|xls|pdf|png|jpg|jpeg|gif|svg|zip|gz|tar|qs2|rds|bw|bed|bam|cram|bai|csi|html|htm|json|log|out|xml|parquet|npz)(?![\w])""",
+    rb"""\.(?:txt|tsv|csv|xlsx|xls|pdf|png|jpg|jpeg|gif|svg|zip|gz|tar|qs2|rds|h5ad|bw|bed|bam|cram|bai|csi|html|htm|json|log|out|xml|parquet|npz)(?![\w])""",
     re.IGNORECASE,
 )
 NAME_BYTES = frozenset(

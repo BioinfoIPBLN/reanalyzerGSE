@@ -76,7 +76,7 @@ for argument in "${arguments[@]}"; do
 	        -Wm | -wgcna_mode # WGCNA mode: 'all' (canonical, runs on all expressed genes, by default) or 'degs' (runs on DEGs only, per comparison)
 	        -Wg | -wgcna_max_genes # Number of most variable genes (variance of the variance-stabilised counts) that WGCNA uses (5000 by default, or 0 for all of them). Co-expression modules from tens of thousands of mostly noisy genes and a few samples are unstable, and 5000 also keeps blockwiseModules in a single block; the module enrichment then uses these genes as background
 	        -apl | -auto_panther_log # Whether to perform additional autoGO and Panther analyses for DEGs separated by log2Fc positive or negative ('yes' or 'no', by default)
-	        -eDe | -exploreDE_se # Whether to generate a SummarizedExperiment object (.qs2) for the exploreLocalDE Shiny app (https://shiny-public.fgcz.uzh.ch/app/exploreLocalDE) ('yes' or 'no', by default). Human, Mouse and Rat get the full annotation/enrichment suite; any other organism gets a basic GO over-representation route built from the file given in '-nrf'
+	        -eDe | -exploreDE # Whether to write an exploreDE file (.h5ad) with the counts, the differential expression and the clusterProfiler GO over-representation and GSEA results, to explore them interactively in the exploreDE Shiny app (https://github.com/fgcz/exploreDE) ('yes' or 'no', by default). It is saved in 'final_results_reanalysis*/exploreDE/' and linked from the report together with how to open it. The YAML key 'exploreDE_se' of earlier versions is still read
 	        -sO | -splicing_option # Splicing analysis method: 'no' (default), 'saser' (differential splicing via saseR with adapted offsets in edgeR), or 'isoformswitchr' (isoform switch analysis via IsoformSwitchAnalyzeR, requires transcript-level quantification from Kallisto or Salmon)
 	        -lit | -literature # Whether to gather bibliographic context for the top DEGs of each comparison ('yes' or 'no', by default). Queries NCBI Gene and PubMed (E-utilities) for the strongest genes in each direction, saving the curated RefSeq summary and the most recent linked papers into a 'literature' folder and a section of the report. Requires outbound access to eutils.ncbi.nlm.nih.gov, and gene identifiers that NCBI recognises for the organism (custom assembly identifiers will not resolve). Set NCBI_API_KEY in the environment to raise the rate limit from 3 to 10 requests/s
 	        -lita | -literature_args # Args passed verbatim to scripts/lit_gather.py (default '--genes-per-sense 5 --papers-per-gene 5'). Options: '--genes-per-sense N' (top N genes per direction, ranked by FDR), '--papers-per-gene N' (most recent linked papers to keep per gene), '--email ADDRESS' (contact address sent to NCBI)
@@ -277,7 +277,8 @@ for argument in "${arguments[@]}"; do
 		-Ofc) featureCounts_extra_args=${arguments[index]} ;;
 		-Fgene) counts_custom_gene_filter=${arguments[index]} ;;
 		-nrf) non_reference_funct_enrichm=${arguments[index]} ;;
-		-eDe) exploreDE_se=${arguments[index]} ;;
+		-eDe | -exploreDE) exploreDE=${arguments[index]} ;;
+		-exploreDE_se) exploreDE_se=${arguments[index]} ;;
 		-sO | -splicing_option) splicing_option=${arguments[index]} ;;
 		-lit | -literature) literature=${arguments[index]} ;;
 		-lita | -literature_args) literature_args=${arguments[index]} ;;
@@ -749,8 +750,8 @@ fi
 if [ -z "$counts_custom_gene_filter" ]; then
 	counts_custom_gene_filter=""
 fi
-if [ -z "$exploreDE_se" ]; then
-	exploreDE_se="no"
+if [ -z "$exploreDE" ]; then
+	exploreDE=${exploreDE_se:-no}
 fi
 if [ -z "$splicing_option" ]; then
 	splicing_option="no"

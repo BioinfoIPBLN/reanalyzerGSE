@@ -329,6 +329,35 @@ convert_ids <- function(ids,mode) {
 }
 mode <- check_naming(keys(eval(parse(text=orgDB)), keytype = "SYMBOL"))
 
+### clusterProfiler objects kept for exploreDE (DGE/clusterProfiler_objects/<comparison>.qs2):
+cp_objects_dir <- file.path(path, "clusterProfiler_objects")
+cp_slots <- c(fdr_05 = "bothGenes", fdr_05_logpos = "upGenes", fdr_05_logneg = "downGenes", ranked = "ranked")
+keep_cp_object <- function(obj, kind, ont, geneset, comp) {
+  slot <- unname(cp_slots[geneset])
+  if (is.na(slot) || !inherits(obj, c("enrichResult", "gseaResult"))) return(invisible(NULL))
+  d <- file.path(cp_objects_dir, comp)
+  dir.create(d, recursive = TRUE, showWarnings = FALSE)
+  qs2::qs_save(obj, file.path(d, paste(kind, ont, slot, "qs2", sep = ".")))
+}
+bundle_cp_objects <- function(comp) {
+  d <- file.path(cp_objects_dir, comp)
+  fs <- list.files(d, pattern = "\\.qs2$")
+  if (length(fs) == 0) return(invisible(NULL))
+  out <- list(ora = list(), gsea = list())
+  for (f in fs) {
+    k <- strsplit(f, ".", fixed = TRUE)[[1]]
+    obj <- qs2::qs_read(file.path(d, f))
+    if (k[1] == "ora") {
+      if (is.null(out$ora[[k[2]]])) out$ora[[k[2]]] <- list()
+      out$ora[[k[2]]][[k[3]]] <- obj
+    } else {
+      out$gsea[[k[2]]] <- obj
+    }
+  }
+  qs2::qs_save(Filter(length, out), file.path(cp_objects_dir, paste0(comp, ".qs2")))
+  unlink(d, recursive = TRUE)
+}
+
 #save.image(file.path(path,"funct_enrich_clusterProfiler_globalenvir1.RData"))
 process_file <- function(file){
   tryCatch(invisible(biomaRt::biomartCacheClear()), error = function(e) NULL)
@@ -337,7 +366,8 @@ process_file <- function(file){
 
   basename <- gsub(".txt","",file)
   name <- paste0(file,"_genes_of_interest")
-  
+  unlink(file.path(cp_objects_dir, c(basename, paste0(basename, ".qs2"))), recursive = TRUE)
+
   a <- read.table(paste0(path,"/",file),head=T)
   # Convert ENSEMBL IDs to symbols if detected at startup
   if (.ensembl_detected && !is.null(.ensembl_map)) {
@@ -518,6 +548,7 @@ process_file <- function(file){
                   ego_df$summary_POS <- unlist(lapply(strsplit(ego_df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
                   ego_df$summary_NEG <- unlist(lapply(strsplit(ego_df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
                   write.table(ego_df,file=paste0("GO_overrepresentation_test_BP_",i,"_",geneset,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                  keep_cp_object(ego, "ora", "BP", geneset, basename)
                   suppressMessages(ggsave(goplot(ego), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_BP_",i,"_",geneset,".pdf"),width=15, height=15))
                   suppressMessages(ggsave(barplot(ego, showCategory=20), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_BP_",i,"_",geneset,"_barplot.pdf"),width=15, height=15))
                   suppressMessages(ggsave(dotplot(ego, showCategory=20), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_BP_",i,"_",geneset,"_dotplot.pdf"),width=15, height=15))
@@ -559,6 +590,7 @@ process_file <- function(file){
                   ego_df$summary_POS <- unlist(lapply(strsplit(ego_df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
                   ego_df$summary_NEG <- unlist(lapply(strsplit(ego_df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
                   write.table(ego_df,file=paste0("GO_overrepresentation_test_MF_",i,"_",geneset,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                  keep_cp_object(ego, "ora", "MF", geneset, basename)
                   suppressMessages(ggsave(goplot(ego), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_MF_",i,"_",geneset,".pdf"),width=15, height=15))
                   suppressMessages(ggsave(barplot(ego, showCategory=20), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_MF_",i,"_",geneset,"_barplot.pdf"),width=15, height=15))
                   suppressMessages(ggsave(dotplot(ego, showCategory=20), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_MF_",i,"_",geneset,"_dotplot.pdf"),width=15, height=15))
@@ -599,6 +631,7 @@ process_file <- function(file){
                   ego_df$summary_POS <- unlist(lapply(strsplit(ego_df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
                   ego_df$summary_NEG <- unlist(lapply(strsplit(ego_df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
                   write.table(ego_df,file=paste0("GO_overrepresentation_test_CC_",i,"_",geneset,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                  keep_cp_object(ego, "ora", "CC", geneset, basename)
                   suppressMessages(ggsave(goplot(ego), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_CC_",i,"_",geneset,".pdf"),width=15, height=15))
                   suppressMessages(ggsave(barplot(ego, showCategory=20), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_CC_",i,"_",geneset,"_barplot.pdf"),width=15, height=15))
                   suppressMessages(ggsave(dotplot(ego, showCategory=20), filename = paste0(getwd(),"/go_figs/","GO_overrepresentation_test_CC_",i,"_",geneset,"_dotplot.pdf"),width=15, height=15))
@@ -796,6 +829,7 @@ process_file <- function(file){
                         df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
                         df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
                         write.table(df,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_BP.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                        keep_cp_object(gse_enrich, "gsea", "BP", geneset, basename)
                         suppressMessages(ggsave(goplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_BP.pdf"),width=15, height=15))
                         suppressMessages(ggsave(dotplot(gse_enrich, showCategory=20), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_BP_dotplot.pdf"),width=15, height=15))
                         suppressMessages(ggsave(cnetplot(gse_enrich,foldChange=b), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_BP_cnetplot.pdf"),width=15, height=15))
@@ -835,6 +869,7 @@ process_file <- function(file){
                         df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
                         df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
                         write.table(df,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_MF.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                        keep_cp_object(gse_enrich, "gsea", "MF", geneset, basename)
                         suppressMessages(ggsave(goplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_MF.pdf"),width=15, height=15))
                         suppressMessages(ggsave(dotplot(gse_enrich, showCategory=20), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_MF_dotplot.pdf"),width=15, height=15))
                         suppressMessages(ggsave(cnetplot(gse_enrich,foldChange=b), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_MF_cnetplot.pdf"),width=15, height=15))
@@ -874,6 +909,7 @@ process_file <- function(file){
                         df$summary_POS <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_POS","",grep("_POS",x,val=T)))),collapse=",")}))
                         df$summary_NEG <- unlist(lapply(strsplit(df$summary_LogFC,"/"),function(x){paste(sort(unique(gsub("_NEG","",grep("_NEG",x,val=T)))),collapse=",")}))
                         write.table(df,file=paste0("GO_GSEA_",f,"_",i,"_fgsea_CC.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                        keep_cp_object(gse_enrich, "gsea", "CC", geneset, basename)
                         suppressMessages(ggsave(goplot(gse_enrich), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_CC.pdf"),width=15, height=15))
                         suppressMessages(ggsave(dotplot(gse_enrich, showCategory=20), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_CC_dotplot.pdf"),width=15, height=15))
                         suppressMessages(ggsave(cnetplot(gse_enrich,foldChange=b), filename = paste0(getwd(),"/go_figs/","GO_GSEA_",f,"_",i,"_fgsea_CC_cnetplot.pdf"),width=15, height=15))
@@ -1576,7 +1612,8 @@ process_file <- function(file){
       mc.cores = min(cores_2, max(1, length(.rgse_units))),
       X = .rgse_units,
       FUN = process_file_within
-    )     
+    )
+    bundle_cp_objects(basename)
 
     print(paste0("Processing ",file,"... Tidying up..."))
     ### Remove empty files and tar everything:

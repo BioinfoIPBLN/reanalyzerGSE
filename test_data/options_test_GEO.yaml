@@ -76,8 +76,8 @@ bonobo: "no"                           # Add BONOBO single-sample networks to th
 wgcna_mode: "all"                      # WGCNA mode: 'all' (canonical, all expressed genes) or 'degs' (DEGs only, per comparison)
 wgcna_max_genes: 5000                  # WGCNA uses only this many most variable genes (0 = all); also the module enrichment background
 auto_panther_log: "no"                 # Additional autoGO/Panther by log2Fc ('yes' or 'no')
-exploreDE_se: "no"                     # Generate SummarizedExperiment (.qs2) for the exploreLocalDE app ('yes' or 'no')
-                                       # https://shiny-public.fgcz.uzh.ch/app/exploreLocalDE
+exploreDE: "no"                        # Write an exploreDE file (.h5ad) with the counts, the DE and the clusterProfiler results ('yes' or 'no')
+                                       # https://github.com/fgcz/exploreDE
 splicing_option: "no"                  # Splicing analysis: 'no' (default), 'saser' (differential splicing), or 'isoformswitchr' (isoform switch analysis, requires Kallisto/Salmon)
 
 # === Literature ===

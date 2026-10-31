@@ -65,6 +65,26 @@ expression_table <- as.data.frame(data.table::fread(paste0(expression),head=T))
 expression_table$Gene_ID <- gsub(":.*","",expression_table$Gene_ID)
 
 dge_files <- list.files(pattern = pattern_search)
+
+### clusterProfiler objects kept for exploreDE (DGE/clusterProfiler_objects/<comparison>.qs2):
+cp_objects <- list()
+keep_cp_object <- function(obj, kind, ont, comp, slot = NULL) {
+  if (!inherits(obj, c("enrichResult", "gseaResult"))) return(invisible(NULL))
+  if (is.null(cp_objects[[comp]])) cp_objects[[comp]] <<- list(ora = list(), gsea = list())
+  if (kind == "gsea") {
+    cp_objects[[comp]]$gsea[[ont]] <<- obj
+  } else {
+    if (is.null(cp_objects[[comp]]$ora[[ont]])) cp_objects[[comp]]$ora[[ont]] <<- list()
+    cp_objects[[comp]]$ora[[ont]][[slot]] <<- obj
+  }
+}
+keep_ora_object <- function(obj, ont, file) {
+  m <- regmatches(file, regexec("^(DGE_analysis_comp[0-9]+)_fdr_05(_logpos|_logneg)?_Gene_IDs\\.txt$", file))[[1]]
+  if (length(m) == 0) return(invisible(NULL))
+  slot <- c("_logpos" = "upGenes", "_logneg" = "downGenes")[m[3]]
+  keep_cp_object(obj, "ora", ont, m[2], if (is.na(slot)) "bothGenes" else unname(slot))
+}
+
 for (f in if (run_ora) dge_files else character(0)){
   a <- as.data.frame(data.table::fread(paste0(f),head=T,fill=T))
   a$Gene_ID <- gsub(":.*","",a$Gene_ID)
@@ -195,6 +215,8 @@ for (file in if (run_ora) list.files(path = path, pattern = "_Gene_IDs\\.txt$") 
     write_1$Description <- get_go_names(write_1$ID)$go_name; write_2$Description <- get_go_names(write_2$ID)$go_name
     write.table(write_1,file=paste0(gsub(".txt","",file),"_functional_clusterProfiler_enrichr_BP_expr_1.txt"),col.names = T,row.names = F,quote = F,sep="\t")
     write.table(write_2,file=paste0(gsub(".txt","",file),"_functional_clusterProfiler_enrichr_BP_expr_2.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+    bp_2@result$Description <- write_2$Description
+    keep_ora_object(bp_2, "BP", file)
     p <- enrichmentNetwork(write_1, repelLabels = TRUE, drawEllipses = TRUE)
     ggsave(p, filename = paste0(gsub(".txt","",file),"_functional_clusterProfiler_enrichr_BP_expr_1_aPEAR.pdf"),width=15, height=15)
     suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0(gsub(".txt","",file),"_functional_clusterProfiler_enrichr_BP_expr_1_aPEAR.html"),selfcontained = TRUE))
@@ -264,6 +286,8 @@ for (file in if (run_ora) list.files(path = path, pattern = "_Gene_IDs\\.txt$") 
     write_1$Description <- get_go_names(write_1$ID)$go_name; write_2$Description <- get_go_names(write_2$ID)$go_name
     write.table(write_1,file=paste0(gsub(".txt","",file),"_functional_clusterProfiler_enrichr_MF_expr_1.txt"),col.names = T,row.names = F,quote = F,sep="\t")
     write.table(write_2,file=paste0(gsub(".txt","",file),"_functional_clusterProfiler_enrichr_MF_expr_2.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+    MF_2@result$Description <- write_2$Description
+    keep_ora_object(MF_2, "MF", file)
     p <- enrichmentNetwork(write_1, repelLabels = TRUE, drawEllipses = TRUE)
     ggsave(p, filename = paste0(gsub(".txt","",file),"_functional_clusterProfiler_enrichr_MF_expr_1_aPEAR.pdf"),width=15, height=15)
     suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0(gsub(".txt","",file),"_functional_clusterProfiler_enrichr_MF_expr_1_aPEAR.html"),selfcontained = TRUE))
@@ -333,6 +357,8 @@ for (file in if (run_ora) list.files(path = path, pattern = "_Gene_IDs\\.txt$") 
     write_1$Description <- get_go_names(write_1$ID)$go_name; write_2$Description <- get_go_names(write_2$ID)$go_name
     write.table(write_1,file=paste0(gsub(".txt","",file),"_functional_clusterProfiler_enrichr_CC_expr_1.txt"),col.names = T,row.names = F,quote = F,sep="\t")
     write.table(write_2,file=paste0(gsub(".txt","",file),"_functional_clusterProfiler_enrichr_CC_expr_2.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+    CC_2@result$Description <- write_2$Description
+    keep_ora_object(CC_2, "CC", file)
     p <- enrichmentNetwork(write_1, repelLabels = TRUE, drawEllipses = TRUE)
     ggsave(p, filename = paste0(gsub(".txt","",file),"_functional_clusterProfiler_enrichr_CC_expr_1_aPEAR.pdf"),width=15, height=15)
     suppressWarnings(htmlwidgets::saveWidget(widget = plotly::ggplotly(p),file = paste0(gsub(".txt","",file),"_functional_clusterProfiler_enrichr_CC_expr_1_aPEAR.html"),selfcontained = TRUE))
@@ -435,10 +461,16 @@ for (f in if (length(gsea_sets) > 0) dge_files else character(0)) {
         print(paste0("  ",set_name,": no gene set with ",minGS,"-",maxGS," ranked genes"))
       } else {
         write.table(as.data.frame(res@result),file=paste0(gsub(".txt","",f),"_functional_clusterProfiler_GSEA_",set_name,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
+        if (startsWith(set_name, "GO_")) keep_cp_object(res, "gsea", sub("^GO_", "", set_name), sub("\\.txt$", "", f))
         print(paste0("  ",set_name,": ",nrow(res@result)," gene sets, ",sum(res@result$p.adjust < 0.05)," with adjusted p < 0.05"))
       }
     }, error = function(e) print(paste0("  WARNING: GSEA ",set_name," failed for ",f,": ",conditionMessage(e))))
   }
+}
+
+if (length(cp_objects) > 0) {
+  dir.create(file.path(path, "clusterProfiler_objects"), showWarnings = FALSE)
+  for (comp in names(cp_objects)) qs2::qs_save(Filter(length, cp_objects[[comp]]), file.path(path, "clusterProfiler_objects", paste0(comp, ".qs2")))
 }
 
 dir.create(file.path(getwd(), "enrichr_clusterProfiler")); rgse_save_env(file.path(getwd(), "enrichr_clusterProfiler/globalenvir.qs2"))

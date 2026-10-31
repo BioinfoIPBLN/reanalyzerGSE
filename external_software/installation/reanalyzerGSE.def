@@ -3,6 +3,7 @@ From: ubuntu:24.04
 
 %arguments
     REANALYZERGSE_REF=main
+    EXPLOREDE_REF=97bb3b6ddc09611a4715236cfa0a0c0d2b5b83a5
 
 %post
     # --------------------------------------------------------------------------
@@ -537,8 +538,7 @@ install_pkgs_batched(pkgs); cat("\n\n\n\n\nBLOCK 1 R packages installed!\n\n\n\n
 
 pak::pkg_install("scRecover", dependencies = FALSE, ask = FALSE)
 
-pkg_install(c("url::https://cran.r-project.org/src/contrib/Archive/bayesbio/bayesbio_1.0.0.tar.gz",
-	      "stephenturner/annotables@5bf7dc0"), dependencies = F, ask = FALSE)
+pkg_install("url::https://cran.r-project.org/src/contrib/Archive/bayesbio/bayesbio_1.0.0.tar.gz", dependencies = F, ask = FALSE)
 
 pkg_install(c("url::https://cran.r-project.org/src/contrib/Archive/aPEAR/aPEAR_1.0.0.tar.gz",
               "url::https://cran.r-project.org/src/contrib/Archive/BisqueRNA/BisqueRNA_1.0.5.tar.gz",
@@ -597,6 +597,13 @@ cat("\n\n\n\n\nBLOCK 4 R packages installed!\n\n\n\n\n")
 pak::pkg_install(c("github::drostlab/metablastr", "github::drostlab/orthologr"), ask = FALSE)
 
 cat("\n\n\n\n\nBLOCK 5 R packages installed!\n\n\n\n\n")
+
+# exploreDE: the Shiny app that opens the .h5ad files written with '-eDe yes'
+pak::pkg_install(c("anndataR", "colourpicker", "fresh", "GGally", "ggbeeswarm", "ggprism", "ggtext", "glmpca", "gridtext",
+                   "kableExtra", "officer", "scuttle", "shinycssloaders", "shinydashboard", "shinylogs", "sortable", "vegan", "waiter"), ask = FALSE)
+pak::pkg_install("github::fgcz/exploreDE@{{ EXPLOREDE_REF }}", dependencies = FALSE, ask = FALSE)
+
+cat("\n\n\n\n\nBLOCK 6 R packages installed!\n\n\n\n\n")
 
 unlink(list.files(path = .libPaths(), pattern = "^src$",
                   recursive = TRUE, full.names = TRUE, include.dirs = TRUE), 

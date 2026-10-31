@@ -2055,28 +2055,6 @@ _log_step "Step_4_R_Process" "start"
 			R_qc_figs.R $output_folder/$name $output_folder/$name/miARma_out$index $output_folder/$name/final_results_reanalysis$index "edgeR_object_prefilter_adjusted" "edgeR_object_adjusted" "edgeR_object_norm_adjusted" $pattern_to_remove $annotation_file $fc_feat_type $split_sections | tee -a $output_folder/$name/R_qc_figs_adjusted.log
 		fi
 	done
-	### Generate SummarizedExperiment for the exploreLocalDE app if requested
-	if [[ "$exploreDE_se" == "yes" ]]; then
-		echo -e "\nGenerating SummarizedExperiment for exploreLocalDE...\n"
-		for index in "${!array[@]}"; do
-			final_dir=$output_folder/$name/final_results_reanalysis$index
-			if [ -f "$final_dir/Raw_counts_genes.txt" ] && [ -f "$final_dir/TPM_counts_genes.txt" ] && [ -f "$final_dir/DGE/list_comp.txt" ]; then
-				export ANNOTATION_FILE="${array[index]}"
-				Rscript $CURRENT_DIR/scripts/prepare_SE.R \
-					"$final_dir/Raw_counts_genes.txt" \
-					"$final_dir/TPM_counts_genes.txt" \
-					"$output_folder/$name/reads_study_info/samples_info.txt" \
-					"$final_dir/DGE/list_comp.txt" \
-					"$final_dir/DGE" \
-					"^DGE_analysis_comp[0-9]+\\.txt$" \
-					"$name" \
-					"$organism" \
-					"${_pre_go_outfile:-$non_reference_funct_enrichm}" 2>&1 | tee -a "$final_dir/DGE/deResults_prepare_SE.log"
-			else
-				echo "Skipping exploreLocalDE SE generation for index $index: required files not found"
-			fi
-		done
-	fi
 	### Leave-out differential expression runs, for comparison with the main run only
 	if [[ "${leave_out_samples:-no}" != "no" ]]; then
 		for index in "${!array[@]}"; do
@@ -2253,7 +2231,7 @@ if run_step step6; then
 		cd $output_folder/$name/final_results_reanalysis$index/DGE/
 		rm -rf $(find . -type d \( -name "*_autoGO" -o -name "*_clusterProfiler" -o -name "*_panther" -o -name "*funct_enr*" \)) $(find . -type f \( -name "*_autoGO" -o -name "*_clusterProfiler" -o -name "*_panther" -o -name "*funct_enr*" \)) # So it's redone if resuming
 		rm -f analysis_capping_notes.txt
-		rm -rf report_tables
+		rm -rf report_tables clusterProfiler_objects
 		annotation_file=${array[index]}
 
 		# Check if any DGE comparison file contains significant DEGs (FDR < 0.05)
@@ -2814,6 +2792,31 @@ if run_step step8; then
 						qc_pdf_ai.py --tables-dir "$_qc_tables" --pdf "$_qc_pdf" >> "$ai_log" 2>&1 || true
 					fi
 				done
+			fi
+		done
+	fi
+
+	### exploreDE file (.h5ad) with the counts, the differential expression and the clusterProfiler results
+	if [[ "$exploreDE" == "yes" ]]; then
+		if [ ${#array[@]} -eq 0 ]; then
+			expand_annotations_per_unit
+			if [[ "$aligner" == "kallisto" && ${#array[@]} -eq 0 ]]; then
+				array=("")
+			fi
+		fi
+		for index in "${!array[@]}"; do
+			restore_final_results_dir $index
+			final_dir=$output_folder/$name/final_results_reanalysis$index
+			if [ ! -f "$final_dir/CPM_counts_genes.txt" ]; then
+				echo "Skipping the exploreDE file for $final_dir: CPM_counts_genes.txt not found"
+				continue
+			fi
+			rm -rf "$final_dir/exploreDE"
+			mkdir -p "$final_dir/exploreDE"
+			R_exploreDE_h5ad.R "$final_dir" "$output_folder/$name/reads_study_info/samples_info.txt" "$final_dir/exploreDE/$name.h5ad" "$organism" "$(basename "${array[index]}")" 2>&1 | tee "$final_dir/exploreDE/exploreDE_h5ad.log"
+			if [ "${PIPESTATUS[0]}" -ne 0 ]; then
+				echo -e "\n\033[1;31mERROR:\033[0m the exploreDE file could not be built (see $final_dir/exploreDE/exploreDE_h5ad.log); the other results are not affected.\n" >&2
+				rm -f "$final_dir/exploreDE/$name.h5ad"
 			fi
 		done
 	fi

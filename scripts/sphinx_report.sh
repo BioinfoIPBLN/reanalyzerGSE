@@ -1098,7 +1098,7 @@ Please use the following links:
    <a href=\"RPKM_counts_genes_log2_1_categ.txt\" target=\"_blank\">Click to get RPKM counts (log2 + 1)</a>$(if [ -f "$path/$final_dir_name/RPKM_counts_genes_log2_1_categ.xlsx" ]; then echo ' (<a href="RPKM_counts_genes_log2_1_categ.xlsx" target="_blank">xlsx version</a>)'; fi)<br>
    <a href=\"CPM_counts_genes_log2_1_categ.txt\" target=\"_blank\">Click to get CPM counts (log2 + 1)</a>$(if [ -f "$path/$final_dir_name/CPM_counts_genes_log2_1_categ.xlsx" ]; then echo ' (<a href="CPM_counts_genes_log2_1_categ.xlsx" target="_blank">xlsx version</a>)'; fi)
 
-If requested, please go to \"$project_name/$final_dir_name/violin\" to check out the figures showing the transcriptional profiles of genes of interest. You may also find the tables \"_annotation.txt\" including the gene annotation available.$(if [ -f "$path/$final_dir_name/DGE/deResults.qs2" ]; then echo " The exploreLocalDE app may be also used (see below)."; fi)
+If requested, please go to \"$project_name/$final_dir_name/violin\" to check out the figures showing the transcriptional profiles of genes of interest. You may also find the tables \"_annotation.txt\" including the gene annotation available.$(if [ -f "$path/$final_dir_name/exploreDE/$project_name.h5ad" ]; then echo " The exploreDE app may also be used (see below)."; fi)
 $ai_counts_rst
 .. index:: Counts
 
@@ -1165,18 +1165,28 @@ $enc_section_rst
 
 
 
-$(if [ -f "$path/$final_dir_name/DGE/deResults.qs2" ]; then echo "
-Interactive exploration
+$(if [ -f "$path/$final_dir_name/exploreDE/$project_name.h5ad" ]; then echo "
+Interactive exploration (exploreDE)
 ------------------------------------------------------------------------------------
-A SummarizedExperiment object has been generated for this analysis, so you can interactively explore your differential expression results, pathway analyses and more in the exploreLocalDE Shiny app.
+The counts, the differential expression results and the clusterProfiler GO over-representation and GSEA results of this analysis are saved in one exploreDE file, to browse them interactively and make figures in the \`exploreDE <https://github.com/fgcz/exploreDE>\`_ Shiny app: :download:\`$project_name.h5ad <../$final_dir_name/exploreDE/$project_name.h5ad>\` (also in the \`\`exploreDE\`\` folder of the results). To open it, either:
 
-.. raw:: html
+1. Upload it on the landing page of FGCZ's exploreDE instance (up to 1 GB; the file is kept in memory for your session only):
 
-   <a href=\"https://shiny-public.fgcz.uzh.ch/app/exploreLocalDE\" target=\"_blank\">Open exploreLocalDE Shiny app</a>
+   .. raw:: html
 
-Load the following object into the app: :download:\`deResults.qs2 <../$final_dir_name/DGE/deResults.qs2>\` (also available in the :file:\`${final_dir_name}/DGE/\` results folder).
+      <a href=\"https://shiny-public.fgcz.uzh.ch/app/exploreDE\" target=\"_blank\">Open the exploreDE Shiny app</a>
 
-.. index:: exploreLocalDE
+2. Run the app from the reanalyzerGSE image, which includes exploreDE, in the folder holding the file, and then open http://localhost:8765 in a browser. From a laptop, forward the port first with \`\`ssh -L 8765:127.0.0.1:8765 <server>\`\`.
+
+   .. code-block:: bash
+
+      apptainer exec reanalyzerGSE.sif Rscript -e 'library(exploreDE); exploreDE(\"$project_name.h5ad\", host = \"127.0.0.1\", port = 8765, launch.browser = FALSE)'
+
+3. Install exploreDE in R with \`\`BiocManager::install(\"fgcz/exploreDE\")\`\` and run \`\`library(exploreDE); exploreDE(\"$project_name.h5ad\")\`\`.
+$(if [ -d "$path/$final_dir_name/DGE/clusterProfiler_objects" ]; then echo "
+The clusterProfiler objects behind these results are in the \`\`DGE/clusterProfiler_objects\`\` folder, one \`\`.qs2\`\` file per comparison, to be read in R with \`\`qs2::qs_read()\`\`."; fi)
+
+.. index:: exploreDE
 "; fi)
 
 
