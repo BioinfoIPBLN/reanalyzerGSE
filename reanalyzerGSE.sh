@@ -2804,6 +2804,7 @@ if run_step step8; then
 				array=("")
 			fi
 		fi
+		IFS=', ' read -r -a _fc_keys <<< "$optionsFeatureCounts_seq"
 		for index in "${!array[@]}"; do
 			restore_final_results_dir $index
 			final_dir=$output_folder/$name/final_results_reanalysis$index
@@ -2813,7 +2814,7 @@ if run_step step8; then
 			fi
 			rm -rf "$final_dir/exploreDE"
 			mkdir -p "$final_dir/exploreDE"
-			R_exploreDE_h5ad.R "$final_dir" "$output_folder/$name/reads_study_info/samples_info.txt" "$final_dir/exploreDE/$name" "$organism" "$(basename "${array[index]}")" 2>&1 | tee "$final_dir/exploreDE/exploreDE_h5ad.log"
+			R_exploreDE_h5ad.R "$final_dir" "$output_folder/$name/reads_study_info/samples_info.txt" "$final_dir/exploreDE/$name" "$organism" "${array[index]}" "${_fc_keys[index]:-${_fc_keys[0]:-gene_name}}" 2>&1 | tee "$final_dir/exploreDE/exploreDE_h5ad.log"
 			if [ "${PIPESTATUS[0]}" -ne 0 ]; then
 				echo -e "\n\033[1;31mERROR:\033[0m the exploreDE file could not be built (see $final_dir/exploreDE/exploreDE_h5ad.log); the other results are not affected.\n" >&2
 				rm -f "$final_dir/exploreDE/"*.h5ad

@@ -7,7 +7,9 @@ final_dir <- args[1]
 samples_info <- args[2]
 out_prefix <- sub("\\.h5ad$", "", args[3])
 organism_arg <- if (length(args) >= 4) trimws(args[4]) else ""
-annotation_label <- if (length(args) >= 5) trimws(args[5]) else ""
+annotation_file <- if (length(args) >= 5) trimws(args[5]) else ""
+feature_key <- if (length(args) >= 6) trimws(args[6]) else ""
+annotation_label <- basename(annotation_file)
 
 suppressPackageStartupMessages(library(exploreDE))
 suppressPackageStartupMessages(library(clusterProfiler))
@@ -21,6 +23,44 @@ match_ids <- function(x, table) {
   miss <- is.na(m)
   if (any(miss)) m[miss] <- match(toupper(x[miss]), toupper(table))
   m
+}
+annotation_descriptions <- function(f, key) {
+  if (!nzchar(f) || !file.exists(f) || !nzchar(key)) return(NULL)
+  con <- gzfile(f)
+  x <- readLines(con, warn = FALSE)
+  close(con)
+  a <- sub("^([^\t]*\t){8}", "", x[!startsWith(x, "#") & nzchar(x)])
+  if (!any(grepl("product|description|Note", a))) return(NULL)
+  gff3 <- !any(grepl("\"", head(a, 1000), fixed = TRUE))
+  attr1 <- function(k) {
+    pat <- if (gff3) paste0("(?:^|;)\\s*", k, "=([^;]*)") else paste0("(?:^|;)\\s*", k, "\\s+\"([^\"]*)\"")
+    m <- regexpr(pat, a, perl = TRUE)
+    v <- rep(NA_character_, length(a))
+    v[m > 0] <- sub(pat, "\\1", regmatches(a, m), perl = TRUE)
+    enc <- gff3 & !is.na(v) & grepl("%", v, fixed = TRUE)
+    v[enc] <- vapply(v[enc], function(z) tryCatch(suppressWarnings(utils::URLdecode(z)), error = function(e) z), character(1), USE.NAMES = FALSE)
+    v
+  }
+  keys <- attr1(key)
+  desc <- attr1("product")
+  for (k in c("description", "Note")) {
+    miss <- is.na(desc) | !nzchar(desc)
+    if (any(miss)) desc[miss] <- attr1(k)[miss]
+  }
+  if (gff3) {
+    ids <- attr1("ID")
+    parent <- sub(",.*", "", attr1("Parent"))
+    for (pass in 1:3) {
+      known <- !is.na(ids) & !is.na(keys)
+      id2key <- setNames(keys[known], ids[known])
+      fill <- is.na(keys) & !is.na(parent) & parent %in% names(id2key)
+      if (!any(fill)) break
+      keys[fill] <- id2key[parent[fill]]
+    }
+  }
+  keep <- !is.na(keys) & !is.na(desc) & nzchar(desc)
+  keep[keep] <- !duplicated(keys[keep])
+  setNames(desc[keep], keys[keep])
 }
 as_layer <- function(df, rows, cols, label) {
   i <- match_ids(rows, df$Gene_ID)
@@ -115,6 +155,16 @@ if (!is.na(orgdb_pkg) && requireNamespace(orgdb_pkg, quietly = TRUE)) {
   res <- res[!is.na(res$GO), , drop = FALSE]
   go_by_gene <- data.frame(gene = genes[match(res[[keytype]], k)], go = res$GO, ontology = res$ONTOLOGY, stringsAsFactors = FALSE)
 } else {
+  ad <- tryCatch(annotation_descriptions(annotation_file, feature_key), error = function(e) {
+    cat(paste0("WARNING: no gene descriptions read from ", annotation_file, " (", conditionMessage(e), ")\n"))
+    NULL
+  })
+  if (length(ad) > 0) {
+    i <- match_ids(genes, names(ad))
+    if (is.null(rowdata$description)) rowdata$description <- NA_character_
+    fill <- (is.na(rowdata$description) | !nzchar(rowdata$description)) & !is.na(i)
+    rowdata$description[fill] <- unname(ad[i[fill]])
+  }
   go_file <- list.files(dge_dir, pattern = "\\.automatically_extracted_GO_terms\\.txt$", full.names = TRUE)[1]
   if (!is.na(go_file)) {
     g <- as.data.frame(data.table::fread(go_file, header = FALSE, fill = TRUE, colClasses = "character"))[, 1:2]
@@ -146,7 +196,8 @@ if (!is.null(go_by_gene)) {
     rowdata[[paste0("go_", tolower(ont))]] <- unname(per_gene[genes])
   }
 }
-cat(paste0("Genes with a name: ", sum(rowdata$gene_name != rowdata$gene_id), "; with GO BP/MF/CC: ",
+cat(paste0("Genes with a name: ", sum(rowdata$gene_name != rowdata$gene_id), "; with a description: ",
+           if (is.null(rowdata$description)) 0L else sum(!is.na(rowdata$description) & nzchar(rowdata$description)), "; with GO BP/MF/CC: ",
            paste(vapply(c("go_bp", "go_mf", "go_cc"), function(x) if (x %in% colnames(rowdata)) sum(!is.na(rowdata[[x]])) else 0L, integer(1)), collapse = "/"), "\n"))
 
 ### Differential expression and the clusterProfiler objects of each comparison

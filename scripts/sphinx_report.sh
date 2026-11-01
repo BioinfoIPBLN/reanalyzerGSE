@@ -1180,6 +1180,8 @@ Interactive exploration (exploreDE)
 The counts, the differential expression results and the clusterProfiler GO over-representation and GSEA results of this analysis are saved in $(if [ $(echo "$explorede_files" | wc -l) -gt 1 ]; then echo "one exploreDE file per design, since the comparisons come from more than one design and each file groups the samples by the design of its comparisons"; else echo "one exploreDE file"; fi), to browse them interactively and make figures in the \`exploreDE <https://github.com/fgcz/exploreDE>\`_ Shiny app (also in the \`\`exploreDE\`\` folder of the results):
 $explorede_links
 
+Each file holds only the genes that passed the expression filter, which are the ones tested for differential expression, and only the GO terms with an adjusted p-value of 0.05 or lower, so the app lists fewer genes and terms than the full tables.
+
 To open a file, either:
 
 1. Upload it on the landing page of FGCZ's exploreDE instance (up to 1 GB; the file is kept in memory for your session only):
