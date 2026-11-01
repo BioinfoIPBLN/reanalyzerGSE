@@ -5,14 +5,14 @@ source(file.path(.rgse_scripts_dir, "R_qs_helpers.R"))
 args <- commandArgs(trailingOnly = TRUE)
 final_dir <- args[1]
 samples_info <- args[2]
-out_file <- args[3]
+out_prefix <- sub("\\.h5ad$", "", args[3])
 organism_arg <- if (length(args) >= 4) trimws(args[4]) else ""
 annotation_label <- if (length(args) >= 5) trimws(args[5]) else ""
 
 suppressPackageStartupMessages(library(exploreDE))
 suppressPackageStartupMessages(library(clusterProfiler))
 
-cat(paste0("\n\nBuilding the exploreDE file ", out_file, "...\n")); print(paste0("Current date: ", date()))
+cat(paste0("\n\nBuilding the exploreDE file(s) ", out_prefix, "*.h5ad...\n")); print(paste0("Current date: ", date()))
 
 dge_dir <- file.path(final_dir, "DGE")
 read_tab <- function(f) as.data.frame(data.table::fread(f, colClasses = c(Gene_ID = "character"), check.names = FALSE), check.names = FALSE)
@@ -42,7 +42,9 @@ layers <- list(
 )
 cat(paste0("Genes: ", length(genes), ", samples: ", length(samples), "\n"))
 
-### Samples
+layers$log2 <- log2(layers$normalised + 1)
+
+### Samples, with one factor per design file (the comparisons of each design use its groups)
 si <- read.delim(samples_info, header = FALSE, colClasses = "character")
 si_ids <- NULL
 for (k in intersect(c("V1", "V2"), colnames(si))) {
@@ -50,18 +52,23 @@ for (k in intersect(c("V1", "V2"), colnames(si))) {
   if (all(samples %in% cand)) { si_ids <- cand; break }
 }
 if (is.null(si_ids)) stop("the count columns (", paste(samples, collapse = ", "), ") could not be matched to ", samples_info)
-cond <- si[[if (ncol(si) >= 3) "V3" else "V2"]]
-coldata <- data.frame(condition = cond[match(samples, si_ids)], row.names = samples, stringsAsFactors = FALSE)
+rows <- match(samples, si_ids)
+designs <- list()
+for (z in list.files(dirname(samples_info), pattern = "design_possible_full", recursive = TRUE, full.names = TRUE)) {
+  v <- tryCatch(as.character(read.table(z, header = FALSE, blank.lines.skip = FALSE)$V1), error = function(e) NULL)
+  if (length(v) != nrow(si) || length(unique(v[rows])) < 2 || any(vapply(designs, identical, logical(1), v))) next
+  designs[[length(designs) + 1]] <- v
+}
+if (length(designs) == 0) designs <- list(si[[if (ncol(si) >= 3) "V3" else "V2"]])
+names(designs) <- c("condition", paste0("condition_", seq_along(designs)[-1]))
+coldata <- data.frame(lapply(designs, function(v) factor(v[rows], levels = intersect(unique(v), v[rows]))), row.names = samples)
 batch_file <- file.path(dirname(samples_info), "batch_vector.txt")
 if (file.exists(batch_file)) {
-  batch <- trimws(readLines(batch_file))
+  batch <- trimws(unlist(strsplit(readLines(batch_file), ",")))
   batch <- batch[nzchar(batch)]
-  if (length(batch) == nrow(si)) coldata$batch <- batch[match(samples, si_ids)]
+  if (length(batch) == nrow(si)) coldata$batch <- batch[rows]
 }
-coldata$condition <- factor(coldata$condition, levels = intersect(unique(cond), coldata$condition))
-ord <- order(coldata$condition)
-coldata <- coldata[ord, , drop = FALSE]
-layers <- lapply(layers, function(m) m[, rownames(coldata), drop = FALSE])
+cat(paste0("Sample groups: ", paste(names(designs), collapse = ", "), if ("batch" %in% colnames(coldata)) ", batch" else "", "\n"))
 
 ### Gene annotation: names and descriptions from the annotation file, GO terms per ontology
 rowdata <- data.frame(gene_id = genes, gene_name = genes, row.names = genes, check.names = FALSE)
@@ -112,8 +119,15 @@ if (!is.na(orgdb_pkg) && requireNamespace(orgdb_pkg, quietly = TRUE)) {
   if (!is.na(go_file)) {
     g <- as.data.frame(data.table::fread(go_file, header = FALSE, fill = TRUE, colClasses = "character"))[, 1:2]
     g <- g[g[[1]] != "source_id", , drop = FALSE]
+    sid <- gsub(":.*", "", g[[1]])
+    hit <- genes[match_ids(sid, genes)]
+    if (all(is.na(hit))) {
+      u <- unique(sid)
+      inside <- vapply(u, function(x) { h <- genes[grep(x, genes, fixed = TRUE)]; if (length(h) > 0) h[1] else NA_character_ }, character(1))
+      hit <- unname(inside[sid])
+    }
     sp <- strsplit(g[[2]], "[,; ]+")
-    long <- data.frame(gene = rep(genes[match_ids(gsub(":.*", "", g[[1]]), genes)], lengths(sp)), go = trimws(unlist(sp)), stringsAsFactors = FALSE)
+    long <- data.frame(gene = rep(hit, lengths(sp)), go = trimws(unlist(sp)), stringsAsFactors = FALSE)
     long <- unique(long[!is.na(long$gene) & grepl("^GO:[0-9]{7}$", long$go), , drop = FALSE])
     onto <- if (nrow(long) > 0) tryCatch(suppressMessages(AnnotationDbi::select(GO.db::GO.db, keys = unique(long$go), keytype = "GOID", columns = "ONTOLOGY")),
                                          error = function(e) { cat(paste0("WARNING: GO terms not split by ontology (", conditionMessage(e), "), the file has no GO columns\n")); NULL })
@@ -129,11 +143,11 @@ if (!is.null(go_by_gene)) {
     s <- go_by_gene[go_by_gene$ontology == ont, , drop = FALSE]
     if (nrow(s) == 0) next
     per_gene <- vapply(split(s$go, s$gene), paste, character(1), collapse = "; ")
-    rowdata[[paste("GO", ont)]] <- unname(per_gene[genes])
+    rowdata[[paste0("go_", tolower(ont))]] <- unname(per_gene[genes])
   }
 }
 cat(paste0("Genes with a name: ", sum(rowdata$gene_name != rowdata$gene_id), "; with GO BP/MF/CC: ",
-           paste(vapply(c("GO BP", "GO MF", "GO CC"), function(x) if (x %in% colnames(rowdata)) sum(!is.na(rowdata[[x]])) else 0L, integer(1)), collapse = "/"), "\n"))
+           paste(vapply(c("go_bp", "go_mf", "go_cc"), function(x) if (x %in% colnames(rowdata)) sum(!is.na(rowdata[[x]])) else 0L, integer(1)), collapse = "/"), "\n"))
 
 ### Differential expression and the clusterProfiler objects of each comparison
 recase <- function(x, ids) {
@@ -144,16 +158,15 @@ recase <- function(x, ids) {
       v[hit] <- up[toupper(v[hit])]
       v
     }
-    col <- if (inherits(x, "gseaResult")) "core_enrichment" else "geneID"
+    gsea <- inherits(x, "gseaResult")
+    col <- if (gsea) "core_enrichment" else "geneID"
     if (col %in% colnames(x@result)) {
       x@result[[col]] <- vapply(strsplit(as.character(x@result[[col]]), "/", fixed = TRUE), function(g) paste(fix(g), collapse = "/"), character(1))
     }
-    x@geneSets <- lapply(x@geneSets, fix)
-    if (inherits(x, "gseaResult")) {
+    if (gsea) {
+      kept <- intersect(names(x@geneSets), x@result$ID)
+      x@geneSets[kept] <- lapply(x@geneSets[kept], fix)
       names(x@geneList) <- fix(names(x@geneList))
-    } else {
-      x@gene <- fix(x@gene)
-      x@universe <- fix(x@universe)
     }
     return(x)
   }
@@ -163,7 +176,8 @@ recase <- function(x, ids) {
 
 dge_files <- list.files(dge_dir, pattern = "^DGE_analysis_comp[0-9]+\\.txt$")
 dge_files <- dge_files[order(as.integer(gsub("\\D", "", dge_files)))]
-de <- list(); de_columns <- list(); pathways <- list()
+groups <- lapply(designs, function(v) unique(v[rows]))
+de <- list(); de_columns <- list(); pathways <- list(); design_of <- character(0)
 for (f in dge_files) {
   d <- read_tab(file.path(dge_dir, f))
   fc <- grep("^logFC", colnames(d), value = TRUE)[1]
@@ -176,40 +190,59 @@ for (f in dge_files) {
   rownames(d) <- genes[i[keep]]
   de[[contrast]] <- d
   de_columns[[contrast]] <- list(effect_log2fc = fc, score_pvalue = "PValue", score_fdr = "FDR")
+  k <- names(groups)[vapply(groups, function(l) length(grp) == 2 && all(grp %in% l), logical(1))][1]
+  if (is.na(k)) {
+    cat(paste0("NOTE: the groups of ", contrast, " are not the groups of any design file, so it goes with the first one\n"))
+    k <- names(groups)[1]
+  }
+  design_of[contrast] <- k
   obj <- file.path(dge_dir, "clusterProfiler_objects", sub("\\.txt$", ".qs2", f))
-  if (file.exists(obj)) pathways[[contrast]] <- recase(qs2::qs_read(obj), genes)
-  cat(paste0(sub("\\.txt$", "", f), " -> ", contrast, ": ", nrow(d), " genes, ",
-             if (file.exists(obj)) paste(names(pathways[[contrast]]), collapse = " + ") else "no clusterProfiler objects", "\n"))
+  if (file.exists(obj)) {
+    pw <- tryCatch(recase(qs2::qs_read(obj), genes), error = function(e) {
+      cat(paste0("WARNING: ", obj, " could not be read (", conditionMessage(e), "), so ", contrast, " has no pathway results\n"))
+      NULL
+    })
+    if (!is.null(pw)) pathways[[contrast]] <- pw
+  }
+  cat(paste0(sub("\\.txt$", "", f), " -> ", contrast, " (", k, "): ", nrow(d), " genes, ",
+             if (is.null(pathways[[contrast]])) "no clusterProfiler objects" else paste(names(pathways[[contrast]]), collapse = " + "), "\n"))
 }
 if (length(de) == 0) cat("No DGE_analysis_comp*.txt table found, the file holds the counts only.\n")
 
-### Write and check
-dir.create(dirname(out_file), recursive = TRUE, showWarnings = FALSE)
-build_explore_h5ad(
-  x = layers,
-  out = out_file,
-  omics = "rnaseq",
-  coldata = coldata,
-  rowdata = rowdata,
-  rowdata_columns = list(id_col = "gene_id", symbol_col = "gene_name"),
-  de = de,
-  de_columns = de_columns,
-  pathways = pathways,
-  enrichment_padj_max = list(ora = 0.05, gsea = 0.05),
-  factors = colnames(coldata),
-  organism = gsub("_", " ", org_key),
-  ref_build = if (nzchar(annotation_label)) paste0(org_key, "/", annotation_label) else org_key
-)
+### Write and check, one file per design that has comparisons
+dir.create(dirname(out_prefix), recursive = TRUE, showWarnings = FALSE)
+used <- if (length(de) > 0) unique(design_of) else names(designs)[1]
+for (k in used) {
+  cn <- names(de)[design_of[names(de)] == k]
+  cd <- coldata[, c(k, setdiff(colnames(coldata), k)), drop = FALSE]
+  cd <- cd[order(cd[[k]]), , drop = FALSE]
+  out_file <- if (length(used) == 1) paste0(out_prefix, ".h5ad") else paste0(out_prefix, "_", k, ".h5ad")
+  build_explore_h5ad(
+    x = lapply(layers, function(m) m[, rownames(cd), drop = FALSE]),
+    out = out_file,
+    omics = "rnaseq",
+    coldata = cd,
+    rowdata = rowdata,
+    rowdata_columns = list(id_col = "gene_id", symbol_col = "gene_name"),
+    de = de[cn],
+    de_columns = de_columns[cn],
+    pathways = pathways[intersect(cn, names(pathways))],
+    enrichment_padj_max = list(ora = 0.05, gsea = 0.05),
+    factors = colnames(cd),
+    organism = gsub("_", " ", org_key),
+    ref_build = if (nzchar(annotation_label)) paste0(org_key, "/", annotation_label) else org_key
+  )
 
-eds <- new_explore_dataset(out_file)
-for (cn in eds$contrasts()) {
-  d <- eds$de(cn)
-  src <- de[[cn]]
-  if (all(is.na(d$effect_log2fc)) || (!is.null(src) && any(!is.na(src$FDR)) && all(is.na(d$score_fdr)))) {
-    cat(paste0("WARNING: ", cn, ": the log2 fold change or the FDR did not come through to the exploreDE file\n"))
+  eds <- new_explore_dataset(out_file)
+  for (contrast in eds$contrasts()) {
+    d <- eds$de(contrast)
+    src <- de[[contrast]]
+    if (all(is.na(d$effect_log2fc)) || (!is.null(src) && any(!is.na(src$FDR)) && all(is.na(d$score_fdr)))) {
+      cat(paste0("WARNING: ", contrast, ": the log2 fold change or the FDR did not come through to the exploreDE file\n"))
+    }
+    cat(sprintf("%s: FDR<0.05 up %d / down %d, ORA terms %d, GSEA terms %d\n", contrast,
+                sum(d$score_fdr < 0.05 & d$effect_log2fc > 0, na.rm = TRUE), sum(d$score_fdr < 0.05 & d$effect_log2fc < 0, na.rm = TRUE),
+                NROW(eds$enrichment_table(contrast, "ora")), NROW(eds$enrichment_table(contrast, "gsea"))))
   }
-  cat(sprintf("%s: FDR<0.05 up %d / down %d, ORA terms %d, GSEA terms %d\n", cn,
-              sum(d$score_fdr < 0.05 & d$effect_log2fc > 0, na.rm = TRUE), sum(d$score_fdr < 0.05 & d$effect_log2fc < 0, na.rm = TRUE),
-              NROW(eds$enrichment_table(cn, "ora")), NROW(eds$enrichment_table(cn, "gsea"))))
+  cat(paste0("Written ", out_file, " (grouped by ", k, ", ", round(file.size(out_file) / 1e6, 1), " MB)\n"))
 }
-cat(paste0("Written ", out_file, " (", round(file.size(out_file) / 1e6, 1), " MB)\n"))

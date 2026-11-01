@@ -215,7 +215,7 @@ for (file in if (run_ora) list.files(path = path, pattern = "_Gene_IDs\\.txt$") 
     write_1$Description <- get_go_names(write_1$ID)$go_name; write_2$Description <- get_go_names(write_2$ID)$go_name
     write.table(write_1,file=paste0(gsub(".txt","",file),"_functional_clusterProfiler_enrichr_BP_expr_1.txt"),col.names = T,row.names = F,quote = F,sep="\t")
     write.table(write_2,file=paste0(gsub(".txt","",file),"_functional_clusterProfiler_enrichr_BP_expr_2.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-    bp_2@result$Description <- write_2$Description
+    bp_2@result$Description <- ifelse(is.na(write_2$Description), write_2$ID, write_2$Description)
     keep_ora_object(bp_2, "BP", file)
     p <- enrichmentNetwork(write_1, repelLabels = TRUE, drawEllipses = TRUE)
     ggsave(p, filename = paste0(gsub(".txt","",file),"_functional_clusterProfiler_enrichr_BP_expr_1_aPEAR.pdf"),width=15, height=15)
@@ -286,7 +286,7 @@ for (file in if (run_ora) list.files(path = path, pattern = "_Gene_IDs\\.txt$") 
     write_1$Description <- get_go_names(write_1$ID)$go_name; write_2$Description <- get_go_names(write_2$ID)$go_name
     write.table(write_1,file=paste0(gsub(".txt","",file),"_functional_clusterProfiler_enrichr_MF_expr_1.txt"),col.names = T,row.names = F,quote = F,sep="\t")
     write.table(write_2,file=paste0(gsub(".txt","",file),"_functional_clusterProfiler_enrichr_MF_expr_2.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-    MF_2@result$Description <- write_2$Description
+    MF_2@result$Description <- ifelse(is.na(write_2$Description), write_2$ID, write_2$Description)
     keep_ora_object(MF_2, "MF", file)
     p <- enrichmentNetwork(write_1, repelLabels = TRUE, drawEllipses = TRUE)
     ggsave(p, filename = paste0(gsub(".txt","",file),"_functional_clusterProfiler_enrichr_MF_expr_1_aPEAR.pdf"),width=15, height=15)
@@ -357,7 +357,7 @@ for (file in if (run_ora) list.files(path = path, pattern = "_Gene_IDs\\.txt$") 
     write_1$Description <- get_go_names(write_1$ID)$go_name; write_2$Description <- get_go_names(write_2$ID)$go_name
     write.table(write_1,file=paste0(gsub(".txt","",file),"_functional_clusterProfiler_enrichr_CC_expr_1.txt"),col.names = T,row.names = F,quote = F,sep="\t")
     write.table(write_2,file=paste0(gsub(".txt","",file),"_functional_clusterProfiler_enrichr_CC_expr_2.txt"),col.names = T,row.names = F,quote = F,sep="\t")
-    CC_2@result$Description <- write_2$Description
+    CC_2@result$Description <- ifelse(is.na(write_2$Description), write_2$ID, write_2$Description)
     keep_ora_object(CC_2, "CC", file)
     p <- enrichmentNetwork(write_1, repelLabels = TRUE, drawEllipses = TRUE)
     ggsave(p, filename = paste0(gsub(".txt","",file),"_functional_clusterProfiler_enrichr_CC_expr_1_aPEAR.pdf"),width=15, height=15)

@@ -449,13 +449,13 @@ if os.path.exists('samples_info.txt'):
 
         # Filter design files
         for f in os.listdir('.'):
-            if f.startswith('design_possible_full_'):
+            if f.startswith('design_possible_full'):
                 dlines = [l for l in open(f).read().splitlines() if l.strip()]
                 # Keep matching indices from original lines
                 kept_d = [dlines[i] for i, l in enumerate(lines) if has_gsm(l) and i < len(dlines)]
                 if kept_d:
                     open(f, 'w').write('\n'.join(kept_d) + '\n')
-            elif f.startswith('design_possible_') and not f.startswith('design_possible_full_'):
+            elif f.startswith('design_possible_') and not f.startswith('design_possible_full'):
                 dlines = [l for l in open(f).read().splitlines() if l.strip()]
                 kept_d = list(dict.fromkeys([lines[i].split('\t')[2] if len(lines[i].split('\t'))>2 else dlines[i] for i, l in enumerate(lines) if has_gsm(l) and i < len(lines)]))
                 if kept_d:
@@ -2813,10 +2813,10 @@ if run_step step8; then
 			fi
 			rm -rf "$final_dir/exploreDE"
 			mkdir -p "$final_dir/exploreDE"
-			R_exploreDE_h5ad.R "$final_dir" "$output_folder/$name/reads_study_info/samples_info.txt" "$final_dir/exploreDE/$name.h5ad" "$organism" "$(basename "${array[index]}")" 2>&1 | tee "$final_dir/exploreDE/exploreDE_h5ad.log"
+			R_exploreDE_h5ad.R "$final_dir" "$output_folder/$name/reads_study_info/samples_info.txt" "$final_dir/exploreDE/$name" "$organism" "$(basename "${array[index]}")" 2>&1 | tee "$final_dir/exploreDE/exploreDE_h5ad.log"
 			if [ "${PIPESTATUS[0]}" -ne 0 ]; then
 				echo -e "\n\033[1;31mERROR:\033[0m the exploreDE file could not be built (see $final_dir/exploreDE/exploreDE_h5ad.log); the other results are not affected.\n" >&2
-				rm -f "$final_dir/exploreDE/$name.h5ad"
+				rm -f "$final_dir/exploreDE/"*.h5ad
 			fi
 		done
 	fi

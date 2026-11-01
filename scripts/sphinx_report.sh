@@ -706,6 +706,15 @@ ENCPY2
 fi
 
 
+######### exploreDE files, one per design with comparisons, as RST download links
+explorede_files=$(LC_ALL=C ls "$path/$final_dir_name/exploreDE/"*.h5ad 2>/dev/null)
+explorede_first=$(basename "$(echo "$explorede_files" | head -1)")
+explorede_links=""
+for f in $explorede_files; do
+	explorede_links="$explorede_links
+- :download:\`$(basename "$f") <../$final_dir_name/exploreDE/$(basename "$f")>\`"
+done
+
 ######### Pipeline timing: turn the raw start/end epoch rows in step_times.tsv into a
 ######### per-step DURATION table (hh:mm:ss) + a total, indented 3 spaces for an RST
 ######### code-block. Empty if the file is absent; a step with a start but no end yet
@@ -1098,7 +1107,7 @@ Please use the following links:
    <a href=\"RPKM_counts_genes_log2_1_categ.txt\" target=\"_blank\">Click to get RPKM counts (log2 + 1)</a>$(if [ -f "$path/$final_dir_name/RPKM_counts_genes_log2_1_categ.xlsx" ]; then echo ' (<a href="RPKM_counts_genes_log2_1_categ.xlsx" target="_blank">xlsx version</a>)'; fi)<br>
    <a href=\"CPM_counts_genes_log2_1_categ.txt\" target=\"_blank\">Click to get CPM counts (log2 + 1)</a>$(if [ -f "$path/$final_dir_name/CPM_counts_genes_log2_1_categ.xlsx" ]; then echo ' (<a href="CPM_counts_genes_log2_1_categ.xlsx" target="_blank">xlsx version</a>)'; fi)
 
-If requested, please go to \"$project_name/$final_dir_name/violin\" to check out the figures showing the transcriptional profiles of genes of interest. You may also find the tables \"_annotation.txt\" including the gene annotation available.$(if [ -f "$path/$final_dir_name/exploreDE/$project_name.h5ad" ]; then echo " The exploreDE app may also be used (see below)."; fi)
+If requested, please go to \"$project_name/$final_dir_name/violin\" to check out the figures showing the transcriptional profiles of genes of interest. You may also find the tables \"_annotation.txt\" including the gene annotation available.$(if [ -n "$explorede_files" ]; then echo " The exploreDE app may also be used (see below)."; fi)
 $ai_counts_rst
 .. index:: Counts
 
@@ -1165,10 +1174,13 @@ $enc_section_rst
 
 
 
-$(if [ -f "$path/$final_dir_name/exploreDE/$project_name.h5ad" ]; then echo "
+$(if [ -n "$explorede_files" ]; then echo "
 Interactive exploration (exploreDE)
 ------------------------------------------------------------------------------------
-The counts, the differential expression results and the clusterProfiler GO over-representation and GSEA results of this analysis are saved in one exploreDE file, to browse them interactively and make figures in the \`exploreDE <https://github.com/fgcz/exploreDE>\`_ Shiny app: :download:\`$project_name.h5ad <../$final_dir_name/exploreDE/$project_name.h5ad>\` (also in the \`\`exploreDE\`\` folder of the results). To open it, either:
+The counts, the differential expression results and the clusterProfiler GO over-representation and GSEA results of this analysis are saved in $(if [ $(echo "$explorede_files" | wc -l) -gt 1 ]; then echo "one exploreDE file per design, since the comparisons come from more than one design and each file groups the samples by the design of its comparisons"; else echo "one exploreDE file"; fi), to browse them interactively and make figures in the \`exploreDE <https://github.com/fgcz/exploreDE>\`_ Shiny app (also in the \`\`exploreDE\`\` folder of the results):
+$explorede_links
+
+To open a file, either:
 
 1. Upload it on the landing page of FGCZ's exploreDE instance (up to 1 GB; the file is kept in memory for your session only):
 
@@ -1180,9 +1192,9 @@ The counts, the differential expression results and the clusterProfiler GO over-
 
    .. code-block:: bash
 
-      apptainer exec reanalyzerGSE.sif Rscript -e 'library(exploreDE); exploreDE(\"$project_name.h5ad\", host = \"127.0.0.1\", port = 8765, launch.browser = FALSE)'
+      apptainer exec reanalyzerGSE.sif Rscript -e 'library(exploreDE); exploreDE(\"$explorede_first\", host = \"127.0.0.1\", port = 8765, launch.browser = FALSE)'
 
-3. Install exploreDE in R with \`\`BiocManager::install(\"fgcz/exploreDE\")\`\` and run \`\`library(exploreDE); exploreDE(\"$project_name.h5ad\")\`\`.
+3. Install exploreDE in R with \`\`BiocManager::install(\"fgcz/exploreDE\")\`\` and run \`\`library(exploreDE); exploreDE(\"$explorede_first\")\`\`.
 $(if [ -d "$path/$final_dir_name/DGE/clusterProfiler_objects" ]; then echo "
 The clusterProfiler objects behind these results are in the \`\`DGE/clusterProfiler_objects\`\` folder, one \`\`.qs2\`\` file per comparison, to be read in R with \`\`qs2::qs_read()\`\`."; fi)
 
