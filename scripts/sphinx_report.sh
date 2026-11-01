@@ -89,7 +89,7 @@ cat > _static/rgse_fold.js <<'FOLDJS'
     while (head.nextSibling) body.appendChild(head.nextSibling);
     el.appendChild(body);
     el.classList.add("rgse-foldable");
-    if (/^H3$/.test(head.tagName)) el.classList.add("rgse-fold-top");
+    if (/^H2$/.test(head.tagName)) el.classList.add("rgse-fold-top");
     head.classList.add("rgse-fold-head");
     head.addEventListener("click", function (e) {
       if (e.target.closest("a")) return;
@@ -107,7 +107,7 @@ cat > _static/rgse_fold.js <<'FOLDJS'
   document.addEventListener("DOMContentLoaded", function () {
     var root = document.querySelector("div.body") || document.body;
     root.querySelectorAll("section, div.section").forEach(function (sec) {
-      var head = Array.prototype.find.call(sec.children, function (c) { return /^H[3-6]$/.test(c.tagName); });
+      var head = Array.prototype.find.call(sec.children, function (c) { return /^H[2-6]$/.test(c.tagName); });
       if (head) fold(sec, head);
     });
     root.querySelectorAll("div.rgse-fold").forEach(function (blk) {
