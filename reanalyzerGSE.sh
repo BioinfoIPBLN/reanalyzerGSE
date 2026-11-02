@@ -384,7 +384,10 @@ if run_step step1; then
 		echo -e "\n\nSTEP 1: Starting...\nCurrent date/time: $(date)\n\n"
  	### Download info:
 		echo -e "\nDownloading info from GEO for $input...\n"
-		R_download_GEO_info.R $input $output_folder
+		if ! R_download_GEO_info.R $input $output_folder; then
+			echo -e "\n\033[1;31mERROR:\033[0m the GEO metadata of $input could not be downloaded (see the messages above). Exiting...\n" >&2
+			exit 1
+		fi
 		arrIN=(${input//,/ })
 		input=$(for a in "${arrIN[@]}"; do echo "$a"; done | sort | tr '\n' '_' | sed 's,_$,,g')
 
