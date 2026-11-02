@@ -326,9 +326,6 @@ if [ ! -z "$options_file" ]; then
 			export "$key=$val"
 		fi
 	done < <(yq -r 'to_entries[] | select(.value != null) | "\(.key)=\(.value)"' "$options_file")
-	if [ -n "$output_folder" ] && [ -n "$name" ]; then
-		copy_options_file_redacted "$options_file" "$output_folder/$name"
-	fi
 fi
 
 ##### Deal with defaults or with the user not providing some...
@@ -433,6 +430,9 @@ else
 	fi
 fi
 echo -e "\nname=$name\n"
+if [ -n "$options_file" ] && [ -n "$output_folder" ] && [ -n "$name" ]; then
+	copy_options_file_redacted "$options_file" "$output_folder/$name"
+fi
 if [ -z "$number_parallel" ]; then
 	number_parallel=10
 fi
