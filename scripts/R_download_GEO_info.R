@@ -4,7 +4,7 @@ GEO_ID <- args[1]
 path <- args[2]
 
 GEO_ID_path <- unlist(lapply(strsplit(GEO_ID,","),function(x){paste(sort(x),collapse="_")}))
-cat(paste0("\nI'm in: /",path,"/",GEO_ID_path,"/reads_study_info\n\n"))
+cat(paste0("\nI'm in: ",path,"/",GEO_ID_path,"/reads_study_info\n\n"))
 dir.create(paste(path,GEO_ID_path,"reads_study_info",sep="/"), showWarnings = FALSE, recursive = TRUE); setwd(paste(path,GEO_ID_path,"reads_study_info",sep="/"))
 
 retry_delays <- c(0, 10, 30)

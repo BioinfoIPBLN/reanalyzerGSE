@@ -2610,7 +2610,7 @@ sub hisat2_index{
 		or die "HISAT2_INDEX ERROR :: system args failed: $? ($commanddef)";
 		close LOG;
 		#Returning the path of the new hisat2 index 
-		return($dir."/hisat2_index/".$indexname);
+		return($hisat2idx_final);
 	}
 	else
 	{
@@ -3170,7 +3170,7 @@ sub star_index{
 		or die "STAR_INDEX ERROR :: system args failed: $? ($commanddef)";
 		close LOG;
 		#Returning the path of the new star index 
-		return($dir."/");
+		return($staridx_final);
 	}
 	else
 	{
@@ -3448,7 +3448,7 @@ sub star{
 					                          STAR --runThreadN $indexthreads --genomeDir $staridx_final --genomeLoad LoadAndExit --outFileNamePrefix $projectdir${output_dir}genomeloading.tmp2 && rm -rf $projectdir${output_dir}genomeloading.tmp*
 					                          parallel --halt-on-error 2 --verbose --joblog ${projectdir}/star_log_parallel.txt -j $parallelnumber 'set -o pipefail; STAR --runMode alignReads --genomeDir $staridx_final --genomeLoad LoadAndKeep --readFilesIn \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \$(cat $tmp_file | xargs dirname | uniq)/{}_2.fastq.gz --outFileNamePrefix $projectdir${output_dir}{}_STAR_ $starpardef --outStd SAM $samtools_pipeline_pe && echo && echo Done...{}_STAR.bam${star_unmapped_gzip}' ::: \$(echo \$name_lists)
 					                          STAR --runThreadN $indexthreads --genomeDir $staridx_final --genomeLoad Remove --outFileNamePrefix $projectdir${output_dir}genomeremoval.tmp >/dev/null 2>&1 || true; rm -rf $projectdir${output_dir}genomeremoval.tmp*
-					                          parallel --halt-on-error 2 --verbose --joblog ${projectdir}/starprocess_log_parallel.txt -j $parallelnumber 'export _JAVA_OPTIONS="-Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD" && qualimap bamqc -bam $projectdir${output_dir}/{}_STAR.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_STAR.bam --java-mem-size="${memorylimit_div_mb}m" >> qc1.log 2>&1 || true
+					                          parallel --halt-on-error 2 --verbose --joblog ${projectdir}/starprocess_log_parallel.txt -j $parallelnumber 'export _JAVA_OPTIONS="-Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD" && qualimap bamqc -bam $projectdir${output_dir}{}_STAR.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_STAR.bam --java-mem-size="${memorylimit_div_mb}m" >> qc1.log 2>&1 || true
 					                          bamCoverage -b {}_STAR.bam -o {}_STAR.bam.bw -of bigwig -bs $bigwig_binsize -p $threads $norm_cmd' ::: \$(echo \$name_lists)
 					                          QC_NJOBS=\$(echo \$name_lists | wc -w); QC_J=$qc_total_cores
 					                          if [ \$QC_J -gt \$QC_NJOBS ]; then QC_J=\$QC_NJOBS; fi
@@ -3456,7 +3456,7 @@ sub star{
 					                          export QC_JAVA_MEM=\$(( $memorylimit_in_mb / (\$QC_J + 2) )); if [ \$QC_JAVA_MEM -lt 4096 ]; then export QC_JAVA_MEM=4096; fi
 					                          export QC_SORT_THREADS=\$(( $qc_total_cores / \$QC_J )); if [ \$QC_SORT_THREADS -lt 1 ]; then export QC_SORT_THREADS=1; fi
 					                          export QC_SORT_MEM=\$(( \$QC_JAVA_MEM / (2 * \$QC_SORT_THREADS) )); if [ \$QC_SORT_MEM -lt 128 ]; then export QC_SORT_MEM=128; fi
-					                          case \"\${RGSE_ANNOT_STYLE:-gtf}\" in gtf) parallel --halt-on-error 2 --verbose --joblog ${projectdir}/rnaseqqc_log_parallel.txt -j \$QC_J 'export _JAVA_OPTIONS="-Xmx\${QC_JAVA_MEM}m -Djava.io.tmpdir=\$PWD" && samtools sort -n -@ \$QC_SORT_THREADS -T {}_nsort_qc_tmp -m \${QC_SORT_MEM}M -o {}_STAR_name_sorted.bam $projectdir${output_dir}/{}_STAR.bam && qualimap rnaseq -bam {}_STAR_name_sorted.bam -gtf $gtf -pe --sorted -outdir \$PWD/rnaseqqc_results/{}_STAR.bam --java-mem-size="\${QC_JAVA_MEM}m" >> qc2.log 2>&1; rm -f {}_STAR_name_sorted.bam || true' ::: \$(echo \$name_lists) ;; esac
+					                          case \"\${RGSE_ANNOT_STYLE:-gtf}\" in gtf) parallel --halt-on-error 2 --verbose --joblog ${projectdir}/rnaseqqc_log_parallel.txt -j \$QC_J 'export _JAVA_OPTIONS="-Xmx\${QC_JAVA_MEM}m -Djava.io.tmpdir=\$PWD" && samtools sort -n -@ \$QC_SORT_THREADS -T {}_nsort_qc_tmp -m \${QC_SORT_MEM}M -o {}_STAR_name_sorted.bam $projectdir${output_dir}{}_STAR.bam && qualimap rnaseq -bam {}_STAR_name_sorted.bam -gtf $gtf -pe --sorted -outdir \$PWD/rnaseqqc_results/{}_STAR.bam --java-mem-size="\${QC_JAVA_MEM}m" >> qc2.log 2>&1; rm -f {}_STAR_name_sorted.bam || true' ::: \$(echo \$name_lists) ;; esac
 					                          find . -maxdepth 1 \\( -name '*_name_sorted.bam' -o -name '*_nsort_qc_tmp*' \\) -delete 2>/dev/null || true
 					                          mkdir -p \$PWD/bamqc_results && for f in \$( ls | egrep '_(hisat2|STAR)\.bam\$' ); do echo \$f"\t"\$PWD/bamqc_results/\$f >> \$PWD/bamqc_results/list_multi.txt; done && mkdir -p \$PWD/samtools_results/ && parallel --halt-on-error 2 --verbose -j $parallelnumber 'samtools flagstat -@ $threads {} > \$PWD/samtools_results/{}_flagstat.txt && samtools stats -@ $threads {} > \$PWD/samtools_results/{}_stats.txt' ::: \$( ls | egrep '_(hisat2|STAR)\.bam\$' )
 					                          export _JAVA_OPTIONS="-Xmx${memorylimit_in_mb}m -Djava.io.tmpdir=\$PWD" && qualimap multi-bamqc -d \$PWD/bamqc_results/list_multi.txt -outdir \$PWD/multibamqc_results/ >> qc3.log 2>&1 || true && \\
@@ -3539,7 +3539,7 @@ sub star{
 		                          STAR --runThreadN $indexthreads --genomeDir $staridx_final --genomeLoad LoadAndExit --outFileNamePrefix $projectdir${output_dir}genomeloading.tmp2 && rm -rf $projectdir${output_dir}genomeloading.tmp*
 					  parallel --halt-on-error 2 --verbose --joblog ${projectdir}/star_log_parallel.txt -j $parallelnumber 'set -o pipefail; STAR --runMode alignReads --genomeDir $staridx_final --genomeLoad LoadAndKeep --readFilesIn \$(cat $tmp_file | xargs dirname | uniq)/{} --outFileNamePrefix $projectdir${output_dir}{}_STAR_ $starpardef --outStd SAM $samtools_pipeline_se && echo && echo Done...{}_STAR.bam${star_unmapped_gzip}' ::: \$(echo \$name_lists)
 					  STAR --runThreadN $indexthreads --genomeDir $staridx_final --genomeLoad Remove --outFileNamePrefix $projectdir${output_dir}genomeremoval.tmp >/dev/null 2>&1 || true; rm -rf $projectdir${output_dir}genomeremoval.tmp*
-					  parallel --halt-on-error 2 --verbose --joblog ${projectdir}/starprocess_log_parallel.txt -j $parallelnumber 'export _JAVA_OPTIONS="-Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD" && qualimap bamqc -bam $projectdir${output_dir}/{}_STAR.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_STAR.bam --java-mem-size="${memorylimit_div_mb}m" >> qc1.log 2>&1 || true
+					  parallel --halt-on-error 2 --verbose --joblog ${projectdir}/starprocess_log_parallel.txt -j $parallelnumber 'export _JAVA_OPTIONS="-Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD" && qualimap bamqc -bam $projectdir${output_dir}{}_STAR.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_STAR.bam --java-mem-size="${memorylimit_div_mb}m" >> qc1.log 2>&1 || true
 		                          bamCoverage -b {}_STAR.bam -o {}_STAR.bam.bw -of bigwig -bs $bigwig_binsize -p $threads $norm_cmd' ::: \$(echo \$name_lists)
 		                          QC_NJOBS=\$(echo \$name_lists | wc -w); QC_J=$qc_total_cores
 		                          if [ \$QC_J -gt \$QC_NJOBS ]; then QC_J=\$QC_NJOBS; fi
@@ -3547,7 +3547,7 @@ sub star{
 		                          export QC_JAVA_MEM=\$(( $memorylimit_in_mb / (\$QC_J + 2) )); if [ \$QC_JAVA_MEM -lt 4096 ]; then export QC_JAVA_MEM=4096; fi
 		                          export QC_SORT_THREADS=\$(( $qc_total_cores / \$QC_J )); if [ \$QC_SORT_THREADS -lt 1 ]; then export QC_SORT_THREADS=1; fi
 		                          export QC_SORT_MEM=\$(( \$QC_JAVA_MEM / (2 * \$QC_SORT_THREADS) )); if [ \$QC_SORT_MEM -lt 128 ]; then export QC_SORT_MEM=128; fi
-		                          case \"\${RGSE_ANNOT_STYLE:-gtf}\" in gtf) parallel --halt-on-error 2 --verbose --joblog ${projectdir}/rnaseqqc_log_parallel.txt -j \$QC_J 'export _JAVA_OPTIONS="-Xmx\${QC_JAVA_MEM}m -Djava.io.tmpdir=\$PWD" && qualimap rnaseq -bam $projectdir${output_dir}/{}_STAR.bam -gtf $gtf -outdir \$PWD/rnaseqqc_results/{}_STAR.bam --java-mem-size="\${QC_JAVA_MEM}m" >> qc2.log 2>&1 || true' ::: \$(echo \$name_lists) ;; esac
+		                          case \"\${RGSE_ANNOT_STYLE:-gtf}\" in gtf) parallel --halt-on-error 2 --verbose --joblog ${projectdir}/rnaseqqc_log_parallel.txt -j \$QC_J 'export _JAVA_OPTIONS="-Xmx\${QC_JAVA_MEM}m -Djava.io.tmpdir=\$PWD" && qualimap rnaseq -bam $projectdir${output_dir}{}_STAR.bam -gtf $gtf -outdir \$PWD/rnaseqqc_results/{}_STAR.bam --java-mem-size="\${QC_JAVA_MEM}m" >> qc2.log 2>&1 || true' ::: \$(echo \$name_lists) ;; esac
 		                          mkdir -p \$PWD/bamqc_results && for f in \$( ls | egrep '_(hisat2|STAR)\.bam\$' ); do echo \$f"\t"\$PWD/bamqc_results/\$f >> \$PWD/bamqc_results/list_multi.txt; done && mkdir -p \$PWD/samtools_results/ && parallel --halt-on-error 2 --verbose -j $parallelnumber 'samtools flagstat -@ $threads {} > \$PWD/samtools_results/{}_flagstat.txt && samtools stats -@ $threads {} > \$PWD/samtools_results/{}_stats.txt' ::: \$( ls | egrep '_(hisat2|STAR)\.bam\$' )
 		                          export _JAVA_OPTIONS="-Xmx${memorylimit_in_mb}m -Djava.io.tmpdir=\$PWD" && qualimap multi-bamqc -d \$PWD/bamqc_results/list_multi.txt -outdir \$PWD/multibamqc_results/ >> qc3.log 2>&1 || true && \\
 		                          

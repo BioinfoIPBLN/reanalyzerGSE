@@ -133,8 +133,8 @@ sub FastQC{
 		#
 		#Checking if user has defined the number of threads to perform the analysis.
 		#JLR: In order to use parallel, write the list of input files to another file, and use parallel...
-		system("mkdir -p $projectdir.$output_dir/");
-		$tmp_file="/".$projectdir.$output_dir."list_of_files.txt";
+		system("mkdir -p $projectdir$output_dir");
+		$tmp_file=$projectdir.$output_dir."list_of_files.txt";
 		$tmp_dir=$ENV{"TMPDIR"} || "/tmp";
 		my $multiplied_parallel = $parallelnumber * $threads;
 		open(LST,">".$tmp_file);

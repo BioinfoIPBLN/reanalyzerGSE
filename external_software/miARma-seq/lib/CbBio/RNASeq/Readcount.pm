@@ -234,7 +234,7 @@ sub featureCount{
 			if ($prefix eq 'his' || $prefix eq 'hisat2') { $prefix = 'hisat2'; }
 			elsif ($prefix eq 'str' || $prefix eq 'STAR') { $prefix = 'star'; }
 			
-			my $output_dir="/".$prefix."_readcount_results/";
+			my $output_dir="/".$prefix."_readcount_results";
 			my $tmp_file;
 			my $parallelnumber=$args{"parallelnumber"} || 5;
 			$tmp_file=$projectdir."/Pre_fastqc_results/list_of_files.txt";
@@ -308,7 +308,7 @@ sub featureCount{
 			$command=qq{if [ \$(ls $projectdir$output_dir | wc -l) -eq 0 ]; then
    				       unset DISPLAY && export PARALLEL_SHELL=/bin/bash
    				       parallel --halt-on-error 2 --verbose --joblog ${projectdir}/featureCounts_log_parallel.txt -j $parallelnumber \\
-   				       'featureCounts $htseqpardef -a $database -o ${projectdir}/${output_dir}/{}_${prefix}_readcount.tab \\
+   				       'featureCounts $htseqpardef -a $database -o ${projectdir}${output_dir}/{}_${prefix}_readcount.tab \\
    				       \$(find -L $projectdir -type f \\( -name "{}_hisat2.bam" -o -name "{}_STAR.bam" -o -name "{}*.bam" \\) | head -n 1) >> $logfile 2>&1' \\
    				       ::: \$(cat $tmp_file | sed -E 's,_(R)?[12].fastq.gz.*,,g' | sort | uniq | awk -F '/' '{print \$NF}')
 	 			    fi

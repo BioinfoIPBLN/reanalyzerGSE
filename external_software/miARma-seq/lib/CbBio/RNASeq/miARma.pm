@@ -199,8 +199,8 @@ sub run_miARma{
 				$cfg->newval("General", "read_dir", $real_dir);
 				$cfg->RewriteConfig;
 			}
-			if($cfg->val("General","output_dir") !~ /\/$/){
-				my $real_dir=$cfg->val("General","output_dir"). "/";
+			if($cfg->val("General","output_dir") =~ /.\/+$/){
+				(my $real_dir=$cfg->val("General","output_dir")) =~ s{(.)/+$}{$1};
 				$cfg->newval("General", "output_dir", $real_dir);
 				$cfg->RewriteConfig;
 			}
@@ -259,11 +259,11 @@ sub run_miARma{
 				# Reading the directory collecting the files and completing with the path
 				if(opendir(DIR, $dir)){
 					my @files= readdir(DIR);
-					@files=map("$dir/$_",@files);
+					@files=map("$dir$_",@files);
 					my $output_dir;
 				
 					open(SUMM,">>$summary_file") || warn "Can't create summary file ($summary_file)\n";
-					print SUMM "\nQuality [".$dir."/Pre_fastqc_results]\n";
+					print SUMM "\nQuality [".$dir."Pre_fastqc_results]\n";
 					close SUMM;
 					
 					# # FASTQC EXECUTION

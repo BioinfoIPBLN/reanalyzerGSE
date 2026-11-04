@@ -2169,7 +2169,7 @@ if run_step step5; then
 			echo -e "\n\nSTEP 5: Starting...\nCurrent date/time: $(date)\n\n"
 _log_step "Step_5_QC_Figs" "start"
    			echo -e "\nPerforming time course analyses."
-			R_process_time_course.R $output_folder/$name/final_results_reanalysis$index/ DGE_analysis_comp1.qs2 edgeR_object_norm $minstd $mestimate
+			R_process_time_course.R $output_folder/$name/final_results_reanalysis$index DGE_analysis_comp1.qs2 edgeR_object_norm $minstd $mestimate
 _log_step "Step_5_QC_Figs" "end"
    			echo -e "\n\nSTEP 5: DONE\nCurrent date/time: $(date)\n\n"
 		fi
@@ -2627,7 +2627,7 @@ _log_step "Step_7_Annotation" "start"
 		export ANNOTATION_FILE="${array[index]}"
 		annotation_file=${array[index]}
 		# All the tables that contain list of genes, annotate them:
-		R_annotate_genes.R $output_folder/$name/final_results_reanalysis$index/ "^DGE_analysis_comp\\d+\\.txt$|^DGE_limma_timecourse_T\\d+_vs_T\\d+\\.txt$|mfuzz_elements_clusters|counts|WGCNA_all_modules_|STRINGdb_all_modules_" $organism			
+		R_annotate_genes.R $output_folder/$name/final_results_reanalysis$index "^DGE_analysis_comp\\d+\\.txt$|^DGE_limma_timecourse_T\\d+_vs_T\\d+\\.txt$|mfuzz_elements_clusters|counts|WGCNA_all_modules_|STRINGdb_all_modules_" $organism			
 
 		if [[ "$bed_mode" == "yes" ]]; then
 			cd "$output_folder/$name/final_results_reanalysis$index/" || exit 1
@@ -2838,7 +2838,7 @@ if run_step step8; then
 	# Convert tables to xlsx before sphinx so download links work in the report
 	if [ "$convert_tables_excel" == "yes" ]; then
 		echo -e "Converting tables to xlsx..."
-		R_convert_tables.R $output_folder/$name/ $cores "log_parallel|jquery|bamqc|rnaseqqc|samtools|strand" > $output_folder/$name/R_convert_tables.log 2>&1
+		R_convert_tables.R $output_folder/$name $cores "log_parallel|jquery|bamqc|rnaseqqc|samtools|strand" > $output_folder/$name/R_convert_tables.log 2>&1
 	fi
 	for _old_report in "$output_folder/$name"/final_results_reanalysis0*/sphinx_report "$output_folder/$name"/final_results_reanalysis0*/final_report.html; do
 		[ -e "$_old_report" ] && rm -rf "$_old_report"

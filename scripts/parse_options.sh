@@ -407,6 +407,9 @@ if [ ! -z "$reference_genome_groups" ]; then
 	done
 fi
 
+for _dir_var in input output_folder TMPDIR_arg reference_genome_index kraken2_databases; do
+	[ -n "${!_dir_var}" ] && printf -v "$_dir_var" '%s' "$(printf '%s' "${!_dir_var}" | sed -E 's#/{2,}#/#g; s#([^,])/+(,|$)#\1\2#g')"
+done
 echo -e "\n\nArguments:"
 echo -e "\ninput=$input\n"
 echo -e "\noutput_folder=$output_folder\n"
@@ -430,9 +433,6 @@ else
 	fi
 fi
 echo -e "\nname=$name\n"
-if [ -n "$options_file" ] && [ -n "$output_folder" ] && [ -n "$name" ]; then
-	copy_options_file_redacted "$options_file" "$output_folder/$name"
-fi
 if [ -z "$number_parallel" ]; then
 	number_parallel=10
 fi
@@ -552,6 +552,9 @@ if [ -d "$output_folder/$name" ]; then
 		sleep 1
 		: $((secs--))
 	done
+fi
+if [ -n "$options_file" ] && [ -n "$output_folder" ] && [ -n "$name" ]; then
+	copy_options_file_redacted "$options_file" "$output_folder/$name"
 fi
 if [ -z "$databases_function" ]; then
 	databases_function="GO_Biological_Process_2025,GO_Molecular_Function_2025,GO_Cellular_Component_2025"
