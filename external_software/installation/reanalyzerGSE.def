@@ -3,7 +3,7 @@ From: ubuntu:24.04
 
 %arguments
     REANALYZERGSE_REF=main
-    EXPLOREDE_REF=97bb3b6ddc09611a4715236cfa0a0c0d2b5b83a5
+    EXPLOREDE_REF=564572b4d1f1136491b031d70ba50713847e24b8
 
 %post
     # --------------------------------------------------------------------------
@@ -39,10 +39,10 @@ DPKGCFG
       libcurl4-openssl-dev libssl-dev libxml2-dev libxml2 zlib1g-dev \
       libfontconfig1-dev libharfbuzz-dev libfribidi-dev \
       libfreetype6-dev libpng-dev libpng-tools libpng16-16 libtiff-dev libtiff5-dev libjpeg-dev \
-      libmagick++-dev libmagickwand-dev libmagickcore-dev imagemagick libglu1-mesa-dev \
+      libmagick++-dev libmagickwand-dev libmagickcore-dev imagemagick \
       libopenblas-dev liblapack-dev libcairo2-dev libncurses5-dev libgit2-dev \
       libbz2-dev liblzma-dev libtbb12 libdeflate0 libdeflate-dev libisal2 libisal-dev \
-      libhdf5-dev libgl1-mesa-dev libglu1-mesa libnode-dev gsfonts libglpk-dev \
+      libhdf5-dev gsfonts libglpk-dev \
       python3-dev python3-pip python3-venv python3-setuptools python-is-python3 picard-tools \
       cython3 libpoppler-cpp-dev poppler-data \
       fastqc pigz parallel zip unzip bzip2 xz-utils expat file jq \
@@ -66,9 +66,9 @@ DPKGCFG
     rm -rf sracha_dl sracha.tar.gz
     
     # Samtools
-    curl -fsSL --retry 10 https://github.com/samtools/samtools/releases/download/1.24/samtools-1.24.tar.bz2 -o samtools.tar.bz2
+    curl -fsSL --retry 10 https://github.com/samtools/samtools/releases/download/1.25/samtools-1.25.tar.bz2 -o samtools.tar.bz2
     tar xf samtools.tar.bz2
-    cd samtools-1.24
+    cd samtools-1.25
     ./configure -q --without-curses --prefix=$PWD/bin
     make -s
     make -s install
@@ -87,7 +87,7 @@ DPKGCFG
     mv /root/edirect /bin_external/edirect
     
     # Fastp
-    curl -fsSL --retry 10 http://opengene.org/fastp/fastp -o fastp
+    curl -fsSL --retry 10 https://opengene.org/fastp/fastp.1.4.0 -o fastp
     chmod a+x ./fastp
     mv ./fastp /bin_external/
     
@@ -97,7 +97,7 @@ DPKGCFG
     mv taxonkit /bin_external/
     
     # Sortmerna
-    curl -fsSL --retry 10 https://github.com/sortmerna/sortmerna/releases/download/v8.0.0/sortmerna-8.0.0-Linux.tar.gz -o sortmerna.tar.gz
+    curl -fsSL --retry 10 https://github.com/sortmerna/sortmerna/releases/download/v8.0.1/sortmerna-8.0.1-Linux.tar.gz -o sortmerna.tar.gz
     tar xzf sortmerna.tar.gz
     mv sortmerna*/bin/* /bin_external/
     
@@ -128,6 +128,7 @@ DPKGCFG
     curl -fsSL --retry 10 https://sourceforge.net/projects/bbmap/files/BBMap_40.05.tar.gz/download -o bbmap.tar.gz
     tar xzf bbmap.tar.gz
     mv bbmap /bin_external/bbmap
+    rm -rf /bin_external/bbmap/resources /bin_external/bbmap/networks
     ln -s /bin_external/bbmap/repair.sh /bin_external/repair.sh
     rm -f bbmap.tar.gz
     
@@ -174,15 +175,15 @@ DPKGCFG
     mv bowtie2*/bowtie* /bin_external/
 
     # DIAMOND (ortholog detection, orthologr DIAMOND_RBH/DIAMOND_BH)
-    curl -fsSL --retry 10 https://github.com/bbuchfink/diamond/releases/download/v2.2.5/diamond-linux64.tar.gz -o diamond.tar.gz
+    curl -fsSL --retry 10 https://github.com/bbuchfink/diamond/releases/download/v2.2.8/diamond-linux64.tar.gz -o diamond.tar.gz
     tar xzf diamond.tar.gz
     mv diamond /bin_external/
 
     # BLAST+ (orthologr RBH/BH)
     curl -fsSL --retry 10 https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/2.17.0/ncbi-blast-2.17.0+-x64-linux.tar.gz -o blast.tar.gz
     tar xzf blast.tar.gz
-    for b in blastp blastn tblastn makeblastdb blastdbcmd blast_formatter; do
-      mv ncbi-blast-2.17.0+/bin/$b /bin_external/ || true
+    for b in blastp makeblastdb; do
+      mv ncbi-blast-2.17.0+/bin/$b /bin_external/
     done
     rm -rf ncbi-blast-2.17.0+
 
@@ -197,13 +198,12 @@ scipy==1.17.0
 matplotlib==3.10.8
 networkx==3.6.1
 statsmodels==0.14.6
-sympy==1.14.0
-pysam==0.23.3
+pysam==0.24.1
 deepTools==3.5.6
-multiqc==1.33
+multiqc==1.35
 fastq-dl==4.0.1
 pysradb==2.5.1
-RSeQC==5.0.4
+RSeQC==5.0.6
 netZooPy==0.10.8
 openpyxl==3.1.5
 python-igraph==1.0.0
@@ -216,7 +216,7 @@ plotly==6.5.2
 kaleido==0.2.1
 click==8.3.1
 markdown==3.10.2
-markupsafe==3.0.3
+markupsafe==3.0.4
 pypdf
 EOF
 
@@ -230,14 +230,14 @@ EOF
     # --------------------------------------------------------------------------
     # 4. R Packages (Ubuntu 24.04 / Noble)
     # --------------------------------------------------------------------------
-    # Installing R, pinned to 4.6.1 (the cran40 repo retains old versions, so this
-    # exact-version pin is reproducible and won't drift when R 4.6.2/4.7 are released)
+    # Installing R, pinned to 4.6.2 (the cran40 repo retains old versions, so this
+    # exact-version pin is reproducible and won't drift when R 4.6.3/4.7 are released)
     wget -qO /etc/apt/trusted.gpg.d/cran_ubuntu_key.asc https://cloud.r-project.org/bin/linux/ubuntu/marutter_pubkey.asc
     echo "deb https://cloud.r-project.org/bin/linux/ubuntu noble-cran40/" > /etc/apt/sources.list.d/cran40.list
     apt-get update -qq
     apt-get install -qy --no-install-recommends \
-      r-base-core=4.6.1-1.2404.1 r-base-dev=4.6.1-1.2404.1 r-base=4.6.1-1.2404.1 \
-      r-recommended=4.6.1-1.2404.1 pandoc
+      r-base-core=4.6.2-1.2404.0 r-base-dev=4.6.2-1.2404.0 r-base=4.6.2-1.2404.0 \
+      r-recommended=4.6.2-1.2404.0 pandoc
     
     cat <<EOF > $APPTAINER_TMPDIR/install_r.R
 options(repos = c(CRAN = "https://packagemanager.posit.co/cran/2026-09-25"))
@@ -277,11 +277,11 @@ pkgs <- c(
   "penalized", "pfamAnalyzeR", "pillar", "pkgbuild", "pkgconfig", "pkgdown", "pkgload", "plotly", "plotrix", "plyr",
   "png", "polyclip", "polynom", "praise", "preprocessCore", "prettyunits", "processx", "profvis", "progress", "progressr",
   "promises", "ProtGenerics", "proto", "proxy", "PRROC", "ps", "pscl", "purrr", "pwalign", "qlcMatrix",
-  "qpcR", "qpdf", "qs2", "quadprog", "quantreg", "qvalue", "R.methodsS3", "R.oo", "R.utils", "R6",
-  "ragg", "randomcoloR", "RANN", "rappdirs", "rbibutils", "rbioapi", "rcmdcheck", "RColorBrewer", "RcppAnnoy", "RcppArmadillo",
+  "qpdf", "qs2", "quadprog", "quantreg", "qvalue", "R.methodsS3", "R.oo", "R.utils", "R6",
+  "ragg", "RANN", "rappdirs", "rbibutils", "rbioapi", "rcmdcheck", "RColorBrewer", "RcppAnnoy", "RcppArmadillo",
   "RcppEigen", "RcppHNSW", "RcppParallel", "RcppProgress", "RcppThread", "RcppTOML", "RCurl", "Rdpack", "reactome.db", "ReactomePA",
   "ReadqPCR", "readr", "readxl", "reformulas", "rematch", "rematch2", "remotes", "rentrez", "reprex", "reshape2",
-  "restfulr", "reticulate", "rgl", "Rgraphviz", "rhdf5", "rhdf5filters", "Rhdf5lib", "RhpcBLASctl", "Rhtslib", "rjson",
+  "restfulr", "reticulate", "Rgraphviz", "rhdf5", "rhdf5filters", "Rhdf5lib", "RhpcBLASctl", "Rhtslib", "rjson",
   "rlang", "rmarkdown", "robustbase", "ROCR", "roxygen2", "rprojroot", "rrvgo", "Rsamtools", "RSpectra", "RSQLite",
   "rstatix", "rstudioapi", "rsvd", "rtracklayer", "Rtsne", "rversions", "rvest", "S4Arrays", "sandwich", "saseR",
   "sass", "satuRn", "SAVER", "ScaledMatrix", "scales", "scattermore", "scatterpie", "scatterplot3d", "sctransform", "segmented",
@@ -291,7 +291,7 @@ pkgs <- c(
   "STRINGdb", "stringfish", "stringi", "stringr", "SummarizedExperiment", "sva", "sys", "systemfonts", "tensor", "testthat",
   "textshape", "textshaping", "TH.data", "tibble", "tidydr", "tidygraph", "tidyr", "tidyselect", "tidytree", "tidyverse",
   "timechange", "timeDate", "tinytex", "tkWidgets", "treeio", "tweenr", "txdbmaker", "tximeta", "tximport", "tzdb",
-  "UCSC.utils", "umap", "UpSetR", "urca", "urlchecker", "usethis", "utf8", "uuid", "uwot", "V8",
+  "UCSC.utils", "umap", "UpSetR", "urca", "urlchecker", "usethis", "utf8", "uuid", "uwot",
   "VariantAnnotation", "vctrs", "VennDiagram", "viridis", "viridisLite", "vroom", "waldo", "WGCNA", "whisker", "widgetTools",
   "withr", "writexl", "xfun", "XML", "xml2", "xopen", "xtable", "xts", "XVector", "yaml",
   "yulab.utils", "zip", "zoo"
@@ -688,9 +688,9 @@ EOF
     apt-get purge -qy --auto-remove \
       build-essential cmake cpanminus cython3 g++ gcc gfortran libbz2-dev libcairo2-dev \
       libcurl4-openssl-dev libdeflate-dev libfontconfig1-dev libfreetype-dev libfribidi-dev \
-      libgit2-dev libgl1-mesa-dev libglpk-dev libglu1-mesa-dev libharfbuzz-dev libhdf5-dev \
+      libgit2-dev libglpk-dev libharfbuzz-dev libhdf5-dev \
       libisal-dev libjpeg-dev liblapack-dev liblzma-dev libmagickcore-dev libmagick++-dev \
-      libmagickwand-dev libncurses-dev libnode-dev libopenblas-dev libpng-dev \
+      libmagickwand-dev libncurses-dev libopenblas-dev libpng-dev \
       libpoppler-cpp-dev libssl-dev libtiff5-dev libtiff-dev libxml2-dev python3-dev r-base-dev \
       zlib1g-dev \
       texlive mupdf-tools dvisvgm lmodern tex-gyre fonts-texgyre-math tipa
@@ -703,6 +703,7 @@ EOF
     rm -rf /root/.cpan 2>/dev/null || true
     rm -rf /root/.cache 2>/dev/null || true
     rm -rf /root/.npm 2>/dev/null || true
+    rm -rf /root/.cpanm /root/.local 2>/dev/null || true
 
     # Build scratch
     cd /
