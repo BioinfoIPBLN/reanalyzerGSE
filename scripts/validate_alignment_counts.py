@@ -18,20 +18,52 @@ import sys
 
 
 def read_samples_info(path):
-    """Return (samples, rows_without_sample) from a samples_info.txt file."""
-    samples = []
-    rows_without_sample = 0
+    """Return the tab-separated fields of every non-empty row of a samples_info.txt file."""
+    rows = []
     with open(path, "r", encoding="utf-8", errors="replace") as f:
         for line in f:
             line = line.rstrip("\r\n")
-            if not line.strip():
-                continue
-            sample = line.split("\t")[0].strip()
-            if not sample:
-                rows_without_sample += 1
-            elif sample not in samples:
-                samples.append(sample)
-    return samples, rows_without_sample
+            if line.strip():
+                rows.append(line.split("\t"))
+    return rows
+
+
+def read_stem(name):
+    """Sample name of a FASTQ file name, or None when it is not a FASTQ file."""
+    for suffix in [".fastq.gz", ".fq.gz", ".fastq", ".fq"]:
+        if name.endswith(suffix):
+            s = name[:-len(suffix)]
+            for end in ["_1", "_2", "_R1", "_R2"]:
+                if s.endswith(end):
+                    s = s[:-len(end)]
+            return s or None
+    return None
+
+
+def sample_names_on_disk(analysis_dir):
+    """Sample names the raw reads and the aligner outputs are named after."""
+    names = set()
+    raw_reads_dir = os.path.join(analysis_dir, "raw_reads")
+    if os.path.isdir(raw_reads_dir):
+        names.update(s for s in map(read_stem, os.listdir(raw_reads_dir)) if s)
+    for subdir, suffix in (("star_results", "_STAR.bam"), ("hisat2_results", "_hisat2.bam")):
+        for p in glob.glob(os.path.join(analysis_dir, "miARma_out*", subdir, "*" + suffix)):
+            names.add(os.path.basename(p)[:-len(suffix)])
+    for p in glob.glob(os.path.join(analysis_dir, "miARma_out*", "kallisto_results", "*")):
+        b = os.path.basename(p)
+        names.add(b[:-len("_kallisto")] if b.endswith("_kallisto") else b)
+    return names
+
+
+def sample_column(rows, names):
+    """Index of the samples_info.txt column the files are named after: the first column for
+    local reads, the second (sample name, after the SRR accession) for GEO/SRA downloads."""
+    best, best_hits = 0, -1
+    for col in (0, 1):
+        hits = sum(1 for r in rows if len(r) > col and r[col].strip() in names)
+        if hits > best_hits:
+            best, best_hits = col, hits
+    return best
 
 
 def parse_expected_samples(analysis_dir, samples_info_path=None):
@@ -41,27 +73,26 @@ def parse_expected_samples(analysis_dir, samples_info_path=None):
     default_info = os.path.join(analysis_dir, "reads_study_info", "samples_info.txt")
     for path in (samples_info_path, default_info):
         if path and os.path.exists(path):
-            samples, rows_without_sample = read_samples_info(path)
-            if samples or rows_without_sample:
+            rows = read_samples_info(path)
+            if rows:
+                col = sample_column(rows, sample_names_on_disk(analysis_dir))
+                samples = []
+                rows_without_sample = 0
+                for r in rows:
+                    sample = r[col].strip() if len(r) > col else ""
+                    if not sample:
+                        rows_without_sample += 1
+                    elif sample not in samples:
+                        samples.append(sample)
                 return samples, rows_without_sample
 
     expected = []
-    # Fallback: inspect raw_reads folder
     raw_reads_dir = os.path.join(analysis_dir, "raw_reads")
     if os.path.exists(raw_reads_dir):
-        files = os.listdir(raw_reads_dir)
-        for f in files:
-            if f.endswith((".fastq.gz", ".fq.gz", ".fastq", ".fq")):
-                # Strip suffixes
-                s = f
-                for suffix in [".fastq.gz", ".fq.gz", ".fastq", ".fq"]:
-                    if s.endswith(suffix):
-                        s = s[:-len(suffix)]
-                for end in ["_1", "_2", "_R1", "_R2"]:
-                    if s.endswith(end):
-                        s = s[:-len(end)]
-                if s and s not in expected:
-                    expected.append(s)
+        for f in os.listdir(raw_reads_dir):
+            s = read_stem(f)
+            if s and s not in expected:
+                expected.append(s)
 
     return sorted(expected), 0
 
