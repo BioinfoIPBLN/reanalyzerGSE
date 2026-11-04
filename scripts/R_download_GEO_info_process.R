@@ -120,7 +120,7 @@ for (z in unlist(strsplit(GEO_ID_path,"_"))){
 			srx_ids <- gsub(".*term=","",as.character(unlist(phenodata[grep("relation",names(phenodata))])))
 		} else {
 			srx_ids <- c()
-			for (id in rownames(phenodata)){srx_ids <- c(srx_ids,noquote(as.character(system(paste0("esearch -db sra -query '",id,"' | efetch -format docsum | grep SRX | sed 's,.*acc=,,g;s, .*,,g'"),intern=T))))}
+			for (id in rownames(phenodata)){srx_ids <- c(srx_ids,noquote(as.character(system(paste0("esearch -db sra -query '",id,"' < /dev/null | efetch -format runinfo | awk -F, 'NR == 1 {for (i = 1; i <= NF; i++) if ($i == \"Experiment\") c = i; next} c && $c ~ /^[SED]RX[0-9]+$/ && !seen[$c]++ {print $c}'"),intern=T))))}
 			srx_ids <- noquote(as.character(srx_ids))
 		}		
 		write.table(rev(srx_ids),

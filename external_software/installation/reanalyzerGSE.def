@@ -77,6 +77,13 @@ DPKGCFG
 
     # Edirect
     yes n | sh -c "$(curl -fsSL --retry 10 https://ftp.ncbi.nlm.nih.gov/entrez/entrezdirect/install-edirect.sh)"
+    for exc in xtract rchive transmute; do
+      if [ ! -x /root/edirect/$exc.Linux ]; then
+        curl -fsSL --retry 10 --retry-delay 30 --retry-all-errors https://ftp.ncbi.nlm.nih.gov/entrez/entrezdirect/$exc.Linux.gz -o /root/edirect/$exc.Linux.gz
+        gunzip -f /root/edirect/$exc.Linux.gz
+        chmod +x /root/edirect/$exc.Linux
+      fi
+    done
     mv /root/edirect /bin_external/edirect
     
     # Fastp

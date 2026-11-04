@@ -415,7 +415,7 @@ if run_step step1; then
 				for attempt in 1 2 3 4; do
 					delay=$(( (attempt - 1) * 10 ))
 					[ $delay -gt 0 ] && sleep $delay
-					srr=$(esearch -db sra -query "$i" 2>/dev/null | esummary 2>/dev/null | xtract -pattern DocumentSummary -element Run@acc 2>/dev/null)
+					srr=$(esearch -db sra -query "$i" < /dev/null 2>/dev/null | efetch -format runinfo 2>/dev/null | awk -F, '$1 ~ /^[SED]RR[0-9]+$/ {print $1}' | paste -sd'\t' -)
 					[ -n "$srr" ] && break
 				done
 				[ -n "$srr" ] && echo "$srr" >> srr_ids.txt
