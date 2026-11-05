@@ -100,7 +100,7 @@ for (z in list.files(dirname(samples_info), pattern = "design_possible_full", re
   designs[[length(designs) + 1]] <- v
 }
 if (length(designs) == 0) designs <- list(si[[if (ncol(si) >= 3) "V3" else "V2"]])
-names(designs) <- c("condition", paste0("condition_", seq_along(designs)[-1]))
+names(designs) <- c("condition", paste0("condition_", seq_along(designs))[-1])
 coldata <- data.frame(lapply(designs, function(v) factor(v[rows], levels = intersect(unique(v), v[rows]))), row.names = samples)
 batch_file <- file.path(dirname(samples_info), "batch_vector.txt")
 if (file.exists(batch_file)) {
