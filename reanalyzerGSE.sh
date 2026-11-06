@@ -247,7 +247,7 @@ missing_sra_downloads() {
 	done
 }
 apply_random_shift() {
-	awk -v n="$1" -v seed="$(printf '%s' "$2" | cksum | cut -d' ' -f1)" 'BEGIN { srand(seed); p = rand() * 10; c = (rand() < 0.5) ? -1 : 1; printf "%d\n", n + n * p / 100 * c + 0.5 }'
+	awk -v n="$1" -v h="$(printf '%s' "$2" | cksum | cut -d' ' -f1)" 'BEGIN { p = (h % 1000) / 100; c = (int(h / 1000) % 2) ? -1 : 1; printf "%d\n", n + n * p / 100 * c + 0.5 }'
 }
 subsample_reads() {
 	local files number file
