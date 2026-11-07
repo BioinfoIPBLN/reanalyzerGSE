@@ -895,6 +895,179 @@ if (length(comp_names) == 0)
   cat("\n> **No functional enrichment results were found in this directory.**\n\n")
 ```
 
+```{r spider, results='asis'}
+spider_dbs <- list(
+  list(label = "GO Biological Process", stub = "GO_BP",        pattern = "^GO_overrepresentation_test_BP_"),
+  list(label = "GO Molecular Function", stub = "GO_MF",        pattern = "^GO_overrepresentation_test_MF_"),
+  list(label = "GO Cellular Component", stub = "GO_CC",        pattern = "^GO_overrepresentation_test_CC_"),
+  list(label = "KEGG",                  stub = "KEGG",         pattern = "^KEGG_enrich_"),
+  list(label = "Reactome",              stub = "Reactome",     pattern = "^REACT_[^G]"),
+  list(label = "WikiPathways",          stub = "WikiPathways", pattern = "^WP_[^G]")
+)
+spider_toks <- c(fdr_05 = "all DEGs", fdr_05_logpos = "up-regulated DEGs", fdr_05_logneg = "down-regulated DEGs")
+spider_n_axes      <- 12
+spider_cap         <- 10
+spider_max_overlay <- 6
+spider_dir         <- file.path(dge_dir, "enrichment_spider_plots")
+
+spider_read <- function(cp_dir, pattern, tok) {
+  files <- list.files(cp_dir, pattern = paste0(pattern, ".*\\.txt$"), full.names = TRUE)
+  files <- files[!grepl("_err\\.txt$|_aPEAR|_clusters|_similarity|GSEA", basename(files))]
+  if (!length(files)) return(NULL)
+  f <- files[which(vapply(files, threshold_token, character(1)) == tok)][1]
+  if (is.na(f)) return(NULL)
+  df <- safe_read(f)
+  if (is.null(df) || !all(c("ID", "Description", "p.adjust") %in% names(df))) return(NULL)
+  df <- as.data.frame(df)[, c("ID", "Description", "p.adjust")]
+  df$p.adjust <- suppressWarnings(as.numeric(df$p.adjust))
+  df[!is.na(df$p.adjust) & !duplicated(df$ID), ]
+}
+
+spider_pick <- function(tabs) {
+  ranked <- lapply(tabs, function(d) {
+    s <- d[d$p.adjust < 0.05, ]
+    s$ID[order(s$p.adjust)]
+  })
+  picked <- character(0)
+  for (r in seq_len(max(lengths(ranked), 0))) {
+    for (ids in ranked) if (length(ids) >= r) picked <- union(picked, ids[r])
+    if (length(picked) >= spider_n_axes) break
+  }
+  head(picked, spider_n_axes)
+}
+
+spider_wrap <- function(x, width = 22) {
+  vapply(x, function(s) {
+    w <- strwrap(s, width = width)
+    if (length(w) > 3) w <- c(w[1:2], paste0(substr(w[3], 1, width - 3), "..."))
+    paste(w, collapse = "\n")
+  }, character(1), USE.NAMES = FALSE)
+}
+
+spider_draw <- function(m, labels, cols, legend_labels, main) {
+  n <- nrow(m)
+  ang <- pi / 2 - 2 * pi * (seq_len(n) - 1) / n
+  ticks <- pretty(c(0, max(m, -log10(0.05))), n = 4)
+  rmax <- max(ticks)
+  ticks <- ticks[ticks > 0]
+  op <- par(mar = c(0.5, 0.5, 3, 0.5), xpd = NA)
+  on.exit(par(op))
+  plot.new()
+  plot.window(xlim = c(-2.1, 2.1), ylim = c(-1.75, 1.45), asp = 1)
+  for (t in ticks) polygon(t / rmax * cos(ang), t / rmax * sin(ang), border = "grey85")
+  segments(0, 0, cos(ang), sin(ang), col = "grey85")
+  text(0.03, ticks / rmax, ticks, cex = 0.6, col = "grey45", adj = c(0, -0.2))
+  sig <- -log10(0.05) / rmax
+  polygon(sig * cos(ang), sig * sin(ang), border = "#c0392b", lty = 2)
+  for (j in seq_len(ncol(m))) {
+    r <- m[, j] / rmax
+    polygon(r * cos(ang), r * sin(ang), border = cols[j], col = adjustcolor(cols[j], alpha.f = 0.12), lwd = 2)
+    points(r * cos(ang), r * sin(ang), col = cols[j], pch = 19, cex = 0.6)
+  }
+  hadj <- ifelse(abs(cos(ang)) < 0.2, 0.5, ifelse(cos(ang) > 0, 0, 1))
+  vadj <- ifelse(sin(ang) > 0.9, 0, ifelse(sin(ang) < -0.9, 1, 0.5))
+  for (i in seq_len(n)) text(1.08 * cos(ang[i]), 1.08 * sin(ang[i]), labels[i], adj = c(hadj[i], vadj[i]), cex = 0.75)
+  title(main, line = 1.6, cex.main = 1)
+  mtext(sprintf("Radius: -log10(adjusted p), capped at %s. Dashed red ring: adjusted p = 0.05", spider_cap),
+        side = 3, line = 0.4, cex = 0.7, col = "grey30")
+  legend("bottom", legend = legend_labels, col = cols, lwd = 2, pch = 19, bty = "n", cex = 0.7,
+         ncol = if (length(legend_labels) > 3) 2 else 1)
+}
+
+spider_render <- function(db, tok, comps, dirs, comp_label, comp_col) {
+  tabs <- list()
+  for (cp in comps) {
+    d <- spider_read(dirs[[cp]], db$pattern, tok)
+    if (!is.null(d)) tabs[[cp]] <- d
+  }
+  missing <- setdiff(comps, names(tabs))
+  if (length(tabs) < 2) {
+    cat("*Fewer than two comparisons have results for this gene set.*\n\n")
+    return(invisible())
+  }
+  ids <- spider_pick(tabs)
+  if (length(ids) < 3) {
+    cat(sprintf("*%d term(s) reach adjusted p < 0.05 in any comparison; a spider plot needs at least 3.*\n\n", length(ids)))
+    return(invisible())
+  }
+  padj <- matrix(vapply(tabs, function(d) d$p.adjust[match(ids, d$ID)], numeric(length(ids))),
+                 nrow = length(ids), dimnames = list(ids, names(tabs)))
+  desc <- vapply(ids, function(i) {
+    for (d in tabs) { h <- match(i, d$ID); if (!is.na(h)) return(as.character(d$Description[h])) }
+    i
+  }, character(1), USE.NAMES = FALSE)
+  m <- padj
+  m[is.na(m)] <- 1
+  m[] <- pmin(-log10(pmax(m, 1e-300)), spider_cap)
+
+  dir.create(spider_dir, showWarnings = FALSE)
+  stem <- file.path(spider_dir, sprintf("spider_%s_%s", db$stub, tok))
+  out <- data.frame(ID = ids, Description = desc, padj, check.names = FALSE)
+  names(out)[-(1:2)] <- comp_label[colnames(padj)]
+  data.table::fwrite(out, paste0(stem, ".tsv"), sep = "\t", na = "NA")
+
+  cn <- colnames(m)
+  per_plot <- ceiling(length(cn) / ceiling(length(cn) / spider_max_overlay))
+  groups <- split(seq_along(cn), ceiling(seq_along(cn) / per_plot))
+  dev_fun <- if (isTRUE(capabilities("cairo"))) grDevices::cairo_pdf else grDevices::pdf
+  for (g in seq_along(groups)) {
+    sel <- groups[[g]]
+    pdf_file <- paste0(stem, if (length(groups) > 1) sprintf("_part%d", g) else "", ".pdf")
+    main <- sprintf("%s: %s", db$label, spider_toks[[tok]])
+    if (length(groups) > 1) main <- sprintf("%s (%d/%d)", main, g, length(groups))
+    dev_fun(pdf_file, width = 7, height = 6)
+    tryCatch(spider_draw(m[, sel, drop = FALSE], spider_wrap(desc), unname(comp_col[cn[sel]]),
+                         unname(comp_label[cn[sel]]), main),
+             finally = grDevices::dev.off())
+    embed_pdf(pdf_file, basename(pdf_file), dpi = 100)
+  }
+  rel <- rgse_rel_path(paste0(stem, ".tsv"))
+  if (!is.null(rel))
+    cat(sprintf('<a href="%s" download="%s" class="btn btn-sm btn-outline-secondary">\u2b07 Adjusted p of the plotted terms (TSV)</a>\n\n',
+                utils::URLencode(rel), basename(paste0(stem, ".tsv"))))
+  if (length(missing))
+    cat(sprintf("*No results file for %s.*\n\n", paste(comp_label[missing], collapse = "; ")))
+}
+
+if (show_plots && length(cp_dirs) >= 2) {
+  unlink(spider_dir, recursive = TRUE)
+  spider_comps <-comp_names[order(as.integer(gsub("\\D", "", comp_names)))]
+  spider_dirs  <- setNames(as.list(cp_dirs), comp_names)
+  spider_label <- setNames(sprintf("C%s", gsub("\\D", "", spider_comps)), spider_comps)
+  if (file.exists(list_comp_file)) {
+    lc   <- trimws(readLines(list_comp_file))
+    lc   <- lc[grepl(":", lc)]
+    num  <- gsub("\\D", "", sub(":.*", "", lc))
+    cond <- sub("^__", "", trimws(sub("^[^:]*:", "", lc)))
+    for (cp in spider_comps) {
+      k <- cond[num == gsub("\\D", "", cp)]
+      if (length(k)) spider_label[[cp]] <- sprintf("C%s: %s", gsub("\\D", "", cp), paste(k, collapse = " vs "))
+    }
+  }
+  spider_col <- setNames(grDevices::hcl.colors(length(spider_comps), "Dark 3"), spider_comps)
+  spider_dbs <- Filter(function(db) sum(vapply(cp_dirs, function(d)
+    length(list.files(d, pattern = paste0(db$pattern, ".*\\.txt$"))) > 0, logical(1))) >= 2, spider_dbs)
+
+  if (length(spider_dbs)) {
+    cat("\n\n# Enrichment across comparisons {.tabset}\n\n")
+    cat(sprintf(paste0("Spider plots of the clusterProfiler over-representation results, with the comparisons overlaid on the same terms. ",
+                       "The axes are up to %d terms with adjusted p < 0.05, taken in turn from the top of each comparison, so every comparison contributes its strongest terms. ",
+                       "The radius is -log10(adjusted p), capped at %s, and the dashed red ring marks adjusted p = 0.05. ",
+                       "A term absent from a comparison's results sits at the centre. ",
+                       "With more than %d comparisons, they are split over several plots that share the same terms and scale.\n\n"),
+                spider_n_axes, spider_cap, spider_max_overlay))
+    for (db in spider_dbs) {
+      cat(sprintf("\n## %s {.tabset}\n\n", db$label))
+      for (tok in names(spider_toks)) {
+        cat(sprintf("\n### %s\n\n", deg_set_label(tok)))
+        tryCatch(spider_render(db, tok, spider_comps, spider_dirs, spider_label, spider_col),
+                 error = function(e) cat(sprintf("*Spider plot not drawn: %s*\n\n", conditionMessage(e))))
+      }
+    }
+  }
+}
+```
+
 ```{r main-loop, results='asis'}
 for (idx in seq_along(comp_names)) {
   comp   <- comp_names[idx]
