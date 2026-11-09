@@ -230,7 +230,7 @@ class IncludeMatchingFiles(SphinxDirective):
             data = pd.read_csv(file_path, sep=\"\\\t\", header=0)
 
             comparison = \"\"
-            lfc_name = next((str(c) for c in data.columns if str(c).startswith(\"logFC\") and \"__VS__\" in str(c)), \"\")
+            lfc_name = next((str(c) for c in data.columns if str(c).startswith(\"logFC\")), \"\")
             if lfc_name:
                 comparison = \" vs \".join(p[2:] if p.startswith(\"__\") else p for p in lfc_name[len(\"logFC\"):].split(\"__VS__\"))
 
@@ -948,7 +948,7 @@ for f in glob.glob(os.path.join(dge, "DGE_analysis_comp*.txt")):
         continue
     with open(f, encoding="utf-8", errors="replace") as fh:
         header = [c.strip('"') for c in fh.readline().rstrip("\n").split("\t")]
-    lfc = next((c for c in header if c.startswith("logFC") and "__VS__" in c), "")
+    lfc = next((c for c in header if c.startswith("logFC")), "")
     if lfc:
         labels[m.group(1)] = " vs ".join(p[2:] if p.startswith("__") else p for p in lfc[len("logFC"):].split("__VS__"))
 combn = {}

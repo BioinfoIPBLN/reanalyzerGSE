@@ -69,20 +69,22 @@ suppressMessages(library(ggplot2, quiet = T, warn.conflicts = F))
 suppressMessages(library(clusterProfiler, quiet = T, warn.conflicts = F))
 suppressMessages(library(AnnotationDbi, quiet = T, warn.conflicts = F))
 
-# Organism-aware OrgDb selection
+source(file.path(.rgse_scripts_dir, "R_gene_id_helpers.R"))
 orgdb <- NULL
 kegg_org <- NULL
 species_label <- NULL
-if (grepl("Mus", organism_name, ignore.case = TRUE)) {
-  suppressMessages(library(org.Mm.eg.db, quiet = T, warn.conflicts = F))
-  orgdb <- org.Mm.eg.db; kegg_org <- "mmu"; species_label <- "Mus musculus"
-  cat("Organism detected: Mouse (Mus musculus)\n")
-} else if (grepl("Homo", organism_name, ignore.case = TRUE)) {
-  suppressMessages(library(org.Hs.eg.db, quiet = T, warn.conflicts = F))
-  orgdb <- org.Hs.eg.db; kegg_org <- "hsa"; species_label <- "Homo sapiens"
-  cat("Organism detected: Human (Homo sapiens)\n")
+reactome_org <- NULL
+.sym_kt <- NA_character_
+.org_info <- rgse_organism_info(organism_name)
+.org_status <- rgse_orgdb_check(.org_info, need = "ENTREZID")
+if (.org_status == "ok") {
+  rgse_orgdb_attach(.org_info)
+  orgdb <- get(.org_info$orgdb, envir = asNamespace(.org_info$orgdb))
+  .sym_kt <- rgse_symbol_keytype(.org_info)
+  kegg_org <- .org_info$kegg; species_label <- .org_info$name; reactome_org <- .org_info$reactome
+  cat(paste0("Organism detected: ", species_label, " (", .org_info$orgdb, ")\n"))
 } else {
-  cat(paste0("Non-model organism ('", organism_name, "'): GSEA and module enrichment will be skipped\n"))
+  cat(paste0(rgse_organism_note(organism_name, .org_info, .org_status), " GSEA and module enrichment will be skipped\n"))
 }
 
 # Create output base directory under DGE/network_analyses/
@@ -165,7 +167,7 @@ map_to_entrez <- function(gene_ids, orgdb) {
     }
 
     attempts <- list(
-        list(keytype = "SYMBOL",  key_of = function(x) x),
+        list(keytype = .sym_kt,  key_of = function(x) x),
         list(keytype = "ENSEMBL", key_of = function(x) toupper(sub("\\..*$", "", x))),
         list(keytype = "ALIAS",   key_of = function(x) x)
     )
@@ -187,7 +189,8 @@ map_to_entrez <- function(gene_ids, orgdb) {
     if (is.null(best) || nrow(best) == 0) return(NULL)
     sym <- tryCatch({
         s <- suppressWarnings(suppressMessages(AnnotationDbi::select(
-            orgdb, keys = unique(best$ENTREZID), columns = "SYMBOL", keytype = "ENTREZID")))
+            orgdb, keys = unique(best$ENTREZID), columns = .sym_kt, keytype = "ENTREZID")))
+        colnames(s)[colnames(s) == .sym_kt] <- "SYMBOL"
         s[!duplicated(s$ENTREZID), , drop = FALSE]
     }, error = function(e) NULL)
     if (!is.null(sym)) best <- merge(best, sym, by = "ENTREZID", all.x = TRUE)
@@ -198,6 +201,8 @@ map_to_entrez <- function(gene_ids, orgdb) {
 ################################################################################
 #### Helper: run GSEA
 ################################################################################
+rgse_skip_msig <- function() stop(paste0("MSigDB has no gene sets for ", species_label))
+
 run_gsea <- function(deg_df, label, gsea_base_dir, orgdb, kegg_org, species_label) {
     if (is.null(orgdb)) {
         cat("  Skipping GSEA: no OrgDb available for this organism\n")
@@ -308,7 +313,6 @@ run_gsea <- function(deg_df, label, gsea_base_dir, orgdb, kegg_org, species_labe
         save_gsea_results(gsea_kegg, "KEGG", out_dir, metric_label)
         
         # Reactome (via ReactomePA)
-        reactome_org <- switch(species_label, "Mus musculus" = "mouse", "Homo sapiens" = "human", NULL)
         gsea_reactome <- if (is.null(reactome_org)) {
             cat(paste0("    Reactome skipped: ReactomePA has no organism mapping for '", species_label, "'\n")); NULL
         } else tryCatch({
@@ -322,7 +326,8 @@ run_gsea <- function(deg_df, label, gsea_base_dir, orgdb, kegg_org, species_labe
         # MSigDB Canonical Pathways (C2:CP) via msigdbr
         gsea_msigdb_cp <- tryCatch({
             suppressMessages(library(msigdbr, quiet = T, warn.conflicts = F))
-            cp_gs <- msigdbr(species = species_label, collection = "C2", subcollection = "CP")
+            if (is.na(.org_info$msigdbr)) rgse_skip_msig()
+            cp_gs <- msigdbr(species = .org_info$msigdbr, collection = "C2", subcollection = "CP")
             gene_col <- if ("ncbi_gene" %in% colnames(cp_gs)) "ncbi_gene" else "entrez_gene"
             term2gene_cp <- cp_gs[, c("gs_name", gene_col)]
             colnames(term2gene_cp)[colnames(term2gene_cp) == gene_col] <- "entrez_gene"
@@ -336,7 +341,8 @@ run_gsea <- function(deg_df, label, gsea_base_dir, orgdb, kegg_org, species_labe
         # MSigDB Reactome (C2:CP:REACTOME) via msigdbr
         gsea_msigdb_reactome <- tryCatch({
             suppressMessages(library(msigdbr, quiet = T, warn.conflicts = F))
-            reactome_gs <- msigdbr(species = species_label, collection = "C2", subcollection = "CP:REACTOME")
+            if (is.na(.org_info$msigdbr)) rgse_skip_msig()
+            reactome_gs <- msigdbr(species = .org_info$msigdbr, collection = "C2", subcollection = "CP:REACTOME")
             gene_col <- if ("ncbi_gene" %in% colnames(reactome_gs)) "ncbi_gene" else "entrez_gene"
             term2gene_reactome <- reactome_gs[, c("gs_name", gene_col)]
             colnames(term2gene_reactome)[colnames(term2gene_reactome) == gene_col] <- "entrez_gene"
@@ -676,8 +682,9 @@ run_stringdb <- function(deg_df, label, new_path, organism_taxid, orgdb = NULL) 
                 ids_clean <- gsub("\\..*", "", toupper(deg_df$Gene_ID))
                 res <- suppressMessages(AnnotationDbi::select(orgdb,
                                            keys = ids_clean,
-                                           columns = "SYMBOL",
+                                           columns = .sym_kt,
                                            keytype = "ENSEMBL"))
+                colnames(res)[colnames(res) == .sym_kt] <- "SYMBOL"
                 res <- res[!is.na(res$SYMBOL), ]
                 res <- res[!duplicated(res$ENSEMBL), ]
                 res

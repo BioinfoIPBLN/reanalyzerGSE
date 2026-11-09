@@ -23,6 +23,7 @@ for argument in "${arguments[@]}"; do
 	        -o | -output_folder # Destination folder
 	        -g | -genes # Genes to highlight their expression in plots (one or several, separated by comma and no space, none by default)
 	        -TMP | -TMPDIR # Directory to export the environmental variable TMPDIR (by default or if left empty an internal folder of the output directory is used, or please enter 'system' to use system's default, or an absolute pathway that will be created if it does not exist)
+	        -dry | -dry_run # Validate the configuration and exit without running anything ('no' by default, or 'yes'): checks the input, the reference files, the databases and the tools in PATH, prints the design and, for ENA/SRA accessions, the runs and samples that would be downloaded, and does not create or modify the output folder
 
 	        #### Reference and databases:
 	        -r | -reference_genome # Reference genome to be used (.fasta file or .gz, absolute pathway). You can provide a comma-separated list of genomes, and one fully independent analysis (alignment, quantification, DGE and report) will be produced per genome. In that case '-a' must be either a single annotation, which is then used to quantify every genome, or exactly one annotation per genome, paired in the order given (first genome with first annotation, second with second, and so on). Several genomes are incompatible with '-ri' and with '-rG'. Optional if '-rG' is used
@@ -36,12 +37,12 @@ for argument in "${arguments[@]}"; do
 	        -rRq | -rrna_qc_databases # Comma-separated list of rRNA reference FASTA paths for preliminary rRNA QC mapping (e.g. '/path/SILVA_138.2_LSURef_NR99_tax_silva.fasta.gz,/path/SILVA_138.2_SSURef_NR99_tax_silva.fasta.gz'). Any input here activates the Bowtie2-based rRNA mapping QC step. Output goes to preliminar_rrna_qc/
 	        -rRs | -rrna_qc_min_score # Min Bowtie2 alignment score for rRNA QC filtering (default -20)
 	        -Df | -databases_function # Comma-separated list of the EXACT databases to use for automatic functional enrichment of DEGs (autoGO/enrichR; see autoGO::choose_database()). This is the COMPLETE set — nothing is auto-added, so include pathway sets (e.g. Reactome_2022, KEGG_2021_Mouse, WikiPathways_2019_Mouse) yourself if you want them. Default: GO_Biological_Process_2025,GO_Molecular_Function_2025,GO_Cellular_Component_2025
-	        -nrf | -non_reference_funct_enrichm # Pathway to a file containing functional annotation (GAF, GMT, GFF, GTF, or a 2-column TSV/TXT mapping) to be used for functional enrichment. Required for Kallisto mode or when the organism is not Human or Mouse. If provided, this file is parsed for GO and KEGG terms, overriding the default behavior of searching the main reference annotation file. These terms are used for the over-representation of the DEGs and for GSEA of all the tested genes (ranked by -log10(p-value) times the sign of logFC), which also runs when there are no DEGs.
+	        -nrf | -non_reference_funct_enrichm # Pathway to a file containing functional annotation (GAF, GMT, GFF, GTF, or a 2-column TSV/TXT mapping) to be used for functional enrichment. Required for Kallisto mode or when the organism has no built-in annotation package (see -O). If provided, this file is parsed for GO and KEGG terms, overriding the default behavior of searching the main reference annotation file. These terms are used for the over-representation of the DEGs and for GSEA of all the tested genes (ranked by -log10(p-value) times the sign of logFC), which also runs when there are no DEGs.
 
 	        #### Metadata and sample info:
 	        -D | -design_custom_local # Specifying here the experimental design for the local dataset (by default an interactive prompt will ask for a comma-separated list of the same length than the number of samples, if you want to avoid that manual input please provide the list in this argument. If no design, please provide a dummy one, e.g. with every sample in the same group or a separate one. If more than one design to provide, please input comma-separated list separated by a '/', without spaces. Please avoid naming that would match the same pattern in grep, e.g. XXXX and XXXX_TREAT. Use 'auto' to take each sample's condition from its name, dropping the '_Rep<N>' replicate suffix and everything after it (e.g. s1_Ctrl_Rep2 becomes s1_Ctrl); every sample must then carry such a suffix. Use 'llm' to have the LLM given in -llm_endpoint and -llm_model propose one condition per sample from the sample names (i.e. the files left after -regex and -regexExclude), printed in the log so it can be reused as an explicit design. The number of conditions must equal the number of samples, otherwise the run stops)
 	        -d | -design_custom # Manually specifying the experimental design for GEO download ('no' by default and if 'yes', please expect an interactive prompt after data download from GEO, and please enter the assignment to groups when asked in the terminal, with a comma-separated list of the same length than the number of samples)
-	        -O | -organism # Specifying here the scientific name of the organism for the local dataset (by default an interactive prompt will ask for it, if you want to avoid that manual input please provide the full organism name in this argument, please use underline instead of space)
+	        -O | -organism # Specifying here the scientific name of the organism for the local dataset (by default an interactive prompt will ask for it, if you want to avoid that manual input please provide the full organism name in this argument, please use underline instead of space). Built-in functional annotation (clusterProfiler, ReactomePA, Panther, REVIGO and gene annotation) exists for Homo sapiens, Mus musculus, Rattus norvegicus, Danio rerio, Drosophila melanogaster, Caenorhabditis elegans, Saccharomyces cerevisiae, Arabidopsis thaliana, Gallus gallus, Sus scrofa, Bos taurus, Canis lupus familiaris, Macaca mulatta, Pan troglodytes, Xenopus laevis, Escherichia coli, Anopheles gambiae and Plasmodium falciparum, as long as the corresponding Bioconductor org.*.db package is in the container (ORGDBS build argument of the image, all 18 by default) or in a bound R library. Any other organism falls back to the annotation-file based enrichment of -nrf
 	        -Tx | -taxon_id # NCBI's taxon id of the organism
 	        -R | -number_reads_to_subsample # Subsample raw reads to reach an approximate target library size (none by default). Provide a comma-separated pair: path to the 'reads_numbers.txt' file from a previous execution, and target library size (i.e. the number of counted/mapped reads you want to reach, NOT the number of raw reads). The pipeline will use the raw-read and library-size columns in reads_numbers.txt to compute the proportional number of raw reads to keep for each sample so that the resulting library size is approximately +-10% of the target. If the sample already has fewer reads than the target, all its reads are kept.
 	        -bv | -batch_vector # Comma-separated list of numbers for use as batch vector with Combat-seq
@@ -57,6 +58,14 @@ for argument in "${arguments[@]}"; do
 	        -q | -qc_raw_reads # Whether to perform quality control on the raw reads ('yes' by default, or 'no')
 	        -fd | -full_differential_analyses # Whether to perform full differential enrichment analyses (for example including computation of DEGs or Venn diagrams, 'no' or 'yes', by default)
 	        -fe | -functional_enrichment_analyses # Whether to perform functional enrichment analyses ('no' or 'yes', by default)
+	        -sR | -small_rna # Small RNA-seq mode for miRNA studies ('no' by default, or 'yes'). The reads are adapter-trimmed with fastp and kept between the lengths in -sRl, aligned with bowtie1 (-k 1 --best, the miARma-seq recipe), counted with featureCounts on the miRNA features of the annotation given in '-a', which has to be the miRBase GFF3 of the organism (https://www.mirbase.org/download/<species>.gff3, so -Of is 'miRNA' and -Os is 'Name' unless set), and tested for differential expression as in any other run. The functional enrichment is then done on the validated targets of the DE miRNAs (multiMiR, human, mouse and rat only) instead of on the miRNA names. Decontamination, rRNA QC, host removal, splicing analyses and Qualimap are skipped, and the strand is 'yes' unless given in '-s'
+	        -sRa | -small_rna_adapter # Adapter of the small RNA libraries: 'auto' (by default: fastp detects it and also trims the known small RNA adapters listed in assets/small_rna_adapters.fa), 'none', or the adapter sequence (e.g. TGGAATTCTCGGGTGCCAAGG for Illumina TruSeq Small RNA, NEXTflex and Lexogen, AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC for NEBNext, AACTGTAGGCACCATCAAT for QIAseq). Random 4N ends (NEXTflex) are removed with -fpe '--trim_front1 4 --trim_tail1 4'. The run stops if most reads stay longer than the maximum of -sRl, which means the adapter was not found
+	        -sRl | -small_rna_length # Minimum and maximum read length kept after trimming in small RNA mode, separated by comma ('15,35' by default)
+	        -Ab | -bowtie1_extra_args # Extra arguments appended verbatim to the bowtie1 command line in small RNA mode (by default '-n 1 -l 20 -e 70 --best -k 1 --nomaqround' is used)
+	        -sRn | -mirna_novel # Whether to predict novel miRNAs with miRDeep2 in small RNA mode ('no' by default, or 'yes'). Needs -sRm and -sRh. The known and novel precursors reported by miRDeep2 (result html/csv, pdfs and the quantifier counts) are written to miARma_out0/miRDeep2_results and are NOT added to the count matrix
+	        -sRm | -mirna_mature_fa # miRBase mature.fa (https://www.mirbase.org/download/mature.fa, all species; the organism and the other species are split automatically), required by -sRn
+	        -sRh | -mirna_hairpin_fa # miRBase hairpin.fa (https://www.mirbase.org/download/hairpin.fa), required by -sRn
+	        -sRt | -mirna_target_tables # multiMiR tables used to collect the targets of the DE miRNAs in small RNA mode: 'validated' (by default, miRTarBase, TarBase and miRecords), 'predicted' (top 20 percent of the predictions of each database) or 'all'
 	        -cPf | -clusterProfiler_full # Whether to perform additional functional enrichment analyses with multiple databases using clusterProfiler, by default only ORA for GO BP, GO MF and GO CC, and KEGG and REACTOME enrichment, will be performed, as additional analyses may be slow if many significant DEGs or multiple number of comparisons ('yes' or 'no', by default)
 	        -cPc | -clusterProfiler_cores # Number of gene lists to enrich concurrently within each comparison (3 by default). The ceiling here is KEGG, not CPU: enrichKEGG/gseKEGG and the pathview snapshots query rest.kegg.jp, so every unit of concurrency multiplies the request rate against a shared public service. Raise it only when '-cPf no' (which removes the GSEA-KEGG and module-KEGG calls) or when KEGG enrichment is not needed
 	        -b | -batch # Batch effect present? (no by default, yes if correction through Combat-seq and model is to be performed, and info is going to be required in other arguments or prompts). The ComBat-seq counts are used for the QC figures only; the differential expression adjusts for the batch through the model, with '-C' or, if '-C' is not given, with the batch vector itself
@@ -99,6 +108,8 @@ for argument in "${arguments[@]}"; do
 	        -eT | -edger_test # Test used by edgeR: 'ql' (default, quasi-likelihood F-test, the method edgeR recommends, also used whenever there are covariables or '-lfc' is above 0) or 'exact' (the classic exactTest, which reanalyzerGSE used without covariables up to v4.1.0; keep it to reproduce older results)
 	        -lfc | -lfc_threshold # Minimum absolute log2 fold change to test against (0 by default, i.e. any change). Above 0 the null hypothesis becomes |log2FC| <= threshold, tested with edgeR glmTreat, DESeq2 results(lfcThreshold) or limma treat, so the FDR refers to changes larger than the threshold; this is the valid way to require a minimum fold change, unlike filtering the DEGs by logFC after testing. Not applied with 'wilcoxon'
 	        -lfS | -lfc_shrink # Whether to add a shrunkLFC column with DESeq2's lfcShrink (type 'ashr' if installed, 'normal' otherwise) to the DESeq2 tables ('yes' or 'no', by default). Shrunk fold changes do not inflate for low counts, so they are the better effect size for ranking and plotting; the logFC column and the p-values are not changed. Only used with '-Des DESeq2'
+	        -Dfm | -design_formula # Custom model for the differential expression in R formula syntax, run on top of the pairwise comparisons that are always done. The factors are the designs given in '-D' (or detected from GEO), named D1, D2, ... in order, and the covariables of '-C', named Cov1, Cov2, ... e.g. '~ 0 + D1:D2' (one coefficient per genotype x treatment cell) or '~ D1 * D2'. Requires -Dcon. Not available with the Wilcoxon test
+	        -Dcon | -design_contrasts # Named contrasts to test on the model of -Dfm, in limma makeContrasts syntax on the coefficient names printed at the start of the differential expression (make.names of the model matrix columns), separated by ';', e.g. 'KO_vs_WT_in_MCAO=D1KO.D2MCAO-D1WT.D2MCAO;interaction=(D1KO.D2MCAO-D1KO.D2ctrl)-(D1WT.D2MCAO-D1WT.D2ctrl)'. Each contrast becomes one more DGE_analysis_compN table, with the same functional enrichment and report sections as the pairwise comparisons
 	        -fp | -fastp_mode # Whether to perform quality filtering on the raw reads by fastp ('yes' or 'no', by default)
 	        -fpa | -fastp_adapter # Whether to perform adapter trimming on the raw reads by fastp ('yes' or 'no', by default, to perform automatic trimming, or a path to a fasta file to perform trimming of its sequences)
 	        -fpt | -fastp_trimming # Whether to trim the raw reads by fastp ('none' by default, if two numbers separated by comma, the indicated number of bases will be trimmed from the front and tail, respectively)
@@ -118,6 +129,8 @@ for argument in "${arguments[@]}"; do
 	        -cPu | -clusterProfiler_universe # Universe to use in clusterProfiler iterations ('all' or 'detected', by default)
 	        -mGS | -clusterProfiler_minGSSize # minGSSize parameter to use in clusterProfiler iterations (a number, '10' by default)
 	        -MGS | -clusterProfiler_maxGSSize # maxGSSize parameter to use in clusterProfiler iterations (a number, '500' by default)
+	        -cPg | -clusterProfiler_gsea # Whether to run the clusterProfiler GSEA of GO, KEGG and Reactome on every gene tested, ranked by log2FC, in every run ('yes' by default, or 'no'). It does not depend on the number of DEGs. The slower WikiPathways, KEGG module and disease (DO, NCG, DisGeNET) analyses, the DOSE permutation GSEA and the extra GSEA plots stay behind -cPf
+	        -rA | -report_images # Where the plot previews of the functional enrichment report are kept: 'folder' (by default, PNG files in DGE/functional_enrichment_report_images next to the report, so the HTML stays light and loads fast; keep the folder with the report) or 'embedded' (one self-contained HTML, which can reach 100 MB with many comparisons)
 	        -Pm | -panther_method # Method for adjusting p.value in panther analyses via rbioapi (one of 'NONE','BONFERRONI', or 'FDR', by default)
 	        -rev | -revigo_threshold_similarity # Similarity threshold for Revigo summaries of GO terms (0-1, suggested values are 0.9, 0.7, 0.5, 0.4 for large, medium, small, and tiny levels of similarity, respectively, being default 0.7
 
@@ -209,6 +222,19 @@ for argument in "${arguments[@]}"; do
 		-eT | -edger_test) edger_test=${arguments[index]} ;;
 		-lfc | -lfc_threshold) lfc_threshold=${arguments[index]} ;;
 		-lfS | -lfc_shrink) lfc_shrink=${arguments[index]} ;;
+		-dry | -dry_run) dry_run=${arguments[index]} ;;
+		-sR | -small_rna) small_rna=${arguments[index]} ;;
+		-sRa | -small_rna_adapter) small_rna_adapter=${arguments[index]} ;;
+		-sRl | -small_rna_length) small_rna_length=${arguments[index]} ;;
+		-Ab | -bowtie1_extra_args) bowtie1_extra_args=${arguments[index]} ;;
+		-sRn | -mirna_novel) mirna_novel=${arguments[index]} ;;
+		-sRm | -mirna_mature_fa) mirna_mature_fa=${arguments[index]} ;;
+		-sRh | -mirna_hairpin_fa) mirna_hairpin_fa=${arguments[index]} ;;
+		-sRt | -mirna_target_tables) mirna_target_tables=${arguments[index]} ;;
+		-Dfm | -design_formula) design_formula=${arguments[index]} ;;
+		-Dcon | -design_contrasts) design_contrasts=${arguments[index]} ;;
+		-cPg | -clusterProfiler_gsea) clusterProfiler_gsea=${arguments[index]} ;;
+		-rA | -report_images) report_images=${arguments[index]} ;;
 		-Dm) debug_module=${arguments[index]} ;;
 		-Es | -end_step) end_step=${arguments[index]} ;;
 		-Dec) differential_expr_comparisons=${arguments[index]} ;;
@@ -472,6 +498,91 @@ if [ -z "$reference_genome_groups" ] && [ ! -z "$reference_genome" ]; then
 fi
 echo -e "\nreference_genome=$reference_genome\n"
 echo -e "\nannotation=$annotation\n"
+if [ -z "$dry_run" ]; then
+	dry_run="no"
+fi
+case "$dry_run" in
+	yes|no) : ;;
+	*) echo "Error: -dry/-dry_run must be 'yes' or 'no'. You provided: $dry_run"; exit 1 ;;
+esac
+if [ -z "$small_rna" ]; then
+	small_rna="no"
+fi
+case "$small_rna" in
+	yes|no) : ;;
+	*) echo "Error: -sR/-small_rna must be 'yes' or 'no'. You provided: $small_rna"; exit 1 ;;
+esac
+if [ -z "$small_rna_adapter" ]; then
+	small_rna_adapter="auto"
+fi
+if [ -z "$small_rna_length" ]; then
+	small_rna_length="15,35"
+fi
+if [ -z "$bowtie1_extra_args" ]; then
+	bowtie1_extra_args=""
+fi
+if [ -z "$mirna_novel" ]; then
+	mirna_novel="no"
+fi
+if [ -z "$mirna_target_tables" ]; then
+	mirna_target_tables="validated"
+fi
+if [ "$small_rna" == "yes" ]; then
+	if [ -n "$aligner" ] && [ "$aligner" != "bowtie1" ]; then
+		echo "NOTE: small_rna is 'yes', so the reads are aligned with bowtie1 and '-A $aligner' is ignored"
+	fi
+	aligner="bowtie1"
+	export RGSE_GENE_ID_CANONICALISE=no
+	if ! [[ "$small_rna_length" =~ ^[0-9]+,[0-9]+$ ]]; then
+		echo "Error: -sRl/-small_rna_length must be two numbers separated by comma, e.g. '15,35'. You provided: $small_rna_length"; exit 1
+	fi
+	if [ "${small_rna_length%%,*}" -ge "${small_rna_length##*,}" ]; then
+		echo "Error: -sRl/-small_rna_length must be 'minimum,maximum' with the minimum below the maximum. You provided: $small_rna_length"; exit 1
+	fi
+	if [ "$small_rna_adapter" != "auto" ] && [ "$small_rna_adapter" != "none" ] && ! [[ "$small_rna_adapter" =~ ^[ACGTNacgtn]+$ ]]; then
+		echo "Error: -sRa/-small_rna_adapter must be 'auto', 'none' or a nucleotide sequence. You provided: $small_rna_adapter"; exit 1
+	fi
+	case "$mirna_target_tables" in
+		validated|predicted|all) : ;;
+		*) echo "Error: -sRt/-mirna_target_tables must be 'validated', 'predicted' or 'all'. You provided: $mirna_target_tables"; exit 1 ;;
+	esac
+	case "$mirna_novel" in
+		yes|no) : ;;
+		*) echo "Error: -sRn/-mirna_novel must be 'yes' or 'no'. You provided: $mirna_novel"; exit 1 ;;
+	esac
+	if [ "$mirna_novel" == "yes" ]; then
+		if [ -z "$mirna_mature_fa" ] || [ -z "$mirna_hairpin_fa" ]; then
+			echo "Error: -sRn/-mirna_novel 'yes' needs the miRBase mature and hairpin FASTA files in -sRm/-mirna_mature_fa and -sRh/-mirna_hairpin_fa (https://www.mirbase.org/download/)"; exit 1
+		fi
+		for _f in "$mirna_mature_fa" "$mirna_hairpin_fa"; do
+			if [ ! -f "$_f" ]; then echo "Error: the miRBase FASTA '$_f' does not exist or is not a file."; exit 1; fi
+		done
+	fi
+	if [ -z "$strand" ]; then
+		strand="yes"
+		echo -e "\nNOTE: small_rna mode without '-s': the libraries are taken as stranded in the sense orientation (strand 'yes'), as every small RNA kit produces. Set '-s' if yours differ.\n"
+	fi
+	if [ -z "$optionsFeatureCounts_feat" ]; then optionsFeatureCounts_feat="miRNA"; fi
+	if [ -z "$optionsFeatureCounts_seq" ]; then optionsFeatureCounts_seq="Name"; fi
+	if [ -z "$featureCounts_extra_args" ]; then featureCounts_extra_args="-O -M -Q 0"; fi
+	spliced_alignment="no"
+	if [ ! -z "$splicing_option" ] && [ "$splicing_option" != "no" ]; then
+		echo "Error: the splicing analyses (-sO/-splicing_option '$splicing_option') need spliced alignments of mRNA reads and cannot be combined with small_rna 'yes'."; exit 1
+	fi
+	if [ ! -z "$reference_genome_groups" ]; then
+		echo "Error: small_rna 'yes' aligns every sample to the single genome in -r and cannot be combined with -rG/-reference_genome_groups."; exit 1
+	fi
+	if [ $(echo "$reference_genome" | awk -F',' '{print NF}') -gt 1 ] || [ $(echo "$annotation" | awk -F',' '{print NF}') -gt 1 ]; then
+		echo "Error: small_rna 'yes' takes a single genome in -r and a single miRBase GFF3 in -a."; exit 1
+	fi
+	for _v in kraken2_databases sortmerna_databases rrna_qc_databases alignment_removal; do
+		if [ -n "${!_v}" ]; then
+			echo "NOTE: small_rna is 'yes', so '$_v' is ignored: reads of 15-35 nt are too short for Kraken2, SortMeRNA and the hisat2 host removal to be meaningful."
+			printf -v "$_v" '%s' ""
+		fi
+	done
+	echo -e "\nsmall_rna=yes (adapter=$small_rna_adapter, length=$small_rna_length, featureCounts -t $optionsFeatureCounts_feat -g $optionsFeatureCounts_seq $featureCounts_extra_args, novel miRNAs=$mirna_novel, targets=$mirna_target_tables)\n"
+fi
 if [ -z "$transcripts" ] && [ -z "$strand" ]; then
 	echo "Please check usage with 'reanalyzer_GSE_RNA_seq.sh -h'. At least one of '-t' or '-s' are required..."; exit 1
 elif [ ! -z "$strand" ]; then
@@ -544,7 +655,7 @@ echo -e "\nmemory_max=$memory_max\n"
 if [ -z "$miarma_path" ]; then
 	miarma_path=$(dirname $CURRENT_DIR_SCRIPTS)/external_software/miARma-seq
 fi
-if [ -d "$output_folder/$name" ]; then
+if [ -d "$output_folder/$name" ] && [ "$dry_run" != "yes" ]; then
 	echo -e "Please note that $output_folder/$name already exists... reanalyzerGSE is going to attempt a new run or resume running, but you may want to remove the folder, change the destination folder with '-o' or '-n', use downloaded raw data from an external software... etc. Sleeping for a while to give you time to exit if you want, and then continuing..."
 	secs=$((1 * 15))
 	while [ $secs -gt 0 ]; do
@@ -553,7 +664,7 @@ if [ -d "$output_folder/$name" ]; then
 		: $((secs--))
 	done
 fi
-if [ -n "$options_file" ] && [ -n "$output_folder" ] && [ -n "$name" ]; then
+if [ -n "$options_file" ] && [ -n "$output_folder" ] && [ -n "$name" ] && [ "$dry_run" != "yes" ]; then
 	copy_options_file_redacted "$options_file" "$output_folder/$name"
 fi
 if [ -z "$databases_function" ]; then
@@ -630,6 +741,42 @@ if [ -z "$lfc_shrink" ]; then
 	lfc_shrink="no"
 fi
 export RGSE_EDGER_TEST="$edger_test" RGSE_LFC_THRESHOLD="$lfc_threshold" RGSE_LFC_SHRINK="$lfc_shrink"
+if [ -z "$clusterProfiler_gsea" ]; then
+	clusterProfiler_gsea="yes"
+fi
+case "$clusterProfiler_gsea" in
+	yes|no) : ;;
+	*) echo "Error: -cPg/-clusterProfiler_gsea must be 'yes' or 'no'. You provided: $clusterProfiler_gsea"; exit 1 ;;
+esac
+if [ -z "$report_images" ]; then
+	report_images="folder"
+fi
+case "$report_images" in
+	folder|embedded) : ;;
+	*) echo "Error: -rA/-report_images must be 'folder' or 'embedded'. You provided: $report_images"; exit 1 ;;
+esac
+if [ -z "$design_formula" ]; then
+	design_formula=""
+fi
+if [ -z "$design_contrasts" ]; then
+	design_contrasts=""
+fi
+if [ -n "$design_formula" ] || [ -n "$design_contrasts" ]; then
+	if [ -z "$design_formula" ] || [ -z "$design_contrasts" ]; then
+		echo "Error: -Dfm/-design_formula and -Dcon/-design_contrasts have to be given together: the formula defines the model and the contrasts say which coefficients to compare."; exit 1
+	fi
+	if [[ "$design_formula" != "~"* ]]; then
+		echo "Error: -Dfm/-design_formula must be an R formula starting with '~', e.g. '~ 0 + D1:D2'. You provided: $design_formula"; exit 1
+	fi
+	if ! echo "$design_contrasts" | tr ';' '\n' | grep -q '='; then
+		echo "Error: every contrast in -Dcon/-design_contrasts must be 'name=expression', separated by ';'. You provided: $design_contrasts"; exit 1
+	fi
+	if [ "$differential_expr_soft" == "wilcoxon" ]; then
+		echo "Error: -Dfm/-design_formula needs a model-based engine (edgeR, DESeq2 or limma); the Wilcoxon test cannot fit a custom model."; exit 1
+	fi
+	echo -e "\ndesign_formula=$design_formula\ndesign_contrasts=$design_contrasts\n"
+fi
+export RGSE_DESIGN_FORMULA="$design_formula" RGSE_DESIGN_CONTRASTS="$design_contrasts"
 echo -e "\ndifferential_expr_soft=$differential_expr_soft (edger_test=$edger_test, lfc_threshold=$lfc_threshold, lfc_shrink=$lfc_shrink)\n"
 if [ -z "$differential_expr_comparisons" ]; then
 	differential_expr_comparisons="no"
@@ -965,11 +1112,11 @@ fi
 
 ### Handle TMPDIR, problematic in some systems or with some runs
 if [ -z "$TMPDIR_arg" ]; then
-	export TMPDIR=$output_folder/$name/miARma_out0/tmpdir; mkdir -p $TMPDIR
+	export TMPDIR=$output_folder/$name/miARma_out0/tmpdir; [ "$dry_run" == "yes" ] || mkdir -p $TMPDIR
 	echo -e "\nTMPDIR changed to $TMPDIR\n"
 elif [ "$TMPDIR_arg" == "system" ]; then
 	echo -e "\nTMPDIR used is $TMPDIR\n"
 else
-	export TMPDIR=$TMPDIR_arg; mkdir -p $TMPDIR
+	export TMPDIR=$TMPDIR_arg; [ "$dry_run" == "yes" ] || mkdir -p $TMPDIR
 	echo -e "\nTMPDIR changed to $TMPDIR\n"
 fi

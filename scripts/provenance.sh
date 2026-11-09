@@ -55,7 +55,7 @@ write_provenance() {
 		echo ""
 		for entry in "hisat2|hisat2 --version" "STAR|STAR --version" "kallisto|kallisto version" "salmon|salmon --version" \
 			"samtools|samtools --version" "featureCounts|featureCounts -v" "fastp|fastp --version" "FastQC|fastqc --version" \
-			"MultiQC|multiqc --version" "Bowtie2|bowtie2 --version" "Kraken2|kraken2 --version" "SortMeRNA|sortmerna --version" \
+			"MultiQC|multiqc --version" "Bowtie2|bowtie2 --version" "Bowtie1|bowtie --version" "ViennaRNA|RNAfold --version" "Kraken2|kraken2 --version" "SortMeRNA|sortmerna --version" \
 			"deepTools|bamCoverage --version" "fastq-dl|fastq-dl --version" "R|Rscript --version" "Python|python3 --version" \
 			"Perl|perl -v" "Sphinx|sphinx-build --version" "GNU parallel|parallel --version"; do
 			label=${entry%%|*}; cmd=${entry#*|}
@@ -64,7 +64,7 @@ write_provenance() {
 			printf '%-14s %s\n' "$label" "$v"
 		done
 	} > "$dir/tool_versions.txt"
-	Rscript -e 'p <- c("edgeR","limma","DESeq2","ashr","sva","clusterProfiler","enrichplot","DOSE","ReactomePA","msigdbr","pathview","autoGO","rbioapi","WGCNA","STRINGdb","saseR","IsoformSwitchAnalyzeR","BisqueRNA","CDSeq","Mfuzz","GO.db","org.Hs.eg.db","org.Mm.eg.db","org.Rn.eg.db","qs2","rhdf5","anndataR","exploreDE"); cat(R.version.string, "\n"); if (requireNamespace("BiocManager", quietly = TRUE)) cat("Bioconductor", as.character(BiocManager::version()), "\n"); for (x in p) cat(sprintf("%-22s %s\n", x, tryCatch(as.character(packageVersion(x)), error = function(e) "not installed")))' > "$dir/R_packages.txt" 2>/dev/null
+	Rscript -e 'p <- c("edgeR","limma","DESeq2","ashr","sva","clusterProfiler","enrichplot","DOSE","ReactomePA","msigdbr","pathview","autoGO","rbioapi","WGCNA","STRINGdb","multiMiR","saseR","IsoformSwitchAnalyzeR","BisqueRNA","CDSeq","Mfuzz","GO.db","org.Hs.eg.db","org.Mm.eg.db","org.Rn.eg.db","qs2","rhdf5","anndataR","exploreDE"); cat(R.version.string, "\n"); if (requireNamespace("BiocManager", quietly = TRUE)) cat("Bioconductor", as.character(BiocManager::version()), "\n"); for (x in p) cat(sprintf("%-22s %s\n", x, tryCatch(as.character(packageVersion(x)), error = function(e) "not installed")))' > "$dir/R_packages.txt" 2>/dev/null
 	python3 -m pip list --format=freeze > "$dir/python_packages.txt" 2>/dev/null
 	{
 		printf 'md5\tbytes\tfile\n'

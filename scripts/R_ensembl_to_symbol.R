@@ -80,7 +80,7 @@ build_gtf_ensembl_map <- function(gtf_file) {
 #' Strategy: 1) GTF mapping (preferred), 2) org.*.eg.db ENSEMBL keytype (fallback)
 #' Returns a character vector of the same length as `ids`, with symbols where possible.
 #' Unmapped IDs are returned as-is.
-ensembl_to_symbol <- function(ids, gtf_file = NULL, orgdb_name = NULL) {
+ensembl_to_symbol <- function(ids, gtf_file = NULL, orgdb_name = NULL, symbol_keytype = "SYMBOL") {
   if (length(ids) == 0) return(ids)
   
   original_ids <- ids
@@ -111,11 +111,11 @@ ensembl_to_symbol <- function(ids, gtf_file = NULL, orgdb_name = NULL) {
         db_result <- suppressMessages(
           AnnotationDbi::select(orgdb,
                                 keys = unique(ids_stripped[unmapped_idx]),
-                                columns = "SYMBOL",
+                                columns = symbol_keytype,
                                 keytype = "ENSEMBL")
         )
         if (!is.null(db_result) && nrow(db_result) > 0) {
-          db_map <- setNames(db_result$SYMBOL, db_result$ENSEMBL)
+          db_map <- setNames(db_result[[symbol_keytype]], db_result$ENSEMBL)
           db_map <- db_map[!is.na(db_map) & !duplicated(names(db_map))]
           db_mapped <- db_map[ids_stripped[unmapped_idx]]
           db_found <- !is.na(db_mapped)

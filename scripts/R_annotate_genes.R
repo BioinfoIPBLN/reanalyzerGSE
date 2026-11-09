@@ -14,21 +14,17 @@ if (file.exists(ensembl_helper)) source(ensembl_helper)
 source(file.path(script_dir, "R_gene_id_helpers.R"))
 
 # Load annotation info:
-organism_cp <- gsub("_"," ",organism)
-if(organism_cp=="Homo sapiens"){
-  organism_cp_react <- "human"  
-  orgDB <- "org.Hs.eg.db"
-  suppressMessages(library("org.Hs.eg.db",quiet = T,warn.conflicts = F))  
-} else if(organism_cp=="Mus musculus"){
-  organism_cp_react <- "mouse"
-  orgDB <- "org.Mm.eg.db"
-  suppressMessages(library("org.Mm.eg.db",quiet = T,warn.conflicts = F))
-} else {
-  cat("\nINFO: Organism '", organism, "' is not yet supported for AnnotationDbi gene annotation (only Human and Mouse are currently supported).\n", sep="")
+.org_info <- rgse_organism_info(organism)
+.org_status <- rgse_orgdb_check(.org_info)
+if (.org_status != "ok") {
+  cat("\nINFO: ", rgse_organism_note(organism, .org_info, .org_status), "\n", sep = "")
   cat("Skipping gene annotation step. The pipeline will continue with the original gene IDs.\n")
-  # Exit gracefully so the pipeline continues
-  quit(save="no", status=0)
+  quit(save = "no", status = 0)
 }
+organism_cp <- .org_info$name
+organism_cp_react <- .org_info$reactome
+orgDB <- rgse_orgdb_attach(.org_info)
+.sym_kt <- rgse_symbol_keytype(.org_info)
 
 
 # Deduce the naming convention in the orgDB package:
@@ -78,7 +74,7 @@ convert_ids <- function(ids,mode) {
   if (exists("canonicalise_gene_ids")) return(canonicalise_gene_ids(ids))
   return(ids2)
 }
-mode <- check_naming(keys(eval(parse(text=orgDB)), keytype = "SYMBOL"))
+mode <- check_naming(keys(eval(parse(text=orgDB)), keytype = .sym_kt))
 
 
 if (exists("orgDB")){
@@ -118,14 +114,14 @@ if (exists("orgDB")){
       } else {
         suppressMessages(suppressWarnings(AnnotationDbi::select(eval(parse(text=orgDB)),
           keys = lookup_ids,
-          columns = c("SYMBOL","ALIAS","GENENAME","GOALL"),
+          columns = unique(c(.sym_kt,"ALIAS","GENENAME","GOALL")),
           keytype = 'ENSEMBL')))
       }
     } else {
       suppressMessages(suppressWarnings(AnnotationDbi::select(eval(parse(text=orgDB)),
         keys = gene_ids_for_lookup,
-        columns = c("ALIAS","GENENAME","GOALL"),
-        keytype = 'SYMBOL')))
+        columns = setdiff(c("ALIAS","GENENAME","GOALL"), .sym_kt),
+        keytype = .sym_kt)))
     }
   }, error = function(e) {
     print(paste0("Warning: Annotation lookup failed: ", e$message))
@@ -135,7 +131,7 @@ if (exists("orgDB")){
 
   if (!is.null(annot) && nrow(annot) > 0) {
     # Determine the key column name (ENSEMBL or SYMBOL depending on keytype used)
-    key_col <- if (use_ensembl_keytype) "ENSEMBL" else "SYMBOL"
+    key_col <- if (use_ensembl_keytype) "ENSEMBL" else .sym_kt
     
     annot_summary <- as.data.frame(annot %>% 
       group_by(across(all_of(key_col))) %>% 
@@ -159,7 +155,7 @@ if (exists("orgDB")){
     # Select output columns
     if (use_ensembl_keytype) {
       # Include SYMBOL for ENSEMBL-keyed results
-      out_cols <- intersect(c(key_col, "SYMBOL", "ALIAS", "GENENAME", "GO_terms"), colnames(annot_summary))
+      out_cols <- intersect(unique(c(key_col, .sym_kt, "ALIAS", "GENENAME", "GO_terms")), colnames(annot_summary))
     } else {
       out_cols <- intersect(c(key_col, "ALIAS", "GENENAME", "GO_terms"), colnames(annot_summary))
     }

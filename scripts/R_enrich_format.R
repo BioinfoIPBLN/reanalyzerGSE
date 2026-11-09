@@ -31,8 +31,9 @@ if ("geneID" %in% colnames(a) && !("Gene_ID_up" %in% colnames(a)) && file.exists
 }
 
 ### Apply Revigo:
-organism_cp <- gsub("_"," ",organism)
-orgDB <- switch(organism_cp, "Homo sapiens" = "org.Hs.eg.db", "Mus musculus" = "org.Mm.eg.db", NULL)
+source(file.path(dirname(normalizePath(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[1]))), "R_gene_id_helpers.R"))
+.org_info <- rgse_organism_info(organism)
+orgDB <- if (identical(rgse_orgdb_check(.org_info, need = "GO"), "ok")) .org_info$orgdb else NULL
 table_base <- basename(table_enrich)
 
 try({

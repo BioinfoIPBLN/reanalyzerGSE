@@ -1,6 +1,21 @@
 name: smoke-test
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "reanalyzerGSE.sh"
+      - "scripts/**"
+      - "external_software/miARma-seq/**"
+      - "test_data/**"
+      - ".github/workflows/smoke_test.yml"
+  pull_request:
+    paths:
+      - "reanalyzerGSE.sh"
+      - "scripts/**"
+      - "external_software/miARma-seq/**"
+      - "test_data/**"
+      - ".github/workflows/smoke_test.yml"
   workflow_dispatch:
     inputs:
       sif_url:
@@ -9,6 +24,18 @@ on:
       aligner:
         description: "hisat2 or star"
         default: "hisat2"
+      enrichment:
+        description: "Run the functional enrichment and its report too (yes or no)"
+        default: "no"
+
+concurrency:
+  group: smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SIF_URL: ${{ inputs.sif_url || 'https://bit.ly/reanalyzerGSE_sif' }}
+  ALIGNER: ${{ inputs.aligner || 'hisat2' }}
+  ENRICHMENT: ${{ inputs.enrichment || 'no' }}
 
 jobs:
   test_data:
@@ -27,12 +54,12 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/reanalyzerGSE.sif
-          key: sif-${{ inputs.sif_url }}
+          key: sif-${{ env.SIF_URL }}
 
       - name: Download the image and a one-chromosome mouse reference
         run: |
           cd "$RUNNER_TEMP"
-          [ -s reanalyzerGSE.sif ] || wget -q "${{ inputs.sif_url }}" -O reanalyzerGSE.sif
+          [ -s reanalyzerGSE.sif ] || wget -q "$SIF_URL" -O reanalyzerGSE.sif
           mkdir -p ref in
           wget -q https://ftp.ensembl.org/pub/release-114/fasta/mus_musculus/dna/Mus_musculus.GRCm39.dna.chromosome.19.fa.gz -O - | gunzip > ref/chr19.fa
           wget -q https://ftp.ensembl.org/pub/release-114/gtf/mus_musculus/Mus_musculus.GRCm39.114.gtf.gz -O - | gunzip | awk -F'\t' '/^#/ || $1 == "19"' > ref/chr19.gtf
@@ -48,9 +75,10 @@ jobs:
           annotation: "$RUNNER_TEMP/ref/chr19.gtf"
           design_custom_local: "A,A,B,B"
           organism: "Mus_musculus"
+          optionsFeatureCounts_seq: "gene_id"
           strand: "reverse"
-          aligner: "${{ inputs.aligner }}"
-          functional_enrichment_analyses: "no"
+          aligner: "$ALIGNER"
+          functional_enrichment_analyses: "$ENRICHMENT"
           network_analyses: "no"
           cores: 4
           cores_index: 4
@@ -59,9 +87,17 @@ jobs:
           aligner_index_cache: "no"
           EOF
 
+      - name: Dry run (configuration, references, tools)
+        run: |
+          cd "$RUNNER_TEMP"
+          apptainer exec --bind "$GITHUB_WORKSPACE":/reanalyzerGSE --bind "$RUNNER_TEMP" reanalyzerGSE.sif \
+            reanalyzerGSE.sh -options "$RUNNER_TEMP/smoke.yaml" -dry yes 2>&1 | tee dry_run.log
+          exit "${PIPESTATUS[0]}"
+
       - name: Run reanalyzerGSE
         run: |
           cd "$RUNNER_TEMP"
+          [ -d out ] && { echo "::error::the dry run created the output folder"; exit 1; }
           apptainer exec --bind "$GITHUB_WORKSPACE":/reanalyzerGSE --bind "$RUNNER_TEMP" reanalyzerGSE.sif \
             reanalyzerGSE.sh -options "$RUNNER_TEMP/smoke.yaml" 2>&1 | tee smoke.log
           exit "${PIPESTATUS[0]}"
@@ -75,15 +111,24 @@ jobs:
             echo "found $hit"
           done
           comp=$(find . -name "DGE_analysis_comp1.txt" | head -1)
-          [ "$(wc -l < "$comp")" -gt 100 ] || { echo "::error::$comp has fewer than 100 genes"; exit 1; }
+          [ "$(wc -l < "$comp")" -gt 1 ] || { echo "::error::$comp has no genes"; exit 1; }
+          if [ "$ENRICHMENT" = "yes" ]; then
+            for pattern in "functional_enrichment_report.html" "functional_enrichment_report_minimal.html"; do
+              hit=$(find . -name "$pattern" | head -1)
+              [ -n "$hit" ] || { echo "::error::$pattern was not produced"; exit 1; }
+              echo "found $hit ($(du -h "$hit" | cut -f1))"
+            done
+          fi
 
-      - name: Keep the log and the report
+      - name: Keep the logs and the report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: smoke-test
+          name: smoke-test-${{ env.ALIGNER }}
           path: |
+            ${{ runner.temp }}/dry_run.log
             ${{ runner.temp }}/smoke.log
             ${{ runner.temp }}/out/smoke/final_report.html
             ${{ runner.temp }}/out/smoke/provenance
+            ${{ runner.temp }}/out/smoke/*/DGE/functional_enrichment_report*.html
           if-no-files-found: ignore

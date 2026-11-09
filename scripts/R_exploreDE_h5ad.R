@@ -133,20 +133,23 @@ if (length(merged) > 0) {
 
 go_by_gene <- NULL
 org_key <- gsub("[ ]+", "_", organism_arg)
-orgdb_pkg <- unname(c(Homo_sapiens = "org.Hs.eg.db", Mus_musculus = "org.Mm.eg.db", Rattus_norvegicus = "org.Rn.eg.db")[org_key])
+source(file.path(.rgse_scripts_dir, "R_gene_id_helpers.R"))
+.org_info <- rgse_organism_info(organism_arg)
+orgdb_pkg <- if (is.null(.org_info)) NA_character_ else .org_info$orgdb
 if (!is.na(orgdb_pkg) && requireNamespace(orgdb_pkg, quietly = TRUE)) {
   db <- getExportedValue(orgdb_pkg, orgdb_pkg)
+  .sym_kt <- rgse_symbol_keytype(.org_info)
   ens <- grepl("^ENS[A-Z]*G[0-9]+", genes)
-  keytype <- if (mean(ens) > 0.5) "ENSEMBL" else "SYMBOL"
+  keytype <- if (mean(ens) > 0.5) "ENSEMBL" else .sym_kt
   ids <- if (keytype == "ENSEMBL") sub("\\.[0-9]+$", "", genes) else genes
   db_keys <- AnnotationDbi::keys(db, keytype = keytype)
   k <- db_keys[match_ids(ids, db_keys)]
   res <- suppressMessages(AnnotationDbi::select(db, keys = unique(k[!is.na(k)]), keytype = keytype,
-                                                 columns = setdiff(c("SYMBOL", "GENENAME", "GO", "ONTOLOGY"), keytype)))
+                                                 columns = setdiff(unique(c(.sym_kt, "GENENAME", "GO", "ONTOLOGY")), keytype)))
   info <- res[!duplicated(res[[keytype]]), , drop = FALSE]
   j <- match(k, info[[keytype]])
   if (keytype == "ENSEMBL") {
-    sym <- info$SYMBOL[j]
+    sym <- info[[.sym_kt]][j]
     rowdata$gene_name[!is.na(sym)] <- sym[!is.na(sym)]
   }
   desc <- info$GENENAME[j]

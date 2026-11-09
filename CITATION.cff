@@ -3,7 +3,7 @@ message: "If you use reanalyzerGSE, please cite the article below and the versio
 title: reanalyzerGSE
 abstract: "Transcriptomic pipeline to automatically analyze entries from online databases or raw data."
 type: software
-version: 4.2.9
+version: 4.3.0
 date-released: "2026-11-04"
 license: GPL-3.0
 repository-code: "https://github.com/BioinfoIPBLN/reanalyzerGSE"

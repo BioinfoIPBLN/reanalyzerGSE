@@ -4,6 +4,7 @@ From: ubuntu:24.04
 %arguments
     REANALYZERGSE_REF=main
     EXPLOREDE_REF=564572b4d1f1136491b031d70ba50713847e24b8
+    ORGDBS=org.Hs.eg.db,org.Mm.eg.db,org.Rn.eg.db,org.Dr.eg.db,org.Dm.eg.db,org.Ce.eg.db,org.Sc.sgd.db,org.At.tair.db,org.Gg.eg.db,org.Ss.eg.db,org.Bt.eg.db,org.Cf.eg.db,org.Mmu.eg.db,org.Pt.eg.db,org.Xl.eg.db,org.EcK12.eg.db,org.Ag.eg.db,org.Pf.plasmo.db
 
 %post
     # --------------------------------------------------------------------------
@@ -42,7 +43,7 @@ DPKGCFG
       libmagick++-dev libmagickwand-dev libmagickcore-dev imagemagick \
       libopenblas-dev liblapack-dev libcairo2-dev libncurses5-dev libgit2-dev \
       libbz2-dev liblzma-dev libtbb12 libdeflate0 libdeflate-dev libisal2 libisal-dev \
-      libhdf5-dev gsfonts libglpk-dev \
+      libhdf5-dev libglpk-dev \
       python3-dev python3-pip python3-venv python3-setuptools python-is-python3 picard-tools \
       cython3 libpoppler-cpp-dev poppler-data \
       fastqc pigz parallel zip unzip bzip2 xz-utils expat file jq \
@@ -174,6 +175,20 @@ DPKGCFG
     unzip -qqo bowtie2.zip
     mv bowtie2*/bowtie* /bin_external/
 
+    # Bowtie1 (small RNA mode: alignment of the trimmed reads and miRDeep2 mapper)
+    curl -fsSL --retry 10 https://github.com/BenLangmead/bowtie/releases/download/v1.3.1/bowtie-1.3.1-linux-x86_64.zip -o bowtie1.zip
+    unzip -qqo bowtie1.zip
+    mv bowtie-1.3.1-linux-x86_64/bowtie* /bin_external/
+    rm -rf bowtie-1.3.1-linux-x86_64 bowtie1.zip
+
+    # miRDeep2 (novel miRNA prediction in small RNA mode). randfold is not packaged for Ubuntu, so the pipeline runs miRDeep2 with -c
+    curl -fsSL --retry 10 https://github.com/rajewsky-lab/mirdeep2/archive/refs/tags/v0.1.3.tar.gz -o mirdeep2.tar.gz
+    mkdir -p mirdeep2
+    tar xzf mirdeep2.tar.gz -C mirdeep2 --strip-components=1
+    chmod +x mirdeep2/src/*.pl
+    mv mirdeep2/src/*.pl /bin_external/
+    rm -rf mirdeep2 mirdeep2.tar.gz
+
     # DIAMOND (ortholog detection, orthologr DIAMOND_RBH/DIAMOND_BH)
     curl -fsSL --retry 10 https://github.com/bbuchfink/diamond/releases/download/v2.2.8/diamond-linux64.tar.gz -o diamond.tar.gz
     tar xzf diamond.tar.gz
@@ -226,6 +241,7 @@ EOF
     apt-get remove -qy python3-numpy python3-scipy python3-matplotlib python3-pandas 2>/dev/null || true
 
     pip3 install --no-cache-dir --break-system-packages --ignore-installed -r $APPTAINER_TMPDIR/requirements.txt
+    pip3 uninstall -y --break-system-packages pyarrow polars-runtime-32
 
     # --------------------------------------------------------------------------
     # 4. R Packages (Ubuntu 24.04 / Noble)
@@ -247,55 +263,52 @@ library(pak); options(pak.timeout = 1200); pak_cleanup(force = TRUE)
 pkgs <- c(
   "abind", "affy", "annotate", "AnnotationDbi", "AnnotationFilter", "AnnotationHub", "ape", "aplot", "arules", "ashr", "askpass",
   "ASpli", "assorthead", "autoGO", "backports", "base64enc", "bbmle", "beachmat", "BH", "Biobase", "BiocBaseUtils",
-  "BiocFileCache", "BiocGenerics", "BiocIO", "BiocManager", "BiocParallel", "BiocSingular", "BiocStyle", "BiocVersion", "biomaRt", "Biostrings",
-  "biovizBase", "bit", "bit64", "bitops", "blob", "bookdown", "brew", "brio", "broom", "BSgenome",
-  "bslib", "cachem", "callr", "car", "carData", "caTools", "cellranger", "checkmate", "chron", "cigarillo",
-  "circlize", "cli", "clipr", "clue", "clusterProfiler", "colorspace", "commonmark", "ComplexHeatmap", "confintr", "conflicted",
-  "corpcor", "corrplot", "cowplot", "cpp11", "crayon", "credentials", "crosstalk", "curl", "data.table", "DBI",
-  "dbplyr", "DelayedArray", "deldir", "dendextend", "DEoptimR", "Deriv", "desc", "DESeq2", "devtools", "DEXSeq",
-  "dichromat", "diffobj", "digest", "dir.expiry", "dirmult", "doBy", "docopt", "doParallel", "DOSE", "doSNOW",
-  "dotCall64", "downlit", "dplyr", "dqrng", "DT", "dtplyr", "dynamicTreeCut", "DynDoc", "e1071", "edgeR",
-  "ellipse", "ellipsis", "emmeans", "EnhancedVolcano", "enrichplot", "enrichR", "ensembldb", "estimability", "europepmc", "evaluate",
-  "expm", "FactoMineR", "fansi", "farver", "fastcluster", "fastDummies", "fastmap", "fastmatch", "fgsea", "filelock",
-  "fitdistrplus", "flashClust", "FNN", "fontawesome", "fontBitstreamVera", "fontLiberation", "fontquiver", "forcats", "foreach", "forecast",
+  "BiocFileCache", "BiocGenerics", "BiocIO", "BiocManager", "BiocParallel", "BiocStyle", "BiocVersion", "biomaRt", "Biostrings",
+  "biovizBase", "bit", "bit64", "bitops", "blob", "bookdown", "brew", "broom", "BSgenome",
+  "bslib", "cachem", "callr", "car", "carData", "caTools", "checkmate", "chron", "cigarillo",
+  "circlize", "cli", "clipr", "clue", "clusterProfiler", "colorspace", "commonmark", "ComplexHeatmap", "confintr", "corrplot", "cowplot", "cpp11", "crayon", "crosstalk", "curl", "data.table", "DBI",
+  "dbplyr", "DelayedArray", "deldir", "dendextend", "DEoptimR", "Deriv", "DESeq2", "DEXSeq",
+  "dichromat", "digest", "dir.expiry", "dirmult", "doBy", "docopt", "doParallel", "DOSE", "dotCall64", "dplyr", "dqrng", "DT", "dynamicTreeCut", "DynDoc", "e1071", "edgeR",
+  "ellipse", "emmeans", "EnhancedVolcano", "enrichplot", "enrichR", "ensembldb", "estimability", "europepmc", "evaluate",
+  "expm", "farver", "fastcluster", "fastDummies", "fastmap", "fastmatch", "fgsea", "filelock",
+  "fitdistrplus", "FNN", "fontawesome", "fontBitstreamVera", "fontLiberation", "fontquiver", "forcats", "foreach", "forecast",
   "formatR", "Formula", "fracdiff", "fs", "funr", "futile.logger", "futile.options", "future", "future.apply", "gamlss",
-  "gargle", "gdtools", "genefilter", "geneplotter", "generics", "GenomeInfoDb", "GenomeInfoDbData", "GenomicAlignments", "GenomicFeatures", "GenomicRanges",
-  "GEOquery", "gert", "GetoptLong", "ggarchery", "ggdendro", "ggforce", "ggfortify", "ggfun", "ggiraph", "ggnewscale",
+  "gdtools", "genefilter", "geneplotter", "generics", "GenomeInfoDb", "GenomeInfoDbData", "GenomicAlignments", "GenomicFeatures", "GenomicRanges",
+  "GEOquery", "GetoptLong", "ggarchery", "ggdendro", "ggforce", "ggfortify", "ggfun", "ggiraph", "ggnewscale",
   "ggplot2", "ggplotify", "ggpmisc", "ggpp", "ggpubr", "ggraph", "ggrepel", "ggridges", "ggsci", "ggsignif",
-  "ggtangle", "ggtree", "ggupset", "gh", "gitcreds", "GlobalOptions", "globals", "glue", "GO.db", "goftest",
-  "gontr", "googledrive", "googlesheets4", "GOSemSim", "gplots", "graph", "graphite", "graphlayouts", "gridExtra", "gridGraphics",
-  "GSEABase", "gson", "gsubfn", "GSVA", "gtable", "gtools", "Gviz", "h5mread", "harmony", "hash",
-  "haven", "HDF5Array", "here", "hexbin", "highr", "Hmisc", "hms", "htmlTable", "htmltools", "htmlwidgets",
-  "httpuv", "httr", "httr2", "hwriter", "ica", "ids", "igraph", "igvShiny", "impute", "ini",
+  "ggtangle", "ggtree", "ggupset", "GlobalOptions", "globals", "glue", "GO.db", "goftest",
+  "gontr", "GOSemSim", "gplots", "graph", "graphite", "graphlayouts", "gridExtra", "gridGraphics",
+  "GSEABase", "gson", "gsubfn", "GSVA", "gtable", "gtools", "Gviz", "h5mread", "hash",
+  "HDF5Array", "here", "hexbin", "highr", "Hmisc", "hms", "htmlTable", "htmltools", "htmlwidgets",
+  "httpuv", "httr", "httr2", "hwriter", "ica", "igraph", "igvShiny", "impute", "ini",
   "interp", "IRanges", "irlba", "isoband", "IsoformSwitchAnalyzeR", "iterators", "jpeg", "jquerylib", "jsonlite", "KEGGgraph",
   "KEGGREST", "kernlab", "knitr", "labeling", "lambda.r", "later", "latticeExtra", "lazyeval", "leaps", "lifecycle",
   "limma", "limSolve", "listenv", "lme4", "lmodel2", "lmtest", "locfdr", "locfit", "lpSolve", "lsa",
-  "lubridate", "magick", "magrittr", "matrixcalc", "MatrixGenerics", "MatrixModels", "matrixStats", "MCL", "memoise", "memuse",
-  "Mfuzz", "microbenchmark", "mime", "miniUI", "minpack.lm", "minqa", "mixtools", "modelr", "msigdbr", "multcomp",
-  "multcompView", "mvtnorm", "network", "nloptr", "NormqPCR", "numDeriv", "openssl", "openxlsx", "org.Hs.eg.db", "org.Mm.eg.db",
-  "org.Rn.eg.db", "otel", "pandoc", "parallelly", "patchwork", "pathview", "pbapply", "pbkrtest", "pbmcapply", "pdftools",
-  "penalized", "pfamAnalyzeR", "pillar", "pkgbuild", "pkgconfig", "pkgdown", "pkgload", "plotly", "plotrix", "plyr",
-  "png", "polyclip", "polynom", "praise", "preprocessCore", "prettyunits", "processx", "profvis", "progress", "progressr",
+  "lubridate", "magick", "magrittr", "MatrixGenerics", "MatrixModels", "matrixStats", "MCL", "memoise", "memuse",
+  "Mfuzz", "mime", "miniUI", "minpack.lm", "minqa", "mixtools", "modelr", "msigdbr", "multcomp",
+  "multcompView", "multiMiR", "mvtnorm", "network", "nloptr", "NormqPCR", "numDeriv", "openssl", "openxlsx",
+  "otel", "pandoc", "parallelly", "patchwork", "pathview", "pbapply", "pbkrtest", "pbmcapply", "pdftools",
+  "penalized", "pfamAnalyzeR", "pillar", "pkgconfig", "plotly", "plotrix", "plyr",
+  "png", "polyclip", "polynom", "preprocessCore", "prettyunits", "processx", "progress", "progressr",
   "promises", "ProtGenerics", "proto", "proxy", "PRROC", "ps", "pscl", "purrr", "pwalign", "qlcMatrix",
   "qpdf", "qs2", "quadprog", "quantreg", "qvalue", "R.methodsS3", "R.oo", "R.utils", "R6",
-  "ragg", "RANN", "rappdirs", "rbibutils", "rbioapi", "rcmdcheck", "RColorBrewer", "RcppAnnoy", "RcppArmadillo",
+  "ragg", "RANN", "rappdirs", "rbibutils", "rbioapi", "RColorBrewer", "RcppAnnoy", "RcppArmadillo",
   "RcppEigen", "RcppHNSW", "RcppParallel", "RcppProgress", "RcppThread", "RcppTOML", "RCurl", "Rdpack", "reactome.db", "ReactomePA",
-  "ReadqPCR", "readr", "readxl", "reformulas", "rematch", "rematch2", "remotes", "rentrez", "reprex", "reshape2",
+  "ReadqPCR", "readr", "reformulas", "remotes", "rentrez", "reshape2",
   "restfulr", "reticulate", "Rgraphviz", "rhdf5", "rhdf5filters", "Rhdf5lib", "RhpcBLASctl", "Rhtslib", "rjson",
-  "rlang", "rmarkdown", "robustbase", "ROCR", "roxygen2", "rprojroot", "rrvgo", "Rsamtools", "RSpectra", "RSQLite",
-  "rstatix", "rstudioapi", "rsvd", "rtracklayer", "Rtsne", "rversions", "rvest", "S4Arrays", "sandwich", "saseR",
-  "sass", "satuRn", "SAVER", "ScaledMatrix", "scales", "scattermore", "scatterpie", "scatterplot3d", "sctransform", "segmented",
-  "selectr", "Seqinfo", "sessioninfo", "Seurat", "SeuratObject", "shape", "shiny", "shinyjs", "SingleCellExperiment", "sitmo",
+  "rlang", "rmarkdown", "robustbase", "ROCR", "rprojroot", "rrvgo", "Rsamtools", "RSpectra", "RSQLite",
+  "rstatix", "rsvd", "rtracklayer", "Rtsne", "rvest", "S4Arrays", "sandwich", "saseR",
+  "sass", "satuRn", "SAVER", "scales", "scattermore", "scatterpie", "scatterplot3d", "sctransform", "segmented",
+  "selectr", "Seqinfo", "Seurat", "SeuratObject", "shape", "shiny", "shinyjs", "SingleCellExperiment", "sitmo",
   "snow", "SnowballC", "sourcetools", "sp", "spam", "SparseArray", "SparseM", "sparseMatrixStats", "sparsesvd", "SpatialExperiment",
   "spatstat.data", "spatstat.explore", "spatstat.geom", "spatstat.random", "spatstat.sparse", "spatstat.univar", "spatstat.utils", "splus2R", "sqldf", "statmod",
-  "STRINGdb", "stringfish", "stringi", "stringr", "SummarizedExperiment", "sva", "sys", "systemfonts", "tensor", "testthat",
-  "textshape", "textshaping", "TH.data", "tibble", "tidydr", "tidygraph", "tidyr", "tidyselect", "tidytree", "tidyverse",
-  "timechange", "timeDate", "tinytex", "tkWidgets", "treeio", "tweenr", "txdbmaker", "tximeta", "tximport", "tzdb",
-  "UCSC.utils", "umap", "UpSetR", "urca", "urlchecker", "usethis", "utf8", "uuid", "uwot",
-  "VariantAnnotation", "vctrs", "VennDiagram", "viridis", "viridisLite", "vroom", "waldo", "WGCNA", "whisker", "widgetTools",
-  "withr", "writexl", "xfun", "XML", "xml2", "xopen", "xtable", "xts", "XVector", "yaml",
+  "STRINGdb", "stringfish", "stringi", "stringr", "SummarizedExperiment", "sva", "sys", "systemfonts", "tensor", "textshape", "textshaping", "TH.data", "tibble", "tidydr", "tidygraph", "tidyr", "tidyselect", "tidytree", "timechange", "timeDate", "tinytex", "tkWidgets", "treeio", "tweenr", "txdbmaker", "tximeta", "tximport", "tzdb",
+  "UCSC.utils", "umap", "UpSetR", "urca", "utf8", "uuid", "uwot",
+  "VariantAnnotation", "vctrs", "VennDiagram", "viridis", "viridisLite", "vroom", "WGCNA", "widgetTools",
+  "withr", "writexl", "xfun", "XML", "xml2", "xtable", "xts", "XVector", "yaml",
   "yulab.utils", "zip", "zoo"
 )
+pkgs <- unique(c(pkgs, strsplit(trimws("{{ ORGDBS }}"), "[ ,]+")[[1]]))
 
 # Function to install and properly handle dependencies
 install_pkgs_batched <- function(pkgs) {
@@ -541,6 +554,8 @@ install_pkgs_batched <- function(pkgs) {
 # Archived on CRAN; must precede the batch (scRecover Imports it)
 pak::pkg_install("url::https://cran.r-project.org/src/contrib/Archive/preseqR/preseqR_4.0.0.tar.gz", ask = FALSE)
 
+install.packages("rgl", configure.args = "--disable-opengl", quiet = TRUE)
+
 install_pkgs_batched(pkgs); cat("\n\n\n\n\nBLOCK 1 R packages installed!\n\n\n\n\n")
 
 pak::pkg_install("scRecover", dependencies = FALSE, ask = FALSE)
@@ -589,14 +604,10 @@ local({
 
 cat("\n\n\n\n\nBLOCK 2 R packages installed!\n\n\n\n\n")
 
-remotes::install_github("bnprks/BPCells/r", ref = "v0.3.1")
-
 cat("\n\n\n\n\nBLOCK 3 R packages installed!\n\n\n\n\n")
 
 # Packages archived on CRAN, pinned to their last released version
-pak::pkg_install(c(
-       "url::https://cran.r-project.org/src/contrib/Archive/imguR/imguR_1.0.3.tar.gz",
-       "url::https://cran.r-project.org/src/contrib/Archive/CDSeq/CDSeq_1.0.8.tar.gz"), dependencies = FALSE, ask = FALSE)
+pak::pkg_install("url::https://cran.r-project.org/src/contrib/Archive/CDSeq/CDSeq_1.0.8.tar.gz", dependencies = FALSE, ask = FALSE)
 
 cat("\n\n\n\n\nBLOCK 4 R packages installed!\n\n\n\n\n")
 
@@ -608,9 +619,30 @@ cat("\n\n\n\n\nBLOCK 5 R packages installed!\n\n\n\n\n")
 # exploreDE: the Shiny app that opens the .h5ad files written with '-eDe yes'
 pak::pkg_install(c("anndataR", "colourpicker", "fresh", "GGally", "ggbeeswarm", "ggprism", "ggtext", "glmpca", "gridtext",
                    "kableExtra", "officer", "scuttle", "shinycssloaders", "shinydashboard", "shinylogs", "sortable", "vegan", "waiter"), ask = FALSE)
-pak::pkg_install("github::fgcz/exploreDE@{{ EXPLOREDE_REF }}", dependencies = FALSE, ask = FALSE)
+local({
+  tgz <- tempfile(fileext = ".tar.gz")
+  download.file("https://codeload.github.com/fgcz/exploreDE/tar.gz/{{ EXPLOREDE_REF }}", tgz, method = "libcurl", quiet = TRUE)
+  exdir <- tempfile(); dir.create(exdir); untar(tgz, exdir = exdir)
+  pkgdir <- list.dirs(exdir, recursive = FALSE)[1]
+  d <- read.dcf(file.path(pkgdir, "DESCRIPTION"))
+  imp <- trimws(strsplit(gsub("[[:space:]]+", " ", d[1, "Imports"]), ",")[[1]])
+  imp <- imp[!grepl("^(devtools|tidyverse)([ (]|$)", imp)]
+  d[1, "Imports"] <- paste(imp, collapse = ", ")
+  write.dcf(d, file.path(pkgdir, "DESCRIPTION"))
+  pak::pkg_install(paste0("local::", pkgdir), dependencies = FALSE, ask = FALSE)
+})
 
 cat("\n\n\n\n\nBLOCK 6 R packages installed!\n\n\n\n\n")
+
+local({
+  f <- system.file("extdata", "reactome.sqlite", package = "reactome.db")
+  con <- DBI::dbConnect(RSQLite::SQLite(), f)
+  keep <- c("pathway2gene", "pathway2name", "reactome2go", "metadata", "map_metadata", "map_counts", "sqlite_sequence")
+  for (v in DBI::dbGetQuery(con, "SELECT name FROM sqlite_master WHERE type = 'view'")[["name"]]) DBI::dbExecute(con, paste0("DROP VIEW IF EXISTS [", v, "]"))
+  for (t in setdiff(DBI::dbListTables(con), keep)) DBI::dbExecute(con, paste0("DROP TABLE IF EXISTS [", t, "]"))
+  DBI::dbExecute(con, "VACUUM"); DBI::dbDisconnect(con)
+  cat("reactome.db reduced to its mapping tables:", round(file.size(f) / 1e6), "MB\n")
+})
 
 unlink(list.files(path = .libPaths(), pattern = "^src$",
                   recursive = TRUE, full.names = TRUE, include.dirs = TRUE), 
@@ -626,6 +658,7 @@ EOF
     apt-get install -qy --no-install-recommends \
       libconfig-inifiles-perl libconfig-ini-perl libtemplate-plugin-posix-perl \
       libscalar-list-utils-perl libwww-perl libdatetime-perl libstatistics-r-perl \
+      libpdf-api2-perl vienna-rna \
       cpanminus
 
     cpanm --force -q Strict::Perl LWP Cwd less Class::MOP
@@ -657,6 +690,7 @@ EOF
     find /usr/local/lib/R/site-library -name "*.so" -exec strip --strip-unneeded {} + 2>/dev/null || true
     find /usr/local/lib/python3.*/dist-packages -name "*.so" -exec strip --strip-unneeded {} + 2>/dev/null || true
     find /bin_external -type f -executable -exec strip --strip-unneeded {} + 2>/dev/null || true
+    rm -f /bin_external/*-debug* /bin_external/STARlong
 
     # Remove R documentation and sources
     rm -rf /usr/local/lib/R/site-library/*/help
@@ -665,7 +699,7 @@ EOF
     rm -rf /usr/lib/R/library/*/help
     rm -rf /usr/lib/R/library/*/doc
     rm -rf /usr/lib/R/library/*/html
-    rm -rf /usr/lib/R/doc /usr/share/R/doc 2>/dev/null || true
+    rm -rf /usr/lib/R/doc /usr/share/R/doc /usr/lib/R/library/translations 2>/dev/null || true
     rm -rf /usr/local/lib/R/site-library/BH
     find /usr/local/lib/R/site-library -name "*.a" -delete 2>/dev/null || true
 
@@ -692,7 +726,7 @@ EOF
       libisal-dev libjpeg-dev liblapack-dev liblzma-dev libmagickcore-dev libmagick++-dev \
       libmagickwand-dev libncurses-dev libopenblas-dev libpng-dev \
       libpoppler-cpp-dev libssl-dev libtiff5-dev libtiff-dev libxml2-dev python3-dev r-base-dev \
-      zlib1g-dev \
+      zlib1g-dev git poppler-data \
       texlive mupdf-tools dvisvgm lmodern tex-gyre fonts-texgyre-math tipa
 
     apt-get autoremove -qy --purge
@@ -716,6 +750,9 @@ EOF
     export LANG=en_US.UTF-8
     export LD_LIBRARY_PATH="/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"
     export R_LIBS_USER=-
+    export R_LIBS=
+    export PYTHONNOUSERSITE=1
+    export PERL5LIB=
 
 %runscript
     exec /reanalyzerGSE/reanalyzerGSE.sh "$@"

@@ -25,7 +25,7 @@ rgse_sample_id <- function(x, mate_suffix = FALSE) {
   x <- basename(as.character(x))
   x <- sub("_categ(_2)?$", "", x)
   x <- sub("_readcount\\.tab(\\.summary)?$", "", x)
-  x <- sub("_(hisat2|HISAT2|star|STAR)([._].*)?$", "", x)
+  x <- sub("_(hisat2|HISAT2|star|STAR|bowtie1|BOWTIE1)([._].*)?$", "", x)
   x <- sub("_(flagstat|stats)(\\..*)?$", "", x)
   x <- sub("_fastqc(\\..*)?$", "", x)
   x <- sub("\\.bam$", "", x)

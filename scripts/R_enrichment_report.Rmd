@@ -7,6 +7,7 @@ params:
   organism: "Unknown"
   minimal: false
   cp_universe: ""
+  img_dir: ""
 output:
   html_document:
     toc: true
@@ -26,6 +27,8 @@ library(knitr)
 
 show_plots    <- !isTRUE(params$minimal)
 has_pdftools  <- show_plots && requireNamespace("pdftools",  quietly = TRUE)
+img_dir       <- if (show_plots && !is.null(params$img_dir)) params$img_dir else ""
+use_img_dir   <- nzchar(img_dir) && dir.exists(img_dir)
 
 dge_dir      <- params$dge_dir
 organism     <- params$organism
@@ -111,7 +114,7 @@ select_cols <- function(df) {
             "number_of_genes","number_of_genes_in_background",
             "pvalue","P.value","pValue","p_value","p.adjust","FDR","fdr","Adjusted.P.value",
             "fold_enrichment","plus_minus",
-            "Gene_ID_up_num","Gene_ID_down_num","Gene_ID_num",
+            "Gene_ID_up_num","Gene_ID_down_num","Gene_ID_num","miRNA_count","miRNAs",
             "geneID","core_enrichment","Genes","preferredNames","Gene_ID","summary_up","summary_down")
   avail <- intersect(prio, names(df))
   if ("preferredNames" %in% avail) avail <- setdiff(avail, "geneID")
@@ -196,7 +199,7 @@ render_autogo_panther <- function(pd, level, csv_prefix) {
   }
 
   panther_files <- list.files(pd, pattern = "^enriched_.*_panther\\.txt$", full.names = TRUE)
-  panther_files <- panther_files[!grepl("_err\\.txt$", panther_files)]
+  panther_files <- panther_files[!grepl("_err\\.txt$|_skipped\\.txt$|plots_not_drawn|not_in_graphite", panther_files)]
   if (length(panther_files) > 0) {
     tabs <- level < 6
     cat(sprintf("\n%s Panther enrichment%s\n\n", h, if (tabs) " {.tabset}" else ""))
@@ -230,7 +233,7 @@ net_gsea_files <- function(comp, metric) {
 cp_ranked_gsea <- function(cp_dir) {
   if (is.na(cp_dir) || !dir.exists(cp_dir)) return(character(0))
   f <- list.files(cp_dir, pattern = "_GSEA_readlist_fc_backg_.*\\.txt$", full.names = TRUE)
-  f[!grepl("_err\\.txt$|_aPEAR|_clusters|_similarity", f)]
+  f[!grepl("_err\\.txt$|_skipped\\.txt$|plots_not_drawn|not_in_graphite|_aPEAR|_clusters|_similarity", f)]
 }
 
 enrichr_ranked_gsea <- function(comp) {
@@ -258,8 +261,8 @@ render_gsea_ranked <- function(comp, cp_dir) {
     cp_full <- length(list.files(cp_dir, pattern = "GSEA_|^MKEGG_|^WP_|^DO_|^NCG_|^DGN_")) > 0
     if (cp_full) cat("*No GSEA results for this comparison.*\n\n")
     else cat(paste0('<div class="alert alert-secondary" style="border-left:4px solid #999;padding:10px;margin:8px 0;">',
-                    '<em>Not run.</em> GSEA runs with <code>clusterProfiler_full: yes</code> (clusterProfiler) ',
-                    'or <code>network_analyses: yes</code> (network step).</div>\n\n'))
+                    '<em>Not run.</em> The clusterProfiler GSEA is off (<code>clusterProfiler_gsea: no</code>) and the network step ',
+                    '(<code>network_analyses: yes</code>) did not run.</div>\n\n'))
     return(invisible(FALSE))
   }
   cat("\n## GSEA (ranked gene list) {.tabset}\n\n")
@@ -429,6 +432,33 @@ threshold_label <- function(tok) {
 # level-2 threshold tab. `primary` (the FDR<0.05 tab) is where shared, non
 # threshold-specific pathway images (KEGG / Reactome snapshots) are embedded, so
 # they are not duplicated across both threshold tabs.
+render_failures <- function(comp, cp_dir, panther_dirs) {
+  dirs <- c(if (!is.na(cp_dir) && dir.exists(cp_dir)) cp_dir, panther_dirs)
+  dirs <- dirs[dir.exists(dirs)]
+  lf <- function(pat) unlist(lapply(dirs, function(d) list.files(d, pattern = pat, recursive = TRUE, full.names = TRUE)))
+  errs <- lf("_err\\.txt$")
+  skips <- lf("_skipped\\.txt$|^plots_not_drawn\\.txt$|^not_in_graphite\\.txt$")
+  no_panther <- length(panther_dirs) == 0 && !is.na(cp_dir) && dir.exists(cp_dir)
+  if (!length(errs) && !length(skips) && !no_panther) return(invisible())
+  rel <- function(f) { for (d in dirs) f <- sub(paste0("^", d, "/?"), "", f); f }
+  first_line <- function(f) {
+    l <- tryCatch(readLines(f, n = 1, warn = FALSE), error = function(e) character(0))
+    if (!length(l)) "" else htmltools::htmlEscape(substr(l[1], 1, 300))
+  }
+  cat("\n## Not run or failed\n\n")
+  if (no_panther) cat("*autoGO and Panther produced no output for this comparison.*\n\n")
+  if (length(skips)) {
+    cat(sprintf("<details><summary>%d analyses skipped (no genes, no terms, or no annotation for this organism)</summary>\n<ul>\n", length(skips)))
+    for (f in skips) cat(sprintf("<li><code>%s</code>: %s</li>\n", rel(f), first_line(f)))
+    cat("</ul></details>\n\n")
+  }
+  if (length(errs)) {
+    cat(sprintf("<details open><summary>%d analyses failed with an error</summary>\n<ul>\n", length(errs)))
+    for (f in errs) cat(sprintf("<li><code>%s</code>: %s</li>\n", rel(f), first_line(f)))
+    cat("</ul></details>\n\n")
+  }
+}
+
 render_cp_gsea_groups <- function(gsea, comp) {
   gsea_one <- function(f) {
     df <- safe_read(f); n_total <- if (is.null(df)) 0 else nrow(df)
@@ -467,7 +497,7 @@ render_cp_threshold <- function(cp_dir, comp, tok, full_mode_ran, primary) {
   }
   # Pick the single result file for this threshold and render count + full table.
   section <- function(files, noun, csv_stub, figs_fn = NULL) {
-    files <- files[!grepl("_err\\.txt$|_aPEAR|_clusters|_similarity", files)]
+    files <- files[!grepl("_err\\.txt$|_skipped\\.txt$|plots_not_drawn|not_in_graphite|_aPEAR|_clusters|_similarity", files)]
     toks  <- vapply(files, threshold_token, character(1))
     f <- if (any(toks == tok, na.rm = TRUE)) files[which(toks == tok)][1] else NA_character_
     if (is.na(f)) { cat("*No results file for this threshold.*\n\n"); return(invisible()) }
@@ -550,7 +580,7 @@ render_cp_threshold <- function(cp_dir, comp, tok, full_mode_ran, primary) {
 
   # -- Disease Ontology --
   do_files <- list.files(cp_dir, pattern = "^DO_|^NCG_|^NGC_|^DGN_", full.names = TRUE)
-  do_files <- do_files[!grepl("_err\\.txt$|GSEA|_aPEAR", do_files)]
+  do_files <- do_files[!grepl("_err\\.txt$|_skipped\\.txt$|plots_not_drawn|not_in_graphite|GSEA|_aPEAR", do_files)]
   if (length(do_files)) {
     cat("\n#### Disease Ontology {.tabset}\n\n")
     dsel <- do_files[which(vapply(do_files, threshold_token, character(1)) == tok)]
@@ -579,12 +609,25 @@ rgse_rel_path <- function(path) {
   substring(full, nchar(root) + 2L)
 }
 
+img_name <- function(path, ext) {
+  rel <- rgse_rel_path(path)
+  stem <- if (is.null(rel)) basename(path) else rel
+  paste0(gsub("[^A-Za-z0-9._-]+", "_", tools::file_path_sans_ext(stem)), ".", ext)
+}
+
+img_src <- function(file, path) {
+  if (!use_img_dir) return(xfun::base64_uri(file))
+  dest <- file.path(img_dir, img_name(path, tools::file_ext(file)))
+  if (!file.exists(dest)) file.copy(file, dest)
+  paste0(basename(dirname(img_dir)), "/", basename(img_dir), "/", utils::URLencode(basename(dest)))
+}
+
 embed_png <- function(path, caption = "", max_width = "700px") {
   if (!show_plots || !file.exists(path)) return(invisible(NULL))
-  uri <- xfun::base64_uri(path)
+  uri <- img_src(path, path)
   fname <- basename(path)
   rel <- rgse_rel_path(path)
-  cat(sprintf('<figure style="margin:10px 0;text-align:center;"><img src="%s" style="max-width:%s;border:1px solid #ddd;border-radius:4px;padding:2px;" />',
+  cat(sprintf('<figure style="margin:10px 0;text-align:center;"><img src="%s" loading="lazy" style="max-width:%s;border:1px solid #ddd;border-radius:4px;padding:2px;" />',
               uri, max_width))
   if (nchar(caption) > 0)
     cat(sprintf('<figcaption style="font-style:italic;color:#666;font-size:0.9em;">%s</figcaption>', caption))
@@ -601,10 +644,9 @@ embed_pdf <- function(pdf_path, caption = "", dpi = 48) {
     pdftools::pdf_convert(pdf_path, format = "png", pages = 1, dpi = dpi,
                           filenames = tmp, verbose = FALSE)
     fname <- basename(pdf_path)
-    # Show rendered PNG preview
-    uri <- xfun::base64_uri(tmp)
+    uri <- img_src(tmp, pdf_path)
     rel <- rgse_rel_path(pdf_path)
-    cat(sprintf('<figure style="margin:10px 0;text-align:center;"><img src="%s" style="max-width:700px;border:1px solid #ddd;border-radius:4px;padding:2px;" />', uri))
+    cat(sprintf('<figure style="margin:10px 0;text-align:center;"><img src="%s" loading="lazy" style="max-width:700px;border:1px solid #ddd;border-radius:4px;padding:2px;" />', uri))
     if (nchar(caption) > 0)
       cat(sprintf('<figcaption style="font-style:italic;color:#666;font-size:0.9em;">%s</figcaption>', caption))
     if (!is.null(rel))
@@ -618,7 +660,7 @@ embed_pdf <- function(pdf_path, caption = "", dpi = 48) {
 show_file_set <- function(dir_path, table_pattern, label,
                           plot_dir = NULL, plot_pattern = NULL, dpi = 48) {
   files <- sort(list.files(dir_path, pattern = table_pattern, full.names = TRUE))
-  files <- files[!grepl("_err\\.txt$|_aPEAR|_clusters|_similarity|revigo", files)]
+  files <- files[!grepl("_err\\.txt$|_skipped\\.txt$|plots_not_drawn|not_in_graphite|_aPEAR|_clusters|_similarity|revigo", files)]
   if (length(files) == 0) {
     cat(sprintf("*%s — not available*\n\n", label))
     return(invisible(NULL))
@@ -799,6 +841,13 @@ cat(sprintf("- **Organism**: %s\n", gsub("_", " ", organism)))
 cat(sprintf("- **Comparisons found**: %d\n", length(comp_names)))
 cat(sprintf("- **Report generated**: %s\n\n", format(Sys.time(), "%Y-%m-%d %H:%M")))
 
+custom_model_file <- file.path(dge_dir, "custom_model.txt")
+if (file.exists(custom_model_file)) {
+  cat("\n**Custom model** (design_formula / design_contrasts; its contrasts are the last comparisons below):\n\n")
+  for (l in readLines(custom_model_file, warn = FALSE)) if (nzchar(trimws(l))) cat(sprintf("- `%s`\n", trimws(l)))
+  cat("\n")
+}
+
 if (file.exists(list_comp_file)) {
   cat("\n**Comparison labels:**\n\n")
   # Group the condition tokens by comparison number so we can report one line
@@ -912,7 +961,7 @@ spider_dir         <- file.path(dge_dir, "enrichment_spider_plots")
 
 spider_read <- function(cp_dir, pattern, tok) {
   files <- list.files(cp_dir, pattern = paste0(pattern, ".*\\.txt$"), full.names = TRUE)
-  files <- files[!grepl("_err\\.txt$|_aPEAR|_clusters|_similarity|GSEA", basename(files))]
+  files <- files[!grepl("_err\\.txt$|_skipped\\.txt$|plots_not_drawn|not_in_graphite|_aPEAR|_clusters|_similarity|GSEA", basename(files))]
   if (!length(files)) return(NULL)
   f <- files[which(vapply(files, threshold_token, character(1)) == tok)][1]
   if (is.na(f)) return(NULL)
@@ -1224,6 +1273,7 @@ for (idx in seq_along(comp_names)) {
   }
 
   render_gsea_ranked(comp, cp_dir)
+  render_failures(comp, cp_dir, panther_dirs_all[grepl(paste0("^", comp, "_"), basename(panther_dirs_all))])
 
   # ── autoGO / Enrichr ────────────────────────────────────────────────────────
   pant_dirs <- panther_dirs_all[grepl(paste0("^", comp, "_"), basename(panther_dirs_all))]

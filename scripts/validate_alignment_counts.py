@@ -2,7 +2,7 @@
 """
 validate_alignment_counts.py
 
-Universal validation gate for reanalyzerGSE across STAR, HISAT2, and Kallisto.
+Universal validation gate for reanalyzerGSE across STAR, HISAT2, Kallisto and bowtie1 (small RNA mode).
 Verifies that 100% of expected samples produced valid BAMs (or pseudoalignment tables),
 valid count matrices, and zero failed jobs in GNU parallel.
 
@@ -46,7 +46,7 @@ def sample_names_on_disk(analysis_dir):
     raw_reads_dir = os.path.join(analysis_dir, "raw_reads")
     if os.path.isdir(raw_reads_dir):
         names.update(s for s in map(read_stem, os.listdir(raw_reads_dir)) if s)
-    for subdir, suffix in (("star_results", "_STAR.bam"), ("hisat2_results", "_hisat2.bam")):
+    for subdir, suffix in (("star_results", "_STAR.bam"), ("hisat2_results", "_hisat2.bam"), ("bowtie1_results", "_bowtie1.bam")):
         for p in glob.glob(os.path.join(analysis_dir, "miARma_out*", subdir, "*" + suffix)):
             names.add(os.path.basename(p)[:-len(suffix)])
     for p in glob.glob(os.path.join(analysis_dir, "miARma_out*", "kallisto_results", "*")):
@@ -129,6 +129,23 @@ def find_hisat2_error(log_file):
     return ""
 
 
+def find_bowtie1_error(log_file):
+    """Extract error details from a bowtie1 stderr log (its normal summary lines mention reads that 'failed to align')."""
+    if not os.path.exists(log_file):
+        return ""
+    try:
+        with open(log_file, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                low = line.lower()
+                if low.startswith("# reads") or low.startswith("reported "):
+                    continue
+                if any(term in low for term in ["error", "segmentation fault", "cannot open", "no such file", "could not locate"]):
+                    return line.strip()
+    except Exception:
+        pass
+    return ""
+
+
 def find_kallisto_error(log_file):
     """Extract error details from a Kallisto log file."""
     if not os.path.exists(log_file):
@@ -178,6 +195,7 @@ def has_alignment_output(analysis_dir, aligner):
         "star":     [("star_results", "*_STAR.bam")],
         "hisat2":   [("hisat2_results", "*_hisat2.bam")],
         "kallisto": [("kallisto_results", "*")],
+        "bowtie1":  [("bowtie1_results", "*_bowtie1.bam")],
     }.get(aligner, [("star_results", "*_STAR.bam")])
     for subdir, leaf in patterns:
         if glob.glob(os.path.join(analysis_dir, "miARma_out*", subdir, leaf)):
@@ -273,6 +291,35 @@ def validate_alignment_and_counts(analysis_dir, aligner="star", samples_info_pat
             # 3. Check HISAT2 log
             hisat2_log = os.path.join(analysis_dir, "miARma_out0", "hisat2_results", f"{sample}_hisat2.log")
             log_excerpt = find_hisat2_error(hisat2_log)
+
+        elif aligner == "bowtie1":
+            # 1. Check BAM file
+            bam_pattern = os.path.join(analysis_dir, "miARma_out*", "bowtie1_results", f"{sample}_bowtie1.bam")
+            bams = glob.glob(bam_pattern)
+            if not bams:
+                sample_errors.append(f"Missing BAM file (bowtie1_results/{sample}_bowtie1.bam)")
+            else:
+                bam_size = os.path.getsize(bams[0])
+                if bam_size < 5000:
+                    sample_errors.append(f"Truncated/Empty BAM ({bam_size / 1024:.1f} KB)")
+
+            # 2. Check readcount table
+            rc_pattern = os.path.join(analysis_dir, "miARma_out*", "bowtie1_readcount_results", f"{sample}_bowtie1_readcount.tab")
+            rcs = glob.glob(rc_pattern)
+            if not rcs:
+                sample_errors.append(f"Missing count table (bowtie1_readcount_results/{sample}_bowtie1_readcount.tab)")
+            else:
+                try:
+                    with open(rcs[0], "r", encoding="utf-8", errors="replace") as f:
+                        lines_count = sum(1 for _ in f)
+                    if lines_count < 10:
+                        sample_errors.append(f"Empty count table ({lines_count} lines)")
+                except Exception as e:
+                    sample_errors.append(f"Unreadable count table: {e}")
+
+            # 3. Check bowtie1 log
+            bowtie1_log = os.path.join(analysis_dir, "miARma_out0", "bowtie1_results", f"{sample}_bowtie1.log")
+            log_excerpt = find_bowtie1_error(bowtie1_log)
 
         elif aligner == "kallisto":
             # 1. Check abundance.tsv

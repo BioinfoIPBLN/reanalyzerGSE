@@ -81,20 +81,22 @@ rgse_de_method_label <- function(engine, settings, covs) {
          engine)
 }
 
+rgse_de_table <- function(y, logFC, logCPM, stat, stat_name, p, fdr) {
+  tab <- data.frame(Gene_ID = y$genes$Gene_ID, Length = y$genes$Length, logFC = logFC, logCPM = logCPM, stringsAsFactors = FALSE)
+  if (!is.null(stat)) tab[[stat_name]] <- stat
+  tab$PValue <- p
+  tab$FDR <- fdr
+  rownames(tab) <- rownames(y)
+  tab
+}
+
 rgse_de_test <- function(y, comp, covs = NULL, engine = "edgeR", settings = rgse_de_settings()) {
   groups <- as.character(y$samples$group)
   cd <- rgse_covariate_design(groups, covs)
   covs <- cd$covs
   design <- cd$design
   rownames(design) <- colnames(y)
-  out_cols <- function(logFC, logCPM, stat, stat_name, p, fdr) {
-    tab <- data.frame(Gene_ID = y$genes$Gene_ID, Length = y$genes$Length, logFC = logFC, logCPM = logCPM, stringsAsFactors = FALSE)
-    if (!is.null(stat)) tab[[stat_name]] <- stat
-    tab$PValue <- p
-    tab$FDR <- fdr
-    rownames(tab) <- rownames(y)
-    tab
-  }
+  out_cols <- function(logFC, logCPM, stat, stat_name, p, fdr) rgse_de_table(y, logFC, logCPM, stat, stat_name, p, fdr)
   if (engine == "edgeR") {
     if (settings$edger_test == "exact" && is.null(covs) && settings$lfc == 0) {
       if (is.null(y$common.dispersion)) y <- edgeR::estimateDisp(y, robust = TRUE)
@@ -154,4 +156,72 @@ rgse_de_test <- function(y, comp, covs = NULL, engine = "edgeR", settings = rgse
     stop("Unknown differential expression engine: ", engine)
   }
   list(table = tab, method = rgse_de_method_label(engine, settings, covs), notes = cd$notes)
+}
+
+rgse_parse_contrasts <- function(txt) {
+  items <- trimws(strsplit(txt, ";", fixed = TRUE)[[1]])
+  items <- items[nzchar(items)]
+  if (!length(items) || any(!grepl("=", items, fixed = TRUE))) stop("every contrast in -Dcon/design_contrasts must be 'name=expression', separated by ';'")
+  nm <- make.names(trimws(sub("=.*$", "", items)), unique = TRUE)
+  setNames(trimws(sub("^[^=]*=", "", items)), nm)
+}
+
+rgse_custom_design <- function(meta, formula_txt) {
+  design <- model.matrix(as.formula(formula_txt), data = meta)
+  colnames(design) <- make.names(colnames(design), unique = TRUE)
+  empty <- colSums(abs(design)) == 0
+  if (any(empty)) design <- design[, !empty, drop = FALSE]
+  if (qr(design)$rank < ncol(design)) stop("the custom model ", formula_txt, " is not of full rank with these samples (coefficients: ", paste(colnames(design), collapse = ", "), "); drop a term or a confounded covariable")
+  if (nrow(design) - ncol(design) < 1) stop("the custom model ", formula_txt, " leaves no residual degrees of freedom (", nrow(design), " samples, ", ncol(design), " coefficients)")
+  rownames(design) <- rownames(meta)
+  design
+}
+
+rgse_contrast_matrix <- function(contrasts, design) {
+  cm <- tryCatch(limma::makeContrasts(contrasts = unname(contrasts), levels = design),
+                 error = function(e) stop("a contrast could not be built from the coefficients ", paste(colnames(design), collapse = ", "), ": ", conditionMessage(e)))
+  colnames(cm) <- names(contrasts)
+  cm
+}
+
+rgse_de_test_contrast <- function(y, design, cvec, engine = "edgeR", settings = rgse_de_settings(), label = "") {
+  lfc_txt <- if (settings$lfc > 0) paste0(", H0: |log2FC| <= ", settings$lfc) else ""
+  if (engine == "edgeR") {
+    y <- edgeR::estimateDisp(y, design, robust = TRUE)
+    fit <- edgeR::glmQLFit(y, design, robust = TRUE)
+    res <- if (settings$lfc > 0) edgeR::glmTreat(fit, contrast = cvec, lfc = settings$lfc) else edgeR::glmQLFTest(fit, contrast = cvec)
+    tab <- edgeR::topTags(res, n = nrow(y), adjust.method = "BH", sort.by = "PValue")$table
+    tab$unshrunk.logFC <- NULL
+    method <- paste0("edgeR quasi-likelihood ", if (settings$lfc > 0) "glmTreat" else "F-test")
+  } else if (engine == "DESeq2") {
+    counts_mat <- round(as.matrix(y$counts)); mode(counts_mat) <- "integer"
+    coldata <- data.frame(sample = colnames(counts_mat), row.names = colnames(counts_mat))
+    dds <- DESeq2::DESeq(DESeq2::DESeqDataSetFromMatrix(countData = counts_mat, colData = coldata, design = design), quiet = TRUE)
+    res <- DESeq2::results(dds, contrast = cvec, lfcThreshold = settings$lfc, altHypothesis = "greaterAbs")
+    tab <- rgse_de_table(y, res$log2FoldChange, edgeR::aveLogCPM(y), res$stat, "stat", res$pvalue, res$padj)
+    tab$PValue[is.na(tab$PValue)] <- 1
+    tab$FDR[is.na(tab$FDR)] <- 1
+    if (settings$shrink == "yes" && requireNamespace("ashr", quietly = TRUE)) {
+      shr <- suppressMessages(DESeq2::lfcShrink(dds, contrast = cvec, res = res, type = "ashr", quiet = TRUE))
+      tab$shrunkLFC <- shr$log2FoldChange
+    }
+    tab <- tab[order(tab$PValue), ]
+    method <- "DESeq2 Wald test"
+  } else if (engine == "limma") {
+    v <- limma::voom(y, design)
+    fit <- limma::contrasts.fit(limma::lmFit(v, design), cvec)
+    if (settings$lfc > 0) {
+      fit <- limma::treat(fit, lfc = settings$lfc, robust = TRUE)
+      tt <- limma::topTreat(fit, coef = 1, number = Inf, sort.by = "none")
+    } else {
+      fit <- limma::eBayes(fit, robust = TRUE)
+      tt <- limma::topTable(fit, coef = 1, number = Inf, sort.by = "none")
+    }
+    tab <- rgse_de_table(y, tt$logFC, tt$AveExpr, tt$t, "t", tt$P.Value, tt$adj.P.Val)
+    tab <- tab[order(tab$PValue), ]
+    method <- paste0("limma-voom moderated ", if (settings$lfc > 0) "treat" else "t-test")
+  } else {
+    stop("the custom model needs edgeR, DESeq2 or limma, not ", engine)
+  }
+  list(table = tab, method = paste0(method, " (custom model", if (nzchar(label)) paste0(" ", label) else "", lfc_txt, ")"))
 }

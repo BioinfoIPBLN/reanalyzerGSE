@@ -14,7 +14,8 @@ reanalyzerGSE is distributed as an Apptainer/Singularity container (~2 GB), whic
    apptainer build reanalyzerGSE.sif reanalyzerGSE/external_software/installation/reanalyzerGSE.def | tee -a reanalyzerGSE.sif.build.log
    ```
 
-   The image packs the latest commit of the main branch. To pack a release instead, which is what a publication should cite, pass its tag (or a full commit hash): `apptainer build --build-arg REANALYZERGSE_REF=v4.2.9 reanalyzerGSE.sif ...`. The commit used is written into the image, and every run records it in `provenance/` (see Output).
+   The image packs the latest commit of the main branch. To pack a release instead, which is what a publication should cite, pass its tag (or a full commit hash): `apptainer build --build-arg REANALYZERGSE_REF=v4.3.0 reanalyzerGSE.sif ...`. The commit used is written into the image, and every run records it in `provenance/` (see Output).
+   The organism annotation packages packed in the image are set with `--build-arg ORGDBS=...` (comma-separated Bioconductor `org.*.db` names; the default packs all 18 organisms that the pipeline supports). Any of the 18 organisms listed under `-O` in the help gets the built-in functional enrichment once its package is in the image or in a bound R library.
 
 2. Download the ready-to-use .sif image:
 
@@ -76,11 +77,44 @@ Three optional steps run after the DEG tables are annotated, and are off by defa
 
 Pick a biosample close to your tissue: `encode_regulatory.py --list-biosamples` prints the ENCODE rE2G biosamples available. One HTTP round trip per genomic region dominates the runtime, so the number of regions is capped (`--max-regions`) and every region is cached, meaning a re-run only fetches what is new. Results land in `<results>/orthologs_human/` and `<results>/DGE/encode/`, and get their own section in the final report.
 
+### Studies in ENA/SRA but not in GEO
+
+`-i`/`input` also takes ENA/SRA accessions (BioProject `PRJNA…`/`PRJEB…`, study `SRP…`, sample `SAMN…`/`SRS…`, experiment `SRX…` or run `SRR…`, several separated by comma). The runs, samples, library layout, organism and study title are read from the ENA portal, non-RNA runs of a BioProject are left out, the runs of one sample are merged into one FASTQ per mate, and the samples are named after their titles (`reads_study_info/ena_samples.tsv` keeps the mapping). The design is given as for local reads with `-D`/`design_custom_local`: one condition per sample in the printed order, `auto` (replicate numbers dropped from the titles) or `llm`. `-O`/`organism` overrides the organism reported by ENA.
+
+```
+dry_run: "yes"        # prints the samples ENA would return, so the design can be written before the real run
+```
+
+### Checking a configuration before running
+
+`-dry`/`dry_run: yes` validates the whole configuration and exits without creating the output folder: input files or accessions, design, reference files and the featureCounts fields in the annotation, databases, tools in `PATH`, R packages, and a summary of what the run would do.
+
+### Small RNA-seq (miRNA) studies
+
+`-sR`/`small_rna: yes` switches to the small RNA recipe of [miARma-seq](https://github.com/eandresleon/miARma-seq): fastp trims the adapter (detected, plus the known kit adapters in `assets/small_rna_adapters.fa`, or the one given with `small_rna_adapter`) and keeps reads of `small_rna_length` (15-35 nt by default), bowtie1 aligns them (`-k 1 --best`), and featureCounts counts the `miRNA` features of the miRBase GFF3 of the organism, which is the annotation to give in `-a` (`https://www.mirbase.org/download/<species>.gff3`). Differential expression, QC and the report are then the same as for mRNA. The functional enrichment works on the validated (or predicted) [multiMiR](https://bioconductor.org/packages/multiMiR/) targets of the DE miRNAs, with the targets of every tested miRNA as background (human, mouse and rat), and the DE miRNAs behind each term are listed in the tables. With `mirna_novel: yes` and the miRBase `mature.fa`/`hairpin.fa`, miRDeep2 predicts novel miRNAs into `miARma_out0/miRDeep2_results` (reported, not counted). Decontamination, rRNA QC, host removal, splicing and Qualimap are skipped in this mode.
+
+```
+small_rna: "yes"
+annotation: "/ref/hsa.gff3"            # miRBase GFF3
+reference_genome: "/ref/GRCh38.fa"
+strand: "yes"
+```
+
 ### Differential expression
 
 `-Des`/`differential_expr_software` chooses the engine: `edgeR` (default, quasi-likelihood F-test), `DESeq2` (Wald test), `limma` (voom with robust empirical Bayes) or `wilcoxon` (rank-sum test on TMM-normalised CPM, meant for population-scale cohorts of roughly 8 or more samples per condition, where the negative-binomial models can report too many false positives). All of them see the same filtered counts, design and comparisons and write the same tables, so everything downstream is unchanged. `-eT exact` brings back edgeR's exactTest, which was used without covariables up to v4.1.0.
 
 Genes are filtered with edgeR's `filterByExpr` by default (`-f`), which adapts the threshold to the library sizes and to the smallest group. `-lfc`/`lfc_threshold` tests against a minimum fold change (edgeR glmTreat, DESeq2 `lfcThreshold`, limma treat), which is the valid way to require one, and `-lfS yes` adds DESeq2's shrunk fold changes as an extra column. `-C`/`covariables` takes several covariables separated by `;` (e.g. `"1,1,2,2;F,M,F,M"` with `-Cf "num;fact"`); without `-C`, a batch vector given with `-b yes` is used as the covariable unless it is confounded with the condition. `DGE/de_methods.txt` and the report state the test, filter and samples of every comparison.
+
+Every pair of conditions of each design is compared by default. `-Dfm`/`design_formula` adds a custom model on top of them: an R formula on the designs (`D1`, `D2`, … in the order given) and the covariables (`Cov1`, …), tested through named contrasts in `-Dcon`/`design_contrasts` (limma `makeContrasts` syntax on the coefficient names, which the log prints at the start of the differential expression). This is how a 2x2 genotype x treatment study gets its interaction term or a within-level comparison, with edgeR, DESeq2 or limma; each contrast becomes one more `DGE_analysis_compN` table with the usual enrichment and report sections, and `DGE/custom_model.txt` records the model.
+
+```
+design_custom_local: "WT,WT,WT,WT,KO,KO,KO,KO/ctrl,ctrl,MCAO,MCAO,ctrl,ctrl,MCAO,MCAO"
+design_formula: "~ 0 + D1:D2"
+design_contrasts: "KO_vs_WT_in_MCAO=D1KO.D2MCAO-D1WT.D2MCAO;interaction=(D1KO.D2MCAO-D1KO.D2ctrl)-(D1WT.D2MCAO-D1WT.D2ctrl)"
+```
+
+The clusterProfiler GSEA of GO, KEGG and Reactome runs on every gene tested, ranked by log2FC, in every run (`clusterProfiler_gsea`, 'yes' by default), so it does not depend on the number of DEGs; `clusterProfiler_full` keeps the slower WikiPathways, KEGG module and disease analyses. The plot previews of the functional enrichment report are PNG files in `DGE/functional_enrichment_report_files/` next to the HTML (`report_images: folder`), which keeps the report light; `embedded` writes one self-contained file instead.
 
 ### Alignment of intronless genomes and BAM filters
 

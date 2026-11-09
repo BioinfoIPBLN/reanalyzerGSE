@@ -46,6 +46,9 @@ def parse_alignment_stats(analysis_dir, aligner=""):
     if not kallisto_logs:
         kallisto_logs = [f for f in glob.glob(f"{analysis_dir}/**/run_info.json", recursive=True) if "sphinx" not in f]
 
+    # 4. Search for bowtie1 logs (small RNA mode)
+    bowtie1_logs = glob.glob(f"{analysis_dir}/**/bowtie1_results/*_bowtie1.log", recursive=True)
+
     detected_aligner = aligner.upper() if aligner else "ALIGNMENT"
 
     if hisat2_logs and (not aligner or aligner.lower() == "hisat2"):
@@ -187,6 +190,33 @@ def parse_alignment_stats(analysis_dir, aligner=""):
                 }
             except Exception:
                 pass
+
+    elif bowtie1_logs and (not aligner or aligner.lower() == "bowtie1"):
+        detected_aligner = "bowtie1"
+        for log_path in bowtie1_logs:
+            sample = os.path.basename(log_path).replace("_bowtie1.log", "")
+            if sample in sample_stats:
+                continue
+            with open(log_path, "r", errors="ignore") as f:
+                content = f.read()
+            total_reads = aligned_reads = 0
+            aligned_pct = 0.0
+            m = re.search(r'# reads processed:\s*(\d+)', content)
+            if m:
+                total_reads = int(m.group(1))
+            m = re.search(r'# reads with at least one (?:reported )?alignment:\s*(\d+)\s*\(([\d\.]+)%\)', content)
+            if m:
+                aligned_reads = int(m.group(1))
+                aligned_pct = float(m.group(2))
+            sample_stats[sample] = {
+                "sample": sample,
+                "total": total_reads,
+                "unique": aligned_reads,
+                "unique_pct": aligned_pct,
+                "multi": 0,
+                "multi_pct": 0.0,
+                "overall_pct": aligned_pct,
+            }
 
     return detected_aligner, list(sample_stats.values())
 

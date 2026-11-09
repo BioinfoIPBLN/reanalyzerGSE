@@ -14,6 +14,10 @@ if [ $? -ne 0 ]; then
 	echo "Exiting..."; exit 1
 fi
 source $CURRENT_DIR/scripts/provenance.sh
+if [ "$dry_run" == "yes" ]; then
+	source $CURRENT_DIR/scripts/dry_run.sh
+	exit $?
+fi
 if [ "$debug_step" != "all" ] && [ "$debug_step" != "step1" ]; then
 	record_run_parameters
 fi
@@ -358,6 +362,313 @@ archive_and_remove_folders() {
 	fi
 }
 
+resolve_sample_design() {
+	local samples=$1 source=$2 n_samples i n_conditions auto_unmatched
+	n_samples=$(echo "$samples" | grep -c .)
+	if [ -z "$design_custom_local" ]; then
+		echo -n "From the ordered list above, please input a comma-separated list with the conditions for each sample. Remember to try and avoid complex names, use as few underlines as possible, avoid names starting with numbers or others that would not be sorted appropriately such as containing spaces, if reads are paired-end, only one name of condition per pair of reads, and if you want to provide more than one design, separate the comma-separated list with a '/', no spaces: "
+		read -r design_input
+	else
+		design_input=$design_custom_local
+	fi
+	if [ "$design_input" == "auto" ]; then
+		if [ "$source" == "accessions" ]; then
+			design_input=$(echo "$samples" | python3 $CURRENT_DIR/scripts/ena_metadata.py --design-auto)
+			if [ $? -ne 0 ] || [ -z "$design_input" ]; then
+				echo -e "\n\033[1;31mERROR:\033[0m the design 'auto' could not be derived from the sample titles (see above). Please provide the conditions explicitly in design_custom_local, in the order of the sample list above.\n" >&2
+				exit 1
+			fi
+			echo -e "Design derived from the sample titles (auto, replicate numbers dropped): $design_input\n"
+		else
+			auto_unmatched=$(echo "$samples" | grep -Ev '_[Rr][Ee][Pp][0-9]')
+			if [ -n "$auto_unmatched" ]; then
+				echo -e "\n\033[1;31mERROR:\033[0m the design is 'auto', which takes each sample's condition from its name by dropping the '_Rep<N>' replicate suffix and everything after it, but these sample(s) have no such suffix:\n$auto_unmatched\nPlease rename them or provide the design explicitly.\n" >&2
+				exit 1
+			fi
+			design_input=$(echo "$samples" | sed -E 's,_[Rr][Ee][Pp][0-9].*$,,' | paste -sd,)
+			echo -e "Design derived from the sample names (auto): $design_input\n"
+		fi
+	fi
+	if [ "$design_input" == "llm" ]; then
+		if [ -z "$LLM_ENDPOINT" ] || [ -z "$LLM_MODEL" ]; then
+			echo -e "\n\033[1;31mERROR:\033[0m the design is 'llm', but no LLM is configured. Please provide -llm_endpoint and -llm_model, or use 'auto' or an explicit design.\n" >&2
+			exit 1
+		fi
+		echo -e "Asking the LLM (model=$LLM_MODEL) for the condition of each of the $n_samples sample(s)..."
+		design_input=$(echo "$samples" | llm_design_local.py --study "$name")
+		if [ $? -ne 0 ] || [ -z "$design_input" ]; then
+			echo -e "\n\033[1;31mERROR:\033[0m the LLM did not propose a usable design (see the messages above). Please rerun with 'auto' or an explicit design.\n" >&2
+			exit 1
+		fi
+		echo -e "Design proposed by the LLM: $design_input\nTo reuse exactly this design in a later run, set design_custom_local to the string above, since the LLM may not answer identically twice.\n"
+	fi
+	echo -e "The used conditions are (the assignment must match sample names):\n"
+	paste <(echo "$samples") <(echo "$design_input" | sed 's_,_\n_g;s,/,\n\n,g')
+	IFS='/' read -ra ADDR <<< "$design_input"
+	for i in "${!ADDR[@]}"; do
+		n_conditions=$(echo "${ADDR[$i]}" | awk -F',' '{print NF}')
+		if [ "$n_conditions" -ne "$n_samples" ]; then
+			echo -e "\n\033[1;31mERROR:\033[0m design $((i + 1)) has $n_conditions condition(s) but there are $n_samples sample(s). Please give exactly one condition per sample, in the order of the sample list above." >&2
+			if [ "$n_conditions" -eq $((2 * n_samples)) ]; then
+				echo -e "That is exactly twice the number of samples: for paired-end reads, give one condition per sample, not one per FASTQ file.\n" >&2
+			fi
+			exit 1
+		fi
+	done
+}
+write_design_files() {
+	local samples=$1 ids=$2 i
+	mkdir -p $output_folder/$name/reads_study_info/
+	if [ -z "$ids" ]; then
+		paste <(echo "$samples") <(paste -d'_' <(echo "$samples") <(echo $design_input | sed 's*/*\t*g'| cut -f1 | sed 's*,*\n*g')) <(echo $design_input | sed 's*/*\t*g'| cut -f1 | sed 's*,*\n*g') > $output_folder/$name/reads_study_info/samples_info.txt
+	else
+		paste <(echo "$ids") <(echo "$samples") <(echo $design_input | sed 's*/*\t*g'| cut -f1 | sed 's*,*\n*g') > $output_folder/$name/reads_study_info/samples_info.txt
+	fi
+	for i in "${!ADDR[@]}"; do
+		echo "${ADDR[$i]}" | tr ',' '\n' > "$output_folder/$name/reads_study_info/design_possible_full_$(($i + 1)).txt"
+		sort -u "$output_folder/$name/reads_study_info/design_possible_full_$(($i + 1)).txt" > "$output_folder/$name/reads_study_info/design_possible_$(($i + 1)).txt"
+	done
+}
+merge_accession_runs() {
+	cd "$seqs_location" || exit 1
+	local layout sname runs _rest mate r f n_runs
+	local -a parts
+	layout=$(cat "$output_folder/$name/reads_study_info/library_layout_info.txt")
+	while IFS=$'\t' read -r sname runs _rest; do
+		[ "$sname" == "sample_name" ] && continue
+		[ -e "${sname}_1.fastq.gz" ] && continue
+		n_runs=$(echo "${runs//;/ }" | wc -w)
+		for mate in 1 2; do
+			[ "$layout" != "PAIRED" ] && [ "$mate" == "2" ] && continue
+			parts=()
+			for r in ${runs//;/ }; do
+				if [ "$layout" == "PAIRED" ]; then f=$(ls | egrep "^${r}_${mate}\.(fastq|fq)\.gz$" | head -1); else f=$(ls | egrep "^${r}(_1)?\.(fastq|fq)\.gz$" | head -1); fi
+				[ -n "$f" ] && parts+=("$f")
+			done
+			[ ${#parts[@]} -ne "$n_runs" ] && continue
+			if [ ${#parts[@]} -eq 1 ]; then
+				mv "${parts[0]}" "${sname}_${mate}.fastq.gz"
+			else
+				echo "Merging the ${#parts[@]} runs of $sname (mate $mate): ${parts[*]}"
+				cat "${parts[@]}" > "${sname}_${mate}.fastq.gz" && rm -f "${parts[@]}"
+			fi
+		done
+		if [ -e "${sname}_1.fastq.gz" ]; then
+			for r in ${runs//;/ }; do rm -f "$r".fastq.gz "$r".fq.gz "$r"_[12].fastq.gz "$r"_[12].fq.gz; done
+		fi
+	done < "$output_folder/$name/reads_study_info/ena_samples.tsv"
+}
+missing_accession_runs() {
+	cd "$seqs_location" || exit 1
+	local layout sname runs _rest r
+	layout=$(cat "$output_folder/$name/reads_study_info/library_layout_info.txt")
+	while IFS=$'\t' read -r sname runs _rest; do
+		[ "$sname" == "sample_name" ] && continue
+		if [ -e "${sname}_1.fastq.gz" ] && { [ "$layout" != "PAIRED" ] || [ -e "${sname}_2.fastq.gz" ]; }; then continue; fi
+		for r in ${runs//;/ }; do
+			if [ "$layout" == "PAIRED" ]; then
+				ls | egrep -q "^${r}_1\.(fastq|fq)\.gz$" && ls | egrep -q "^${r}_2\.(fastq|fq)\.gz$" && continue
+			else
+				ls | egrep -q "^${r}(_1)?\.(fastq|fq)\.gz$" && continue
+			fi
+			echo "$r"
+		done
+	done < "$output_folder/$name/reads_study_info/ena_samples.tsv"
+}
+validate_featurecounts_annotation() {
+	local gff=$1 fc_feat_val=$2 fc_seq_val=$3 available_feats example_attrs
+	[ -f "$gff" ] || return 0
+	available_feats=$(zcat -f "$gff" | awk -F'\t' '!/^#/ && NF>=9 {print $3}' | sort -u | tr '\n' ', ' | sed 's/,$//')
+	if ! zcat -f "$gff" | awk -F'\t' -v ft="$fc_feat_val" '!/^#/ && NF>=9 && $3==ft {found=1; exit} END {exit !found}'; then
+		echo -e "\n\033[1;31mERROR:\033[0m Feature type '$fc_feat_val' (optionsFeatureCounts_feat / -t) was NOT found in column 3 of annotation file:\n  $gff\n\nAvailable feature types: $available_feats\n\nPlease set 'optionsFeatureCounts_feat' in your YAML config to one of the above (e.g. 'exon' for GTF, 'gene' for some GFF3 files, 'miRNA' for miRBase).\n" >&2
+		exit 1
+	fi
+	if ! zcat -f "$gff" | awk -F'\t' -v ft="$fc_feat_val" -v attr="$fc_seq_val" '!/^#/ && NF>=9 && $3==ft { n=split($9,pairs,";"); for(i=1;i<=n;i++){ gsub(/^[ \t]+/,"",pairs[i]); split(pairs[i],kv,/[ =]+/); if(kv[1]==attr){found=1; exit} } } END {exit !found}'; then
+		example_attrs=$(zcat -f "$gff" | awk -F'\t' -v ft="$fc_feat_val" '!/^#/ && NF>=9 && $3==ft {print $9; exit}')
+		echo -e "\n\033[1;31mERROR:\033[0m Attribute name '$fc_seq_val' (optionsFeatureCounts_seq / -g) was NOT found in column 9 of annotation file (for feature type '$fc_feat_val'):\n  $gff\n\nExample attributes from your file (for '$fc_feat_val'):\n  $example_attrs\n\nFor GTF files, typical values are 'gene_id' or 'gene_name'.\nFor GFF3 files, typical values are 'ID', 'Name', or 'gene_id' (or 'Parent' if feature type is 'exon').\nPlease set 'optionsFeatureCounts_seq' and 'optionsFeatureCounts_feat' in your YAML config accordingly.\n" >&2
+		exit 1
+	fi
+	local n_missing
+	n_missing=$(zcat -f "$gff" | awk -F'\t' -v ft="$fc_feat_val" -v attr="$fc_seq_val" '!/^#/ && NF>=9 && $3==ft { ok=0; n=split($9,pairs,";"); for(i=1;i<=n;i++){ gsub(/^[ \t]+/,"",pairs[i]); split(pairs[i],kv,/[ =]+/); if(kv[1]==attr){ok=1; break} } if(!ok) m++ } END {print m+0}')
+	if [ "$n_missing" -gt 0 ]; then
+		echo -e "\n\033[1;31mERROR:\033[0m $n_missing '$fc_feat_val' feature(s) of $gff have no '$fc_seq_val' attribute, and featureCounts stops on the first one. Ensembl GTFs lack gene_name on unnamed genes: set 'optionsFeatureCounts_seq' to 'gene_id' (the gene names are added to the tables later), or use a GENCODE GTF, which names every gene.\n" >&2
+		exit 1
+	fi
+	echo "Annotation validation OK: feature type '$fc_feat_val' and attribute '$fc_seq_val' found in every '$fc_feat_val' feature of $gff"
+}
+organism_annotation_status() {
+	Rscript -e 'source(commandArgs(TRUE)[1]); i <- rgse_organism_info(commandArgs(TRUE)[2]); cat(if (is.null(i)) "unknown" else rgse_orgdb_check(i))' "$CURRENT_DIR/scripts/R_gene_id_helpers.R" "$1" 2>/dev/null | tail -1
+}
+
+small_rna_strand_code() {
+	case "$strand" in
+		yes) echo 1 ;;
+		reverse) echo 2 ;;
+		*) echo 0 ;;
+	esac
+}
+small_rna_prepare_alignment() {
+	local gff=${unit_gtf[0]} fasta=${unit_fasta[0]} idx_dir=$output_folder/$name/indexes
+	validate_featurecounts_annotation "$gff" "$optionsFeatureCounts_feat" "$optionsFeatureCounts_seq"
+	if ! zcat -f "$gff" | awk -F'\t' '!/^#/ && NF>=9 && $3=="miRNA" {f=1; exit} END {exit !f}'; then
+		echo -e "\nNOTE: $(basename $gff) has no 'miRNA' features, so it does not look like a miRBase GFF3. The reads are counted on the '$optionsFeatureCounts_feat' features with the attribute '$optionsFeatureCounts_seq', as requested.\n"
+	fi
+	mkdir -p "$idx_dir"
+	if [ -n "$reference_genome_index" ]; then
+		small_rna_index=$reference_genome_index
+		if ! ls "${small_rna_index}".1.ebwt* >/dev/null 2>&1; then
+			echo -e "\n\033[1;31mERROR:\033[0m no bowtie1 index found at $small_rna_index (expected ${small_rna_index}.1.ebwt or .1.ebwtl). In small RNA mode, -ri must be the basename of a bowtie1 index.\n" >&2
+			exit 1
+		fi
+	else
+		small_rna_index=$idx_dir/${organism}_$(basename ${fasta%.*})_bowtie1_idx
+		if ls "${small_rna_index}".1.ebwt* >/dev/null 2>&1; then
+			echo -e "\nUsing the existing bowtie1 index $small_rna_index\n"
+		else
+			echo -e "\nBuilding the bowtie1 index $small_rna_index with $indexthreads threads...\n"
+			if ! bowtie-build --threads $indexthreads -q "$fasta" "$small_rna_index" > "$small_rna_index.log" 2>&1; then
+				echo -e "\n\033[1;31mERROR:\033[0m bowtie-build failed, see $small_rna_index.log\n" >&2
+				exit 1
+			fi
+		fi
+	fi
+	echo "$small_rna_index" > "$output_folder/$name/reads_study_info/bowtie1_index.txt"
+	echo -e "\nsmall RNA mode: bowtie1 index $small_rna_index; featureCounts -t $optionsFeatureCounts_feat -g $optionsFeatureCounts_seq -s $(small_rna_strand_code) $featureCounts_extra_args on $(basename $gff)\n"
+}
+small_rna_align_and_count() {
+	local out=${unit_out[0]} reads=${unit_reads[0]} gff=${unit_gtf[0]}
+	local aln_dir=$out/bowtie1_results rc_dir=$out/bowtie1_readcount_results fqc_dir=$out/Pre_fastqc_results
+	local layout jobs thr n s mapq_filter _v
+	local -a sr_samples
+	[ -z "$small_rna_index" ] && small_rna_index=$(cat "$output_folder/$name/reads_study_info/bowtie1_index.txt" 2>/dev/null)
+	if [ -z "$small_rna_index" ] || ! ls "${small_rna_index}".1.ebwt* >/dev/null 2>&1; then
+		echo -e "\n\033[1;31mERROR:\033[0m the bowtie1 index is not available (reads_study_info/bowtie1_index.txt). Please resume from step3a.\n" >&2
+		exit 1
+	fi
+	rm -rf "${out:?}"; mkdir -p "$aln_dir" "$rc_dir" "$fqc_dir" "$TMPDIR"
+	layout=$(find $output_folder/$name -name library_layout_info.txt 2>/dev/null | head -1 | xargs cat 2>/dev/null | head -n1 | tr -d ' \r\n')
+	mapfile -t sr_samples < <(ls "$reads" | egrep '_1\.(fastq|fq)\.gz$' | sed -E 's/_1\.(fastq|fq)\.gz$//' | sort)
+	n=${#sr_samples[@]}
+	if [ "$n" -eq 0 ]; then
+		echo -e "\n\033[1;31mERROR:\033[0m no *_1.fastq.gz files found in $reads to align.\n" >&2
+		exit 1
+	fi
+	if [ "$layout" == "PAIRED" ]; then
+		echo -e "\nNOTE: paired-end small RNA libraries: the insert is shorter than the read, so only the _1 mates are aligned and counted; the _2 mates are left untouched.\n"
+	fi
+	for s in "${sr_samples[@]}"; do
+		if [ -z "$(zcat -f "$reads/${s}_1.fastq.gz" | head -c 1)" ]; then
+			echo -e "\n\033[1;31mERROR:\033[0m $reads/${s}_1.fastq.gz has no reads left to align.\n" >&2
+			exit 1
+		fi
+	done
+	jobs=$number_parallel; [ "$jobs" -gt "$n" ] && jobs=$n; [ "$jobs" -lt 1 ] && jobs=1
+	thr=$((cores / jobs)); [ "$thr" -lt 1 ] && thr=1
+	if [ "$qc_raw_reads" != "no" ]; then
+		echo -e "\nFastQC on the raw reads...\n"
+		ls "$reads"/*.fastq.gz > "$fqc_dir/list_of_files.txt"
+		if ! parallel --halt-on-error 2 --joblog "$out/fastqc_log_parallel.txt" -j $jobs "fastqc -q --noextract -t $thr --dir $TMPDIR -o $fqc_dir {}" :::: "$fqc_dir/list_of_files.txt"; then
+			echo -e "\n\033[1;31mERROR:\033[0m FastQC failed, see $out/fastqc_log_parallel.txt\n" >&2
+			exit 1
+		fi
+	else
+		mkdir -p "$fqc_dir/_skip_"
+	fi
+	mapq_filter=""
+	if [ "${bam_mapq_threshold:-0}" -gt 0 ] 2>/dev/null; then mapq_filter="-q $bam_mapq_threshold"; fi
+	for _v in bam_exclude_flags bam_require_flags bam_custom_filter; do
+		[ -n "${!_v}" ] && echo "NOTE: '$_v' is not applied in small RNA mode"
+	done
+	[ "$bam_dedup" == "yes" ] && echo "NOTE: bam_dedup is not applied in small RNA mode: identical reads are the expected signal of an abundant miRNA, not PCR duplicates"
+	echo -e "\nAligning $n sample(s) with bowtie1 ($jobs at a time, $thr threads each): bowtie -n 1 -l 20 -e 70 --best -k 1 --nomaqround $bowtie1_extra_args\n"
+	printf '%s\n' "${sr_samples[@]}" | parallel --halt-on-error 2 --joblog "$out/bowtie1_log_parallel.txt" -j $jobs \
+		"zcat -f $reads/{}_1.fastq.gz | bowtie -p $thr -q -S -n 1 -l 20 -e 70 --best -k 1 --nomaqround --no-unal $bowtie1_extra_args $small_rna_index - 2> $aln_dir/{}_bowtie1.log | samtools view -u $mapq_filter - | samtools sort -@ $thr -T $TMPDIR/{}_bowtie1_sort -o $aln_dir/{}_bowtie1.bam - && samtools index $aln_dir/{}_bowtie1.bam"
+	if [ $? -ne 0 ]; then
+		echo -e "\n\033[1;31mERROR:\033[0m bowtie1 failed for some sample(s), see $out/bowtie1_log_parallel.txt and $aln_dir/*_bowtie1.log\n" >&2
+		exit 1
+	fi
+	for s in "${sr_samples[@]}"; do
+		echo "  $s: $(grep -E '^# reads (processed|with at least one)' "$aln_dir/${s}_bowtie1.log" | sed 's/^# //' | paste -sd ';' | sed 's/;/; /g')"
+	done
+	echo -e "\nCounting with featureCounts (-t $optionsFeatureCounts_feat -g $optionsFeatureCounts_seq -s $(small_rna_strand_code) $featureCounts_extra_args)...\n"
+	printf '%s\n' "${sr_samples[@]}" | parallel --halt-on-error 2 --joblog "$out/featureCounts_log_parallel.txt" -j $jobs \
+		"featureCounts -T $thr -s $(small_rna_strand_code) -t $optionsFeatureCounts_feat -g $optionsFeatureCounts_seq $featureCounts_extra_args -a $gff -o $rc_dir/{}_bowtie1_readcount.tab $aln_dir/{}_bowtie1.bam &> $rc_dir/{}_bowtie1_readcount.log"
+	if [ $? -ne 0 ]; then
+		echo -e "\n\033[1;31mERROR:\033[0m featureCounts failed for some sample(s), see $rc_dir/*_bowtie1_readcount.log\n" >&2
+		exit 1
+	fi
+	for s in "${sr_samples[@]}"; do
+		echo "  $s: $(awk -F'\t' 'NR>1 && $1 ~ /^(Assigned|Unassigned_NoFeatures|Unassigned_Ambiguity)$/ {printf "%s=%s ", $1, $2}' "$rc_dir/${s}_bowtie1_readcount.tab.summary")"
+	done
+	if [ "${bam_normalization:-BPM}" != "None" ]; then
+		echo -e "\nCoverage tracks with bamCoverage ($bam_normalization, bin $bigwig_binsize bp)...\n"
+		printf '%s\n' "${sr_samples[@]}" | parallel --joblog "$out/bamCoverage_log_parallel.txt" -j $jobs \
+			"bamCoverage -b $aln_dir/{}_bowtie1.bam -o $aln_dir/{}_bowtie1.bam.bw -of bigwig -bs $bigwig_binsize -p $thr --normalizeUsing $bam_normalization &>> $aln_dir/bamCoverage.log" || echo "WARNING: some bigwig tracks could not be built, see $aln_dir/bamCoverage.log"
+	fi
+	rm -rf "${output_folder:?}/${name:?}/multiqc_out"; mkdir -p "$output_folder/$name/multiqc_out"
+	if [ -n "$RGSE_DO_MULTIQC" ] && command -v multiqc_ai.py >/dev/null 2>&1; then
+		multiqc_ai.py --analysis-dir $output_folder/$name --out-dir $output_folder/$name/multiqc_out ${MULTIQC_AI_ARGS} > $output_folder/$name/multiqc_out/multiqc.log 2>&1 || {
+			echo "AI MultiQC failed - using standard MultiQC" >> $output_folder/$name/multiqc_out/multiqc.log
+			multiqc -f $output_folder/$name --ignore indexes -n multiqc_report -o $output_folder/$name/multiqc_out -p -q >> $output_folder/$name/multiqc_out/multiqc.log 2>&1; }
+	else
+		multiqc -f $output_folder/$name --ignore indexes -n multiqc_report -o $output_folder/$name/multiqc_out -p -q > $output_folder/$name/multiqc_out/multiqc.log 2>&1
+	fi
+	if [ "$mirna_novel" == "yes" ]; then
+		small_rna_mirdeep2
+	fi
+}
+small_rna_mirdeep2() {
+	local out=${unit_out[0]} reads=${unit_reads[0]} gff=${unit_gtf[0]} fasta=${unit_fasta[0]}
+	local md=$out/miRDeep2_results sp k s genome_nows randfold_flag _t
+	echo -e "\nNovel miRNA prediction with miRDeep2...\nCurrent date/time: $(date)\n"
+	for _t in mapper.pl miRDeep2.pl RNAfold bowtie; do
+		if ! command -v $_t >/dev/null 2>&1; then
+			echo -e "\n\033[1;33mWARNING:\033[0m $_t is not available in this container, so the miRDeep2 novel miRNA prediction is skipped.\n"
+			return 0
+		fi
+	done
+	rm -rf "${md:?}"; mkdir -p "$md"; cd "$md" || return 1
+	sp=$(zcat -f "$gff" | awk -F'\t' '!/^#/ && NF>=9 && $3=="miRNA" && match($9, /Name=[^;]+/) {n=substr($9, RSTART+5, RLENGTH-5); split(n, a, "-"); print a[1]; exit}')
+	if [ -z "$sp" ]; then
+		echo -e "\n\033[1;33mWARNING:\033[0m no miRBase species prefix (e.g. hsa) found in the Name attributes of $(basename $gff), so miRDeep2 is skipped.\n"
+		cd "$output_folder/$name" || return 1
+		return 0
+	fi
+	awk -v sp="$sp" 'BEGIN{RS=">"; ORS=""} NR>1 && index($0, sp"-")==1 {print ">"$0}' "$mirna_mature_fa" | sed '/^>/! y/Uu/Tt/; /^>/ s/[[:space:]].*//' > mature_${sp}.fa
+	awk -v sp="$sp" 'BEGIN{RS=">"; ORS=""} NR>1 && index($0, sp"-")!=1 {print ">"$0}' "$mirna_mature_fa" | sed '/^>/! y/Uu/Tt/; /^>/ s/[[:space:]].*//' > mature_others.fa
+	awk -v sp="$sp" 'BEGIN{RS=">"; ORS=""} NR>1 && index($0, sp"-")==1 {print ">"$0}' "$mirna_hairpin_fa" | sed '/^>/! y/Uu/Tt/; /^>/ s/[[:space:]].*//' > hairpin_${sp}.fa
+	if [ ! -s mature_${sp}.fa ] || [ ! -s hairpin_${sp}.fa ]; then
+		echo -e "\n\033[1;33mWARNING:\033[0m no '$sp' entries in $mirna_mature_fa or $mirna_hairpin_fa, so miRDeep2 is skipped.\n"
+		cd "$output_folder/$name" || return 1
+		return 0
+	fi
+	genome_nows=$md/$(basename ${fasta%.*})_nows.fa
+	sed '/^>/ s/[[:space:]].*//' "$fasta" > "$genome_nows"
+	: > reads_config.txt; k=0
+	for s in $(ls "$reads" | egrep '_1\.(fastq|fq)\.gz$' | sed -E 's/_1\.(fastq|fq)\.gz$//' | sort); do
+		k=$((k + 1))
+		zcat -f "$reads/${s}_1.fastq.gz" > "$TMPDIR/mirdeep2_${s}.fastq"
+		printf '%s\t%s\n' "$TMPDIR/mirdeep2_${s}.fastq" "$(printf 's%02d' $k)" >> reads_config.txt
+	done
+	awk -F'\t' -v t="$TMPDIR/mirdeep2_" 'BEGIN{OFS="\t"; print "code", "sample"} {sub(t, "", $1); sub(/\.fastq$/, "", $1); print $2, $1}' reads_config.txt > sample_codes.tsv
+	echo "Sample codes used by miRDeep2 (sample_codes.tsv): $(awk -F'\t' 'NR>1 {printf "%s=%s ", $1, $2}' sample_codes.tsv)"
+	randfold_flag=""
+	if ! command -v randfold >/dev/null 2>&1; then
+		randfold_flag="-c"
+		echo "randfold is not available: miRDeep2 runs without the randfold significance of the precursor folding (-c)"
+	fi
+	if mapper.pl reads_config.txt -d -e -h -i -j -l ${small_rna_length%%,*} -m -p "$small_rna_index" -s reads_collapsed.fa -t reads_vs_genome.arf -o $cores -v > mapper.log 2>&1 \
+	   && miRDeep2.pl reads_collapsed.fa "$genome_nows" reads_vs_genome.arf mature_${sp}.fa mature_others.fa hairpin_${sp}.fa -P $randfold_flag -v > miRDeep2.log 2>&1; then
+		echo "miRDeep2 done: $(ls result_*.csv 2>/dev/null | head -1), $(ls miRNAs_expressed_all_samples_*.csv 2>/dev/null | head -1) and the pdfs in $md"
+	else
+		echo -e "\n\033[1;33mWARNING:\033[0m miRDeep2 failed, see $md/mapper.log and $md/miRDeep2.log. The known-miRNA quantification is not affected.\n"
+	fi
+	rm -f "$TMPDIR"/mirdeep2_*.fastq "$genome_nows"
+	rm -rf "${md:?}"/dir_mapper_seq_* "${md:?}"/mirdeep_runs
+	cd "$output_folder/$name" || return 1
+}
+
+
 ###### STEP 1. Download info from GEO and organize metadata and so:
 if run_step step1; then
 	case "$output_folder" in
@@ -425,6 +736,10 @@ if run_step step1; then
 		if test -f srr_ids.txt; then
 			paste -d$'\t' srr_ids.txt sample_names.txt $(for f in $(ls | grep full); do echo $f" "$(sort $f | uniq -c | wc -l); done | grep -v " 1" | cut -d" " -f1 | head -1) > samples_info.txt # the third column is a design containing at least more than one element...
 			sed -i -r -e 's/[^[:alnum:]_\t]/_/g' -e 's/_\+/_/g' -e 's/(_[^_]*)\1+/\1/g' -e 's/_([0-9]+)/-\1/g' samples_info.txt # Should be redundant but make sure to remove special characters from the sample names and _1/_2... it's crucial for later steps such as fastqc and miarma-seq
+			if [ "$(ls | grep -c design_possible_full)" -eq 0 ] && [ "$design_custom" != "yes" ]; then
+				echo -e "\n\033[1;31mERROR:\033[0m no experimental design could be derived for $input from the GEO metadata or the sample titles (see $PWD/phenodata_extracted.txt and $PWD/sample_names.txt). Rerun with 'design_custom: yes' (-d yes) to enter the groups interactively, or download the reads and use the local route with design_custom_local (-D)."
+				exit 1
+			fi
 			
 			# Filter metadata files if GSM_filter is provided so fastq-dl and AI metadata streamlining only process requested samples
 			if [ -n "$GSM_filter" ] && [ -f gsm_manual_filter.txt ]; then
@@ -697,58 +1012,8 @@ if run_step step1b; then
 		fi
 	 	echo -e "This is the content of $seqs_location:\n$(ls -l $seqs_location | awk '{ print $9 }' | tail -n +2)\n"
 		local_samples=$(ls $seqs_location | egrep '.fq|.fastq' | sed 's,_[12].fastq.gz,,g' | uniq)
-		n_local_samples=$(echo "$local_samples" | grep -c .)
-		if [ -z "$design_custom_local" ]; then
-			echo -n "From the ordered list above, please input a comma-separated list with the conditions for each sample. Remember to try and avoid complex names, use as few underlines as possible, avoid names starting with numbers or others that would not be sorted appropriately such as containing spaces, if reads are paired-end, only one name of condition per pair of reads, and if you want to provide more than one design, separate the comma-separated list with a '/', no spaces: "
-			read -r design_input
-		else
-			design_input=$design_custom_local
-		fi
-		if [ "$design_input" == "auto" ]; then
-			auto_unmatched=$(echo "$local_samples" | grep -Ev '_[Rr][Ee][Pp][0-9]')
-			if [ -n "$auto_unmatched" ]; then
-				echo -e "\n\033[1;31mERROR:\033[0m the design is 'auto', which takes each sample's condition from its name by dropping the '_Rep<N>' replicate suffix and everything after it, but these sample(s) have no such suffix:\n$auto_unmatched\nPlease rename them or provide the design explicitly.\n" >&2
-				exit 1
-			fi
-			design_input=$(echo "$local_samples" | sed -E 's,_[Rr][Ee][Pp][0-9].*$,,' | paste -sd,)
-			echo -e "Design derived from the sample names (auto): $design_input\n"
-		fi
-		if [ "$design_input" == "llm" ]; then
-			if [ -z "$LLM_ENDPOINT" ] || [ -z "$LLM_MODEL" ]; then
-				echo -e "\n\033[1;31mERROR:\033[0m the design is 'llm', but no LLM is configured. Please provide -llm_endpoint and -llm_model, or use 'auto' or an explicit design.\n" >&2
-				exit 1
-			fi
-			echo -e "Asking the LLM (model=$LLM_MODEL) for the condition of each of the $n_local_samples sample(s)..."
-			design_input=$(echo "$local_samples" | llm_design_local.py --study "$name")
-			if [ $? -ne 0 ] || [ -z "$design_input" ]; then
-				echo -e "\n\033[1;31mERROR:\033[0m the LLM did not propose a usable design (see the messages above). Please rerun with 'auto' or an explicit design.\n" >&2
-				exit 1
-			fi
-			echo -e "Design proposed by the LLM: $design_input\nTo reuse exactly this design in a later run, set design_custom_local to the string above, since the LLM may not answer identically twice.\n"
-		fi
-		echo -e "The used conditions are (the assignment must match sample names):\n"
-		paste <(echo "$local_samples") <(echo "$design_input" | sed 's_,_\n_g;s,/,\n\n,g')
-		IFS='/' read -ra ADDR <<< "$design_input"
-		for i in "${!ADDR[@]}"; do
-			n_conditions=$(echo "${ADDR[$i]}" | awk -F',' '{print NF}')
-			if [ "$n_conditions" -ne "$n_local_samples" ]; then
-				echo -e "\n\033[1;31mERROR:\033[0m design $((i + 1)) has $n_conditions condition(s) but there are $n_local_samples sample(s). Please give exactly one condition per sample, in the order of the sample list above." >&2
-				if [ "$n_conditions" -eq $((2 * n_local_samples)) ]; then
-					echo -e "That is exactly twice the number of samples: for paired-end reads, give one condition per sample, not one per FASTQ file.\n" >&2
-				fi
-				exit 1
-			fi
-		done
-		mkdir -p $output_folder/$name/reads_study_info/
-		paste <(echo "$local_samples") <(paste -d'_' <(echo "$local_samples") <(echo $design_input | sed 's*/*\t*g'| cut -f1 | sed 's*,*\n*g')) <(echo $design_input | sed 's*/*\t*g'| cut -f1 | sed 's*,*\n*g') > $output_folder/$name/reads_study_info/samples_info.txt
-		for i in "${!ADDR[@]}"; do
-			# For each comma-separated list, split by ',' and echo to file
-			IFS=',' read -ra ITEMS <<< "${ADDR[$i]}"
-			for item in "${ITEMS[@]}"; do
-				echo "$item"
-			done > "$output_folder/$name/reads_study_info/design_possible_full_$(($i + 1)).txt"
-			cat "$output_folder/$name/reads_study_info/design_possible_full_$(($i + 1)).txt" | sort | uniq > "$output_folder/$name/reads_study_info/design_possible_$(($i + 1)).txt"
-		done
+		resolve_sample_design "$local_samples" local
+		write_design_files "$local_samples"
 		echo $name > $output_folder/$name/reads_study_info/study_title.txt
 		if [ -z "$organism_argument" ]; then
 			echo -n "Please input the scientific name of the organism: "
@@ -768,32 +1033,56 @@ fi
 ### STEP 1. Process if required to download from manually provided ids from databases
 if run_step step1c; then
 	if [[ $input == P* || $input == E* || $input == D* || $input == S* ]]; then
-		echo -e "\n\nSTEP 1: Downloading from the $input id provided...\nCurrent date/time: $(date)\n\n"
+		echo -e "\n\nSTEP 1c: Downloading from the ENA/SRA accession(s) $input...\nCurrent date/time: $(date)\n\n"
 		_log_step "Step_1c_Download_accessions" "start"
 		set_reads_location prep "$output_folder/$name/raw_reads"
 		rm -f "$READS_LOCATION_DIR/reads_location_decontam.txt"
-		rm -rf "$seqs_location" # I'm now removing the seqs_location at the beginning of this section, in the context of the new system of resuming by -Dm stepx, so this should always be done
-		number_ids=$(echo $input | tr ',' '\n' | wc -l)
-		if [ "${number_ids:-0}" -lt 1 ]; then number_ids=1; fi
-		if [ $number_ids -le $number_parallel ]; then
-			export cores_parallel=$((cores / number_ids))
-		else
-			export cores_parallel=$((cores / number_parallel))
+		rm -rf "${seqs_location:?}"
+		mkdir -p "$seqs_location" "$output_folder/$name/reads_study_info"
+		cd "$output_folder/$name/reads_study_info" || exit 1
+		rm -f ena_run_metadata.tsv ena_samples.tsv srr_ids.txt sample_names.txt library_layout_info.txt study_title.txt
+		echo -e "\nQuerying ENA for the runs, samples, layout and organism of $input...\n"
+		if ! python3 $CURRENT_DIR/scripts/ena_metadata.py --accessions "$input" --out-dir "$output_folder/$name/reads_study_info" ${organism_argument:+--organism "${organism_argument//_/ }"}; then
+			echo -e "\n\033[1;31mERROR:\033[0m the ENA metadata of $input could not be retrieved, or it has no RNA-seq runs (see the messages above). Exiting...\n" >&2
+			exit 1
 		fi
-		if [ "${cores_parallel:-0}" -lt 1 ]; then export cores_parallel=1; fi
-		if [ ! -d "$seqs_location" ]; then
-			mkdir -p $seqs_location; cd $seqs_location
-			echo -e "\nDownloading from the input accessions that you manually provided...\n"
-			echo $input | tr ',' '\n' | parallel --joblog $output_folder/$name/fastq_dl_log_parallel.txt -j $number_parallel --max-args 1 "if [ \$(echo {} | egrep -c 'PRJEB|PRJNA|PRJDB|ERX|DRX|SRX|ERP|DRP|SRP') -eq 1 ]; then fastq-dl --cpus $cores_parallel --silent --force --max-attempts 10 --gzip-level $compression_level --accession {}; fi && 
-		 																		   if [ \$(echo {} | egrep -c 'ERS|DRS|SRS|SAMD|SAME|SAMN|ERR|DRR|SRR') -eq 1 ]; then fastq-dl --cpus $cores_parallel --silent --force --max-attempts 10 --gzip-level $compression_level --accession {}; fi"
-			if [ $? -ne 0 ]; then
-				echo -e "\n\033[1;31mERROR:\033[0m some downloads failed; see $output_folder/$name/fastq_dl_log_parallel.txt, where a non-zero Exitval marks each failed accession.\n" >&2
+		echo -e "Runs and samples found (full metadata in reads_study_info/ena_run_metadata.tsv):\n"
+		column -t -s$'\t' ena_samples.tsv 2>/dev/null || cat ena_samples.tsv
+		echo ""
+		local_samples=$(cat sample_names.txt)
+		resolve_sample_design "$local_samples" accessions
+		write_design_files "$local_samples" "$(awk -F'\t' 'NR>1 {print $2}' ena_samples.tsv)"
+		organism=$(cat organism.txt)
+		echo -e "\nOrganism: $organism\nLibrary layout: $(cat library_layout_info.txt)\n"
+		if [ "$stop" == "yes" ]; then
+			echo "You have requested a stop. Please double check or manually modify the files in reads_study_info (samples_info.txt, srr_ids.txt, ena_samples.tsv, organism.txt, library_layout_info.txt, design files, etc). The pipeline is stopped. Please press space to continue or Ctrl + C to exit..."
+			read -n1 -s -r -p $'Press space to continue...\n' key
+		fi
+		echo -e "\nDownloading the $(wc -l < srr_ids.txt) run(s) with fastq-dl...\n"
+		download_sra_fq.sh "$output_folder/$name/reads_study_info/srr_ids.txt" "$seqs_location" $number_parallel $cores $compression_level
+		merge_accession_runs
+		missing_1c=$(missing_accession_runs)
+		if [ -n "$missing_1c" ]; then
+			echo -e "\nSome runs are missing after the download. Retrying only the missing accessions...\n"
+			cores_retry=$((cores / number_parallel))
+			if [ "$cores_retry" -lt 1 ]; then cores_retry=1; fi
+			cd "$seqs_location" || exit 1
+			echo "$missing_1c" | parallel --joblog $output_folder/$name/fastq_dl_retry_log_parallel.txt -j $number_parallel "fastq-dl --cpus $cores_retry --silent --force --max-attempts 10 --gzip-level $compression_level --accession {}"
+			merge_accession_runs
+			missing_1c=$(missing_accession_runs)
+			if [ -n "$missing_1c" ]; then
+				echo -e "\n\033[1;31mERROR:\033[0m the download is still incomplete after the retry. Runs still missing: $(echo $missing_1c | tr '\n' ' ')\n" >&2
 				exit 1
 			fi
 		fi
-_log_step "Step_1c_Download_accessions" "end"
-		echo -e "\n\nSTEP 1: DONE\nCurrent date/time: $(date)\n\n"
- 	fi
+		rm -f "$seqs_location"/fastq-run*
+		echo -e "This is the content of $seqs_location:\n$(ls "$seqs_location")\n"
+		if [ ! -z "$number_reads" ]; then
+			subsample_local_reads
+		fi
+		_log_step "Step_1c_Download_accessions" "end"
+		echo -e "\n\nSTEP 1c: DONE\nCurrent date/time: $(date)\n\n"
+	fi
 	export debug_step="all"
 fi
 
@@ -968,6 +1257,17 @@ elif [ "$fastp_adapter" == "no" ] && [ "$fastp_mode" == "yes" ]; then
 	fastp_extra_opts="$fastp_extra_opts --disable_adapter_trimming"
 fi
 
+if [ "$small_rna" == "yes" ]; then
+	fastp_labels+=("small RNA adapter trimming and ${small_rna_length%%,*}-${small_rna_length##*,} nt length selection")
+	case "$small_rna_adapter" in
+		auto) fastp_extra_opts="$fastp_extra_opts --adapter_fasta $CURRENT_DIR/assets/small_rna_adapters.fa" ;;
+		none) fastp_extra_opts="$fastp_extra_opts --disable_adapter_trimming" ;;
+		*) fastp_extra_opts="$fastp_extra_opts --adapter_sequence $small_rna_adapter" ;;
+	esac
+	fastp_extra_opts="$fastp_extra_opts --length_required ${small_rna_length%%,*} --length_limit ${small_rna_length##*,}"
+fi
+
+
 fastp_label=""
 if [ ${#fastp_labels[@]} -gt 0 ]; then
 	joined_labels=$(IFS=','; echo "${fastp_labels[*]}" | sed 's/,/ and /g')
@@ -1039,6 +1339,10 @@ elif [ ! -z "$fastp_label" ] || [ "$fastp_trimming" != "none" ]; then
 		fi
 	fi
 	rename_fastp_outputs
+	if [ "$small_rna" == "yes" ] && ! python3 $CURRENT_DIR/scripts/small_rna_fastp_check.py "$output_folder/$name/fastp_out" "${small_rna_length##*,}"; then
+		echo -e "\n\033[1;31mERROR:\033[0m see the fastp reports in $output_folder/$name/fastp_out. Exiting...\n" >&2
+		exit 1
+	fi
 	touch "$fastp_marker"
 	echo "Files in $seqs_location have been successfully processed by fastp!"
 fi
@@ -1603,6 +1907,9 @@ _log_step "Step_3a_Prepare" "start"
 			array=("")
 		fi
 		build_alignment_units
+		if [ "$small_rna" == "yes" ]; then
+			small_rna_prepare_alignment
+		else
 		if [ -z "$reference_genome_groups" ]; then
 			mkdir -p $output_folder/$name/reads_study_info
 			ga_assignment_file=$output_folder/$name/reads_study_info/genome_annotation_assignment.tsv
@@ -1691,27 +1998,7 @@ _log_step "Step_3a_Prepare" "start"
 				sed -i "s,featuretype=exon,featuretype=${array3[fc_opt_index]:-${array3[0]}},g" ${unit_ini[index]}
 			fi
 
-			# ── Validate featureCounts parameters against annotation file ──
-			mkdir -p $TMPDIR
-			fc_feat_val="${array3[fc_opt_index]:-${array3[0]:-exon}}"
-			fc_seq_val="${array2[fc_opt_index]:-${array2[0]:-gene_name}}"
-			if [ -f "$gff" ]; then
-				# Check feature type (-t) exists in column 3
-				available_feats=$(zcat -f "$gff" | awk -F'\t' '!/^#/ && NF>=9 {print $3}' | sort -u | tr '\n' ', ' | sed 's/,$//')
-				if ! zcat -f "$gff" | awk -F'\t' -v ft="$fc_feat_val" '!/^#/ && NF>=9 && $3==ft {found=1; exit} END {exit !found}'; then
-					echo -e "\n\033[1;31mERROR:\033[0m Feature type '$fc_feat_val' (optionsFeatureCounts_feat / -t) was NOT found in column 3 of annotation file:\n  $gff\n\nAvailable feature types: $available_feats\n\nPlease set 'optionsFeatureCounts_feat' in your YAML config to one of the above (e.g. 'exon' for GTF, 'gene' for some GFF3 files).\n" >&2
-					exit 1
-				fi
-				# Check attribute name (-g) exists as a proper key in column 9 (not substring) for the given feature type
-				if ! zcat -f "$gff" | awk -F'\t' -v ft="$fc_feat_val" -v attr="$fc_seq_val" '!/^#/ && NF>=9 && $3==ft { n=split($9,pairs,";"); for(i=1;i<=n;i++){ gsub(/^[ \t]+/,"",pairs[i]); split(pairs[i],kv,/[ =]+/); if(kv[1]==attr){found=1; exit} } } END {exit !found}'; then
-					# Extract example attributes from the first data line with the selected feature type
-					example_attrs=$(zcat -f "$gff" | awk -F'\t' -v ft="$fc_feat_val" '!/^#/ && NF>=9 && $3==ft {print $9; exit}')
-					echo -e "\n\033[1;31mERROR:\033[0m Attribute name '$fc_seq_val' (optionsFeatureCounts_seq / -g) was NOT found in column 9 of annotation file (for feature type '$fc_feat_val'):\n  $gff\n\nExample attributes from your file (for '$fc_feat_val'):\n  $example_attrs\n\nFor GTF files, typical values are 'gene_id' or 'gene_name'.\nFor GFF3 files, typical values are 'ID', 'Name', or 'gene_id' (or 'Parent' if feature type is 'exon').\nPlease set 'optionsFeatureCounts_seq' and 'optionsFeatureCounts_feat' in your YAML config accordingly.\n" >&2
-					exit 1
-				fi
-				echo "Annotation validation OK: feature type '$fc_feat_val' and attribute '$fc_seq_val' found in $gff"
-			fi
-			# ── End featureCounts parameter validation ──
+			validate_featurecounts_annotation "$gff" "${array3[fc_opt_index]:-${array3[0]:-exon}}" "${array2[fc_opt_index]:-${array2[0]:-gene_name}}"
 			if [ "$bam_mapq_threshold" -gt 0 ] 2>/dev/null; then
 				sed -i "s,bam_mapq_threshold=,bam_mapq_threshold=$bam_mapq_threshold,g" ${unit_ini[index]}
 			fi
@@ -1784,6 +2071,7 @@ _log_step "Step_3a_Prepare" "start"
 				echo "Extra args for $aligner: $aligner_extra_args_used"
 			fi
 		done
+		fi
 	fi
 	export debug_step="all"
 _log_step "Step_3a_Prepare" "end"
@@ -1808,6 +2096,9 @@ _log_step "Step_3b_miARma" "start"
 	fi
 	build_alignment_units
 
+	if [ "$small_rna" == "yes" ]; then
+		small_rna_align_and_count
+	else
 	echo -e "miARma configuration .ini:"
         cat ${unit_ini[0]}
 	echo -e "\nPlease double check all the parameters above for miARma, in particular the stranded or the reference genome files and annotation used. Proceeding with miARma execution in..."
@@ -1843,6 +2134,7 @@ _log_step "Step_3b_miARma" "start"
 			exit $miarma_exit
 		fi
 	done
+	fi
 
 	if [ ! -z "$reference_genome_groups" ]; then
 		echo -e "\n\nMerging the genome groups into a single quantification...\n"
@@ -2259,7 +2551,7 @@ if run_step step6; then
 		if [ "$deg_count" -eq 0 ]; then
 			echo -e "\n=========================================================================="
 			echo "NOTICE: 0 significant DEGs (FDR < 0.05) found across all comparisons."
-			echo "Skipping the over-representation analyses (clusterProfiler ORA, autoGO, Panther) for index $index; GSEA on all the tested genes and the network analyses still run."
+			echo "Skipping the over-representation analyses (clusterProfiler ORA, autoGO, Panther) for index $index; the GSEA on all the tested genes (unless clusterProfiler_gsea is no) and the network analyses still run."
 			echo -e "==========================================================================\n"
 		fi
 
@@ -2277,18 +2569,29 @@ if run_step step6; then
 		if [[ "$functional_enrichment_analyses" == "no" ]]; then
     			echo -e "\nSkipping functional enrichment analyses\n"
 		else
-			if [[ "$organism" == "Mus_musculus" || "$organism" == "Homo_sapiens" || "$organism" == "Mus musculus" || "$organism" == "Homo sapiens" ]]; then
+			organism_annot=$(organism_annotation_status "$organism")
+			if [ "$small_rna" == "yes" ]; then
+				echo -e "\nSTEP 6b: small RNA mode, over-representation of the targets of the DE miRNAs (multiMiR, tables: $mirna_target_tables)...\nCurrent date/time: $(date)\n"
+				_log_step "Step_6b_miRNA_targets" "start"
+				if [ "$deg_count" -gt 0 ]; then
+					ls | egrep "^DGE_analysis_comp[0-9]+.txt$" | parallel --joblog R_mirna_targets_log_parallel.txt -j $enrich_jobs --max-args 1 "R_mirna_targets_enrichment.R $PWD $organism $clusterProfiler_cores $clusterProfiler_method {} $mirna_target_tables $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> mirna_targets_{}_funct_enrichment.log"
+				else
+					echo "No DE miRNAs at FDR < 0.05 in any comparison, so there are no targets to test."
+				fi
+				_log_step "Step_6b_miRNA_targets" "end"
+				echo -e "\nSTEP 6b: DONE\nCurrent date/time: $(date)\n"
+			elif [ "$organism_annot" == "ok" ]; then
     				echo -e "\nPerforming functional enrichment analyses for DEGs. The results up to this point are ready to use (including DEGs and expression table including gene_ids). This step of funtional enrichment analyses may take long if many significant DEGs, comparisons, or analyses...\n"
 				export ANNOTATION_FILE="${array[index]}"
 				cd $output_folder/$name/final_results_reanalysis$index/DGE/
-				if [ "$deg_count" -gt 0 ] || [[ "$clusterProfiler_full" == "yes" ]]; then
+				if [ "$deg_count" -gt 0 ] || [[ "$clusterProfiler_full" == "yes" ]] || [[ "$clusterProfiler_gsea" == "yes" ]]; then
 					echo -e "\nSTEP 6b: Performing clusterProfiler execution...\nCurrent date/time: $(date)\n"
 					_log_step "Step_6b_clusterProfiler" "start"
-					ls | egrep "^DGE_analysis_comp[0-9]+.txt$" | parallel --joblog R_clusterProfiler_analyses_parallel_log_parallel.txt -j $enrich_jobs --max-args 1 "R_clusterProfiler_analyses_parallel.R $PWD $organism "$clusterProfiler_cores" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution '^{}$' $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_{}_funct_enrichment.log"
+					ls | egrep "^DGE_analysis_comp[0-9]+.txt$" | parallel --joblog R_clusterProfiler_analyses_parallel_log_parallel.txt -j $enrich_jobs --max-args 1 "R_clusterProfiler_analyses_parallel.R $PWD $organism "$clusterProfiler_cores" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution '^{}$' $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize $clusterProfiler_gsea &> clusterProfiler_{}_funct_enrichment.log"
 					_log_step "Step_6b_clusterProfiler" "end"
 					echo -e "\nSTEP 6b: DONE\nCurrent date/time: $(date)\n"
 				else
-					echo -e "\nSTEP 6b: skipped, there are no DEGs for over-representation and the clusterProfiler GSEA only runs with 'clusterProfiler_full: yes'\n"
+					echo -e "\nSTEP 6b: skipped, there are no DEGs for over-representation and the clusterProfiler GSEA is off (clusterProfiler_gsea: no)\n"
 				fi
 				if [ "$deg_count" -gt 0 ]; then
 					echo -e "\nSTEP 6c: Performing autoGO and Panther execution... this may take long if many genes or comparisons...\nCurrent date/time: $(date)\n"
@@ -2298,14 +2601,14 @@ if run_step step6; then
 					echo -e "\nSTEP 6c: DONE\nCurrent date/time: $(date)\n"
 					if [[ "$time_course" == "yes" ]]; then
 						cd $output_folder/$name/final_results_reanalysis$index/time_course_analyses
-						ls | egrep "^DGE_limma_timecourse.*.txt$" | parallel --joblog R_clusterProfiler_analyses_parallel_log_parallel.txt -j $enrich_jobs --max-args 1 "R_clusterProfiler_analyses_parallel.R $PWD $organism "$clusterProfiler_cores" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution '^{}$' $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_{}_funct_enrichment.log"
+						ls | egrep "^DGE_limma_timecourse.*.txt$" | parallel --joblog R_clusterProfiler_analyses_parallel_log_parallel.txt -j $enrich_jobs --max-args 1 "R_clusterProfiler_analyses_parallel.R $PWD $organism "$clusterProfiler_cores" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution '^{}$' $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize $clusterProfiler_gsea &> clusterProfiler_{}_funct_enrichment.log"
 						ls | egrep "^DGE_limma_timecourse.*.txt$" | parallel --joblog R_autoGO_panther_analyses_parallel_log_parallel.txt -j $enrich_jobs --max-args 1 "R_autoGO_panther_analyses_parallel.R $output_folder/$name/final_results_reanalysis$index $organism "$clusterProfiler_cores" $databases_function {} $panther_method $auto_panther_log &> autoGO_panther_{}_funct_enrichment.log"
 					fi
 				fi
 			else
 				echo -e "\nSTEP 6b: Performing non-model organism over-representation and GSEA analyses...\nCurrent date/time: $(date)\n"
 				_log_step "Step_6b_NonModel_ORA" "start"
-   				echo "Organism '$organism' is not human/mouse, so functional enrichment support is limited: reanalyzerGSE will attempt GO/KEGG over-representation and GSEA using terms extracted from the provided annotation (dedicated OrgDb-based analyses are human/mouse only)."
+   				echo "Organism '$organism' has no usable built-in annotation package in this container (status: $organism_annot; see -O in the help), so functional enrichment support is limited: reanalyzerGSE will attempt GO/KEGG over-representation and GSEA using terms extracted from the provided annotation (dedicated OrgDb-based analyses are human/mouse only)."
 				# Determine which annotation file to use for functional enrichment
 				annot_enrichm=""
 				if [ ! -z "$non_reference_funct_enrichm" ]; then
@@ -2383,7 +2686,7 @@ if run_step step6; then
 			        if [ -f "$ff" ]; then
 			            echo "  Retrying clusterProfiler for $ff ..."
 			            rm -rf $(echo $ff | sed 's/.txt$//')_funct_enrich_clusterProfiler
-			            R_clusterProfiler_analyses_parallel.R $PWD $organism "$clusterProfiler_cores" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution "^${ff}$" $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize &> clusterProfiler_${ff}_funct_enrichment_retry.log
+			            R_clusterProfiler_analyses_parallel.R $PWD $organism "$clusterProfiler_cores" $clusterProfiler_method $clusterProfiler_full $aPEAR_execution "^${ff}$" $clusterProfiler_universe $clusterProfiler_minGSSize $clusterProfiler_maxGSSize $clusterProfiler_gsea &> clusterProfiler_${ff}_funct_enrichment_retry.log
 			        fi
 			    done
 			    failed_ago=$(grep -lE "$enrich_err_re" autoGO_panther_*_funct_enrichment.log 2>/dev/null | sed 's/autoGO_panther_//g;s/_funct_enrichment.log//g' | sort | uniq)
@@ -2409,7 +2712,7 @@ if run_step step6; then
 			# Success is decided solely by whether result files were produced, not by
 			# the presence/absence of log errors. Add the up/down gene counts to them.
 			cd $output_folder/$name/final_results_reanalysis$index/
-			files_to_process=$(find . \( -name "*.txt" -o -name "*.tsv" -o -name "*.csv" \) | grep funct | grep -v '_err.txt\|_aPEAR\|_similarity')
+			files_to_process=$(find . \( -name "*.txt" -o -name "*.tsv" -o -name "*.csv" \) | grep funct | grep -v '_err.txt\|_skipped.txt\|plots_not_drawn\|not_in_graphite\|_aPEAR\|_similarity')
 			if [ -n "$files_to_process" ]; then
 				enrichment_results_found="yes"
 				cd $output_folder/$name/final_results_reanalysis$index/DGE/
@@ -2601,7 +2904,8 @@ PYEOF
 					"$name" \
 					"$organism" \
 					"$report_mode" \
-					"$clusterProfiler_universe" &> "$output_folder/$name/final_results_reanalysis$index/DGE/$report_log"
+					"$clusterProfiler_universe" \
+					"$report_images" &> "$output_folder/$name/final_results_reanalysis$index/DGE/$report_log"
 				if [ $? -eq 0 ] && [ -f "$output_folder/$name/final_results_reanalysis$index/DGE/$report_html" ]; then
 					echo "Done! Report: $output_folder/$name/final_results_reanalysis$index/DGE/$report_html"
 				else
@@ -2627,7 +2931,11 @@ _log_step "Step_7_Annotation" "start"
 		export ANNOTATION_FILE="${array[index]}"
 		annotation_file=${array[index]}
 		# All the tables that contain list of genes, annotate them:
-		R_annotate_genes.R $output_folder/$name/final_results_reanalysis$index "^DGE_analysis_comp\\d+\\.txt$|^DGE_limma_timecourse_T\\d+_vs_T\\d+\\.txt$|mfuzz_elements_clusters|counts|WGCNA_all_modules_|STRINGdb_all_modules_" $organism			
+		if [ "$small_rna" == "yes" ]; then
+			echo "small RNA mode: the gene annotation of the tables is skipped, the miRNA names are already the identifiers"
+		else
+			R_annotate_genes.R $output_folder/$name/final_results_reanalysis$index "^DGE_analysis_comp\\d+\\.txt$|^DGE_limma_timecourse_T\\d+_vs_T\\d+\\.txt$|mfuzz_elements_clusters|counts|WGCNA_all_modules_|STRINGdb_all_modules_" $organism
+		fi
 
 		if [[ "$bed_mode" == "yes" ]]; then
 			cd "$output_folder/$name/final_results_reanalysis$index/" || exit 1

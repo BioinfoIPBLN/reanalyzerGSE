@@ -13,7 +13,7 @@ jobs:
       - name: Install interpreters and Perl modules
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -qy --no-install-recommends r-base-core libconfig-inifiles-perl libstatistics-r-perl libdatetime-perl libwww-perl python3-yaml
+          sudo apt-get install -qy --no-install-recommends r-base-core r-cran-knitr libconfig-inifiles-perl libstatistics-r-perl libdatetime-perl libwww-perl python3-yaml
 
       - name: Bash syntax
         run: |
@@ -29,6 +29,10 @@ jobs:
       - name: R syntax
         run: |
           Rscript -e 'bad <- character(0); for (f in Sys.glob(c("scripts/*.R", "external_software/miARma-seq/lib/CbBio/RNASeq/R-Scripts/*.R"))) tryCatch(parse(f), error = function(e) { message(f, ": ", conditionMessage(e)); bad <<- c(bad, f) }); if (length(bad)) quit(status = 1)'
+
+      - name: R Markdown syntax
+        run: |
+          Rscript -e 'bad <- character(0); for (f in Sys.glob("scripts/*.Rmd")) { out <- tempfile(fileext = ".R"); tryCatch({ knitr::purl(f, output = out, quiet = TRUE); parse(out) }, error = function(e) { message(f, ": ", conditionMessage(e)); bad <<- c(bad, f) }) }; if (length(bad)) quit(status = 1)'
 
       - name: Python syntax
         run: python3 -m py_compile scripts/*.py

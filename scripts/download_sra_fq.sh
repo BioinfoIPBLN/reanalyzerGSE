@@ -29,7 +29,12 @@ if [ $? -ne 0 ]; then
 fi
 
 # Extract library_layout by column name
-awk -F'\t' 'NR==1 { for(i=1;i<=NF;i++) if($i=="library_layout") col=i } NR>1 && col { print $col }' fastq-run-info.tsv | head -1 > $(dirname $file)/library_layout_info.txt
+layout=$(awk -F'\t' 'NR==1 { for(i=1;i<=NF;i++) if($i=="library_layout") col=i } NR>1 && col { print $col }' fastq-run-info.tsv 2>/dev/null | head -1)
+if [ -n "$layout" ]; then
+	echo "$layout" > $(dirname $file)/library_layout_info.txt
+elif [ ! -s "$(dirname $file)/library_layout_info.txt" ]; then
+	echo -e "\nWARNING: the library layout could not be read from fastq-run-info.tsv and no library_layout_info.txt exists yet.\n" >&2
+fi
 
 rm fastq-run*
 

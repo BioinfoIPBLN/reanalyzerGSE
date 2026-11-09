@@ -871,6 +871,7 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
         print("Reading targets in /reads_study_info/samples_info.txt")
         targets <- read.table(file = paste0(path,"/reads_study_info/samples_info.txt"),header = F,stringsAsFactors=F)        
     }
+    if (ncol(targets) < 3) stop("samples_info.txt has ", ncol(targets), " columns, so the per-sample condition (third column) is missing and no experimental design reached the differential expression step. Check reads_study_info/design_possible_full*.txt, or provide the design with -D (local) or -d yes (GEO).")
     colnames(targets) <- c("Filename","Name","Type")
     # Kept verbatim: Filename is only used for the GSM/SRR reordering below (unaffected by any
     # token trimming) before being overwritten by Name, and the trimming that used to happen here
@@ -1101,6 +1102,65 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
       }
     }
     }
+  ## Custom model and named contrasts (design_formula / design_contrasts), on top of the pairwise comparisons:
+    custom_formula <- Sys.getenv("RGSE_DESIGN_FORMULA", "")
+    custom_contrasts <- Sys.getenv("RGSE_DESIGN_CONTRASTS", "")
+    if (nzchar(custom_formula) && nzchar(custom_contrasts) && full_analyses != "no") {
+      cat(paste0("\nCustom model ", custom_formula, " with the contrasts: ", custom_contrasts, "\n"))
+      files_designs <- list.files(pattern = "design_possible_full", recursive = TRUE, full.names = TRUE, path = paste0(path, "/reads_study_info"))
+      files_designs <- files_designs[order(as.integer(sub("^design_possible_full_?([0-9]+).*$", "\\1", basename(files_designs))))]
+      de_count_cols <- grep("Gene_ID|Length", colnames(gene_counts), invert = TRUE, value = TRUE)
+      de_keep <- rep(TRUE, length(de_count_cols))
+      if (pattern_to_remove != "none") de_keep <- !grepl(pattern_to_remove, de_count_cols)
+      meta <- data.frame(row.names = de_count_cols[de_keep])
+      for (k in seq_along(files_designs)) {
+        v <- read.table(files_designs[k], head = FALSE, blank.lines.skip = FALSE)$V1
+        if (exists("gsm_manual_filter")) v <- v[idxs_gsm_manual]
+        if (exists("keep_samples")) v <- v[keep_samples]
+        v <- v[de_keep]
+        if (length(v) != nrow(meta)) stop("the design file ", basename(files_designs[k]), " has ", length(v), " entries for ", nrow(meta), " samples")
+        meta[[paste0("D", k)]] <- factor(sub("^__", "", as.character(v)))
+      }
+      covs_cm <- covs_all
+      if (exists("keep_samples")) covs_cm <- rgse_subset_covariates(covs_cm, keep_samples)
+      covs_cm <- rgse_subset_covariates(covs_cm, de_keep)
+      if (!is.null(covs_cm)) meta <- cbind(meta, covs_cm)
+      cat("\nSamples and variables of the custom model (D1, D2, ... are the designs in order; Cov1, Cov2, ... the covariables):\n"); print(meta)
+      design_cm <- rgse_custom_design(meta, custom_formula)
+      cat("\nCoefficients of the custom model (the names to use in design_contrasts):\n"); print(colnames(design_cm))
+      cm_expr <- rgse_parse_contrasts(custom_contrasts)
+      cm <- rgse_contrast_matrix(cm_expr, design_cm)
+      cat("\nContrast matrix:\n"); print(cm)
+      writeLines(c(paste0("formula: ", custom_formula), paste0("coefficients: ", paste(colnames(design_cm), collapse = ", ")),
+                   paste0("contrast ", names(cm_expr), " = ", cm_expr)), paste0(output_dir, "/DGE/custom_model.txt"))
+      y_cm <- DGEList(counts = gene_counts[, de_count_cols[de_keep]], group = meta[[1]],
+                      genes = gene_counts[, c(grep("Gene_ID", colnames(gene_counts)), grep("Length", colnames(gene_counts)))])
+      y_cm <- filter(filter = filter_option, y_cm)
+      y_cm <- normLibSizes(y_cm)
+      existing_comps <- as.integer(sub("^DGE_analysis_comp([0-9]+)\\.txt$", "\\1", list.files(paste0(output_dir, "/DGE/"), pattern = "^DGE_analysis_comp[0-9]+\\.txt$")))
+      next_comp <- if (length(existing_comps)) max(existing_comps) + 1 else 1
+      for (j in seq_len(ncol(cm))) {
+        cname <- colnames(cm)[j]
+        k <- next_comp + j - 1
+        de_res <- tryCatch(rgse_de_test_contrast(y_cm, design_cm, cm[, j], diff_soft, de_settings, cname),
+                           error = function(e) { cat(paste0("\nERROR: the contrast ", cname, " could not be tested: ", conditionMessage(e), "\n")); NULL })
+        if (is.null(de_res)) next
+        tab <- de_res$table
+        colnames(tab)[3] <- paste0("logFC", cname)
+        cat(paste0("\nComparison ", k, ", custom contrast ", cname, " = ", cm_expr[[j]], " (positive log2FC = higher in the positive side of the contrast): ", de_res$method, "\n",
+                   "  genes tested: ", nrow(tab), " | FDR<=0.05: ", sum(tab$FDR <= 0.05, na.rm = TRUE),
+                   " (up: ", sum(tab$FDR <= 0.05 & tab[[3]] > 0, na.rm = TRUE), ", down: ", sum(tab$FDR <= 0.05 & tab[[3]] < 0, na.rm = TRUE), ")\n"))
+        write.table(paste0("\nComparison number ", k, ": __", cname), file = paste0(output_dir, "/DGE/list_comp.txt"), quote = FALSE, row.names = FALSE, col.names = FALSE, sep = "\n", append = TRUE)
+        de_methods_file <- paste0(output_dir, "/DGE/de_methods.txt")
+        if (!file.exists(de_methods_file)) writeLines("Comparison\tContrast\tMethod\tFilter\tSamples", de_methods_file)
+        write(paste(paste0("comp", k), paste0(cname, " = ", cm_expr[[j]]), de_res$method, filter_option, paste0(nrow(design_cm), " in the model"), sep = "\t"), file = de_methods_file, append = TRUE)
+        if (venn_volcano != "no") {
+          myLabel1 <- gsub("^_", "", gsub("_+", "_", gsub("[^[:alnum:]_]+", "_", cname)))
+          Volcano(list(table = tab), paste(output_dir, "/DGE/Volcano_plot_", myLabel1, ".pdf", sep = ""), myLabel1)
+        }
+        write.table(tab, file = paste0(output_dir, "/DGE/DGE_analysis_comp", k, ".txt"), quote = FALSE, row.names = FALSE, col.names = TRUE, sep = "\t")
+      }
+    }
     print("Done")
     print(paste0("Differential gene expression analyses done. Current date: ",date()))
   
@@ -1249,16 +1309,22 @@ if (venn_volcano!="no"){
       levels(col.group) <- rgse_stable_sample(contrast2, nlevels(col.group)); col.group <- as.character(col.group)
       list_of_ids <- lapply(list_of_tables,function(y){y$Gene_ID[which(y$FDR<0.05)]})
       names(list_of_ids) <- group
+      if (sum(lengths(list_of_ids) > 0) < 2 || length(unique(unlist(list_of_ids))) < 2) {
+        cat(paste0("Venn diagrams skipped: fewer than two comparisons have DEGs at FDR < 0.05 (", paste(names(list_of_ids), lengths(list_of_ids), sep = "=", collapse = ", "), ")\n"))
+        return(invisible(NULL))
+      }
   
       if(length(list_of_ids) < 8){
         # A more complex Venn diagram with an independent file showing the intersect:
       tmp_file <- tempfile()
       sink(tmp_file)
-      hey <- nVennR::plotVenn(list_of_ids,nCycles=14000,showPlot=F)
-      nVennR::showSVG(nVennObj = hey, outFile=paste0(unique(dirname(files)),"/Venn_diagram_complete.svg"),opacity=0.2,borderWidth=0.5)
+      tryCatch({
+        hey <- nVennR::plotVenn(list_of_ids,nCycles=14000,showPlot=F)
+        nVennR::showSVG(nVennObj = hey, outFile=paste0(unique(dirname(files)),"/Venn_diagram_complete.svg"),opacity=0.2,borderWidth=0.5)
+        hey <- nVennR::listVennRegions(hey);names(hey) <- gsub(".* \\(","(",names(hey));names(hey) <- gsub(", ","-",names(hey));names(hey) <- gsub("\\(|\\)","",names(hey))
+        write.table(data.frame(Combination=names(hey),Shared_genes=unname(unlist(lapply(hey,function(x){paste(x,collapse=",")})))),file=paste0(unique(dirname(files)),"/Venn_diagram_complete.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+      }, error = function(e) message("nVennR could not draw the complete Venn diagram (", conditionMessage(e), "); the pairwise diagrams are still drawn"))
       sink(); unlink(tmp_file)
-      hey <- nVennR::listVennRegions(hey);names(hey) <- gsub(".* \\(","(",names(hey));names(hey) <- gsub(", ","-",names(hey));names(hey) <- gsub("\\(|\\)","",names(hey))
-      write.table(data.frame(Combination=names(hey),Shared_genes=unname(unlist(lapply(hey,function(x){paste(x,collapse=",")})))),file=paste0(unique(dirname(files)),"/Venn_diagram_complete.txt"),col.names = T,row.names = F,quote = F,sep="\t")
     } else {
       print(paste0("Too many conditions (",length(list_of_ids),"). We decided to only allow up to 7 conditions for the more complex Venn Diagram by nVennR. Otherwise, it would take too much time. You can check all the Venn Diagrams with up to 4 comparisons or perform the more complex one externally..."))
     }
@@ -1586,6 +1652,13 @@ tryCatch({
   # 4. If DGE tables exist, merge each with expression + GTF
   dge_files <- list.files(path = paste0(output_dir, "/DGE"),
                           full.names = TRUE, pattern = "^DGE_analysis_comp\\d+\\.txt$")
+  .rgse_design_samples <- tryCatch({
+    si <- read.table(paste0(path, "/reads_study_info/samples_info.txt"), header = FALSE, stringsAsFactors = FALSE)
+    as.character(si[[if (ncol(si) > 2) 2 else 1]])
+  }, error = function(e) character(0))
+  .rgse_design_sets <- lapply(list.files(paste0(path, "/reads_study_info"), pattern = "design_possible_full", full.names = TRUE),
+                              function(z) tryCatch(as.character(read.table(z, header = FALSE, stringsAsFactors = FALSE)[[1]]), error = function(e) character(0)))
+  .rgse_design_sets <- .rgse_design_sets[vapply(.rgse_design_sets, length, integer(1)) == length(.rgse_design_samples)]
 
   if (length(dge_files) > 0 && full_analyses != "no") {
     for (dge_file in dge_files) {
@@ -1603,9 +1676,15 @@ tryCatch({
         clean_comp_conds <- gsub("^cond_?|^__?|_+$", "", comp_conditions)
         clean_pheno_conds <- gsub("^cond_?|^__?|_+$", "", pheno$condition)
 
-        # Get sample names belonging to these two conditions
-        comp_samples <- pheno$sample[clean_pheno_conds %in% clean_comp_conds]
-        matched_conds <- pheno$condition[clean_pheno_conds %in% clean_comp_conds]
+        comp_samples <- character(0); matched_conds <- character(0)
+        for (d in .rgse_design_sets) {
+          cd <- gsub("^cond_?|^__?|_+$", "", d)
+          if (all(clean_comp_conds %in% cd)) { comp_samples <- .rgse_design_samples[cd %in% clean_comp_conds]; matched_conds <- d[cd %in% clean_comp_conds]; break }
+        }
+        if (length(comp_samples) == 0) {
+          comp_samples <- pheno$sample[clean_pheno_conds %in% clean_comp_conds]
+          matched_conds <- pheno$condition[clean_pheno_conds %in% clean_comp_conds]
+        }
 
         # Strip trailing condition from sample name if formatted as Sample_Condition
         comp_samples_stripped <- mapply(function(s, cond) {

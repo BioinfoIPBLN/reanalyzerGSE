@@ -210,44 +210,45 @@ for (z in unlist(strsplit(GEO_ID_path,"_"))){
 			    file=paste(path,GEO_ID_path,"reads_study_info","phenodata_extracted.txt",sep="/"),quote = F,row.names = F, col.names = F,sep = "\t", append=TRUE)
 		# Write possible designs:
 		if (!is.null(dim(phenodata))){
-			#phenodata_possible_designs <- phenodata[,names(which(sort(unlist(lapply(apply(phenodata,2,table),function(x){length(x)}))) <= 10))]
-			phenodata_possible_designs <- phenodata[,names(which(apply(phenodata,2,function(x){length(table(x))}) <= 10 & apply(phenodata,2,function(x){length(table(x))}) > 1 & apply(phenodata,2,function(x){length(table(x))}) <= dim(phenodata)[1]))] # Keep in mind if over 10 conditions in large studies...
-			# Add combinations of columns
-			combinations <- c()
-			for (i in 2:dim(phenodata_possible_designs)[2]){
-				apply(combn(1:dim(phenodata_possible_designs)[2],i),2,function(x){
-					combinations <<- c(combinations,paste(x,collapse="."))
-				})
+			norm_design <- function(x) {
+				x <- tolower(sub("([+-])|RNA-Seq|Homo sapiens|Mus musculus","\\1",gsub(".*: ","",as.character(x))))
+				x <- gsub(" ","-",x); x <- gsub("--","",x); x <- gsub("[^a-zA-Z0-9_]","_",x); x <- gsub("[0-9]+","",x)
+				x <- gsub("_+","_",x); gsub("_$","",gsub("^_","",x))
 			}
-
-			for (i in combinations){
-				lapply(strsplit(i,".",fixed=T),function(x){
-					phenodata_possible_designs <<- cbind(phenodata_possible_designs,apply(phenodata_possible_designs[,as.numeric(x)],1,function(y){
-					gsub(".","_",gsub(" ","_",paste(gsub(".*: ","",y),collapse=".")),fixed=T)
-					}))
-				})
+			usable_design <- function(x) { t <- table(x); length(t) >= 2 && length(t) <= 10 && all(t >= 2) }
+			title_groups <- function(titles) {
+				t <- trimws(gsub("[[:space:]]+"," ",gsub("\\[.*?\\]|\\(.*?\\)","",titles)))
+				t <- sub("(?:[ _.,-]+(?:replicate|rep|r|n|sample|s)?|(?:replicate|rep))[ _.,-]*[0-9]+$","",t,ignore.case=TRUE,perl=TRUE)
+				norm_design(sub("[ _.,-]+$","",t))
 			}
-			phenodata_possible_designs <- phenodata_possible_designs[,order(colnames(phenodata_possible_designs))]
+			pn <- if (ncol(phenodata) > 0) as.data.frame(lapply(phenodata, norm_design), stringsAsFactors = FALSE, check.names = FALSE) else data.frame(row.names = rownames(phenodata))
+			rownames(pn) <- rownames(phenodata)
+			pn <- pn[, vapply(pn, usable_design, logical(1)), drop = FALSE]
+			if (ncol(pn) >= 2) {
+				base_cols <- colnames(pn)
+				for (k in 2:length(base_cols)) {
+					for (cols in combn(base_cols, k, simplify = FALSE)) {
+						comb <- apply(pn[, cols, drop = FALSE], 1, paste, collapse = "_")
+						if (usable_design(comb)) pn[[paste(cols, collapse = ".")]] <- comb
+					}
+				}
+			}
+			if (ncol(pn) == 0) {
+				tg <- title_groups(geoquery_data_df$title)
+				if (length(tg) == nrow(pn) && usable_design(tg)) {
+					cat("\nNo informative characteristics in the GEO metadata, so the groups are derived from the sample titles:\n"); print(table(tg)); cat("\n")
+					pn$title_groups <- tg
+				} else {
+					cat("\nWARNING: no experimental design could be derived from the GEO metadata or the sample titles. The run stops after the download unless a design is given (-d yes, or the local route with -D).\n")
+				}
+			}
+			if (ncol(pn) >= 2) {
+				grouping <- lapply(pn, function(x) as.integer(factor(x, levels = unique(x))))
+				pn <- pn[, !duplicated(grouping), drop = FALSE]
+			}
+			phenodata_possible_designs <- pn
 			num_des=length(grep("design_possible_full",list.files(),val=T))
-			# Remove special characters, columns that are pointing to the same groups, etc...:
-			phenodata_possible_designs <- as.data.frame(apply(phenodata_possible_designs,2,function(x){tolower(sub("([+-])|RNA-Seq|Homo sapiens|Mus musculus","\\1",x))}))
-			phenodata_possible_designs <- as.data.frame(apply(phenodata_possible_designs,2,function(x){gsub(" ","-",x)}))
-			phenodata_possible_designs <- as.data.frame(apply(phenodata_possible_designs,2,function(x){gsub("--","",x)}))
-			phenodata_possible_designs <- as.data.frame(apply(phenodata_possible_designs,2,function(x){gsub("[^a-zA-Z0-9_]","_",x)}))
-			phenodata_possible_designs <- as.data.frame(apply(phenodata_possible_designs,2,function(x){gsub("[0-9]+","",x)}))
-			phenodata_possible_designs <- as.data.frame(apply(phenodata_possible_designs,2,function(x){gsub("_+","_",x)}))
-			phenodata_possible_designs <- as.data.frame(apply(phenodata_possible_designs,2,function(x){gsub("_$","",x)}))
-			
-			# Remove columns if any of the categories that they are containing are repeated only one (which would give errors in the DGE analyses due to lack of replicates)
-			phenodata_possible_designs <- phenodata_possible_designs[,!(colnames(phenodata_possible_designs) %in% names(phenodata_possible_designs)[unlist(lapply(phenodata_possible_designs,function(x){any(table(x)==1)}))])]
-			# If different columns are containing the same groups, get only one of them (the first):
-			a <- lapply(phenodata_possible_designs, function(x){unname(sapply(seq_along(names(table(x))),function(y){paste(gsub("[a-zA-Z_]","",gsub(names(table(x)[match(unique(x),names(table(x)))])[y],y,x)),collapse="_")}))})
-			columns_with_same_groups <- get_common_elements(a) # funcion defined above in the script
-			columns_to_keep <- c(unlist(lapply(get_common_elements(a),function(x){x[1]})),
-					     colnames(phenodata_possible_designs)[!(colnames(phenodata_possible_designs) %in% unlist(columns_with_same_groups))])
-			phenodata_possible_designs <- as.data.frame(phenodata_possible_designs[,colnames(phenodata_possible_designs) %in% columns_to_keep])			
-			
-			for (i in (num_des+1):(dim(phenodata_possible_designs)[2]+num_des)){
+			if (ncol(phenodata_possible_designs) > 0) for (i in (num_des+1):(dim(phenodata_possible_designs)[2]+num_des)){
 				idx=i
 				if(length(grep("design_possible_full",list.files(),val=T))!=0){
 					idx=i-num_des

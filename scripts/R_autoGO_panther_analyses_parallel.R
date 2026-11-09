@@ -27,6 +27,7 @@ source(file.path(script_dir, "R_net_config.R"))
 .rgse_min_cluster_genes <- 10
 
 .rgse_enrichr_tables <- function(genes, dbs, background = NULL, attempts = 6, empty_plausible_below = .rgse_min_enrich_genes) {
+  if (length(dbs) == 0) return(NULL)
   if (length(genes) < empty_plausible_below) attempts <- 1L
   for (k in seq_len(attempts)) {
     res <- tryCatch(
@@ -46,7 +47,8 @@ source(file.path(script_dir, "R_net_config.R"))
   NULL
 }
 
-org_panther <- if (grepl("Homo", organism, ignore.case = TRUE)) 9606 else if (grepl("Mus", organism, ignore.case = TRUE)) 10090 else if (grepl("Rattus", organism, ignore.case = TRUE)) 10116 else {
+.org_info <- rgse_organism_info(organism)
+org_panther <- if (!is.null(.org_info)) .org_info$panther else {
   tryCatch({
     a <- rba_panther_info(what = "organisms")
     as.numeric(a$taxon_id[grep(gsub(" ", "_", organism), gsub(" ", "_", a$long_name))])
@@ -298,19 +300,31 @@ if (is.na(enrichment_databases) || !nzchar(enrichment_databases) || enrichment_d
 
 enrichment_databases <- unique(unlist(strsplit(enrichment_databases,",")))
 
-if (grepl("sapiens", organism, fixed=TRUE)){
-  databases_autoGO <- unique(enrichment_databases)   # strict: exactly -databases_function, no auto-added extras
-  databases_autoGO_print <- paste(databases_autoGO,collapse=",")
-  print(paste0("The databases selected for autoGO are ",databases_autoGO_print,". Please double check autoGO::choose_database(), which has > 200 databases, in case you want to add any extra by using the pipeline argument..."))
-  suppressMessages(library("org.Hs.eg.db",quiet = T,warn.conflicts = F))
-} else if (grepl("musculus", organism, fixed=TRUE)){
-  databases_autoGO <- unique(enrichment_databases)   # strict: exactly -databases_function, no auto-added extras
-  databases_autoGO_print <- paste(databases_autoGO,collapse=",")
-  print(paste0("The databases selected for autoGO are ",databases_autoGO_print,". Please double check autoGO::choose_database(), which has > 200 databases, in case you want to add any extra by using the pipeline argument..."))
-  suppressMessages(library("org.Mm.eg.db",quiet = T,warn.conflicts = F))
+.org_status <- rgse_orgdb_check(.org_info)
+if (.org_status != "ok") {
+  print(rgse_organism_note(organism, .org_info, .org_status))
+  print("Skipping the autoGO and Panther analyses")
+  quit(save = "no", status = 0)
+}
+orgDB <- rgse_orgdb_attach(.org_info)
+databases_autoGO <- unique(enrichment_databases)
+.enrichr_site <- .org_info$enrichr
+.enrichr_background_ok <- TRUE
+if (is.na(.enrichr_site)) {
+  print(paste0("Enrichr has no gene-set libraries for ", .org_info$name, ", so autoGO is skipped and only the Panther analyses run"))
+  databases_autoGO <- character(0)
 } else {
-  print(paste0("Your organism is ",organism,", and unfortunately the pipeline for automatic functional enrichment currently fully supports only mouse and human. We'll include non-model organisms eventually, but in the meantime please don't give up and double check if you can use autoGO manually with any of the rest of databases that may contain your organism from autoGO::choose_database(), which has > 200 databases"))
-  stop("Exiting")
+  if (.enrichr_site != "Enrichr") {
+    enrichR::setEnrichrSite(.enrichr_site)
+    .enrichr_background_ok <- FALSE
+    .site_dbs <- tryCatch(enrichR::listEnrichrDbs()$libraryName, error = function(e) NULL)
+    if (!is.null(.site_dbs)) {
+      .missing <- setdiff(databases_autoGO, .site_dbs)
+      if (length(.missing)) print(paste0("Not available in ", .enrichr_site, " and dropped: ", paste(.missing, collapse = ",")))
+      databases_autoGO <- intersect(databases_autoGO, .site_dbs)
+    }
+  }
+  print(paste0("The databases selected for autoGO (", .enrichr_site, ") are ", paste(databases_autoGO, collapse = ","), ". Please double check autoGO::choose_database(), which has > 200 databases, in case you want to add any extra by using the pipeline argument..."))
 }
 
 
@@ -319,7 +333,8 @@ key_files <- data.frame()
 # Detect ENSEMBL IDs and build mapping once
 .ensembl_detected_ago <- FALSE
 .ensembl_map_ago <- NULL
-.dge_files_ago <- grep("05|_annotation|Gene_ID",list.files(pattern = pattern_search,path=path,recursive=T, full.names=T),invert=T,val=T)
+.dge_files_ago <- list.files(pattern = pattern_search,path=path,recursive=T, full.names=T)
+.dge_files_ago <- .dge_files_ago[!grepl("_annotation|Gene_ID", basename(.dge_files_ago))]
 if (exists("is_ensembl_id") && length(.dge_files_ago) > 0) {
   .test_ids_ago <- data.table::fread(.dge_files_ago[1],head=T,fill=T)$Gene_ID
   if (is_ensembl_id(.test_ids_ago)) {
@@ -407,9 +422,11 @@ process_file <- function(file){
   path3=paste0(path2,"/","enrichment_tables")
   if (length(expr_back) > 0) print(paste0("Using the detected-gene universe as background for ",file2,": ",length(expr_back)," genes"))
   .ago_genes <- unique(read.table(file,head=F)$V1)
-  .ago_res <- .rgse_enrichr_tables(.ago_genes, databases_autoGO, background = expr_back)
+  .ago_res <- .rgse_enrichr_tables(.ago_genes, databases_autoGO, background = if (.enrichr_background_ok) expr_back else character(0))
   if (is.null(.ago_res)) {
-    if (length(.ago_genes) < .rgse_min_enrich_genes)
+    if (length(databases_autoGO) == 0)
+      print(paste0("autoGO skipped for ",file2,": no Enrichr libraries for this organism"))
+    else if (length(.ago_genes) < .rgse_min_enrich_genes)
       print(paste0("autoGO returned nothing for ",file2,": only ",length(.ago_genes)," gene(s), too few to enrich, retries skipped"))
     else
       print(paste0("autoGO with errors after retries: ",file2))

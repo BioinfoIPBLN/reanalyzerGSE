@@ -17,6 +17,7 @@ name: ""                               # Name of the project/folder to create
 output_folder: ""                      # Destination folder
 genes: "none"                          # Genes to highlight in plots (comma-separated, no spaces)
 TMPDIR_arg: ""                         # TMPDIR directory ('system' for system default, or an absolute path)
+dry_run: "no"                          # Check the configuration, the references and the tools and exit without running or touching the output folder ('yes' or 'no')
 
 # === Reference and databases ===
 reference_genome: ""                   # Reference genome (.fasta or .gz, absolute path). Comma-separated for several genomes:
@@ -40,12 +41,12 @@ sortmerna_databases: ""                # SortMeRNA database path (activates rRNA
 rrna_qc_databases: ""                  # Comma-separated rRNA FASTA paths for preliminary rRNA QC (e.g. '/path/SILVA_138.2_LSURef_NR99_tax_silva.fasta.gz,/path/SILVA_138.2_SSURef_NR99_tax_silva.fasta.gz'). Activates Bowtie2 rRNA mapping QC step
 rrna_qc_min_score: -20                 # Min Bowtie2 alignment score for rRNA QC (default -20)
 databases_function: "GO_Biological_Process_2025,GO_Molecular_Function_2025,GO_Cellular_Component_2025"  # EXACT db list for autoGO/enrichR (nothing auto-added; add Reactome_2022/KEGG_2021_*/WikiPathways_* here if wanted). autoGO::choose_database() lists all
-non_reference_funct_enrichm: ""        # Annotation file (GAF, GMT, GFF, GTF, or 2-column TSV/TXT mapping) for GO/KEGG enrichment in non-model organisms or Kallisto mode
+non_reference_funct_enrichm: ""        # Annotation file (GAF, GMT, GFF, GTF, or 2-column TSV/TXT mapping) for GO/KEGG enrichment when the organism has no built-in org.*.db annotation (see organism) or in Kallisto mode
 
 # === Metadata and sample info ===
 design_custom_local: ""                # Experimental design for local dataset (comma-separated list, one condition per sample, '/' for multiple. 'auto' derives it from the sample names by dropping the '_Rep<N>' suffix, 'llm' asks the configured LLM to propose it. If no design, please provide a dummy one, e.g. with every sample in the same group or a separate one.)
 design_custom: "no"                    # Manually specify experimental design for GEO ('yes' or 'no')
-organism: ""                           # Scientific name with underscore (e.g. Homo_sapiens)
+organism: ""                           # Scientific name with underscore (e.g. Homo_sapiens); built-in enrichment for the 18 organisms listed in the -O help when their org.*.db is in the image
 taxonid: ""                            # NCBI taxon ID
 number_reads_to_subsample: ""          # Path to reads_numbers.txt and target library size (comma-separated). NOTE: the number is the desired library size (counted/mapped reads), NOT raw reads; proportions are computed automatically
 batch_vector: ""                       # Comma-separated batch vector for Combat-seq
@@ -64,6 +65,8 @@ qc_raw_reads: "yes"                    # QC on raw reads ('yes' or 'no')
 full_differential_analyses: "yes"      # Full differential analyses ('yes' or 'no')
 functional_enrichment_analyses: "yes"  # Functional enrichment ('yes' or 'no')
 clusterProfiler_full: "no"             # Additional clusterProfiler analyses ('yes' or 'no')
+clusterProfiler_gsea: "yes"            # clusterProfiler GSEA of GO, KEGG and Reactome on every gene tested, in every run ('yes' or 'no'); the slower WikiPathways, KEGG module and disease analyses stay under clusterProfiler_full
+report_images: "folder"                # Plot previews of the functional enrichment report: 'folder' (PNG files in DGE/functional_enrichment_report_files, light HTML) or 'embedded' (one self-contained HTML, large)
 clusterProfiler_cores: 3               # Gene lists enriched concurrently per comparison (default 3). Bounded by KEGG request rate, not CPU
 batch: "no"                            # Batch effect correction ('yes' or 'no')
 bed_mode: "no"                         # Convert to BED format for genome browsers ('yes' or 'no')
@@ -159,10 +162,22 @@ differential_expr_soft: "edgeR"        # DGE software: 'edgeR', 'DESeq2', 'limma
 edger_test: "ql"                       # edgeR test: 'ql' (quasi-likelihood F-test) or 'exact' (exactTest, the default up to v4.1.0)
 lfc_threshold: 0                       # Minimum |log2FC| tested against (glmTreat / DESeq2 lfcThreshold / limma treat); 0 = any change
 lfc_shrink: "no"                       # DESeq2 only: add a shrunkLFC column from lfcShrink ('yes' or 'no')
+design_formula: ""                     # Custom model on top of the pairwise comparisons, R formula on the designs D1, D2, ... (the -D designs in order) and the covariables Cov1, Cov2, ... e.g. "~ 0 + D1:D2"; needs design_contrasts
+design_contrasts: ""                   # Named contrasts on the coefficients of design_formula (limma makeContrasts syntax, make.names of the model matrix columns), separated by ';', e.g. "KO_vs_WT_in_MCAO=D1KO.D2MCAO-D1WT.D2MCAO;interaction=(D1KO.D2MCAO-D1KO.D2ctrl)-(D1WT.D2MCAO-D1WT.D2ctrl)"
 fastp_mode: "no"                       # Quality filtering by fastp ('yes' or 'no')
 fastp_adapter: "no"                    # Adapter trimming by fastp ('yes', 'no', or path to fasta)
 fastp_trimming: "none"                 # Trimming by fastp ('none' or 'front,tail' as numbers)
 fastp_extra_args: ""                   # Extra arguments to pass to fastp (e.g. '-g' for polyG, '-x' for polyX, '--cut_right')
+
+# === Small RNA-seq (miRNA) mode ===
+small_rna: "no"                        # Small RNA mode ('yes' or 'no'): fastp adapter trimming and length selection, bowtie1, featureCounts on the miRNA features of a miRBase GFF3 given in annotation, enrichment of the targets of the DE miRNAs
+small_rna_adapter: "auto"              # 'auto' (fastp detects it and trims the known kit adapters of assets/small_rna_adapters.fa), 'none', or the adapter sequence (TGGAATTCTCGGGTGCCAAGG Illumina TruSeq/NEXTflex/Lexogen, AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC NEBNext, AACTGTAGGCACCATCAAT QIAseq; add fastp_extra_args "--trim_front1 4 --trim_tail1 4" for NEXTflex 4N ends)
+small_rna_length: "15,35"              # Minimum,maximum read length kept after trimming
+bowtie1_extra_args: ""                 # Extra bowtie1 arguments (default: -n 1 -l 20 -e 70 --best -k 1 --nomaqround)
+mirna_novel: "no"                      # Predict novel miRNAs with miRDeep2 ('yes' or 'no'); needs the two miRBase FASTA files below. Reported in miARma_out0/miRDeep2_results, not added to the counts
+mirna_mature_fa: ""                    # miRBase mature.fa (https://www.mirbase.org/download/mature.fa)
+mirna_hairpin_fa: ""                   # miRBase hairpin.fa (https://www.mirbase.org/download/hairpin.fa)
+mirna_target_tables: "validated"       # multiMiR tables for the targets of the DE miRNAs: 'validated', 'predicted' or 'all' (human, mouse and rat only)
 time_course_std: 1                     # SD threshold for time-course filtering
 time_course_fuzz: 0                    # Fuziness for soft clustering (0 = auto-estimate)
 
