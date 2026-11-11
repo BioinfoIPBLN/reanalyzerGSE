@@ -539,6 +539,7 @@ process_file <- function(file){
                                 readable      = TRUE)
                   # head(ego)
                   ego_df <- as.data.frame(ego)
+                  if (NROW(ego_df) == 0) rgse_skip("no GO term within the gene set size limits contains these genes")
                   ego_df$summary_LogFC <- unlist(lapply(lapply(ego_df$geneID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,"/"))]}),function(y){paste(y,collapse=",")}))
                   ego_df$summary_LogFC_2 <- unlist(lapply(strsplit(ego_df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")}))
                   ego_df$summary_LogFC <- unlist(lapply(strsplit(ego_df$geneID,"/"),function(x){paste(x[order(x)],a$logFC_sense[a$Gene_ID %in% x[order(x)]],sep="_",collapse="/")}))
@@ -570,6 +571,7 @@ process_file <- function(file){
                                 qvalueCutoff  = 1,
                                 readable      = TRUE)
                   ego_df <- as.data.frame(ego)
+                  if (NROW(ego_df) == 0) rgse_skip("no GO term within the gene set size limits contains these genes")
                   ego_df$summary_LogFC <- unlist(lapply(lapply(ego_df$geneID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,"/"))]}),function(y){paste(y,collapse=",")}))
                   ego_df$summary_LogFC_2 <- unlist(lapply(strsplit(ego_df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")}))
                   ego_df$summary_LogFC <- unlist(lapply(strsplit(ego_df$geneID,"/"),function(x){paste(x[order(x)],a$logFC_sense[a$Gene_ID %in% x[order(x)]],sep="_",collapse="/")}))
@@ -611,7 +613,7 @@ process_file <- function(file){
                                 qvalueCutoff  = 1,
                                 readable      = TRUE)
                   ego_df <- as.data.frame(ego)
-                  ego_df <- as.data.frame(ego)
+                  if (NROW(ego_df) == 0) rgse_skip("no GO term within the gene set size limits contains these genes")
                   ego_df$summary_LogFC <- unlist(lapply(lapply(ego_df$geneID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,"/"))]}),function(y){paste(y,collapse=",")}))
                   ego_df$summary_LogFC_2 <- unlist(lapply(strsplit(ego_df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")}))
                   ego_df$summary_LogFC <- unlist(lapply(strsplit(ego_df$geneID,"/"),function(x){paste(x[order(x)],a$logFC_sense[a$Gene_ID %in% x[order(x)]],sep="_",collapse="/")}))
@@ -653,6 +655,7 @@ process_file <- function(file){
                               qvalueCutoff  = 1,
                               readable      = TRUE)
                   ego_df <- as.data.frame(ego)
+                  if (NROW(ego_df) == 0) rgse_skip("no GO term within the gene set size limits contains these genes")
                   ego_df$summary_LogFC <- unlist(lapply(lapply(ego_df$geneID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,"/"))]}),function(y){paste(y,collapse=",")}))
                   ego_df$summary_LogFC_2 <- unlist(lapply(strsplit(ego_df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")}))
                   ego_df$summary_LogFC <- unlist(lapply(strsplit(ego_df$geneID,"/"),function(x){paste(x[order(x)],a$logFC_sense[a$Gene_ID %in% x[order(x)]],sep="_",collapse="/")}))

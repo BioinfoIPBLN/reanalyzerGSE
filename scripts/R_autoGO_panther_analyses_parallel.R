@@ -23,6 +23,21 @@ source(file.path(script_dir, "R_report_notes.R"))
 source(file.path(script_dir, "R_net_config.R"))
 .rgse_net_configure()
 
+.rgse_panther_timeout <- 300
+rba_options(timeout = .rgse_panther_timeout, skip_error = FALSE)
+.rgse_panther_enrich <- function(...) {
+  for (k in 1:2) {
+    t0 <- Sys.time()
+    res <- tryCatch(httr::with_config(httr::config(low_speed_time = .rgse_panther_timeout), rba_panther_enrich(...)),
+                    error = function(e) e)
+    if (is.list(res) && !inherits(res, "error")) return(res)
+    msg <- if (inherits(res, "error")) conditionMessage(res) else paste(as.character(res), collapse = " ")
+    if (k == 2 || as.numeric(difftime(Sys.time(), t0, units = "secs")) >= 60) break
+    Sys.sleep(30 + stats::runif(1, 0, 15))
+  }
+  stop(msg, call. = FALSE)
+}
+
 .rgse_min_enrich_genes <- 5
 .rgse_min_cluster_genes <- 10
 
@@ -476,66 +491,32 @@ process_file <- function(file){
     dataset <- head(dataset, 10000)
   }
   if (length(dataset) > 0){
+    panther_runs <- list(
+      fisher_whole_back = list(test_type = "FISHER"),
+      binom_whole_back  = list(test_type = "BINOMIAL"),
+      fisher_expr_back  = list(test_type = "FISHER",   ref_genes = expr_back, ref_organism = org_panther),
+      binom_expr_back   = list(test_type = "BINOMIAL", ref_genes = expr_back, ref_organism = org_panther))
+    if (length(expr_back) == 0) panther_runs <- panther_runs[c("fisher_whole_back", "binom_whole_back")]
     for(annot_panther in methods){
       annot_panther2 <- annot_panther
       annot_panther2 <- gsub("ANNOT_TYPE_ID_PANTHER_","",gsub("GO:0003674","GO_MF",gsub("GO:0008150","GO_BP",gsub("GO:0005575","GO_CC",annot_panther2))))
-      tryCatch({
-        enriched_fisher_whole_back <- rba_panther_enrich(genes = dataset,
-                                       organism = org_panther,
-                                       annot_dataset = annot_panther,
-                                       test_type = "FISHER",
-                                       correction = padjustmethod,
-                                       cutoff = 0.05)
-        if (NROW(enriched_fisher_whole_back$result) > 0){
-          write.table(enriched_fisher_whole_back$result,file=paste0("enriched_fisher_whole_back_",annot_panther2,"_",padjustmethod,"_panther.txt"),col.names = T,row.names = F,quote = F,sep="\t")      
+      failed_before <- NULL
+      for (run in names(panther_runs)) {
+        out <- paste0("enriched_", run, "_", annot_panther2, "_", padjustmethod, "_panther")
+        if (!is.null(failed_before)) {
+          writeLines(paste0("Not attempted: ", failed_before), paste0(out, "_err.txt"))
+          next
         }
-      }, error = function(e) {
-          writeLines(as.character(e), paste0("enriched_fisher_whole_back_",annot_panther2,"_",padjustmethod,"_panther_err.txt"))
-      })
-      tryCatch({
-        enriched_binom_whole_back <- rba_panther_enrich(genes = dataset,
-                                       organism = org_panther,
-                                       annot_dataset = annot_panther,
-                                       test_type = "BINOMIAL",
-                                       correction = padjustmethod,
-                                       cutoff = 0.05)
-        if (NROW(enriched_binom_whole_back$result) > 0){
-          write.table(enriched_binom_whole_back$result,file=paste0("enriched_binom_whole_back_",annot_panther2,"_",padjustmethod,"_panther.txt"),col.names = T,row.names = F,quote = F,sep="\t")      
+        res <- tryCatch(do.call(.rgse_panther_enrich, c(list(genes = dataset, organism = org_panther, annot_dataset = annot_panther,
+                                                             correction = padjustmethod, cutoff = 0.05), panther_runs[[run]])),
+                        error = function(e) e)
+        if (inherits(res, "error")) {
+          writeLines(conditionMessage(res), paste0(out, "_err.txt"))
+          failed_before <- paste0("PANTHER failed on ", annot_panther2, " for this gene list (", run, "): ", conditionMessage(res))
+        } else if (NROW(res$result) > 0) {
+          write.table(res$result, file = paste0(out, ".txt"), col.names = T, row.names = F, quote = F, sep = "\t")
         }
-      }, error = function(e) {
-          writeLines(as.character(e),paste0("enriched_binom_whole_back_",annot_panther2,"_",padjustmethod,"_panther_err.txt"))
-      })
-      if (length(expr_back) == 0) next
-      tryCatch({
-        enriched_fisher_expr_back <- rba_panther_enrich(genes = dataset,
-                                       organism = org_panther,
-                                       annot_dataset = annot_panther,
-                                       test_type = "FISHER",
-                                       correction = padjustmethod,
-                                       cutoff = 0.05,
-                                       ref_genes = expr_back,
-                                       ref_organism = org_panther)
-        if (NROW(enriched_fisher_expr_back$result) > 0){
-          write.table(enriched_fisher_expr_back$result,file=paste0("enriched_fisher_expr_back_",annot_panther2,"_",padjustmethod,"_panther.txt"),col.names = T,row.names = F,quote = F,sep="\t")      
-        }
-      }, error = function(e) {
-          writeLines(as.character(e), paste0("enriched_fisher_expr_back_",annot_panther2,"_",padjustmethod,"_panther_err.txt"))
-      })
-      tryCatch({
-        enriched_binom_expr_back <- rba_panther_enrich(genes = dataset,
-                                       organism = org_panther,
-                                       annot_dataset = annot_panther,
-                                       test_type = "BINOMIAL",
-                                       correction = padjustmethod,
-                                       cutoff = 0.05,
-                                       ref_genes = expr_back,
-                                       ref_organism = org_panther)
-        if (NROW(enriched_binom_expr_back$result) > 0){
-          write.table(enriched_binom_expr_back$result,file=paste0("enriched_binom_expr_back_",annot_panther2,"_",padjustmethod,"_panther.txt"),col.names = T,row.names = F,quote = F,sep="\t")      
-        }
-      }, error = function(e) {
-          writeLines(as.character(e), paste0("enriched_binom_expr_back_",annot_panther2,"_",padjustmethod,"_panther_err.txt"))
-      })
+      }
     }
   } else {
     cat(file2, "... no genes to apply PANTHER\n")
