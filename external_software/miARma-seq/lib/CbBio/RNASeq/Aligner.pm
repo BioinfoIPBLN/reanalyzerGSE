@@ -2838,11 +2838,11 @@ sub hisat2{
 					" | samtools markdup -r --write-index - {}_hisat2.bam##idx##{}_hisat2.bam.csi ";
 			} elsif (defined $bam_dedup && ($bam_dedup eq "picard" || $bam_dedup eq "picard_optical")) {
 				my $p_opts = ($bam_dedup eq "picard_optical") ? "REMOVE_SEQUENCING_DUPLICATES=true" : "REMOVE_DUPLICATES=true";
-				$samtools_pipeline_pe = $custom_filter_part . $filter_part . $pair_part . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_hisat2.bam##idx##{}_hisat2.bam.csi - && " .
+				$samtools_pipeline_pe = $custom_filter_part . $filter_part . $pair_part . " | samtools sort -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_hisat2.bam##idx##{}_hisat2.bam.csi - && " .
 					" picard MarkDuplicates I={}_hisat2.bam O={}_hisat2.dedup.bam M={}_hisat2.dup_metrics.txt $p_opts VALIDATION_STRINGENCY=LENIENT QUIET=true && " .
 					" mv {}_hisat2.dedup.bam {}_hisat2.bam && samtools index -c {}_hisat2.bam";
 			} else {
-				$samtools_pipeline_pe = $custom_filter_part . $filter_part . $pair_part . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_hisat2.bam##idx##{}_hisat2.bam.csi - ";
+				$samtools_pipeline_pe = $custom_filter_part . $filter_part . $pair_part . " | samtools sort -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_hisat2.bam##idx##{}_hisat2.bam.csi - ";
 			}
    			
 			if($file =~ /.*_R?1\.f.*/){
@@ -2950,11 +2950,11 @@ sub hisat2{
 					" | samtools markdup -r --write-index - {}_hisat2.bam##idx##{}_hisat2.bam.csi ";
 			} elsif (defined $bam_dedup && ($bam_dedup eq "picard" || $bam_dedup eq "picard_optical")) {
 				my $p_opts = ($bam_dedup eq "picard_optical") ? "REMOVE_SEQUENCING_DUPLICATES=true" : "REMOVE_DUPLICATES=true";
-				$samtools_pipeline_se = $custom_filter_part_se . $filter_part_se . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_hisat2.bam##idx##{}_hisat2.bam.csi - && " .
+				$samtools_pipeline_se = $custom_filter_part_se . $filter_part_se . " | samtools sort -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_hisat2.bam##idx##{}_hisat2.bam.csi - && " .
 					" picard MarkDuplicates I={}_hisat2.bam O={}_hisat2.dedup.bam M={}_hisat2.dup_metrics.txt $p_opts VALIDATION_STRINGENCY=LENIENT QUIET=true && " .
 					" mv {}_hisat2.dedup.bam {}_hisat2.bam && samtools index -c {}_hisat2.bam";
 			} else {
-				$samtools_pipeline_se = $custom_filter_part_se . $filter_part_se . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_hisat2.bam##idx##{}_hisat2.bam.csi - ";
+				$samtools_pipeline_se = $custom_filter_part_se . $filter_part_se . " | samtools sort -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_hisat2.bam##idx##{}_hisat2.bam.csi - ";
 			}
 			print STDOUT "\tHISAT 2 :: ".date()." Checking $file for hisat2 (single-end) analysis\n" if($verbose);
 						$command=qq{if [ \$(ls $projectdir$output_dir | wc -l) -eq 0 ]; then
@@ -3378,11 +3378,11 @@ sub star{
 				" | samtools markdup -r --write-index - {}_STAR.bam##idx##{}_STAR.bam.csi ";
 		} elsif (defined $bam_dedup && ($bam_dedup eq "picard" || $bam_dedup eq "picard_optical")) {
 			my $p_opts = ($bam_dedup eq "picard_optical") ? "REMOVE_SEQUENCING_DUPLICATES=true" : "REMOVE_DUPLICATES=true";
-			$samtools_pipeline_pe = $filter_part . $custom_filter_part . $pair_part . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_STAR.bam##idx##{}_STAR.bam.csi - && " .
+			$samtools_pipeline_pe = $filter_part . $custom_filter_part . $pair_part . " | samtools sort -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_STAR.bam##idx##{}_STAR.bam.csi - && " .
 				" picard MarkDuplicates I={}_STAR.bam O={}_STAR.dedup.bam M={}_STAR.dup_metrics.txt $p_opts VALIDATION_STRINGENCY=LENIENT QUIET=true && " .
 				" mv {}_STAR.dedup.bam {}_STAR.bam && samtools index -c {}_STAR.bam";
 		} else {
-			$samtools_pipeline_pe = $filter_part . $custom_filter_part . $pair_part . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_STAR.bam##idx##{}_STAR.bam.csi - ";
+			$samtools_pipeline_pe = $filter_part . $custom_filter_part . $pair_part . " | samtools sort -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_STAR.bam##idx##{}_STAR.bam.csi - ";
 		}
 		
 		my $command;
@@ -3411,11 +3411,11 @@ sub star{
 				" | samtools markdup -r --write-index - {}_STAR.bam##idx##{}_STAR.bam.csi ";
 		} elsif (defined $bam_dedup && ($bam_dedup eq "picard" || $bam_dedup eq "picard_optical")) {
 			my $p_opts = ($bam_dedup eq "picard_optical") ? "REMOVE_SEQUENCING_DUPLICATES=true" : "REMOVE_DUPLICATES=true";
-			$samtools_pipeline_se = $filter_part_se . $custom_filter_part_se . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_STAR.bam##idx##{}_STAR.bam.csi - && " .
+			$samtools_pipeline_se = $filter_part_se . $custom_filter_part_se . " | samtools sort -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_STAR.bam##idx##{}_STAR.bam.csi - && " .
 				" picard MarkDuplicates I={}_STAR.bam O={}_STAR.dedup.bam M={}_STAR.dup_metrics.txt $p_opts VALIDATION_STRINGENCY=LENIENT QUIET=true && " .
 				" mv {}_STAR.dedup.bam {}_STAR.bam && samtools index -c {}_STAR.bam";
 		} else {
-			$samtools_pipeline_se = $filter_part_se . $custom_filter_part_se . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_STAR.bam##idx##{}_STAR.bam.csi - ";
+			$samtools_pipeline_se = $filter_part_se . $custom_filter_part_se . " | samtools sort -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_STAR.bam##idx##{}_STAR.bam.csi - ";
 		}
 
 		if(lc($Seqtype) eq "pairedend" or lc($Seqtype) eq "paired" or lc($Seqtype) eq "paired-end"){
@@ -3526,11 +3526,11 @@ sub star{
 					" | samtools markdup -r --write-index - {}_STAR.bam##idx##{}_STAR.bam.csi ";
 			} elsif (defined $bam_dedup && ($bam_dedup eq "picard" || $bam_dedup eq "picard_optical")) {
 				my $p_opts = ($bam_dedup eq "picard_optical") ? "REMOVE_SEQUENCING_DUPLICATES=true" : "REMOVE_DUPLICATES=true";
-				$samtools_pipeline_se = $filter_part_se . $custom_filter_part_se . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_STAR.bam##idx##{}_STAR.bam.csi - && " .
+				$samtools_pipeline_se = $filter_part_se . $custom_filter_part_se . " | samtools sort -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_STAR.bam##idx##{}_STAR.bam.csi - && " .
 					" picard MarkDuplicates I={}_STAR.bam O={}_STAR.dedup.bam M={}_STAR.dup_metrics.txt $p_opts VALIDATION_STRINGENCY=LENIENT QUIET=true && " .
 					" mv {}_STAR.dedup.bam {}_STAR.bam && samtools index -c {}_STAR.bam";
 			} else {
-				$samtools_pipeline_se = $filter_part_se . $custom_filter_part_se . " | samtools sort -@ $threads_sort -l 9 -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_STAR.bam##idx##{}_STAR.bam.csi - ";
+				$samtools_pipeline_se = $filter_part_se . $custom_filter_part_se . " | samtools sort -@ $threads_sort -m ${memorylimit_div_mb_sort_cores}M --write-index -o {}_STAR.bam##idx##{}_STAR.bam.csi - ";
 			}
 
 			$command=qq{if [ \$(ls $projectdir$output_dir | wc -l) -eq 0 ]; then

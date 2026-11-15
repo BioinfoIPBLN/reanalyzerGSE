@@ -1156,9 +1156,9 @@ if run_step step1d; then
 	export debug_step="all"
 fi
 
-### STEP 1. Give info of NCBI's current genome:
+### STEP 1. Give info of NCBI's reference genome:
 organism=$(cat $output_folder/$name/reads_study_info/organism.txt | sed 's/ \+/_/g;s/__*/_/g') # Get again the organism in case it has been manually modified... and without spaces...
-timeout 120 Rscript -e 'organism <- commandArgs(TRUE)[1]; tryCatch({ ids <- rentrez::entrez_search(db="assembly", term=paste0(organism, "[orgn]"))$ids; if(length(ids)==0) stop("No ids"); assemblies <- rentrez::entrez_summary(db="assembly", id=ids[1]); cat(paste(paste0("\n\nNCBI current assembly info: ", date()), assemblies$assemblyname, assemblies$assemblyaccession, assemblies$submissiondate, "\n", sep="\n")) }, error=function(e) cat(paste0("\n\nNo genome information found in NCBI for: ", organism, "\n\n")))' "${organism//_/ }" || echo -e "\n\nNCBI assembly information not available (no answer within 120 s)\n"
+timeout 120 Rscript -e 'organism <- commandArgs(TRUE)[1]; tryCatch({ filters <- c("NCBI reference assembly" = " AND \"reference genome\"[filter]", "NCBI latest RefSeq assembly" = " AND \"latest refseq\"[filter]", "NCBI most recent assembly" = ""); for (k in names(filters)) { ids <- rentrez::entrez_search(db="assembly", term=paste0(organism, "[orgn]", filters[[k]]))$ids; if (length(ids) > 0) break }; if(length(ids)==0) stop("No ids"); assemblies <- rentrez::entrez_summary(db="assembly", id=ids[1]); cat(paste(paste0("\n\n", k, " info: ", date()), assemblies$assemblyname, assemblies$assemblyaccession, assemblies$submissiondate, "\n", sep="\n")) }, error=function(e) cat(paste0("\n\nNo genome information found in NCBI for: ", organism, "\n\n")))' "${organism//_/ }" || echo -e "\n\nNCBI assembly information not available (no answer within 120 s)\n"
 echo -e "\nYou are using $reference_genome\n"
 
 ### STEP 1. Auto-decompress gzipped reference inputs into the indexes subfolder:
