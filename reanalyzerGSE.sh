@@ -582,7 +582,7 @@ small_rna_align_and_count() {
 	[ "$bam_dedup" == "yes" ] && echo "NOTE: bam_dedup is not applied in small RNA mode: identical reads are the expected signal of an abundant miRNA, not PCR duplicates"
 	echo -e "\nAligning $n sample(s) with bowtie1 ($jobs at a time, $thr threads each): bowtie -n 1 -l 20 -e 70 --best -k 1 --nomaqround $bowtie1_extra_args\n"
 	printf '%s\n' "${sr_samples[@]}" | parallel --halt-on-error 2 --joblog "$out/bowtie1_log_parallel.txt" -j $jobs \
-		"zcat -f $reads/{}_1.fastq.gz | bowtie -p $thr -q -S -n 1 -l 20 -e 70 --best -k 1 --nomaqround --no-unal $bowtie1_extra_args $small_rna_index - 2> $aln_dir/{}_bowtie1.log | samtools view -u $mapq_filter - | samtools sort -@ $thr -T $TMPDIR/{}_bowtie1_sort -o $aln_dir/{}_bowtie1.bam - && samtools index $aln_dir/{}_bowtie1.bam"
+		"zcat -f $reads/{}_1.fastq.gz | bowtie -p $thr -q -S -n 1 -l 20 -e 70 --best -k 1 --nomaqround --no-unal $bowtie1_extra_args $small_rna_index - 2> $aln_dir/{}_bowtie1.log | samtools view -u $mapq_filter - | samtools sort -@ $thr -l $compression_level -T $TMPDIR/{}_bowtie1_sort -o $aln_dir/{}_bowtie1.bam - && samtools index $aln_dir/{}_bowtie1.bam"
 	if [ $? -ne 0 ]; then
 		echo -e "\n\033[1;31mERROR:\033[0m bowtie1 failed for some sample(s), see $out/bowtie1_log_parallel.txt and $aln_dir/*_bowtie1.log\n" >&2
 		exit 1
@@ -2011,6 +2011,7 @@ _log_step "Step_3a_Prepare" "start"
 			if [ ! -z "$bam_dedup" ]; then
 				sed -i "s,bam_dedup=no,bam_dedup=$bam_dedup,g" ${unit_ini[index]}
 			fi
+			sed -i "s,^compression_level=$,compression_level=$compression_level," ${unit_ini[index]}
 			if [ ! -z "$bam_custom_filter" ]; then
 				bam_custom_filter_escaped=$(sed_escape "$bam_custom_filter")
 				sed -i "s,bam_custom_filter=,bam_custom_filter=$bam_custom_filter_escaped,g" ${unit_ini[index]}

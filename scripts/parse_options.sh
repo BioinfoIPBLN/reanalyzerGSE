@@ -163,7 +163,7 @@ for argument in "${arguments[@]}"; do
 	        -pi | -cores_index # Number of cores for genome indexing in aligning step (by default, same than -p)
 	        -M | -memory_max # Max RAM memory to be used by aligner or JAVA in bytes (by default 257698037760, or 240GB, used)
 	        -P | -number_parallel # Number of files to be processed in parallel (10 by default)
-	        -cG | -compression_level # Specify the compression level to gzip the downloaded fastq files from GEO, and the local ones re-paired by -repair_pairs (numeric '0' to '9', default '9')
+	        -cG | -compression_level # Compression level, '1' (fastest) to '9' (smallest), of the gzipped fastq files (GEO/SRA downloads, fastp output, local pairs re-paired by -repair_pairs) and of the final BAM files (samtools sort or markdup, Picard). '6' by default, the standard gzip and samtools level. Up to v4.3.0 the default was '9' and BAMs were always written at 9, which makes files only a few percent smaller and the compression several times slower
 	        -Ac | -aligner_index_cache # Whether to try and keep the genome index on the cache/loaded RAM so concurrent jobs do not have to reload it and can use it more easily ('no', which will empty cache at the end, or 'yes', by default)
 
 	        #### MultiQC AI annotation (optional; skipped unless -llm_endpoint is provided):
@@ -260,7 +260,7 @@ for argument in "${arguments[@]}"; do
 			;;
 		-Os) optionsFeatureCounts_seq=${arguments[index]} ;;
 		-iG) input_geo_reads=${arguments[index]} ;;
-		-cG) compression_level=${arguments[index]} ;;
+		-cG | -compression_level) compression_level=${arguments[index]} ;;
 		-Ti) tidy_tmp_files=${arguments[index]} ;;
 		-Tr) tidy_report_files=${arguments[index]} ;;
 		-Txls) convert_tables_excel=${arguments[index]} ;;
@@ -834,8 +834,12 @@ if [ -z "$kraken2_confidence" ]; then
 	kraken2_confidence="0"
 fi
 if [ -z "$compression_level" ]; then
-	compression_level=9
+	compression_level=6
 fi
+case "$compression_level" in
+	[1-9]) : ;;
+	*) echo "Error: -cG/-compression_level must be a number from 1 to 9. You provided: $compression_level"; exit 1 ;;
+esac
 if [ -z "$revigo_threshold_similarity" ]; then
 	revigo_threshold_similarity=0.7
 fi

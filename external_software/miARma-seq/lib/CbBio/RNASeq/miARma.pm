@@ -723,6 +723,7 @@ sub run_miARma{
 						bam_exclude_flags=>$cfg->val("Aligner","bam_exclude_flags") || undef,
 						bam_mapq_threshold=>$cfg->val("Aligner","bam_mapq_threshold") || undef,
 						bam_dedup=>$cfg->val("Aligner","bam_dedup") || "no",
+						compression_level=>$cfg->val("Aligner","compression_level") || undef,
 						bam_custom_filter=>$cfg->val("Aligner","bam_custom_filter") || undef,
 						bam_filter_pairs=>$cfg->val("Aligner","bam_filter_pairs") || "yes",
 						bam_normalization=>$cfg->val("Aligner","bam_normalization") || "BPM",

@@ -235,7 +235,7 @@ cores_reads_to_subsample: 10           # Cores for seqtk subsampling
 cores_index: 30                        # Cores for genome indexing
 memory_max: 257698037760               # Max RAM in bytes (~240GB)
 number_parallel: 10                    # Files processed in parallel
-compression_level: 9                   # Gzip compression level (0-9)
+compression_level: 6                   # Compression level (1-9) of the gzipped fastq files and the final BAM files (9 = smallest files, several times slower)
 aligner_index_cache: "yes"             # Keep genome index in cache ('yes' or 'no')
 
 # === AI annotation ===
