@@ -2202,6 +2202,13 @@ _log_step "Step_3b_miARma" "start"
 			echo -e "\n\033[1;31mERROR:\033[0m miARma-seq exited with code $miarma_exit for ${unit_ini[index]}. Please check the log above for details.\n" >&2
 			exit $miarma_exit
 		fi
+		if [ "$RGSE_ANNOT_STYLE" == "gtf" ]; then
+			_qm_dir=${unit_out[index]}/${aligner}_results
+			_qm_missing=$(find $_qm_dir -maxdepth 1 \( -type f -o -type l \) \( -name "*_hisat2.bam" -o -name "*_STAR.bam" \) 2>/dev/null | sort | while read -r _bam; do [ -s "$_qm_dir/rnaseqqc_results/$(basename $_bam)/rnaseq_qc_results.txt" ] || basename $_bam; done)
+			if [ -n "$_qm_missing" ]; then
+				echo -e "\n\033[1;33mWARNING:\033[0m qualimap rnaseq produced no results for $(echo $_qm_missing | wc -w) BAM file(s): $(echo $_qm_missing). Their RNA-seq QC pages and MultiQC plots will be missing from the report. See $_qm_dir/qc2.log: 'out of memory' there means the Java heap was too small for the annotation, and a larger -M/memory_max fixes it.\n"
+			fi
+		fi
 	done
 	fi
 

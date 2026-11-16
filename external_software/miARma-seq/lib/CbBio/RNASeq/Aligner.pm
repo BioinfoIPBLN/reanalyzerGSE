@@ -2887,7 +2887,9 @@ sub hisat2{
 	      							  QC_NJOBS=\$(cat $tmp_file | sed -E 's,_(R)?[12]\.fastq.*,,g' | sort | uniq | wc -l); QC_J=$qc_total_cores
 	      							  if [ \$QC_J -gt \$QC_NJOBS ]; then QC_J=\$QC_NJOBS; fi
 	      							  if [ \$QC_J -lt 1 ]; then QC_J=1; fi
-	      							  export QC_JAVA_MEM=\$(( $memorylimit_in_mb / (\$QC_J + 2) )); if [ \$QC_JAVA_MEM -lt 4096 ]; then export QC_JAVA_MEM=4096; fi
+	      							  QC_HEAP_NEED=\$(( \$(stat -Lc %s $gtf 2>/dev/null || echo 0) * 4 / 1048576 )); QC_HEAP_CAP=\$(( $memorylimit_in_mb * 3 / 4 )); if [ \$QC_HEAP_NEED -gt \$QC_HEAP_CAP ]; then QC_HEAP_NEED=\$QC_HEAP_CAP; fi; if [ \$QC_HEAP_NEED -lt 4096 ]; then QC_HEAP_NEED=4096; fi
+	      							  while [ \$QC_J -gt 1 ] && [ \$(( $memorylimit_in_mb / (\$QC_J + 2) )) -lt \$QC_HEAP_NEED ]; do QC_J=\$(( \$QC_J - 1 )); done
+	      							  export QC_JAVA_MEM=\$(( $memorylimit_in_mb / (\$QC_J + 2) )); if [ \$QC_JAVA_MEM -lt \$QC_HEAP_NEED ]; then export QC_JAVA_MEM=\$QC_HEAP_NEED; fi
 	      							  export QC_SORT_THREADS=\$(( $qc_total_cores / \$QC_J )); if [ \$QC_SORT_THREADS -lt 1 ]; then export QC_SORT_THREADS=1; fi
 	      							  export QC_SORT_MEM=\$(( \$QC_JAVA_MEM / (2 * \$QC_SORT_THREADS) )); if [ \$QC_SORT_MEM -lt 128 ]; then export QC_SORT_MEM=128; fi
 	      							  case \"\${RGSE_ANNOT_STYLE:-gtf}\" in gtf) parallel --halt-on-error 2 --verbose --joblog ${projectdir}/rnaseqqc_log_parallel.txt -j \$QC_J 'export _JAVA_OPTIONS="-Xmx\${QC_JAVA_MEM}m -Djava.io.tmpdir=\$PWD" && samtools sort -n -@ \$QC_SORT_THREADS -T {}_nsort_qc_tmp -m \${QC_SORT_MEM}M -o {}_hisat2_name_sorted.bam {}_hisat2.bam && qualimap rnaseq -bam {}_hisat2_name_sorted.bam -gtf $gtf -pe --sorted -outdir \$PWD/rnaseqqc_results/{}_hisat2.bam --java-mem-size="\${QC_JAVA_MEM}m" >> qc2.log 2>&1; rm -f {}_hisat2_name_sorted.bam || true' ::: \$(cat $tmp_file | sed -E 's,_(R)?[12]\.fastq.*,,g' | sort | uniq | awk -F '/' '{print \$NF}') ;; esac
@@ -2987,7 +2989,9 @@ sub hisat2{
 	      							  QC_NJOBS=\$(cat $tmp_file | sed -E 's,_(R)?1\.fastq\.gz.*,,g' | sort | uniq | wc -l); QC_J=$qc_total_cores
 	      							  if [ \$QC_J -gt \$QC_NJOBS ]; then QC_J=\$QC_NJOBS; fi
 	      							  if [ \$QC_J -lt 1 ]; then QC_J=1; fi
-	      							  export QC_JAVA_MEM=\$(( $memorylimit_in_mb / (\$QC_J + 2) )); if [ \$QC_JAVA_MEM -lt 4096 ]; then export QC_JAVA_MEM=4096; fi
+	      							  QC_HEAP_NEED=\$(( \$(stat -Lc %s $gtf 2>/dev/null || echo 0) * 4 / 1048576 )); QC_HEAP_CAP=\$(( $memorylimit_in_mb * 3 / 4 )); if [ \$QC_HEAP_NEED -gt \$QC_HEAP_CAP ]; then QC_HEAP_NEED=\$QC_HEAP_CAP; fi; if [ \$QC_HEAP_NEED -lt 4096 ]; then QC_HEAP_NEED=4096; fi
+	      							  while [ \$QC_J -gt 1 ] && [ \$(( $memorylimit_in_mb / (\$QC_J + 2) )) -lt \$QC_HEAP_NEED ]; do QC_J=\$(( \$QC_J - 1 )); done
+	      							  export QC_JAVA_MEM=\$(( $memorylimit_in_mb / (\$QC_J + 2) )); if [ \$QC_JAVA_MEM -lt \$QC_HEAP_NEED ]; then export QC_JAVA_MEM=\$QC_HEAP_NEED; fi
 	      							  export QC_SORT_THREADS=\$(( $qc_total_cores / \$QC_J )); if [ \$QC_SORT_THREADS -lt 1 ]; then export QC_SORT_THREADS=1; fi
 	      							  export QC_SORT_MEM=\$(( \$QC_JAVA_MEM / (2 * \$QC_SORT_THREADS) )); if [ \$QC_SORT_MEM -lt 128 ]; then export QC_SORT_MEM=128; fi
 	      							  case \"\${RGSE_ANNOT_STYLE:-gtf}\" in gtf) parallel --halt-on-error 2 --verbose --joblog ${projectdir}/rnaseqqc_log_parallel.txt -j \$QC_J 'export _JAVA_OPTIONS="-Xmx\${QC_JAVA_MEM}m -Djava.io.tmpdir=\$PWD" && qualimap rnaseq -bam {}_hisat2.bam -gtf $gtf -outdir \$PWD/rnaseqqc_results/{}_hisat2.bam --java-mem-size="\${QC_JAVA_MEM}m" >> qc2.log 2>&1 || true' ::: \$(cat $tmp_file | sed -E 's,_(R)?1\.fastq\.gz.*,,g' | sort | uniq | awk -F '/' '{print \$NF}') ;; esac
@@ -3474,7 +3478,9 @@ sub star{
 					                          QC_NJOBS=\$(echo \$name_lists | wc -w); QC_J=$qc_total_cores
 					                          if [ \$QC_J -gt \$QC_NJOBS ]; then QC_J=\$QC_NJOBS; fi
 					                          if [ \$QC_J -lt 1 ]; then QC_J=1; fi
-					                          export QC_JAVA_MEM=\$(( $memorylimit_in_mb / (\$QC_J + 2) )); if [ \$QC_JAVA_MEM -lt 4096 ]; then export QC_JAVA_MEM=4096; fi
+					                          QC_HEAP_NEED=\$(( \$(stat -Lc %s $gtf 2>/dev/null || echo 0) * 4 / 1048576 )); QC_HEAP_CAP=\$(( $memorylimit_in_mb * 3 / 4 )); if [ \$QC_HEAP_NEED -gt \$QC_HEAP_CAP ]; then QC_HEAP_NEED=\$QC_HEAP_CAP; fi; if [ \$QC_HEAP_NEED -lt 4096 ]; then QC_HEAP_NEED=4096; fi
+					                          while [ \$QC_J -gt 1 ] && [ \$(( $memorylimit_in_mb / (\$QC_J + 2) )) -lt \$QC_HEAP_NEED ]; do QC_J=\$(( \$QC_J - 1 )); done
+					                          export QC_JAVA_MEM=\$(( $memorylimit_in_mb / (\$QC_J + 2) )); if [ \$QC_JAVA_MEM -lt \$QC_HEAP_NEED ]; then export QC_JAVA_MEM=\$QC_HEAP_NEED; fi
 					                          export QC_SORT_THREADS=\$(( $qc_total_cores / \$QC_J )); if [ \$QC_SORT_THREADS -lt 1 ]; then export QC_SORT_THREADS=1; fi
 					                          export QC_SORT_MEM=\$(( \$QC_JAVA_MEM / (2 * \$QC_SORT_THREADS) )); if [ \$QC_SORT_MEM -lt 128 ]; then export QC_SORT_MEM=128; fi
 					                          case \"\${RGSE_ANNOT_STYLE:-gtf}\" in gtf) parallel --halt-on-error 2 --verbose --joblog ${projectdir}/rnaseqqc_log_parallel.txt -j \$QC_J 'export _JAVA_OPTIONS="-Xmx\${QC_JAVA_MEM}m -Djava.io.tmpdir=\$PWD" && samtools sort -n -@ \$QC_SORT_THREADS -T {}_nsort_qc_tmp -m \${QC_SORT_MEM}M -o {}_STAR_name_sorted.bam $projectdir${output_dir}{}_STAR.bam && qualimap rnaseq -bam {}_STAR_name_sorted.bam -gtf $gtf -pe --sorted -outdir \$PWD/rnaseqqc_results/{}_STAR.bam --java-mem-size="\${QC_JAVA_MEM}m" >> qc2.log 2>&1; rm -f {}_STAR_name_sorted.bam || true' ::: \$(echo \$name_lists) ;; esac
@@ -3565,7 +3571,9 @@ sub star{
 		                          QC_NJOBS=\$(echo \$name_lists | wc -w); QC_J=$qc_total_cores
 		                          if [ \$QC_J -gt \$QC_NJOBS ]; then QC_J=\$QC_NJOBS; fi
 		                          if [ \$QC_J -lt 1 ]; then QC_J=1; fi
-		                          export QC_JAVA_MEM=\$(( $memorylimit_in_mb / (\$QC_J + 2) )); if [ \$QC_JAVA_MEM -lt 4096 ]; then export QC_JAVA_MEM=4096; fi
+		                          QC_HEAP_NEED=\$(( \$(stat -Lc %s $gtf 2>/dev/null || echo 0) * 4 / 1048576 )); QC_HEAP_CAP=\$(( $memorylimit_in_mb * 3 / 4 )); if [ \$QC_HEAP_NEED -gt \$QC_HEAP_CAP ]; then QC_HEAP_NEED=\$QC_HEAP_CAP; fi; if [ \$QC_HEAP_NEED -lt 4096 ]; then QC_HEAP_NEED=4096; fi
+		                          while [ \$QC_J -gt 1 ] && [ \$(( $memorylimit_in_mb / (\$QC_J + 2) )) -lt \$QC_HEAP_NEED ]; do QC_J=\$(( \$QC_J - 1 )); done
+		                          export QC_JAVA_MEM=\$(( $memorylimit_in_mb / (\$QC_J + 2) )); if [ \$QC_JAVA_MEM -lt \$QC_HEAP_NEED ]; then export QC_JAVA_MEM=\$QC_HEAP_NEED; fi
 		                          export QC_SORT_THREADS=\$(( $qc_total_cores / \$QC_J )); if [ \$QC_SORT_THREADS -lt 1 ]; then export QC_SORT_THREADS=1; fi
 		                          export QC_SORT_MEM=\$(( \$QC_JAVA_MEM / (2 * \$QC_SORT_THREADS) )); if [ \$QC_SORT_MEM -lt 128 ]; then export QC_SORT_MEM=128; fi
 		                          case \"\${RGSE_ANNOT_STYLE:-gtf}\" in gtf) parallel --halt-on-error 2 --verbose --joblog ${projectdir}/rnaseqqc_log_parallel.txt -j \$QC_J 'export _JAVA_OPTIONS="-Xmx\${QC_JAVA_MEM}m -Djava.io.tmpdir=\$PWD" && qualimap rnaseq -bam $projectdir${output_dir}{}_STAR.bam -gtf $gtf -outdir \$PWD/rnaseqqc_results/{}_STAR.bam --java-mem-size="\${QC_JAVA_MEM}m" >> qc2.log 2>&1 || true' ::: \$(echo \$name_lists) ;; esac
