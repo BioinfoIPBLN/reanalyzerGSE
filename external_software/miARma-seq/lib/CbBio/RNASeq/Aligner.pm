@@ -3335,6 +3335,7 @@ sub star{
 	}
 	my $star_load_mode = (lc($aligner_index_cache) eq "no") ? "NoSharedMemory" : "LoadAndKeep";
 	my $star_preload = (lc($aligner_index_cache) eq "no") ? ":" : "STAR --runThreadN $indexthreads --genomeDir $staridx_final --genomeLoad LoadAndExit --outFileNamePrefix $projectdir${output_dir}genomeloading.tmp2 && rm -rf $projectdir${output_dir}genomeloading.tmp*";
+	my $star_unload = (lc($aligner_index_cache) eq "no") ? ":" : "STAR --runThreadN $indexthreads --genomeDir $staridx_final --genomeLoad Remove --outFileNamePrefix $projectdir${output_dir}genomeremoval.tmp >/dev/null 2>&1 || true; rm -rf $projectdir${output_dir}genomeremoval.tmp*";
 	#Collecting star parameters provided by the user
 	if(defined($args{"starparameters"})){
 		my $starparameters=$args{"starparameters"};
@@ -3467,7 +3468,7 @@ sub star{
 					                          name_lists=\$(cat $tmp_file | sed -E 's,_(R)?[12]\.fastq.*,,g' | sort | uniq | awk -F '/' '{ print \$NF }') && unset DISPLAY
 					                          $star_preload
 					                          parallel --halt-on-error 2 --verbose --joblog ${projectdir}/star_log_parallel.txt -j $parallelnumber 'set -o pipefail; STAR --runMode alignReads --genomeDir $staridx_final --genomeLoad $star_load_mode --readFilesIn \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \$(cat $tmp_file | xargs dirname | uniq)/{}_2.fastq.gz --outFileNamePrefix $projectdir${output_dir}{}_STAR_ $starpardef --outStd SAM $samtools_pipeline_pe && echo && echo Done...{}_STAR.bam${star_unmapped_gzip}' ::: \$(echo \$name_lists)
-					                          STAR --runThreadN $indexthreads --genomeDir $staridx_final --genomeLoad Remove --outFileNamePrefix $projectdir${output_dir}genomeremoval.tmp >/dev/null 2>&1 || true; rm -rf $projectdir${output_dir}genomeremoval.tmp*
+					                          $star_unload
 					                          parallel --halt-on-error 2 --verbose --joblog ${projectdir}/starprocess_log_parallel.txt -j $parallelnumber 'export _JAVA_OPTIONS="-Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD" && qualimap bamqc -bam $projectdir${output_dir}{}_STAR.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_STAR.bam --java-mem-size="${memorylimit_div_mb}m" >> qc1.log 2>&1 || true
 					                          bamCoverage -b {}_STAR.bam -o {}_STAR.bam.bw -of bigwig -bs $bigwig_binsize -p $threads $norm_cmd' ::: \$(echo \$name_lists)
 					                          QC_NJOBS=\$(echo \$name_lists | wc -w); QC_J=$qc_total_cores
@@ -3558,7 +3559,7 @@ sub star{
 		                          name_lists=\$(cat $tmp_file | awk -F '/' '{ print \$NF }') && unset DISPLAY && export PARALLEL_SHELL=/bin/bash
 		                          $star_preload
 					  parallel --halt-on-error 2 --verbose --joblog ${projectdir}/star_log_parallel.txt -j $parallelnumber 'set -o pipefail; STAR --runMode alignReads --genomeDir $staridx_final --genomeLoad $star_load_mode --readFilesIn \$(cat $tmp_file | xargs dirname | uniq)/{} --outFileNamePrefix $projectdir${output_dir}{}_STAR_ $starpardef --outStd SAM $samtools_pipeline_se && echo && echo Done...{}_STAR.bam${star_unmapped_gzip}' ::: \$(echo \$name_lists)
-					  STAR --runThreadN $indexthreads --genomeDir $staridx_final --genomeLoad Remove --outFileNamePrefix $projectdir${output_dir}genomeremoval.tmp >/dev/null 2>&1 || true; rm -rf $projectdir${output_dir}genomeremoval.tmp*
+					  $star_unload
 					  parallel --halt-on-error 2 --verbose --joblog ${projectdir}/starprocess_log_parallel.txt -j $parallelnumber 'export _JAVA_OPTIONS="-Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD" && qualimap bamqc -bam $projectdir${output_dir}{}_STAR.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_STAR.bam --java-mem-size="${memorylimit_div_mb}m" >> qc1.log 2>&1 || true
 		                          bamCoverage -b {}_STAR.bam -o {}_STAR.bam.bw -of bigwig -bs $bigwig_binsize -p $threads $norm_cmd' ::: \$(echo \$name_lists)
 		                          QC_NJOBS=\$(echo \$name_lists | wc -w); QC_J=$qc_total_cores

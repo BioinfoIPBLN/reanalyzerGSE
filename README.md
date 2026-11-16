@@ -14,7 +14,7 @@ reanalyzerGSE is distributed as an Apptainer/Singularity container (~2 GB), whic
    apptainer build reanalyzerGSE.sif reanalyzerGSE/external_software/installation/reanalyzerGSE.def | tee -a reanalyzerGSE.sif.build.log
    ```
 
-   The image packs the latest commit of the main branch. To pack a release instead, which is what a publication should cite, pass its tag (or a full commit hash): `apptainer build --build-arg REANALYZERGSE_REF=v4.3.1 reanalyzerGSE.sif ...`. The commit used is written into the image, and every run records it in `provenance/` (see Output).
+   The image packs the latest commit of the main branch. To pack a release instead, which is what a publication should cite, pass its tag (or a full commit hash): `apptainer build --build-arg REANALYZERGSE_REF=v4.3.2 reanalyzerGSE.sif ...`. The commit used is written into the image, and every run records it in `provenance/` (see Output).
    The organism annotation packages packed in the image are set with `--build-arg ORGDBS=...` (comma-separated Bioconductor `org.*.db` names; the default packs all 18 organisms that the pipeline supports). Any of the 18 organisms listed under `-O` in the help gets the built-in functional enrichment once its package is in the image or in a bound R library.
 
 2. Download the ready-to-use .sif image:

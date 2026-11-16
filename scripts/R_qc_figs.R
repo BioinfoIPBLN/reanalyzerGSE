@@ -199,15 +199,27 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
     print(paste0("Replacing the palette with ",nsamples," random colors..."))
   }
   
-  par(mfrow=c(1,2))
-  plot(density(lcpm_prefilter), col=col[1], lwd=2, las=2, main="", xlab="")
-  title(main="Raw data", xlab="Log-cpm")
-  abline(v=lcpm.cutoff, lty=3)
-  if (!is.na(applied.cutoff)) abline(v=applied.cutoff, lty=1, col="red", lwd=1.5)
-  for (i in 2:nsamples){
-    den <- density(lcpm_prefilter[,i])
-    lines(den$x, den$y, col=col[i], lwd=2)
+  draw_density_panel <- function(m, main) {
+    dens <- lapply(seq_len(ncol(m)), function(i) {
+      v <- m[, i][is.finite(m[, i])]
+      if (length(v) < 2) NULL else density(v)
+    })
+    ok <- which(!vapply(dens, is.null, logical(1)))
+    if (length(ok) == 0) {
+      plot.new()
+      title(main=main, xlab="Log-cpm")
+      text(0.5, 0.5, "Fewer than 2 genes per sample:\nno density curve", cex=0.8)
+      return(invisible(FALSE))
+    }
+    plot(dens[[ok[1]]], col=col[ok[1]], lwd=2, las=2, main="", xlab="")
+    title(main=main, xlab="Log-cpm")
+    abline(v=lcpm.cutoff, lty=3)
+    if (!is.na(applied.cutoff)) abline(v=applied.cutoff, lty=1, col="red", lwd=1.5)
+    for (i in ok[-1]) lines(dens[[i]]$x, dens[[i]]$y, col=col[i], lwd=2)
+    invisible(TRUE)
   }
+  par(mfrow=c(1,2))
+  draw_density_panel(lcpm_prefilter, "Raw data")
   cutoff_legends <- c("approx recommended: 10/M + 2/L")
   cutoff_ltys <- c(3)
   cutoff_cols <- c("black")
@@ -220,14 +232,7 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
   legend("topright",legend=gsub("(_t|m_Rep|_seq|_KO|_WT)$","",targets$Name), text.col=col, bty = "n", cex = 0.5)
   
   ### 1.2. Density rawcounts log2, cpm...:
-  plot(density(lcpm[,1]), col=col[1], lwd=2, las=2, main="", xlab="")
-  title(main="Filtered data", xlab="Log-cpm")
-  abline(v=lcpm.cutoff, lty=3)
-  if (!is.na(applied.cutoff)) abline(v=applied.cutoff, lty=1, col="red", lwd=1.5)
-  for (i in 2:nsamples){
-    den <- density(lcpm[,i])
-    lines(den$x, den$y, col=col[i], lwd=2)
-  }
+  draw_density_panel(lcpm, "Filtered data")
   legend("topleft", legend=cutoff_legends, lty=cutoff_ltys, col=cutoff_cols, bty="n", cex=0.5)
   legend("topright", legend=gsub("(_t|m_Rep|_seq|_KO|_WT)$","",targets$Name), text.col=col, bty="n", cex = 0.5)
   

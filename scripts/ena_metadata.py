@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""ENA metadata for the accessions given to reanalyzerGSE in -i (PRJ*, [EDS]RP, SAM*, [EDS]RS, [EDS]RX, [EDS]RR).
+"""ENA metadata for the accessions given to reanalyzerGSE in -i (PRJ*, [EDS]RP, SAM*, [EDS]RS, [EDS]RX, [EDS]RR),
+from NCBI SRA when ENA does not answer or has no runs for an accession.
 
 --out-dir writes the files that the pipeline reads in reads_study_info; --print only shows the table;
 --design-auto reads sample names from stdin and prints the design derived from them.
@@ -7,12 +8,14 @@
 import argparse
 import csv
 import io
+import json
 import os
 import re
 import sys
 import time
 import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
 
 FIELDS = ["run_accession", "sample_accession", "secondary_sample_accession", "experiment_accession",
           "study_accession", "secondary_study_accession", "sample_title", "sample_alias", "experiment_title",
@@ -40,6 +43,97 @@ def fetch_runs(accession, retries=4):
             if attempt < retries - 1:
                 time.sleep(15 * (attempt + 1))
     raise RuntimeError(f"ENA did not answer for {accession}: {last}")
+
+
+def ncbi_get(endpoint, params, retries=4):
+    params = dict(params, tool="reanalyzerGSE")
+    if os.environ.get("NCBI_API_KEY"):
+        params["api_key"] = os.environ["NCBI_API_KEY"]
+    url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/" + endpoint + "?" + urllib.parse.urlencode(params)
+    last = None
+    for attempt in range(retries):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "reanalyzerGSE ena_metadata.py"})
+            with urllib.request.urlopen(req, timeout=180) as r:
+                return r.read()
+        except Exception as e:  # noqa: BLE001
+            last = e
+            if attempt < retries - 1:
+                time.sleep(15 * (attempt + 1))
+    raise RuntimeError(f"NCBI did not answer ({endpoint}): {last}")
+
+
+def xml_text(elem, path):
+    found = elem.find(path) if elem is not None else None
+    return (found.text or "").strip() if found is not None else ""
+
+
+def xml_external_id(elem, namespace):
+    for e in (elem.findall("IDENTIFIERS/EXTERNAL_ID") if elem is not None else []):
+        if e.get("namespace") == namespace:
+            return (e.text or "").strip()
+    return ""
+
+
+def ncbi_package_rows(pkg, accession):
+    exp, study, sample = pkg.find("EXPERIMENT"), pkg.find("STUDY"), pkg.find("SAMPLE")
+    lib = exp.find("DESIGN/LIBRARY_DESCRIPTOR") if exp is not None else None
+    layout = lib.find("LIBRARY_LAYOUT") if lib is not None else None
+    layout = layout[0] if layout is not None and len(layout) else None
+    platform = exp.find("PLATFORM") if exp is not None else None
+    platform = platform[0] if platform is not None and len(platform) else None
+    get = lambda e, k: e.get(k, "") if e is not None else ""
+    base = {
+        "sample_accession": xml_external_id(sample, "BioSample") or get(sample, "accession"),
+        "secondary_sample_accession": get(sample, "accession"),
+        "experiment_accession": get(exp, "accession"),
+        "study_accession": xml_external_id(study, "BioProject") or get(study, "accession"),
+        "secondary_study_accession": get(study, "accession"),
+        "sample_title": xml_text(sample, "TITLE"),
+        "sample_alias": get(sample, "alias"),
+        "experiment_title": xml_text(exp, "TITLE"),
+        "experiment_alias": get(exp, "alias"),
+        "sample_description": xml_text(sample, "DESCRIPTION"),
+        "description": "",
+        "scientific_name": xml_text(sample, "SAMPLE_NAME/SCIENTIFIC_NAME"),
+        "tax_id": xml_text(sample, "SAMPLE_NAME/TAXON_ID"),
+        "library_layout": layout.tag if layout is not None else "",
+        "library_strategy": xml_text(lib, "LIBRARY_STRATEGY"),
+        "library_source": xml_text(lib, "LIBRARY_SOURCE"),
+        "library_selection": xml_text(lib, "LIBRARY_SELECTION"),
+        "instrument_platform": platform.tag if platform is not None else "",
+        "instrument_model": xml_text(platform, "INSTRUMENT_MODEL"),
+        "nominal_length": get(layout, "NOMINAL_LENGTH"),
+        "fastq_ftp": "",
+        "study_title": xml_text(study, "DESCRIPTOR/STUDY_TITLE"),
+    }
+    whole = accession in {base["sample_accession"], base["secondary_sample_accession"], base["experiment_accession"],
+                          base["study_accession"], base["secondary_study_accession"]}
+    rows = []
+    for run in pkg.findall("RUN_SET/RUN"):
+        if not whole and run.get("accession") != accession:
+            continue
+        rows.append(dict(base, run_accession=run.get("accession", ""), run_alias=run.get("alias", ""),
+                         read_count=run.get("total_spots", ""), base_count=run.get("total_bases", ""),
+                         first_public=(run.get("published") or "")[:10]))
+    return rows
+
+
+def fetch_runs_ncbi(accession, batch=200):
+    found = json.loads(ncbi_get("esearch.fcgi", {"db": "sra", "term": accession, "usehistory": "y",
+                                                 "retmax": 0, "retmode": "json"}))["esearchresult"]
+    rows = []
+    for start in range(0, int(found.get("count", 0)), batch):
+        data = ncbi_get("efetch.fcgi", {"db": "sra", "query_key": found["querykey"], "WebEnv": found["webenv"],
+                                        "retstart": start, "retmax": batch, "retmode": "xml"})
+        try:
+            packages = ET.fromstring(data).iter("EXPERIMENT_PACKAGE")
+        except ET.ParseError as e:
+            raise RuntimeError(f"NCBI returned unreadable SRA records for {accession}: {e}")
+        for pkg in packages:
+            rows.extend(ncbi_package_rows(pkg, accession))
+        time.sleep(0.4)
+    return rows
 
 
 def clean_name(text):
@@ -135,16 +229,30 @@ def main():
         sys.exit(1)
     runs = []
     seen_runs = set()
+    from_ncbi = []
     for acc in accessions:
-        rows = fetch_runs(acc)
+        try:
+            rows = fetch_runs(acc)
+            if not rows:
+                sys.stderr.write(f"NOTE: ENA has no runs for {acc}; asking NCBI SRA\n")
+        except RuntimeError as e:
+            sys.stderr.write(f"WARNING: {e}; asking NCBI SRA\n")
+            rows = []
         if not rows:
-            sys.stderr.write(f"WARNING: ENA has no runs for {acc}\n")
+            try:
+                rows = fetch_runs_ncbi(acc)
+            except RuntimeError as e:
+                sys.stderr.write(f"WARNING: {e}\n")
+            if rows:
+                from_ncbi.append(acc)
+            else:
+                sys.stderr.write(f"WARNING: neither ENA nor NCBI SRA has runs for {acc}\n")
         for r in rows:
             if r["run_accession"] not in seen_runs:
                 seen_runs.add(r["run_accession"])
                 runs.append(r)
     if not runs:
-        sys.stderr.write("ERROR: no runs found in ENA for " + ", ".join(accessions) + "\n")
+        sys.stderr.write("ERROR: no runs found in ENA or NCBI SRA for " + ", ".join(accessions) + "\n")
         sys.exit(1)
 
     strategies = sorted({(r.get("library_strategy") or "").strip() for r in runs})
@@ -155,7 +263,7 @@ def main():
                          ", ".join(f"{r['run_accession']} ({r.get('library_strategy')})" for r in dropped) + "\n")
         runs = rna
     elif not rna:
-        sys.stderr.write("WARNING: none of the runs is RNA-seq according to ENA (library_strategy: " +
+        sys.stderr.write("WARNING: none of the runs is RNA-seq according to the metadata (library_strategy: " +
                          ", ".join(strategies) + "); all of them are kept\n")
 
     organisms = sorted({(r.get("scientific_name") or "").strip() for r in runs if (r.get("scientific_name") or "").strip()})
@@ -168,7 +276,7 @@ def main():
                              "). Give the accessions of one organism, or set 'organism' to the one to analyse.\n")
             sys.exit(1)
         else:
-            sys.stderr.write("ERROR: ENA reports no organism for these runs; please set 'organism'.\n")
+            sys.stderr.write("ERROR: the metadata reports no organism for these runs; please set 'organism'.\n")
             sys.exit(1)
     layouts = sorted({(r.get("library_layout") or "").strip().upper() for r in runs})
     if len(layouts) != 1 or layouts[0] not in ("SINGLE", "PAIRED"):
@@ -193,6 +301,8 @@ def main():
             out.write("\t".join(t) + "\n")
         out.write("\n")
     out.write(f"{len(runs)} run(s) in {len(samples)} sample(s); organism: {organism}; layout: {layout}\n")
+    if from_ncbi:
+        out.write("Metadata from NCBI SRA instead of ENA for: " + ", ".join(from_ncbi) + "\n")
     if multi:
         out.write("The runs of a sample are merged into one FASTQ per mate: " +
                   ", ".join(f"{t[0]} ({t[1].count(';') + 1} runs)" for t in multi) + "\n")

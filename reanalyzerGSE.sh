@@ -1105,9 +1105,9 @@ if run_step step1c; then
 		mkdir -p "$seqs_location" "$output_folder/$name/reads_study_info"
 		cd "$output_folder/$name/reads_study_info" || exit 1
 		rm -f ena_run_metadata.tsv ena_samples.tsv srr_ids.txt sample_names.txt library_layout_info.txt study_title.txt
-		echo -e "\nQuerying ENA for the runs, samples, layout and organism of $input...\n"
+		echo -e "\nQuerying ENA (NCBI SRA if ENA fails) for the runs, samples, layout and organism of $input...\n"
 		if ! python3 $CURRENT_DIR/scripts/ena_metadata.py --accessions "$input" --out-dir "$output_folder/$name/reads_study_info" ${organism_argument:+--organism "${organism_argument//_/ }"}; then
-			echo -e "\n\033[1;31mERROR:\033[0m the ENA metadata of $input could not be retrieved, or it has no RNA-seq runs (see the messages above). Exiting...\n" >&2
+			echo -e "\n\033[1;31mERROR:\033[0m the metadata of $input could not be retrieved from ENA or NCBI SRA, or it has no RNA-seq runs (see the messages above). Exiting...\n" >&2
 			exit 1
 		fi
 		echo -e "Runs and samples found (full metadata in reads_study_info/ena_run_metadata.tsv):\n"

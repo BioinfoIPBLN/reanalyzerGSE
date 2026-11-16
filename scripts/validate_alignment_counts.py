@@ -12,9 +12,35 @@ preventing the pipeline from cascading into Step 4 with missing or corrupted dat
 
 import argparse
 import glob
+import gzip
 import json
 import os
+import struct
 import sys
+
+BGZF_EOF = bytes.fromhex("1f8b08040000000000ff0600424302001b0003000000000000000000")
+
+
+def bam_problem(path):
+    try:
+        with open(path, "rb") as fh:
+            fh.seek(0, os.SEEK_END)
+            if fh.tell() < len(BGZF_EOF):
+                return "Truncated BAM (no BGZF end-of-file block)"
+            fh.seek(-len(BGZF_EOF), os.SEEK_END)
+            if fh.read() != BGZF_EOF:
+                return "Truncated BAM (no BGZF end-of-file block)"
+        with gzip.open(path, "rb") as fh:
+            if fh.read(4) != b"BAM\x01":
+                return "Not a BAM file"
+            fh.read(struct.unpack("<i", fh.read(4))[0])
+            for _ in range(struct.unpack("<i", fh.read(4))[0]):
+                fh.read(struct.unpack("<i", fh.read(4))[0] + 4)
+            if len(fh.read(4)) < 4:
+                return "Empty BAM (header only, no alignments)"
+    except Exception as e:  # noqa: BLE001
+        return f"Unreadable BAM: {e}"
+    return None
 
 
 def read_samples_info(path):
@@ -241,9 +267,9 @@ def validate_alignment_and_counts(analysis_dir, aligner="star", samples_info_pat
             if not bams:
                 sample_errors.append(f"Missing BAM file (star_results/{sample}_STAR.bam)")
             else:
-                bam_size = os.path.getsize(bams[0])
-                if bam_size < 50000:  # < 50 KB means aborted/empty header-only BAM
-                    sample_errors.append(f"Truncated/Empty BAM ({bam_size / 1024:.1f} KB)")
+                problem = bam_problem(bams[0])
+                if problem:
+                    sample_errors.append(problem)
 
             # 2. Check readcount table
             rc_pattern = os.path.join(analysis_dir, "miARma_out*", "star_readcount_results", f"{sample}_star_readcount.tab")
@@ -270,9 +296,9 @@ def validate_alignment_and_counts(analysis_dir, aligner="star", samples_info_pat
             if not bams:
                 sample_errors.append(f"Missing BAM file (hisat2_results/{sample}_hisat2.bam)")
             else:
-                bam_size = os.path.getsize(bams[0])
-                if bam_size < 50000:
-                    sample_errors.append(f"Truncated/Empty BAM ({bam_size / 1024:.1f} KB)")
+                problem = bam_problem(bams[0])
+                if problem:
+                    sample_errors.append(problem)
 
             # 2. Check readcount table
             rc_pattern = os.path.join(analysis_dir, "miARma_out*", "hisat2_readcount_results", f"{sample}_hisat2_readcount.tab")
@@ -299,9 +325,9 @@ def validate_alignment_and_counts(analysis_dir, aligner="star", samples_info_pat
             if not bams:
                 sample_errors.append(f"Missing BAM file (bowtie1_results/{sample}_bowtie1.bam)")
             else:
-                bam_size = os.path.getsize(bams[0])
-                if bam_size < 5000:
-                    sample_errors.append(f"Truncated/Empty BAM ({bam_size / 1024:.1f} KB)")
+                problem = bam_problem(bams[0])
+                if problem:
+                    sample_errors.append(problem)
 
             # 2. Check readcount table
             rc_pattern = os.path.join(analysis_dir, "miARma_out*", "bowtie1_readcount_results", f"{sample}_bowtie1_readcount.tab")
