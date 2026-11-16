@@ -111,7 +111,9 @@ dry_file "proteome" "$proteome_faa"
 dry_file "human proteome" "$ortho_human_proteome"
 dry_file "functional annotation" "$non_reference_funct_enrichm"
 dry_file "SortMeRNA database" "$sortmerna_databases"
-dry_file "rRNA QC database" "$rrna_qc_databases"
+for d in $(echo "$rrna_qc_databases" | tr ',' '\n'); do
+	dry_file "rRNA QC database" "$d"
+done
 dry_file "miRBase mature FASTA" "$mirna_mature_fa"
 dry_file "miRBase hairpin FASTA" "$mirna_hairpin_fa"
 [[ $fastp_adapter == /* ]] && dry_file "fastp adapters" "$fastp_adapter"

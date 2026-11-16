@@ -4,11 +4,11 @@ export PATH=$CURRENT_DIR_SCRIPTS:$PATH; echo -e "\n\nAdding to PATH the scripts 
 REANALYZER_VERSION=$(cat "$(dirname "$CURRENT_DIR_SCRIPTS")/VERSION" 2>/dev/null || echo "unknown")
 
 ##### From the command line, get arguments by looping through an index...
-index=0
-for argument in "${arguments[@]}"; do
-
-### Incrementing index
-	index=`expr $index + 1`
+_arg_pos=0
+while [ $_arg_pos -lt ${#arguments[@]} ]; do
+	argument=${arguments[_arg_pos]}
+	index=$((_arg_pos + 1))
+	_arg_next=$((_arg_pos + 2))
 
 ### Gather the parameters, default values, exit if essential not provided...
 	case $argument in
@@ -53,7 +53,7 @@ for argument in "${arguments[@]}"; do
 	        -T | -target # Protopical target file for attempts to differential gene expression analyses (containing filenames and covariates, automatically built if not provided)
 
 	        #### Activate alternative modes:
-	        -Dm | -debug_module # For debugging, step to remove the content of the corresponding folders and to resume a failed or incomplete run without repeating (one of 'step1', 'step1a', 'step1b', 'step1c', 'step1d', 'step2', 'step2b', 'step3a', 'step3b', 'step4', 'step4b', 'step5', 'step6', 'step7', 'step8', step9', or 'all' to execute everything, by default)
+	        -Dm | -debug_module # For debugging, step to remove the content of the corresponding folders and to resume a failed or incomplete run without repeating (one of 'step1', 'step1a', 'step1b', 'step1c', 'step1d', 'step2', 'step2b', 'step3a', 'step3b', 'step4', 'step4b', 'step5', 'step6', 'step7', 'step8', 'step9', or 'all' to execute everything, by default)
 	        -Es | -end_step # Mirror of -Dm, but for the end: the step after which to force-stop the pipeline. All steps up to and including this one are run, and any later steps are skipped (one of 'step1', 'step1a', 'step1b', 'step1c', 'step1d', 'step2', 'step2b', 'step3a', 'step3b', 'step4', 'step4b', 'step5', 'step6', 'step7', 'step8', 'step9', or 'none' to run to completion, by default). Must not be earlier than -Dm
 	        -q | -qc_raw_reads # Whether to perform quality control on the raw reads ('yes' by default, or 'no')
 	        -fd | -full_differential_analyses # Whether to perform full differential enrichment analyses (for example including computation of DEGs or Venn diagrams, 'no' or 'yes', by default)
@@ -164,7 +164,7 @@ for argument in "${arguments[@]}"; do
 	        -M | -memory_max # Max RAM memory to be used by aligner or JAVA in bytes (by default 257698037760, or 240GB, used)
 	        -P | -number_parallel # Number of files to be processed in parallel (10 by default)
 	        -cG | -compression_level # Compression level, '1' (fastest) to '9' (smallest), of the gzipped fastq files (GEO/SRA downloads, fastp output, local pairs re-paired by -repair_pairs) and of the final BAM files (samtools sort or markdup, Picard). '6' by default, the standard gzip and samtools level. Up to v4.3.0 the default was '9' and BAMs were always written at 9, which makes files only a few percent smaller and the compression several times slower
-	        -Ac | -aligner_index_cache # Whether to try and keep the genome index on the cache/loaded RAM so concurrent jobs do not have to reload it and can use it more easily ('no', which will empty cache at the end, or 'yes', by default)
+	        -Ac | -aligner_index_cache # STAR only: 'yes' (default) loads the genome index once into shared memory for all the concurrent alignments and removes it at the end; 'no' lets every alignment load its own copy, which needs that much more RAM per parallel job but leaves nothing in shared memory if the run is killed
 
 	        #### MultiQC AI annotation (optional; skipped unless -llm_endpoint is provided):
 	        -Lep | -llm_endpoint # OpenAI-compatible chat/completions URL. Providing it ACTIVATES AI annotation of the MultiQC report via the wrapper (multiqc_ai.py); miARma exports the LLM_* env vars and calls the wrapper instead of standard MultiQC (with automatic fallback to standard MultiQC on failure). Empty by default
@@ -175,50 +175,50 @@ for argument in "${arguments[@]}"; do
 	        -aii | -ai_insights # Which AI annotations to generate, as a comma-separated list of: 'metadata' (AI simplification of sample & condition names from GEO metadata), 'multiqc' (AI annotation of the MultiQC report), 'qualimap' (AI annotation of Qualimap reports), 'design' (study-design insight), 'counts' (per-sample expression-landscape insight from the log2(TPM+0.1) table), 'qc_pdf' (AI annotation of the QC PDF), 'dge' (per-comparison DEG summary), 'enrichment' (per-comparison enrichment narrative), 'literature' (per-comparison synthesis of the bibliographic context gathered by '-lit', and only if that gathering produced results); or 'all' (default, == all nine); or 'no' to disable every AI annotation. 'yes' is accepted as an alias of 'all'. All reuse -llm_endpoint/-llm_model and have no effect unless -llm_endpoint is provided. Each AI option has a 5-minute per-response cap: on timeout its boxes show 'ai_insights timeout. Please try again', and implausibly long (degraded) answers are dropped
 	        -K | -Kraken2_fast # DEPRECATED: daemon mode now replaces /dev/shm approach. This option is kept for backward compatibility but has no effect" && exit 1;;
 		-options) options_file=${arguments[index]} ;;
-		-i) input=${arguments[index]} ;;
-		-n) name=${arguments[index]} ;;
-		-o) output_folder=${arguments[index]} ;;
-		-p) cores=${arguments[index]} ;;
+		-i | -input) input=${arguments[index]} ;;
+		-n | -name) name=${arguments[index]} ;;
+		-o | -output_folder) output_folder=${arguments[index]} ;;
+		-p | -cores) cores=${arguments[index]} ;;
                 -regex | -input_filter_regex) input_filter_regex=${arguments[index]} ;;
                 -regexExclude | -input_filter_regex_exclude) input_filter_regex_exclude=${arguments[index]} ;;
                 -Rpair | -repair_pairs) repair_pairs=${arguments[index]} ;;
                 -Ar | -alignment_removal) alignment_removal=${arguments[index]} ;;
-		-pi) cores_index=${arguments[index]} ;;
-		-M) memory_max=${arguments[index]} ;;
-		-s) strand=${arguments[index]} ;;
-		-r) reference_genome=${arguments[index]} ;;
-		-ri) reference_genome_index=${arguments[index]} ;;
+		-pi | -cores_index) cores_index=${arguments[index]} ;;
+		-M | -memory_max) memory_max=${arguments[index]} ;;
+		-s | -strand) strand=${arguments[index]} ;;
+		-r | -reference_genome) reference_genome=${arguments[index]} ;;
+		-ri | -reference_genome_index) reference_genome_index=${arguments[index]} ;;
 		-rG | -reference_genome_groups) reference_genome_groups=${arguments[index]} ;;
-		-g) genes=${arguments[index]} ;;
-		-G) GSM_filter=${arguments[index]} ;;
-		-rev) revigo_threshold_similarity=${arguments[index]} ;;
-		-a) annotation=${arguments[index]} ;;
-		-f) filter=${arguments[index]} ;;
-		-d) design_custom=${arguments[index]} ;;
-		-D) design_custom_local=${arguments[index]} ;;
-		-Df) databases_function=${arguments[index]} ;;
-		-nrf) non_reference_funct_enrichm=${arguments[index]} ;;
-		-b) batch=${arguments[index]} ;;
-		-bv) batch_vector=${arguments[index]} ;;
-		-bc) batch_biological_covariates=${arguments[index]} ;;
-		-bf) batch_format=${arguments[index]} ;;
-		-B) bed_mode=${arguments[index]} ;;
-		-C) covariables=${arguments[index]} ;;
-		-Cf) covariables_format=${arguments[index]} ;;
-		-S) stop=${arguments[index]} ;;
-		-P) number_parallel=${arguments[index]} ;;
-		-R) number_reads_to_subsample=${arguments[index]} ;;
-		-t) transcripts=${arguments[index]} ;;
-		-T) target=${arguments[index]} ;;
-		-A) aligner=${arguments[index]} ;;
+		-g | -genes) genes=${arguments[index]} ;;
+		-G | -GSM_filter) GSM_filter=${arguments[index]} ;;
+		-rev | -revigo_threshold_similarity) revigo_threshold_similarity=${arguments[index]} ;;
+		-a | -annotation) annotation=${arguments[index]} ;;
+		-f | -filter) filter=${arguments[index]} ;;
+		-d | -design_custom) design_custom=${arguments[index]} ;;
+		-D | -design_custom_local) design_custom_local=${arguments[index]} ;;
+		-Df | -databases_function) databases_function=${arguments[index]} ;;
+		-nrf | -non_reference_funct_enrichm) non_reference_funct_enrichm=${arguments[index]} ;;
+		-b | -batch) batch=${arguments[index]} ;;
+		-bv | -batch_vector) batch_vector=${arguments[index]} ;;
+		-bc | -batch_biological_covariable) batch_biological_covariates=${arguments[index]} ;;
+		-bf | -batch_format) batch_format=${arguments[index]} ;;
+		-B | -bed_mode) bed_mode=${arguments[index]} ;;
+		-C | -covariables) covariables=${arguments[index]} ;;
+		-Cf | -covariables_format) covariables_format=${arguments[index]} ;;
+		-S | -stop) stop=${arguments[index]} ;;
+		-P | -number_parallel) number_parallel=${arguments[index]} ;;
+		-R | -number_reads_to_subsample) number_reads_to_subsample=${arguments[index]} ;;
+		-t | -transcripts) transcripts=${arguments[index]} ;;
+		-T | -target) target=${arguments[index]} ;;
+		-A | -aligner) aligner=${arguments[index]} ;;
 		-Ac | -aligner_index_cache) aligner_index_cache=${arguments[index]} ;;
-		-K) kraken2_fast=${arguments[index]}; echo "WARNING: -K/Kraken2_fast is deprecated; k2 daemon mode is used instead. This option has no effect." ;;
-		-Dk) kraken2_databases=${arguments[index]} ;;
+		-K | -Kraken2_fast) kraken2_fast=${arguments[index]}; echo "WARNING: -K/Kraken2_fast is deprecated; k2 daemon mode is used instead. This option has no effect." ;;
+		-Dk | -kraken2_databases) kraken2_databases=${arguments[index]} ;;
 		-Kc | -kraken2_confidence) kraken2_confidence=${arguments[index]} ;;
-		-Ds) sortmerna_databases=${arguments[index]} ;;
+		-Ds | -sortmerna_databases) sortmerna_databases=${arguments[index]} ;;
 		-rRq | -rrna_qc_databases) rrna_qc_databases=${arguments[index]} ;;
 		-rRs | -rrna_qc_min_score) rrna_qc_min_score=${arguments[index]} ;;
-		-Des) differential_expr_soft=${arguments[index]} ;;
+		-Des | -differential_expr_software) differential_expr_soft=${arguments[index]} ;;
 		-eT | -edger_test) edger_test=${arguments[index]} ;;
 		-lfc | -lfc_threshold) lfc_threshold=${arguments[index]} ;;
 		-lfS | -lfc_shrink) lfc_shrink=${arguments[index]} ;;
@@ -235,21 +235,21 @@ for argument in "${arguments[@]}"; do
 		-Dcon | -design_contrasts) design_contrasts=${arguments[index]} ;;
 		-cPg | -clusterProfiler_gsea) clusterProfiler_gsea=${arguments[index]} ;;
 		-rA | -report_images) report_images=${arguments[index]} ;;
-		-Dm) debug_module=${arguments[index]} ;;
+		-Dm | -debug_module) debug_module=${arguments[index]} ;;
 		-Es | -end_step) end_step=${arguments[index]} ;;
-		-Dec) differential_expr_comparisons=${arguments[index]} ;;
-		-Dc) deconvolution=${arguments[index]} ;;
+		-Dec | -differential_expr_comparisons) differential_expr_comparisons=${arguments[index]} ;;
+		-Dc | -deconvolution) deconvolution=${arguments[index]} ;;
 		-scM | -sc_count_matrix) sc_count_matrix=${arguments[index]} ;;
 		-scP | -sc_phenotype) sc_phenotype=${arguments[index]} ;;
 		-bulkM | -bulk_expression_matrix) bulk_expression_matrix=${arguments[index]} ;;
-		-cPf) clusterProfiler_full=${arguments[index]} ;;
+		-cPf | -clusterProfiler_full) clusterProfiler_full=${arguments[index]} ;;
 		-cPc | -clusterProfiler_cores) clusterProfiler_cores=${arguments[index]} ;;
-		-fe) functional_enrichment_analyses=${arguments[index]} ;;
-		-fd) full_differential_analyses=${arguments[index]} ;;
-		-vv) perform_volcano_venn=${arguments[index]} ;;
-		-aP) aPEAR_execution=${arguments[index]} ;;
-		-Of) optionsFeatureCounts_feat=${arguments[index]} ;;
-		-O)
+		-fe | -functional_enrichment_analyses) functional_enrichment_analyses=${arguments[index]} ;;
+		-fd | -full_differential_analyses) full_differential_analyses=${arguments[index]} ;;
+		-vv | -perform_volcano_venn) perform_volcano_venn=${arguments[index]} ;;
+		-aP | -aPEAR_execution) aPEAR_execution=${arguments[index]} ;;
+		-Of | -options_featureCounts_feat) optionsFeatureCounts_feat=${arguments[index]} ;;
+		-O | -organism)
 			val=${arguments[index]}
 			temp_idx=$((index + 1))
 			while [ $temp_idx -lt ${#arguments[@]} ] && [[ "${arguments[temp_idx]}" != -* ]]; do
@@ -257,52 +257,52 @@ for argument in "${arguments[@]}"; do
 				temp_idx=$((temp_idx + 1))
 			done
 			organism=$val
+			_arg_next=$temp_idx
 			;;
-		-Os) optionsFeatureCounts_seq=${arguments[index]} ;;
-		-iG) input_geo_reads=${arguments[index]} ;;
+		-Os | -options_featureCounts_seq) optionsFeatureCounts_seq=${arguments[index]} ;;
+		-iG | -input_GEO_reads) input_geo_reads=${arguments[index]} ;;
 		-cG | -compression_level) compression_level=${arguments[index]} ;;
-		-Ti) tidy_tmp_files=${arguments[index]} ;;
-		-Tr) tidy_report_files=${arguments[index]} ;;
-		-Txls) convert_tables_excel=${arguments[index]} ;;
-		-Tx) taxonid=${arguments[index]} ;;
-		-Tc) time_course=${arguments[index]} ;;
-		-std) time_course_std=${arguments[index]} ;;
-		-fuzz) time_course_fuzz=${arguments[index]} ;;
-		-TMP) TMPDIR_arg=${arguments[index]} ;;
-		-q) qc_raw_reads=${arguments[index]} ;;
-		-cPm) clusterProfiler_method=${arguments[index]} ;;
-		-cPu) clusterProfiler_universe=${arguments[index]} ;;
-		-mGS) clusterProfiler_minGSSize=${arguments[index]} ;;
-		-MGS) clusterProfiler_maxGSSize=${arguments[index]} ;;
-		-Pm) panther_method=${arguments[index]} ;;
-		-Na) network_analyses=${arguments[index]} ;;
+		-Ti | -tidy_tmp_files) tidy_tmp_files=${arguments[index]} ;;
+		-Tr | -tidy_report_files) tidy_report_files=${arguments[index]} ;;
+		-Txls | -convert_tables_excel) convert_tables_excel=${arguments[index]} ;;
+		-Tx | -taxon_id) taxonid=${arguments[index]} ;;
+		-Tc | -time_course) time_course=${arguments[index]} ;;
+		-std | -time_course_std) time_course_std=${arguments[index]} ;;
+		-fuzz | -time_course_fuzz) time_course_fuzz=${arguments[index]} ;;
+		-TMP | -TMPDIR) TMPDIR_arg=${arguments[index]} ;;
+		-q | -qc_raw_reads) qc_raw_reads=${arguments[index]} ;;
+		-cPm | -clusterProfiler_method) clusterProfiler_method=${arguments[index]} ;;
+		-cPu | -clusterProfiler_universe) clusterProfiler_universe=${arguments[index]} ;;
+		-mGS | -clusterProfiler_minGSSize) clusterProfiler_minGSSize=${arguments[index]} ;;
+		-MGS | -clusterProfiler_maxGSSize) clusterProfiler_maxGSSize=${arguments[index]} ;;
+		-Pm | -panther_method) panther_method=${arguments[index]} ;;
+		-Na | -network_analyses) network_analyses=${arguments[index]} ;;
 		-bnb | -bonobo) bonobo=${arguments[index]} ;;
-		-Wm) wgcna_mode=${arguments[index]} ;;
+		-Wm | -wgcna_mode) wgcna_mode=${arguments[index]} ;;
 		-Wg | -wgcna_max_genes) wgcna_max_genes=${arguments[index]} ;;
-		-fp) fastp_mode=${arguments[index]} ;;
-		-fpa) fastp_adapter=${arguments[index]} ;;
-		-fpt) fastp_trimming=${arguments[index]} ;;
-		-fpe) fastp_extra_args=${arguments[index]} ;;
-		-cR) cores_reads_to_subsample=${arguments[index]} ;;
-		-pR) pattern_to_remove=${arguments[index]} ;;
+		-fp | -fastp_mode) fastp_mode=${arguments[index]} ;;
+		-fpa | -fastp_adapter) fastp_adapter=${arguments[index]} ;;
+		-fpt | -fastp_trimming) fastp_trimming=${arguments[index]} ;;
+		-fpe | -fastp_extra_args) fastp_extra_args=${arguments[index]} ;;
+		-cR | -cores_reads_to_subsample) cores_reads_to_subsample=${arguments[index]} ;;
+		-pR | -pattern_to_remove) pattern_to_remove=${arguments[index]} ;;
 		-los | -leave_out_samples) leave_out_samples=${arguments[index]} ;;
-		-apl) auto_panther_log=${arguments[index]} ;;
-		-mQ) bam_mapq_threshold=${arguments[index]} ;;
-		-Fex) bam_exclude_flags=${arguments[index]} ;;
-		-Freq) bam_require_flags=${arguments[index]} ;;
-		-Fdup) bam_dedup=${arguments[index]} ;;
+		-apl | -auto_panther_log) auto_panther_log=${arguments[index]} ;;
+		-mQ | -bam_mapq_threshold) bam_mapq_threshold=${arguments[index]} ;;
+		-Fex | -bam_exclude_flags) bam_exclude_flags=${arguments[index]} ;;
+		-Freq | -bam_require_flags) bam_require_flags=${arguments[index]} ;;
+		-Fdup | -bam_dedup) bam_dedup=${arguments[index]} ;;
 		-Fpair | -bam_filter_pairs) bam_filter_pairs=${arguments[index]} ;;
-		-Fcust) bam_custom_filter=${arguments[index]} ;;
-		-bN) bam_normalization=${arguments[index]} ;;
+		-Fcust | -bam_custom_filter) bam_custom_filter=${arguments[index]} ;;
+		-bN | -bam_normalization) bam_normalization=${arguments[index]} ;;
 		-bs | -bigwig_binsize) bigwig_binsize=${arguments[index]} ;;
 		-Su | -save_unaligned) save_unaligned=${arguments[index]} ;;
 		-Ah | -hisat2_extra_args) hisat2_extra_args=${arguments[index]} ;;
 		-Sa | -spliced_alignment) spliced_alignment=${arguments[index]} ;;
 		-As | -star_extra_args) star_extra_args=${arguments[index]} ;;
 		-Ak | -kallisto_extra_args) kallisto_extra_args=${arguments[index]} ;;
-		-Ofc) featureCounts_extra_args=${arguments[index]} ;;
-		-Fgene) counts_custom_gene_filter=${arguments[index]} ;;
-		-nrf) non_reference_funct_enrichm=${arguments[index]} ;;
+		-Ofc | -featureCounts_extra_args) featureCounts_extra_args=${arguments[index]} ;;
+		-Fgene | -counts_custom_gene_filter) counts_custom_gene_filter=${arguments[index]} ;;
 		-eDe | -exploreDE) exploreDE=${arguments[index]} ;;
 		-exploreDE_se) exploreDE_se=${arguments[index]} ;;
 		-sO | -splicing_option) splicing_option=${arguments[index]} ;;
@@ -320,12 +320,16 @@ for argument in "${arguments[@]}"; do
 		-Lcw | -llm_context_window) llm_context_window=${arguments[index]} ;;
 		-Mqa | -multiqc_ai_args) multiqc_ai_args=${arguments[index]} ;;
 		-aii | -ai_insights) ai_insights=${arguments[index]} ;;
+		*) echo "Error: unknown option '$argument'. Run 'reanalyzerGSE.sh -h' to list the options."; exit 1 ;;
 	esac
+	_arg_pos=$_arg_next
 done
 
 copy_options_file_redacted() {
+	local dest="$2/${3:-$(basename "$1")}"
 	mkdir -p "$2" 2>/dev/null || return 0
-	sed -E 's/^([[:space:]]*(llm_endpoint|llm_api_key)[[:space:]]*:[[:space:]]*)("[^"]+"|\x27[^\x27]+\x27|[^"#\x27[:space:]][^#]*)(.*)$/\1"" # redacted, set it again to rerun with AI/' "$1" > "$2/$(basename "$1")" 2>/dev/null || true
+	[ "$(readlink -f "$1")" == "$(readlink -f "$dest")" ] && return 0
+	sed -E 's/^([[:space:]]*(llm_endpoint|llm_api_key)[[:space:]]*:[[:space:]]*)("[^"]+"|\x27[^\x27]+\x27|[^"#\x27[:space:]][^#]*)(.*)$/\1"" # redacted, set it again to rerun with AI/' "$1" > "$dest" 2>/dev/null || true
 }
 
 ##### From the YAML configuration file...
@@ -676,6 +680,10 @@ fi
 if [ -z "$aligner_index_cache" ]; then
 	aligner_index_cache="yes"
 fi
+case "$aligner_index_cache" in
+	yes|no) : ;;
+	*) echo "Error: -Ac/-aligner_index_cache must be 'yes' or 'no'. You provided: $aligner_index_cache"; exit 1 ;;
+esac
 if [ -z "$cores_index" ]; then
 	cores_index=$cores
 fi

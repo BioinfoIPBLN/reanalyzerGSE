@@ -236,7 +236,7 @@ cores_index: 30                        # Cores for genome indexing
 memory_max: 257698037760               # Max RAM in bytes (~240GB)
 number_parallel: 10                    # Files processed in parallel
 compression_level: 6                   # Compression level (1-9) of the gzipped fastq files and the final BAM files (9 = smallest files, several times slower)
-aligner_index_cache: "yes"             # Keep genome index in cache ('yes' or 'no')
+aligner_index_cache: "yes"             # STAR only: share one copy of the genome index in memory across the parallel alignments ('yes' or 'no')
 
 # === AI annotation ===
 llm_endpoint: ""                       # OpenAI-compatible chat/completions URL (e.g. http://host:8081/v1/chat/completions). Non-empty = enable AI annotation
