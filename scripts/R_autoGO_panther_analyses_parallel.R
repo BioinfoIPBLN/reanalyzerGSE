@@ -24,6 +24,7 @@ source(file.path(script_dir, "R_net_config.R"))
 .rgse_net_configure()
 
 .rgse_panther_timeout <- 300
+.rgse_panther_transient <- "HTTP Status '(408|429|5[0-9][0-9])'|timeout|timed out|too slow|resolve host|connect|reset by peer|SSL|recv failure|send failure|empty reply|transfer closed|internet"
 rba_options(timeout = .rgse_panther_timeout, skip_error = FALSE)
 .rgse_panther_enrich <- function(...) {
   for (k in 1:2) {
@@ -497,14 +498,16 @@ process_file <- function(file){
       fisher_expr_back  = list(test_type = "FISHER",   ref_genes = expr_back, ref_organism = org_panther),
       binom_expr_back   = list(test_type = "BINOMIAL", ref_genes = expr_back, ref_organism = org_panther))
     if (length(expr_back) == 0) panther_runs <- panther_runs[c("fisher_whole_back", "binom_whole_back")]
-    for(annot_panther in methods){
-      annot_panther2 <- annot_panther
-      annot_panther2 <- gsub("ANNOT_TYPE_ID_PANTHER_","",gsub("GO:0003674","GO_MF",gsub("GO:0008150","GO_BP",gsub("GO:0005575","GO_CC",annot_panther2))))
+    run_panther <- function(annot_panther, runs) {
+      annot_panther2 <- gsub("ANNOT_TYPE_ID_PANTHER_","",gsub("GO:0003674","GO_MF",gsub("GO:0008150","GO_BP",gsub("GO:0005575","GO_CC",annot_panther))))
       failed_before <- NULL
-      for (run in names(panther_runs)) {
+      missing <- character(0)
+      transient <- FALSE
+      for (run in runs) {
         out <- paste0("enriched_", run, "_", annot_panther2, "_", padjustmethod, "_panther")
         if (!is.null(failed_before)) {
           writeLines(paste0("Not attempted: ", failed_before), paste0(out, "_err.txt"))
+          missing <- c(missing, run)
           next
         }
         res <- tryCatch(do.call(.rgse_panther_enrich, c(list(genes = dataset, organism = org_panther, annot_dataset = annot_panther,
@@ -513,10 +516,26 @@ process_file <- function(file){
         if (inherits(res, "error")) {
           writeLines(conditionMessage(res), paste0(out, "_err.txt"))
           failed_before <- paste0("PANTHER failed on ", annot_panther2, " for this gene list (", run, "): ", conditionMessage(res))
-        } else if (NROW(res$result) > 0) {
-          write.table(res$result, file = paste0(out, ".txt"), col.names = T, row.names = F, quote = F, sep = "\t")
+          missing <- c(missing, run)
+          transient <- grepl(.rgse_panther_transient, conditionMessage(res), ignore.case = TRUE)
+        } else {
+          unlink(paste0(out, "_err.txt"))
+          if (NROW(res$result) > 0) write.table(res$result, file = paste0(out, ".txt"), col.names = T, row.names = F, quote = F, sep = "\t")
         }
       }
+      list(missing = missing, transient = transient)
+    }
+    retry <- list()
+    for (annot_panther in methods) {
+      r <- run_panther(annot_panther, names(panther_runs))
+      if (r$transient) retry[[annot_panther]] <- r$missing
+    }
+    if (length(retry) > 0) {
+      n_retry <- length(unlist(retry))
+      print(paste0("PANTHER server or network errors for ", file2, ": retrying ", n_retry, " test(s) once in about a minute"))
+      Sys.sleep(60 + stats::runif(1, 0, 15))
+      left <- unlist(lapply(names(retry), function(a) run_panther(a, retry[[a]])$missing))
+      print(paste0("PANTHER retry for ", file2, ": ", n_retry - length(left), " of ", n_retry, " test(s) recovered"))
     }
   } else {
     cat(file2, "... no genes to apply PANTHER\n")

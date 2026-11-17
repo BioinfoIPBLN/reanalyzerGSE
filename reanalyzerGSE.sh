@@ -2786,6 +2786,10 @@ if run_step step6; then
 			        echo "  Nothing could be retried automatically (the failing step is not a per-comparison script); see the errors above."
 			    fi
 			fi
+			panther_missing=$(find $output_folder/$name/final_results_reanalysis$index -path "*/sphinx_report" -prune -o -type f -path "*_funct_enrichment_panther/*" -name "*_panther_err.txt" -print 2>/dev/null | sed "s,^$output_folder/$name/final_results_reanalysis$index/,,;s,_err\.txt$,," | sort)
+			if [ -n "$panther_missing" ]; then
+				echo -e "\n\033[1;33mWARNING:\033[0m PANTHER produced no table for $(echo $panther_missing | wc -w) test(s): $(echo $panther_missing). The reason is in each <name>_err.txt. HTTP 5xx or timeout errors there mean the PANTHER server failed and were already retried once; re-running step 6 with '-Dm step6' may recover them.\n"
+			fi
 
 			# Success is decided solely by whether result files were produced, not by
 			# the presence/absence of log errors. Add the up/down gene counts to them.
