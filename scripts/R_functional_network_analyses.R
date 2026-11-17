@@ -285,6 +285,7 @@ run_gsea <- function(deg_df, label, gsea_base_dir, orgdb, kegg_org, species_labe
         system(paste("mkdir -p", out_dir))
         
         # GO Biological Process
+        set.seed(123)
         gsea_go_bp <- tryCatch(gseGO(geneList = ranked, OrgDb = orgdb, ont = "BP",
                                       keyType = "ENTREZID", minGSSize = 15, maxGSSize = 500,
                                       pvalueCutoff = 1, eps = 0, verbose = FALSE),
@@ -292,6 +293,7 @@ run_gsea <- function(deg_df, label, gsea_base_dir, orgdb, kegg_org, species_labe
         save_gsea_results(gsea_go_bp, "GO_BP", out_dir, metric_label)
         
         # GO Molecular Function
+        set.seed(123)
         gsea_go_mf <- tryCatch(gseGO(geneList = ranked, OrgDb = orgdb, ont = "MF",
                                       keyType = "ENTREZID", minGSSize = 15, maxGSSize = 500,
                                       pvalueCutoff = 1, eps = 0, verbose = FALSE),
@@ -299,6 +301,7 @@ run_gsea <- function(deg_df, label, gsea_base_dir, orgdb, kegg_org, species_labe
         save_gsea_results(gsea_go_mf, "GO_MF", out_dir, metric_label)
         
         # GO Cellular Component
+        set.seed(123)
         gsea_go_cc <- tryCatch(gseGO(geneList = ranked, OrgDb = orgdb, ont = "CC",
                                       keyType = "ENTREZID", minGSSize = 15, maxGSSize = 500,
                                       pvalueCutoff = 1, eps = 0, verbose = FALSE),
@@ -306,6 +309,7 @@ run_gsea <- function(deg_df, label, gsea_base_dir, orgdb, kegg_org, species_labe
         save_gsea_results(gsea_go_cc, "GO_CC", out_dir, metric_label)
         
         # KEGG
+        set.seed(123)
         gsea_kegg <- tryCatch(gseKEGG(geneList = ranked, organism = kegg_org,
                                        minGSSize = 15, maxGSSize = 500,
                                        pvalueCutoff = 1, eps = 0, verbose = FALSE),
@@ -317,6 +321,7 @@ run_gsea <- function(deg_df, label, gsea_base_dir, orgdb, kegg_org, species_labe
             cat(paste0("    Reactome skipped: ReactomePA has no organism mapping for '", species_label, "'\n")); NULL
         } else tryCatch({
             suppressMessages(library(ReactomePA, quiet = T, warn.conflicts = F))
+            set.seed(123)
             ReactomePA::gsePathway(geneList = ranked, organism = reactome_org,
                                    minGSSize = 15, maxGSSize = 500,
                                    pvalueCutoff = 1, verbose = FALSE)
@@ -332,6 +337,7 @@ run_gsea <- function(deg_df, label, gsea_base_dir, orgdb, kegg_org, species_labe
             term2gene_cp <- cp_gs[, c("gs_name", gene_col)]
             colnames(term2gene_cp)[colnames(term2gene_cp) == gene_col] <- "entrez_gene"
             term2gene_cp$entrez_gene <- as.character(term2gene_cp$entrez_gene)
+            set.seed(123)
             GSEA(geneList = ranked, TERM2GENE = term2gene_cp,
                  minGSSize = 15, maxGSSize = 500,
                  pvalueCutoff = 1, eps = 0, verbose = FALSE)
@@ -347,6 +353,7 @@ run_gsea <- function(deg_df, label, gsea_base_dir, orgdb, kegg_org, species_labe
             term2gene_reactome <- reactome_gs[, c("gs_name", gene_col)]
             colnames(term2gene_reactome)[colnames(term2gene_reactome) == gene_col] <- "entrez_gene"
             term2gene_reactome$entrez_gene <- as.character(term2gene_reactome$entrez_gene)
+            set.seed(123)
             GSEA(geneList = ranked, TERM2GENE = term2gene_reactome,
                  minGSSize = 15, maxGSSize = 500,
                  pvalueCutoff = 1, eps = 0, verbose = FALSE)

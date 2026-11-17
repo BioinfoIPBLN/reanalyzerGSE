@@ -17,7 +17,7 @@ http_status <- function(url) {
 wget_with_retry <- function(dir, url) {
   for (attempt in seq_along(retry_delays)) {
     if (retry_delays[attempt] > 0) Sys.sleep(retry_delays[attempt])
-    if (system(paste0("cd ", dir, " && wget -nv ", url)) == 0) return(TRUE)
+    if (system(paste0("cd ", dir, " && wget -nv --no-hsts ", url)) == 0) return(TRUE)
     cat(paste0("Download attempt ", attempt, " failed for: ", url, "\n"))
   }
   return(FALSE)
@@ -64,7 +64,7 @@ for (i in unlist(strsplit(GEO_ID_path,"_"))){
 		suppl_dir <- paste(path,GEO_ID_path,"reads_study_info",GEO_ID,sep="/")
 		system(paste0("mkdir -p ", suppl_dir))
 		if (wget_with_retry(suppl_dir, paste0(series_url, "suppl/"))) {
-			system(paste0('cd ', suppl_dir, ' && for f in $(grep href index.html 2>/dev/null | grep -v www. | grep -v // | grep -v nnn | cut -d ">" -f 2 | cut -d "<" -f 1); do wget -nv ', series_url, 'suppl/$f; done'))
+			system(paste0('cd ', suppl_dir, ' && for f in $(grep href index.html 2>/dev/null | grep -v www. | grep -v // | grep -v nnn | cut -d ">" -f 2 | cut -d "<" -f 1); do wget -nv --no-hsts ', series_url, 'suppl/$f; done'))
 		}
 	}
 	if (length(list.files(target_dir, pattern = paste0("^", GEO_ID, ".*_series_matrix\\.txt\\.gz$"))) == 0) stop_download(GEO_ID, series_url)

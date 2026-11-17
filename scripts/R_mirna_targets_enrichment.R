@@ -124,7 +124,7 @@ for (geneset in names(sets)) {
     tryCatch({
       ego <- suppressMessages(enrichGO(gene = genes_sym, universe = uni_sym, OrgDb = orgDB, keyType = rgse_symbol_keytype(.org_info), ont = ont,
                                        pAdjustMethod = i, pvalueCutoff = 1, qvalueCutoff = 1, minGSSize = minGS, maxGSSize = maxGS, readable = TRUE))
-      df <- add_mirna_columns(as.data.frame(ego), targets)
+      df <- add_mirna_columns(rgse_sort_gene_cells(ego), targets)
       write.table(df, file = paste0("GO_overrepresentation_test_", ont, "_", i, "_", geneset, ".txt"), col.names = TRUE, row.names = FALSE, quote = FALSE, sep = "\t")
       save_plots(ego, paste0("GO_overrepresentation_test_", ont, "_", i, "_", geneset), "go_figs")
     }, error = function(e) writeLines(as.character(e), paste0("GO_overrepresentation_test_", ont, "_", i, "_", geneset, "_err.txt")))
@@ -132,7 +132,7 @@ for (geneset in names(sets)) {
   tryCatch({
     kk <- suppressMessages(enrichKEGG(gene = genes_ent, organism = org, universe = uni_ent, pAdjustMethod = i, pvalueCutoff = 1, qvalueCutoff = 1, minGSSize = minGS, maxGSSize = maxGS))
     kk <- suppressMessages(setReadable(kk, OrgDb = orgDB, keyType = "ENTREZID"))
-    df <- as.data.frame(kk)
+    df <- rgse_sort_gene_cells(kk)
     df$Gene_ID <- df$geneID
     df <- add_mirna_columns(df, targets)
     write.table(df, file = paste0("KEGG_enrich_", i, "_", geneset, ".txt"), col.names = TRUE, row.names = FALSE, quote = FALSE, sep = "\t")
@@ -140,7 +140,7 @@ for (geneset in names(sets)) {
   }, error = function(e) writeLines(as.character(e), paste0("KEGG_enrich_", i, "_", geneset, "_err.txt")))
   tryCatch({
     rp <- suppressMessages(ReactomePA::enrichPathway(gene = genes_ent, organism = react_org, universe = uni_ent, pAdjustMethod = i, pvalueCutoff = 1, qvalueCutoff = 1, minGSSize = minGS, maxGSSize = maxGS, readable = TRUE))
-    df <- as.data.frame(rp)
+    df <- rgse_sort_gene_cells(rp)
     df$Gene_ID <- df$geneID
     df <- add_mirna_columns(df, targets)
     write.table(df, file = paste0("REACT_", i, "_", geneset, ".txt"), col.names = TRUE, row.names = FALSE, quote = FALSE, sep = "\t")

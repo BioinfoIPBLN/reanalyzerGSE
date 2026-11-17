@@ -539,7 +539,7 @@ process_file <- function(file){
                                 qvalueCutoff  = 1,
                                 readable      = TRUE)
                   # head(ego)
-                  ego_df <- as.data.frame(ego)
+                  ego_df <- rgse_sort_gene_cells(ego)
                   if (NROW(ego_df) == 0) rgse_skip("no GO term within the gene set size limits contains these genes")
                   ego_df$summary_LogFC <- unlist(lapply(lapply(ego_df$geneID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,"/"))]}),function(y){paste(y,collapse=",")}))
                   ego_df$summary_LogFC_2 <- unlist(lapply(strsplit(ego_df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")}))
@@ -571,7 +571,7 @@ process_file <- function(file){
                                 pvalueCutoff  = 1,
                                 qvalueCutoff  = 1,
                                 readable      = TRUE)
-                  ego_df <- as.data.frame(ego)
+                  ego_df <- rgse_sort_gene_cells(ego)
                   if (NROW(ego_df) == 0) rgse_skip("no GO term within the gene set size limits contains these genes")
                   ego_df$summary_LogFC <- unlist(lapply(lapply(ego_df$geneID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,"/"))]}),function(y){paste(y,collapse=",")}))
                   ego_df$summary_LogFC_2 <- unlist(lapply(strsplit(ego_df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")}))
@@ -613,7 +613,7 @@ process_file <- function(file){
                                 pvalueCutoff  = 1,
                                 qvalueCutoff  = 1,
                                 readable      = TRUE)
-                  ego_df <- as.data.frame(ego)
+                  ego_df <- rgse_sort_gene_cells(ego)
                   if (NROW(ego_df) == 0) rgse_skip("no GO term within the gene set size limits contains these genes")
                   ego_df$summary_LogFC <- unlist(lapply(lapply(ego_df$geneID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,"/"))]}),function(y){paste(y,collapse=",")}))
                   ego_df$summary_LogFC_2 <- unlist(lapply(strsplit(ego_df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")}))
@@ -655,7 +655,7 @@ process_file <- function(file){
                               pvalueCutoff  = 1,
                               qvalueCutoff  = 1,
                               readable      = TRUE)
-                  ego_df <- as.data.frame(ego)
+                  ego_df <- rgse_sort_gene_cells(ego)
                   if (NROW(ego_df) == 0) rgse_skip("no GO term within the gene set size limits contains these genes")
                   ego_df$summary_LogFC <- unlist(lapply(lapply(ego_df$geneID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,"/"))]}),function(y){paste(y,collapse=",")}))
                   ego_df$summary_LogFC_2 <- unlist(lapply(strsplit(ego_df$summary_LogFC,",",),function(x){paste(names(table(x)),table(x),sep="_",collapse=",")}))
@@ -704,7 +704,7 @@ process_file <- function(file){
               .rgse_safe_plot(heatplot(kk, showCategory=20), filename = paste0(getwd(),"/kegg_paths_snapshots/","KEGG_overrepresentation_test",i,"_",geneset,"_heatplot.pdf"),width=15, height=15)
               .rgse_safe_plot(emapplot(pairwise_termsim(kk)), filename = paste0(getwd(),"/kegg_paths_snapshots/","KEGG_overrepresentation_test",i,"_",geneset,"_emapplot.pdf"),width=15, height=15)
               .rgse_safe_plot(upsetplot(kk), filename = paste0(getwd(),"/kegg_paths_snapshots/","KEGG_overrepresentation_test",i,"_",geneset,"_upsetplot.pdf"),width=15, height=15)
-              kk_write <- kk@result
+              kk_write <- rgse_sort_gene_cells(kk@result)
               kk_write$Gene_ID <-  unlist(lapply(strsplit(kk_write$geneID,"/"),function(x){paste(unique(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
               kk_write$Custom_id <- unlist(lapply(strsplit(kk_write$geneID,"/"),function(x){paste(unique(entrez_ids_keys$Custom_ID[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
               kk_write$summary_LogFC <- unlist(lapply(lapply(kk_write$Gene_ID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,","))]}),function(y){paste(y,collapse=",")}))
@@ -764,7 +764,7 @@ process_file <- function(file){
                                                     pvalueCutoff = 1,
                                                     qvalueCutoff = 1,
                                                     pAdjustMethod = i))
-            df <- gse_enrich@result
+            df <- rgse_sort_gene_cells(gse_enrich@result)
             df$Gene_ID <- unlist(lapply(strsplit(df$geneID,"/"),function(x){paste(unique(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
             df$Custom_ID <- unlist(lapply(strsplit(df$geneID,"/"),function(x){paste(unique(entrez_ids_keys$Custom_ID[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
             df$summary_LogFC <- unlist(lapply(lapply(df$Gene_ID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,","))]}),function(y){paste(y,collapse=",")}))
@@ -818,7 +818,7 @@ process_file <- function(file){
               b <- sort(unlist(genes_of_interest[f]),decreasing=T); names(b) <- convert_ids(gsub(paste0(f,"."),"",names(b)),mode); b <- b[!is.na(names(b)) & nzchar(names(b)) & !duplicated(names(b))]
               tryCatch({
                         gse_enrich <- c(); Sys.sleep(sample(1:5, size = 1))
-                        gse_enrich <- suppressMessages(gseGO(geneList= b,                                           
+                        set.seed(123); gse_enrich <- suppressMessages(gseGO(geneList= b,                                           
                                            minGSSize = minGS,
                                            maxGSSize = maxGS,
                                            OrgDb        = orgDB,
@@ -847,7 +847,7 @@ process_file <- function(file){
               })
               tryCatch({
                         gse_enrich <- c(); Sys.sleep(sample(1:5, size = 1))
-                        gse_enrich <- suppressMessages(gseGO(geneList=b,
+                        set.seed(123); gse_enrich <- suppressMessages(gseGO(geneList=b,
                                          minGSSize = minGS,
                                          maxGSSize = maxGS,
                                          OrgDb        = orgDB,
@@ -886,7 +886,7 @@ process_file <- function(file){
               })
               tryCatch({
                         gse_enrich <- c(); Sys.sleep(sample(1:5, size = 1))
-                        gse_enrich <- suppressMessages(gseGO(geneList=b,
+                        set.seed(123); gse_enrich <- suppressMessages(gseGO(geneList=b,
                                          minGSSize = minGS,
                                          maxGSSize = maxGS,
                                          OrgDb        = orgDB,
@@ -925,7 +925,7 @@ process_file <- function(file){
               })
               tryCatch({
                         gse_enrich <- c(); Sys.sleep(sample(1:5, size = 1))
-                        gse_enrich <- suppressMessages(gseGO(geneList=b,
+                        set.seed(123); gse_enrich <- suppressMessages(gseGO(geneList=b,
                                          minGSSize = minGS,
                                          maxGSSize = maxGS,
                                          OrgDb        = orgDB,
@@ -964,7 +964,7 @@ process_file <- function(file){
               })
               if (all_analyses == "yes") tryCatch({
                         gse_enrich <- c(); Sys.sleep(sample(1:5, size = 1))
-                        gse_enrich <- suppressMessages(gseGO(geneList=b,
+                        set.seed(123); gse_enrich <- suppressMessages(gseGO(geneList=b,
                                          minGSSize = minGS,
                                          maxGSSize = maxGS,
                                          OrgDb        = orgDB,
@@ -994,7 +994,7 @@ process_file <- function(file){
               })
               if (all_analyses == "yes") tryCatch({
                         gse_enrich <- c(); Sys.sleep(sample(1:5, size = 1))
-                        gse_enrich <- suppressMessages(gseGO(geneList=b,
+                        set.seed(123); gse_enrich <- suppressMessages(gseGO(geneList=b,
                                         minGSSize = minGS,
                                         maxGSSize = maxGS,
                                         OrgDb        = orgDB,
@@ -1033,7 +1033,7 @@ process_file <- function(file){
               })
               if (all_analyses == "yes") tryCatch({
                         gse_enrich <- c(); Sys.sleep(sample(1:5, size = 1))
-                        gse_enrich <- suppressMessages(gseGO(geneList=b,
+                        set.seed(123); gse_enrich <- suppressMessages(gseGO(geneList=b,
                                         minGSSize = minGS,
                                         maxGSSize = maxGS,
                                         OrgDb        = orgDB,
@@ -1072,7 +1072,7 @@ process_file <- function(file){
               })
               if (all_analyses == "yes") tryCatch({
                         gse_enrich <- c(); Sys.sleep(sample(1:5, size = 1))
-                        gse_enrich <- suppressMessages(gseGO(geneList=b,
+                        set.seed(123); gse_enrich <- suppressMessages(gseGO(geneList=b,
                                         minGSSize = minGS,
                                         maxGSSize = maxGS,
                                         OrgDb        = orgDB,
@@ -1120,7 +1120,7 @@ process_file <- function(file){
               b <- b[names(b) %in% entrez_ids_keys$SYMBOL]; names(b) <- entrez_ids_keys$ENTREZID[match(names(b),entrez_ids_keys$SYMBOL)]
               tryCatch({
                       gse_enrich <- c(); Sys.sleep(sample(1:5, size = 1))
-                      gse_enrich <- suppressMessages(gseKEGG(geneList= b,
+                      set.seed(123); gse_enrich <- suppressMessages(gseKEGG(geneList= b,
                                                              minGSSize = minGS,
                                                              maxGSSize = maxGS,
                                                              organism = org,
@@ -1153,7 +1153,7 @@ process_file <- function(file){
               })
               if (all_analyses == "yes") tryCatch({
                       gse_enrich <- c(); Sys.sleep(sample(1:5, size = 1))
-                      gse_enrich <- suppressMessages(gseKEGG(geneList= b,
+                      set.seed(123); gse_enrich <- suppressMessages(gseKEGG(geneList= b,
                                                              minGSSize = minGS,
                                                              maxGSSize = maxGS,
                                                              organism = org,
@@ -1200,7 +1200,7 @@ process_file <- function(file){
                                                            pvalueCutoff = 1,
                                                            qvalueCutoff = 1,
                                                            pAdjustMethod = i))
-                kk_write <- gse_enrich@result
+                kk_write <- rgse_sort_gene_cells(gse_enrich@result)
                 kk_write$Gene_ID <-  unlist(lapply(strsplit(kk_write$geneID,"/"),function(x){paste(unique(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
                 kk_write$Custom_id <- unlist(lapply(strsplit(kk_write$geneID,"/"),function(x){paste(unique(entrez_ids_keys$Custom_ID[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
                 kk_write$summary_LogFC <- unlist(lapply(lapply(kk_write$Gene_ID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,","))]}),function(y){paste(y,collapse=",")}))
@@ -1230,7 +1230,7 @@ process_file <- function(file){
                 b <- b[names(b) %in% entrez_ids_keys$SYMBOL]; names(b) <- entrez_ids_keys$ENTREZID[match(names(b),entrez_ids_keys$SYMBOL)]
                 tryCatch({
                       gse_enrich <- c(); Sys.sleep(sample(1:5, size = 1))
-                      gse_enrich <- suppressMessages(gseMKEGG(geneList= b,
+                      set.seed(123); gse_enrich <- suppressMessages(gseMKEGG(geneList= b,
                                                               minGSSize = minGS,
                                                               maxGSSize = maxGS,
                                                               organism = org,
@@ -1259,7 +1259,7 @@ process_file <- function(file){
                 })
                 tryCatch({
                       gse_enrich <- c(); Sys.sleep(sample(1:5, size = 1))
-                      gse_enrich <- suppressMessages(gseMKEGG(geneList= b,
+                      set.seed(123); gse_enrich <- suppressMessages(gseMKEGG(geneList= b,
                                                               minGSSize = minGS,
                                                               maxGSSize = maxGS,
                                                               organism = org,
@@ -1303,7 +1303,7 @@ process_file <- function(file){
                                                        pvalueCutoff = 1,
                                                        qvalueCutoff = 1,
                                                        pAdjustMethod = i))
-            df <- gse_enrich@result
+            df <- rgse_sort_gene_cells(gse_enrich@result)
             df$Gene_ID <- unlist(lapply(strsplit(df$geneID,"/"),function(x){paste(unique(entrez_ids_keys$SYMBOL[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
             df$Custom_ID <- unlist(lapply(strsplit(df$geneID,"/"),function(x){paste(unique(entrez_ids_keys$Custom_ID[entrez_ids_keys$ENTREZID %in% x]),collapse=",")}))
             df$summary_LogFC <- unlist(lapply(lapply(df$Gene_ID, function(x){a$logFC_sense[a$Gene_ID %in% unlist(strsplit(x,","))]}),function(y){paste(y,collapse=",")}))
@@ -1334,7 +1334,7 @@ process_file <- function(file){
             b <- b[names(b) %in% entrez_ids_keys$SYMBOL]; names(b) <- entrez_ids_keys$ENTREZID[match(names(b),entrez_ids_keys$SYMBOL)]
             tryCatch({
                     gse_enrich <- c(); Sys.sleep(sample(1:5, size = 1))
-                    if (is.na(.wp_org)) rgse_skip("WikiPathways has no gene sets for this organism"); gse_enrich <- suppressMessages(gseWP(geneList= b,                                                            
+                    if (is.na(.wp_org)) rgse_skip("WikiPathways has no gene sets for this organism"); set.seed(123); gse_enrich <- suppressMessages(gseWP(geneList= b,                                                            
                                                             minGSSize = minGS,
                                                             maxGSSize = maxGS,
                                                             organism = .wp_org,
@@ -1363,7 +1363,7 @@ process_file <- function(file){
             })
             tryCatch({
                     gse_enrich <- c(); Sys.sleep(sample(1:5, size = 1))
-                    if (is.na(.wp_org)) rgse_skip("WikiPathways has no gene sets for this organism"); gse_enrich <- suppressMessages(gseWP(geneList= b,                                                            
+                    if (is.na(.wp_org)) rgse_skip("WikiPathways has no gene sets for this organism"); set.seed(123); gse_enrich <- suppressMessages(gseWP(geneList= b,                                                            
                                                             minGSSize = minGS,
                                                             maxGSSize = maxGS,
                                                             organism = .wp_org,
@@ -1402,7 +1402,7 @@ process_file <- function(file){
                   b <- b[names(b) %in% entrez_ids_keys$SYMBOL]; names(b) <- entrez_ids_keys$ENTREZID[match(names(b),entrez_ids_keys$SYMBOL)]
                   tryCatch({
                     gse_enrich <- c(); Sys.sleep(sample(1:5, size = 1))
-                    gse_enrich <- suppressMessages(gsePathway(geneList=b,                                                         
+                    set.seed(123); gse_enrich <- suppressMessages(gsePathway(geneList=b,                                                         
                                                          minGSSize = minGS,
                                                          maxGSSize = maxGS,
                                                          organism = organism_cp_react,
@@ -1431,7 +1431,7 @@ process_file <- function(file){
                   })
                   if (all_analyses == "yes") tryCatch({
                     gse_enrich <- c(); Sys.sleep(sample(1:5, size = 1))
-                    gse_enrich <- suppressMessages(gsePathway(geneList=b,
+                    set.seed(123); gse_enrich <- suppressMessages(gsePathway(geneList=b,
                                                          minGSSize = minGS,
                                                          maxGSSize = maxGS,
                                                          organism = organism_cp_react,
@@ -1479,7 +1479,7 @@ process_file <- function(file){
                                     qvalueCutoff  = 1,
                                     readable      = TRUE)
                     # head(ego)
-                    write.table(ego,file=paste0("DO_overrepresentation_test_",i,"_",geneset,"_DO.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                    write.table(rgse_sort_gene_cells(ego),file=paste0("DO_overrepresentation_test_",i,"_",geneset,"_DO.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                   }, error = function(e) {
                     .rgse_write_fail(e, paste0("DO_overrepresentation_test_",i,"_",geneset,"_DO"))
                   })
@@ -1495,7 +1495,7 @@ process_file <- function(file){
                                     qvalueCutoff  = 1,
                                     readable      = TRUE)
                     # head(ego)
-                    write.table(ego,file=paste0("DO_overrepresentation_test_",i,"_",geneset,"_DOLite.txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                    write.table(rgse_sort_gene_cells(ego),file=paste0("DO_overrepresentation_test_",i,"_",geneset,"_DOLite.txt"),col.names = T,row.names = F,quote = F,sep="\t")
                   }, error = function(e) {
                     .rgse_write_fail(e, paste0("DO_overrepresentation_test_",i,"_",geneset,"_DOLite"))
                   })
@@ -1510,7 +1510,7 @@ process_file <- function(file){
                                        qvalueCutoff  = 1,
                                        readable      = TRUE)
                       # head(ego)
-                      write.table(ego,file=paste0("NGC_overrepresentation_test_",i,"_",geneset,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                      write.table(rgse_sort_gene_cells(ego),file=paste0("NGC_overrepresentation_test_",i,"_",geneset,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
                   }, error = function(e) {
                     .rgse_write_fail(e, paste0("NGC_overrepresentation_test_",i,"_",geneset,""))
                   })
@@ -1525,7 +1525,7 @@ process_file <- function(file){
                                        qvalueCutoff  = 1,
                                        readable      = TRUE)
                       # head(ego)
-                      write.table(ego,file=paste0("DGN_overrepresentation_test_",i,"_",geneset,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
+                      write.table(rgse_sort_gene_cells(ego),file=paste0("DGN_overrepresentation_test_",i,"_",geneset,".txt"),col.names = T,row.names = F,quote = F,sep="\t")
                   }, error = function(e) {
                     .rgse_write_fail(e, paste0("DGN_overrepresentation_test_",i,"_",geneset,""))
                   })
@@ -1538,7 +1538,7 @@ process_file <- function(file){
                     b <- b[names(b) %in% entrez_ids_keys$SYMBOL]; names(b) <- entrez_ids_keys$ENTREZID[match(names(b),entrez_ids_keys$SYMBOL)]
                     tryCatch({
                           gse_enrich <- c(); Sys.sleep(sample(1:5, size = 1))
-                          gse_enrich <- suppressMessages(gseDO(geneList= b,
+                          set.seed(123); gse_enrich <- suppressMessages(gseDO(geneList= b,
                                                                     minGSSize = minGS,
                                                                     maxGSSize = maxGS,
                                                                     pvalueCutoff = 1,
@@ -1550,7 +1550,7 @@ process_file <- function(file){
                     })
                     tryCatch({
                           gse_enrich <- c(); Sys.sleep(sample(1:5, size = 1))  
-                          gse_enrich <- suppressMessages(gseDO(geneList= b,
+                          set.seed(123); gse_enrich <- suppressMessages(gseDO(geneList= b,
                                                                     minGSSize = minGS,
                                                                     maxGSSize = maxGS,
                                                                     pvalueCutoff = 1,
@@ -1564,7 +1564,7 @@ process_file <- function(file){
                     
                     tryCatch({
                           gse_enrich <- c(); Sys.sleep(sample(1:5, size = 1))  
-                          gse_enrich <- suppressMessages(gseNCG(geneList= b,
+                          set.seed(123); gse_enrich <- suppressMessages(gseNCG(geneList= b,
                                                                minGSSize = minGS,
                                                                maxGSSize = maxGS,
                                                                pvalueCutoff = 1,
@@ -1576,7 +1576,7 @@ process_file <- function(file){
                     })
                     tryCatch({
                           gse_enrich <- c(); Sys.sleep(sample(1:5, size = 1))  
-                          gse_enrich <- suppressMessages(gseNCG(geneList= b,
+                          set.seed(123); gse_enrich <- suppressMessages(gseNCG(geneList= b,
                                                                minGSSize = minGS,
                                                                maxGSSize = maxGS,
                                                                pvalueCutoff = 1,
@@ -1590,7 +1590,7 @@ process_file <- function(file){
                     
                     tryCatch({
                           gse_enrich <- c(); Sys.sleep(sample(1:5, size = 1))  
-                          gse_enrich <- suppressMessages(gseDGN(geneList= b,
+                          set.seed(123); gse_enrich <- suppressMessages(gseDGN(geneList= b,
                                                                 minGSSize = minGS,
                                                                 maxGSSize = maxGS,
                                                                 pvalueCutoff = 1,
@@ -1602,7 +1602,7 @@ process_file <- function(file){
                     })
                     tryCatch({
                           gse_enrich <- c(); Sys.sleep(sample(1:5, size = 1))  
-                          gse_enrich <- suppressMessages(gseDGN(geneList= b,
+                          set.seed(123); gse_enrich <- suppressMessages(gseDGN(geneList= b,
                                                                 minGSSize = minGS,
                                                                 maxGSSize = maxGS,
                                                                 pvalueCutoff = 1,

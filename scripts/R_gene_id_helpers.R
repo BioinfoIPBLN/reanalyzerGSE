@@ -143,3 +143,13 @@ canonicalise_gene_ids <- function(ids, fallback = NULL) {
   }
   out
 }
+
+rgse_sort_gene_cells <- function(df, cols = "geneID") {
+  df <- as.data.frame(df)
+  for (col in intersect(cols, colnames(df))) {
+    df[[col]] <- vapply(strsplit(as.character(df[[col]]), "/", fixed = TRUE),
+                        function(x) paste(x[order(suppressWarnings(as.numeric(x)), x, method = "radix")], collapse = "/"),
+                        character(1))
+  }
+  df
+}
