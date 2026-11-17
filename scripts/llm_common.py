@@ -138,21 +138,48 @@ def cap_text(text, context_window, floor=0):
 
 _RETRY_BACKOFFS = [10, 30]  # seconds to wait before retry 2 and 3
 _RETRYABLE_HTTP_CODES = {429, 500, 502, 503, 504}
+_SAMPLING = {"temperature": 0, "seed": 123}
+_sampling_accepted = True
+
+def _rejects_sampling(e):
+    if e.code not in (400, 422):
+        return False
+    try:
+        body = e.read().decode("utf-8", "replace")
+    except Exception:
+        return False
+    return re.search(r"temperature|seed", body, re.IGNORECASE) is not None
 
 def chat_completion(endpoint, model, api_key, messages, timeout=600):
     """One TEXT-ONLY, SERIALISED chat call with retry.  Returns (text, usage)
     where usage carries the server's token counts plus 'duration_s' (model time,
     excluding any time spent waiting for the sequential lock).
 
+    Asks for temperature 0 and a fixed seed. If the endpoint rejects either
+    (HTTP 400/422 naming it), this call and the later ones of the process are
+    sent without them.
+
     Retries up to 3 times total on transient failures (timeouts, HTTP 429/5xx,
     connection errors) with exponential backoff (10 s, 30 s).  Permanent errors
     (HTTP 400/401/403) are raised immediately."""
+    global _sampling_accepted
+    if _sampling_accepted:
+        try:
+            return _chat_completion(endpoint, model, api_key, messages, timeout, _SAMPLING)
+        except urllib.error.HTTPError as e:
+            if not _rejects_sampling(e):
+                raise
+            _sampling_accepted = False
+            log("[LLM] The endpoint does not accept temperature/seed; querying without them, so answers may differ between runs")
+    return _chat_completion(endpoint, model, api_key, messages, timeout, {})
+
+def _chat_completion(endpoint, model, api_key, messages, timeout, sampling):
     _ensure_text_only(messages)
     max_attempts = 1 + len(_RETRY_BACKOFFS)  # 3 total
     last_exc = None
     for attempt in range(max_attempts):
         req = urllib.request.Request(
-            endpoint, data=json.dumps({"model": model, "messages": messages}).encode(),
+            endpoint, data=json.dumps({"model": model, "messages": messages, **sampling}).encode(),
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"})
         with _Serial(endpoint):                        # <= no two LLM queries ever overlap
             t0 = time.time()
