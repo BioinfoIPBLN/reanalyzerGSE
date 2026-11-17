@@ -2629,6 +2629,10 @@ if run_step step6; then
 			echo -e "==========================================================================\n"
 		fi
 
+		if [[ $network_analyses == "yes" ]] || [[ "$functional_enrichment_analyses" != "no" ]]; then
+			R_refresh_kegg_cache.R
+		fi
+
 		# Network analyses (WGCNA is organism-agnostic; STRINGdb supports any organism with a valid taxon ID)
 		if [[ $network_analyses == "yes" ]]; then
 			mkdir -p network_analyses && rm -rf network_analyses/* && cd network_analyses
