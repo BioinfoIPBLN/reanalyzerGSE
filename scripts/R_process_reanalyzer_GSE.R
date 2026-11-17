@@ -668,8 +668,9 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
     gene_counts_rpkm_to_plot <- gene_counts_rpkm_adjusted
   }
 
+  plot_design_files <- rgse_design_files(paste0(path,"/reads_study_info"), verbose = FALSE)
   for (i in unlist(strsplit(genes,","))){
-    for (z in list.files(pattern = "design_possible_full", recursive = TRUE, full.names=T, path=paste0(path,"/reads_study_info"))){
+    for (z in plot_design_files){
       if (length(unique(read.table(z,head=F,blank.lines.skip=T)$V1)) == 1){
         next
       }
@@ -908,7 +909,8 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
   ## Proceed with DGE analyses:
     print("Attempting differential gene expression analyses between the conditions:")
     dir.create(paste0(output_dir,"/DGE"),showWarnings=F)
-    files_designs <- list.files(pattern = "design_possible_full", recursive = TRUE, full.names=T, path=paste0(path,"/reads_study_info"))
+    files_designs <- rgse_design_files(paste0(path,"/reads_study_info"))
+    seen_design_keys <- character(0)
     batch_vector_file <- paste0(path,"/reads_study_info/batch_vector.txt")
     for (n in 1:length(files_designs)){
       z <- files_designs[n]
@@ -935,6 +937,11 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
         if (any(!de_keep)) cat(paste0("\nExcluded from the differential expression analyses (still used for the batch correction and the adjusted counts): ", paste(de_count_cols[!de_keep], collapse = ", "), "\n"))
         condition <- condition[de_keep]
       }
+      if (rgse_design_key(condition) %in% seen_design_keys) {
+        cat(paste0("\nDesign ", basename(z), " groups the analysed samples exactly like an earlier design, so it is not analysed again\n"))
+        next
+      }
+      seen_design_keys <- c(seen_design_keys, rgse_design_key(condition))
 
       covs_de <- covs_all
       if (exists("keep_samples")) covs_de <- rgse_subset_covariates(covs_de, keep_samples)

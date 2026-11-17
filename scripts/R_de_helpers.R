@@ -225,3 +225,17 @@ rgse_de_test_contrast <- function(y, design, cvec, engine = "edgeR", settings = 
   }
   list(table = tab, method = paste0(method, " (custom model", if (nzchar(label)) paste0(" ", label) else "", lfc_txt, ")"))
 }
+
+rgse_design_key <- function(v) paste(match(as.character(v), unique(as.character(v))), collapse = ",")
+
+rgse_design_files <- function(info_dir, verbose = TRUE) {
+  files <- list.files(pattern = "design_possible_full", recursive = TRUE, full.names = TRUE, path = info_dir)
+  if (length(files) == 0) return(files)
+  files <- files[order(suppressWarnings(as.integer(sub("^design_possible_full_?([0-9]+).*$", "\\1", basename(files)))), files)]
+  keys <- vapply(files, function(z) tryCatch(rgse_design_key(read.table(z, header = FALSE, blank.lines.skip = FALSE)$V1),
+                                             error = function(e) z), character(1))
+  dup <- duplicated(keys)
+  if (verbose && any(dup)) cat(paste0("\nDesign(s) grouping the samples exactly like an earlier design, not analysed again: ",
+                                      paste(basename(files[dup]), collapse = ", "), "\n"))
+  unname(files[!dup])
+}

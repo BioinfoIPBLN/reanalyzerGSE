@@ -146,10 +146,12 @@ if (id!="agilent" & id!="HT12V4"){
 	names <- gsub("__","_",gsub("__","_",gsub("[[:punct:]]| ","_",paste(phenodata$V1,apply(phenodata_possible_designs,1,function(x){paste(x,collapse="_")}),sep="_"))))
 	names <- make.unique(names, sep = '_')
 
+	design_full_1 <- list.files(paste0(path,"/reads_study_info"), pattern = "^design_possible_full", full.names = TRUE)
+	design_full_1 <- design_full_1[order(suppressWarnings(as.integer(sub("^design_possible_full_?([0-9]+).*$", "\\1", basename(design_full_1)))))][1]
 	bead.results <- beadAnalyze(idats = grep(".idat",list.files(path=path2,full.names=T),val=T),
 		                    names = names,
-		                    condition = read.table(paste0(path,"/reads_study_info/design_possible_full_1.txt"))$V1,
-		                    ref.condition = unique(read.table(paste0(path,"/reads_study_info/design_possible_full_1.txt"))$V1)[1])
+		                    condition = read.table(design_full_1)$V1,
+		                    ref.condition = unique(read.table(design_full_1)$V1)[1])
 	GSEXXXXX <- bead.results$expr_df[!is.na(bead.results$expr_df$SYMBOL),-c((length(colnames(bead.results$expr_df))-3):length(colnames(bead.results$expr_df)))]
 	GSEXXXXX_agg <- aggregate(. ~ SYMBOL, data = GSEXXXXX, mean,na.rm=T)
 	rownames(GSEXXXXX_agg) <- stringr::str_to_title(GSEXXXXX_agg$SYMBOL)

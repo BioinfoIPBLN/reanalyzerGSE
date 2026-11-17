@@ -795,7 +795,7 @@ if run_step step1; then
 			rm srx_ids.txt
 		fi
 		if test -f srr_ids.txt; then
-			paste -d$'\t' srr_ids.txt sample_names.txt $(for f in $(ls | grep full); do echo $f" "$(sort $f | uniq -c | wc -l); done | grep -v " 1" | cut -d" " -f1 | head -1) > samples_info.txt # the third column is a design containing at least more than one element...
+			paste -d$'\t' srr_ids.txt sample_names.txt $(for f in $(ls -v | grep design_possible_full); do [ "$(sort -u $f | wc -l)" -gt 1 ] && echo $f; done | head -1) > samples_info.txt # the third column is a design containing at least more than one element...
 			sed -i -r -e 's/[^[:alnum:]_\t]/_/g' -e 's/_\+/_/g' -e 's/(_[^_]*)\1+/\1/g' -e 's/_([0-9]+)/-\1/g' samples_info.txt # Should be redundant but make sure to remove special characters from the sample names and _1/_2... it's crucial for later steps such as fastqc and miarma-seq
 			if [ "$(ls | grep -c design_possible_full)" -eq 0 ] && [ "$design_custom" != "yes" ]; then
 				echo -e "\n\033[1;31mERROR:\033[0m no experimental design could be derived for $input from the GEO metadata or the sample titles (see $PWD/phenodata_extracted.txt and $PWD/sample_names.txt). Rerun with 'design_custom: yes' (-d yes) to enter the groups interactively, or download the reads and use the local route with design_custom_local (-D)."
@@ -834,11 +834,9 @@ if os.path.exists('samples_info.txt'):
                 kept_d = [dlines[i] for i, l in enumerate(lines) if has_gsm(l) and i < len(dlines)]
                 if kept_d:
                     open(f, 'w').write('\n'.join(kept_d) + '\n')
-            elif f.startswith('design_possible_') and not f.startswith('design_possible_full'):
-                dlines = [l for l in open(f).read().splitlines() if l.strip()]
-                kept_d = list(dict.fromkeys([lines[i].split('\t')[2] if len(lines[i].split('\t'))>2 else dlines[i] for i, l in enumerate(lines) if has_gsm(l) and i < len(lines)]))
-                if kept_d:
-                    open(f, 'w').write('\n'.join(kept_d) + '\n')
+                    companion = 'design_possible' + f[len('design_possible_full'):]
+                    if os.path.exists(companion):
+                        open(companion, 'w').write('\n'.join(dict.fromkeys(kept_d)) + '\n')
 
 # Filter phenodata_extracted.txt if present
 if os.path.exists('phenodata_extracted.txt'):

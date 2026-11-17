@@ -1,6 +1,7 @@
 #!/usr/bin/env Rscript
 .rgse_scripts_dir <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE)[1])))
 source(file.path(.rgse_scripts_dir, "R_qs_helpers.R"))
+source(file.path(.rgse_scripts_dir, "R_de_helpers.R"))
 
 args <- commandArgs(trailingOnly = TRUE)
 final_dir <- args[1]
@@ -94,9 +95,9 @@ for (k in intersect(c("V1", "V2"), colnames(si))) {
 if (is.null(si_ids)) stop("the count columns (", paste(samples, collapse = ", "), ") could not be matched to ", samples_info)
 rows <- match(samples, si_ids)
 designs <- list()
-for (z in list.files(dirname(samples_info), pattern = "design_possible_full", recursive = TRUE, full.names = TRUE)) {
+for (z in rgse_design_files(dirname(samples_info), verbose = FALSE)) {
   v <- tryCatch(as.character(read.table(z, header = FALSE, blank.lines.skip = FALSE)$V1), error = function(e) NULL)
-  if (length(v) != nrow(si) || length(unique(v[rows])) < 2 || any(vapply(designs, identical, logical(1), v))) next
+  if (length(v) != nrow(si) || length(unique(v[rows])) < 2 || rgse_design_key(v[rows]) %in% vapply(designs, function(d) rgse_design_key(d[rows]), character(1))) next
   designs[[length(designs) + 1]] <- v
 }
 if (length(designs) == 0) designs <- list(si[[if (ncol(si) >= 3) "V3" else "V2"]])
