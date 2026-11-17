@@ -86,26 +86,19 @@ for (z in unlist(strsplit(GEO_ID_path,"_"))){
 		delays <- c(0, 10, 20, 30)
 		for (attempt in 1:4) {
 			if (delays[attempt] > 0) Sys.sleep(delays[attempt])
-			tryCatch({
-				geoquery_data <- GEOquery::getGEO(GEO_ID)
-			}, error=function(e){
-				soft_files <- list.files(pattern="soft.gz")
-				if (length(soft_files) > 0) {
-					gpl_id <- paste0("GPL",gsub('"','',noquote(system(paste0("zcat ",getwd(),"/",grep(GEO_ID,list.files(pattern='_series_matrix'),val=T)[1], " | grep GPL | grep Series | sed 's,.*GPL,,g'"),intern=T))))
-					matching_soft <- grep(gpl_id, soft_files, val=T)
-					if (length(matching_soft) > 0) {
-						geoquery_data <<- GEOquery::getGEO(filename=matching_soft[1])
-					}
-				}
+			geoquery_data <- tryCatch(GEOquery::getGEO(GEO_ID), error=function(e){
+				cat("getGEO(", GEO_ID, ") failed (attempt ", attempt, " of 4): ", conditionMessage(e), "\n", sep="")
+				NULL
 			})
 			if (!is.null(geoquery_data)) break
 		}
 		if (is.null(geoquery_data)) {
-			cat("Warning: getGEO failed online and soft file missing/unparseable. Attempting fallback from series_matrix.txt.gz...\n")
-			series_files <- list.files(pattern='_series_matrix.txt.gz')
+			series_files <- list.files(pattern=paste0("^", GEO_ID, "(-GPL[0-9]+)?_series_matrix\\.txt\\.gz$"))
 			if (length(series_files) > 0) {
-				try({
-					geoquery_data <- GEOquery::getGEO(filename=series_files[1])
+				cat("Warning: getGEO failed online; reading the downloaded series matrix file(s) instead:", series_files, "\n")
+				geoquery_data <- tryCatch(lapply(series_files, function(f) GEOquery::getGEO(filename=f)), error=function(e){
+					cat("Could not parse ", paste(series_files, collapse=", "), ": ", conditionMessage(e), "\n", sep="")
+					NULL
 				})
 			}
 		}
@@ -255,9 +248,9 @@ for (z in unlist(strsplit(GEO_ID_path,"_"))){
 				}
 				design_possible <- gsub("[[:punct:]]| ","_",phenodata_possible_designs[,idx])
 				write.table(unique(design_possible),
-						file=paste0(path,"/",GEO_ID_path,"/reads_study_info/design_possible",i,"_",GEO_ID,".txt"),quote = F,row.names = F, col.names = F,sep = "\n")
+						file=paste0(path,"/",GEO_ID_path,"/reads_study_info/design_possible_",i,"_",GEO_ID,".txt"),quote = F,row.names = F, col.names = F,sep = "\n")
 				write.table(design_possible,
-						file=paste0(path,"/",GEO_ID_path,"/reads_study_info/design_possible_full",i,"_",GEO_ID,".txt"),quote = F,row.names = F, col.names = F,sep = "\n")
+						file=paste0(path,"/",GEO_ID_path,"/reads_study_info/design_possible_full_",i,"_",GEO_ID,".txt"),quote = F,row.names = F, col.names = F,sep = "\n")
 				cat(paste0("\nDetected ",i,": "))
 				print(table(design_possible)); cat("\n")
 			}

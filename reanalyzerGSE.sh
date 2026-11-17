@@ -2468,7 +2468,7 @@ if run_step step4b; then
 			mkdir -p $saser_out
 			library_layout=$(find $output_folder/$name -name library_layout_info.txt 2>/dev/null | head -1 | xargs cat 2>/dev/null | head -n1 | tr -d ' \r\n')
 			samples_info=$output_folder/$name/reads_study_info/samples_info.txt
-			design_file=$(ls $output_folder/$name/reads_study_info/design_possible_full_1.txt 2>/dev/null || echo "none")
+			design_file=$(ls -v $output_folder/$name/reads_study_info/design_possible_full*.txt 2>/dev/null | head -1); [ -n "$design_file" ] || design_file=none
 			R_saseR_splicing.R \
 				"$bam_dir" \
 				"${array[index]}" \
@@ -2509,7 +2509,7 @@ if run_step step4b; then
 			isoswitch_out=$output_folder/$name/final_results_reanalysis$index/IsoformSwitchAnalyzeR
 			mkdir -p $isoswitch_out
 			samples_info=$output_folder/$name/reads_study_info/samples_info.txt
-			design_file=$(ls $output_folder/$name/reads_study_info/design_possible_full_1.txt 2>/dev/null || echo "none")
+			design_file=$(ls -v $output_folder/$name/reads_study_info/design_possible_full*.txt 2>/dev/null | head -1); [ -n "$design_file" ] || design_file=none
 			R_isoformswitch.R \
 				"$quant_dir" \
 				"${array[index]}" \
