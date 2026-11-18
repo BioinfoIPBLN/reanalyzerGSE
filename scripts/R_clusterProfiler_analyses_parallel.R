@@ -1622,6 +1622,7 @@ process_file <- function(file){
     if (all_analyses == "yes" || gsea_default == "yes") .rgse_units <- c(.rgse_units, "ranked")
     .rgse_gsea_unit <- "ranked"
     .rgse_inner_cores <- max(1, floor(cores_2 / max(1, length(.rgse_units))))
+    unlink(c(list.files(path2, pattern = "^plots_not_drawn\\.txt$", recursive = TRUE, full.names = TRUE), file.path(path2, "reactome_paths_snapshots", "not_in_graphite.txt")))
     mclapply(
       mc.cores = min(cores_2, max(1, length(.rgse_units))),
       X = .rgse_units,

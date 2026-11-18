@@ -1084,6 +1084,8 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
         } else {
           de_res <- rgse_de_test(edgeR_object_norm_temp_to_process, list_combinations[[i]], covs_de, diff_soft, de_settings)
           dge_results <- list(table = de_res$table)
+          dge_results$table$Replicate_outlier <- unname(rgse_replicate_outliers(edgeR_object_norm_temp_to_process, list_combinations[[i]],
+                                                                                rgse_sample_id(colnames(edgeR_object_norm_temp_to_process)))[rownames(dge_results$table)])
           de_method <- de_res$method
           if (length(de_res$notes)) cat(paste0("Covariables, comparison ", i+existing, ": ", de_res$notes, "\n"))
           tab <- dge_results$table

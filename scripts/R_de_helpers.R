@@ -158,6 +158,27 @@ rgse_de_test <- function(y, comp, covs = NULL, engine = "edgeR", settings = rgse
   list(table = tab, method = rgse_de_method_label(engine, settings, covs), notes = cd$notes)
 }
 
+rgse_replicate_outliers <- function(y, comp, ids = colnames(y)) {
+  groups <- as.character(y$samples$group)
+  lcpm <- edgeR::cpm(y, log = TRUE)
+  cutoff <- log2(10 / (median(y$samples$lib.size) * 1e-6) + 2 / (mean(y$samples$lib.size) * 1e-6))
+  calls <- rep("", nrow(lcpm))
+  for (g in comp) {
+    idx <- which(groups == g)
+    if (length(idx) < 3) next
+    for (i in idx) {
+      peers <- lapply(setdiff(idx, i), function(j) lcpm[, j])
+      other_max <- do.call(pmax, peers)
+      other_min <- do.call(pmin, peers)
+      lab <- ifelse(lcpm[, i] - other_max >= 1 & lcpm[, i] >= cutoff, paste(ids[i], "up"),
+                    ifelse(lcpm[, i] - other_min <= -1 & other_min >= cutoff, paste(ids[i], "down"), ""))
+      calls <- ifelse(nzchar(lab), ifelse(nzchar(calls), paste0(calls, ", ", lab), lab), calls)
+    }
+  }
+  calls[!nzchar(calls)] <- "no"
+  setNames(calls, rownames(y))
+}
+
 rgse_parse_contrasts <- function(txt) {
   items <- trimws(strsplit(txt, ";", fixed = TRUE)[[1]])
   items <- items[nzchar(items)]
