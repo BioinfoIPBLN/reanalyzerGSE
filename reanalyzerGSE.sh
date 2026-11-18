@@ -1173,7 +1173,7 @@ if run_step step1a_bis; then
 		if [[ "$layout_removal" == "PAIRED" ]]; then
 			for f in $(ls | egrep "_1.fastq.gz$" | sed 's,_1.fastq.gz,,g'); do
 				echo "Processing $f..."
-				if ! hisat2 -p $cores -x $removal_index_path -1 ${f}_1.fastq.gz -2 ${f}_2.fastq.gz --un-conc-gz $clean_seqs_location/${f}_%.fastq.gz --summary-file $removal_summaries/${f}_removal_summary.txt > /dev/null; then
+				if ! hisat2 -p $cores --temp-directory ${TMPDIR:-/tmp} -x $removal_index_path -1 ${f}_1.fastq.gz -2 ${f}_2.fastq.gz --un-conc-gz $clean_seqs_location/${f}_%.fastq.gz --summary-file $removal_summaries/${f}_removal_summary.txt > /dev/null; then
 					echo -e "\n\033[1;31mERROR:\033[0m host alignment removal failed for $f\n" >&2
 					exit 1
 				fi
@@ -1181,7 +1181,7 @@ if run_step step1a_bis; then
 		else
 			for f in $(ls | egrep ".fastq.gz$"); do
 				echo "Processing $f..."
-				if ! hisat2 -p $cores -x $removal_index_path -U $f --un-gz $clean_seqs_location/$f --summary-file $removal_summaries/${f}_removal_summary.txt > /dev/null; then
+				if ! hisat2 -p $cores --temp-directory ${TMPDIR:-/tmp} -x $removal_index_path -U $f --un-gz $clean_seqs_location/$f --summary-file $removal_summaries/${f}_removal_summary.txt > /dev/null; then
 					echo -e "\n\033[1;31mERROR:\033[0m host alignment removal failed for $f\n" >&2
 					exit 1
 				fi

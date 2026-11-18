@@ -2785,6 +2785,9 @@ sub hisat2{
 	if($threads>0){
 		$hisatpardef.= " -p " . ($threads + 1);
 	}
+	if($ENV{TMPDIR} and -d $ENV{TMPDIR} and $hisatpardef !~ /--temp-directory/){
+		$hisatpardef.= " --temp-directory $ENV{TMPDIR}";
+	}
 
 	#Checking the mandatory parameters
 	if ($file and $projectdir and $hisat2idx_final and $logfile and $statsfile){ 
