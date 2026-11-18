@@ -796,7 +796,7 @@ process_file <- function(file){
           .react_wd <- getwd()
           .react_graphite <- if (is.na(.org_info$graphite)) character(0) else tryCatch(names(graphite::pathways(.org_info$graphite, "reactome")), error = function(e) character(0))
           .not_drawn <- setdiff(paths_list, .react_graphite)
-          if (length(.not_drawn)) writeLines(c(if (is.na(.org_info$graphite)) paste0("Skipped: graphite has no Reactome pathways for ", organism_cp, ", so no pathway snapshots are drawn") else "Skipped: pathways absent from graphite's Reactome set for this organism, no snapshot drawn:", .not_drawn), paste0(.react_wd, "/reactome_paths_snapshots/not_in_graphite.txt"))
+          if (length(.not_drawn)) cat(paste0(.not_drawn, "\n"), sep = "", file = paste0(.react_wd, "/reactome_paths_snapshots/not_in_graphite.txt"), append = TRUE)
           paths_list <- intersect(paths_list, .react_graphite)
           .rgse_mclapply_timeout(paths_list, .rgse_inner_cores, 3600, function(f){
             tryCatch({
@@ -1628,6 +1628,8 @@ process_file <- function(file){
       FUN = process_file_within
     )
     for (.pnd in list.files(path2, pattern = "^plots_not_drawn\\.txt$", recursive = TRUE, full.names = TRUE)) writeLines(sort(readLines(.pnd, warn = FALSE), method = "radix"), .pnd)
+    .nig <- file.path(path2, "reactome_paths_snapshots", "not_in_graphite.txt")
+    if (file.exists(.nig)) writeLines(c(if (is.na(.org_info$graphite)) paste0("Skipped: graphite has no Reactome pathways for ", organism_cp, ", so no pathway snapshots are drawn") else "Skipped: pathways absent from graphite's Reactome set for this organism, no snapshot drawn:", sort(unique(readLines(.nig, warn = FALSE)), method = "radix")), .nig)
     bundle_cp_objects(basename)
 
     print(paste0("Processing ",file,"... Tidying up..."))
