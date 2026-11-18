@@ -59,7 +59,7 @@ DPKGCFG
     cd $TMPDIR && rm -rf *
 
     # sracha (Rust sra-tools; used by fastq-dl for the SRA provider)
-    curl -fsSL --retry 10 https://github.com/rnabioco/sracha-rs/releases/download/v0.6.0/sracha-0.6.0-x86_64-unknown-linux-musl-v2.tar.gz -o sracha.tar.gz
+    curl -fsSL --retry 10 https://github.com/rnabioco/sracha-rs/releases/download/v0.10.1/sracha-0.10.1-x86_64-unknown-linux-musl-v2.tar.gz -o sracha.tar.gz
     mkdir -p sracha_dl
     tar xzf sracha.tar.gz -C sracha_dl
     find sracha_dl -type f -name sracha -exec mv {} /bin_external/ \;
