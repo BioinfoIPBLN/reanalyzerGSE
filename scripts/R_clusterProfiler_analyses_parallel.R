@@ -789,7 +789,7 @@ process_file <- function(file){
           while(dev.cur() > 1) dev.off()
           Sys.sleep(sample(1:5, size = 1))
           print(paste0("Processing ",file,"_",name_internal,"... Reactome pathways visualization"))
-          paths_list <- unique(unlist(lapply(list.files(path = getwd(), pattern = "^REACT", full.names = TRUE), function(x){
+          paths_list <- unique(unlist(lapply(list.files(path = getwd(), pattern = paste0("^REACT_", i, "_", geneset, "\\.txt$"), full.names = TRUE), function(x){
               data <- read.delim(x)
               data_filtered <- data$Description[data$pvalue < 0.05]
           })))
@@ -1627,6 +1627,7 @@ process_file <- function(file){
       X = .rgse_units,
       FUN = process_file_within
     )
+    for (.pnd in list.files(path2, pattern = "^plots_not_drawn\\.txt$", recursive = TRUE, full.names = TRUE)) writeLines(sort(readLines(.pnd, warn = FALSE), method = "radix"), .pnd)
     bundle_cp_objects(basename)
 
     print(paste0("Processing ",file,"... Tidying up..."))
