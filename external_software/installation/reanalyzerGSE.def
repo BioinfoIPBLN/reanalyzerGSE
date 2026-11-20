@@ -161,6 +161,19 @@ DPKGCFG
     curl -fsSL --retry 10 https://codeload.github.com/DerrickWood/kraken2/tar.gz/01fb1d90167c720b6ecab3db707587d6406c8df4 -o kraken2.tar.gz
     mkdir -p kraken2
     tar xzf kraken2.tar.gz -C kraken2 --strip-components=1
+    sed -i -e 's|"/tmp/\(classify[._][a-z]*\)"|DaemonPath("\1").c_str()|g' \
+      -e 's|"/tmp/classify_%d_\([a-z]*\)", pid|"%s/classify_%d_\1", DaemonDir(), pid|g' \
+      -e '/^int daemonize() {/i static const char *DaemonDir() { const char *d = getenv("TMPDIR"); return d && *d && access(d, W_OK | X_OK) == 0 ? d : "/tmp"; }' \
+      -e '/^int daemonize() {/i static std::string DaemonPath(const char *name) { return std::string(DaemonDir()) + "/" + name; }' \
+      kraken2/src/classify.cc
+    sed -i -e 's|"/tmp/\(classify[._][a-z]*\)"|os.path.join(tempfile.gettempdir(), "\1")|g' \
+      -e 's|os\.listdir("/tmp")|os.listdir(tempfile.gettempdir())|' \
+      -e 's|os\.path\.join("/tmp", |os.path.join(tempfile.gettempdir(), |g' \
+      kraken2/scripts/k2
+    if grep -n '"/tmp/' kraken2/src/classify.cc kraken2/scripts/k2; then
+      echo "kraken2: daemon paths still hard-coded to /tmp" >&2
+      exit 1
+    fi
     mkdir -p kraken2/bin
     ./kraken2/install_kraken2.sh $PWD/kraken2/bin
     mv kraken2/bin/* /bin_external/
@@ -214,6 +227,7 @@ matplotlib==3.10.8
 networkx==3.6.1
 statsmodels==0.14.6
 pysam==0.24.1
+biopython==1.84
 deepTools==3.5.6
 multiqc==1.35
 fastq-dl==4.0.1

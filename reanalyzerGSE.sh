@@ -1424,6 +1424,13 @@ _log_step "Step_2_Decontamination" "start"
 		IFS=',' read -r -a k2_db_array <<< "$kraken2_databases"
 		IFS=',' read -r -a k2_conf_array <<< "$kraken2_confidence"
 		layout=$(find $output_folder/$name -name library_layout_info.txt 2>/dev/null | head -1 | xargs cat 2>/dev/null | head -n1 | tr -d ' \r\n')
+		k2_tmp=$(mktemp -d /tmp/rgse_k2.XXXXXXXX) || { echo -e "\n\033[1;31mERROR:\033[0m could not create a temporary folder in /tmp for Kraken2.\n" >&2; exit 1; }
+		k2_fail() {
+			TMPDIR=$k2_tmp k2 clean --stop-daemon &>/dev/null
+			rm -rf "$k2_tmp"
+			echo -e "\n\033[1;31mERROR:\033[0m Kraken2 classification of $1 with $db_basename (confidence $conf) wrote no report; see $PWD/kraken2_log_warnings_errors.txt\n" >&2
+			exit 1
+		}
 
 		for k2_db in "${k2_db_array[@]}"; do
 			db_basename=$(basename $k2_db)
@@ -1438,32 +1445,36 @@ _log_step "Step_2_Decontamination" "start"
 				if [[ "$layout" == "SINGLE" ]]; then
 					for f in $(ls $seqs_location | egrep ".fastq$|.fq$|.fastq.gz$|.fq.gz$"); do
 						sample_base=$(basename $f | sed 's,\.\(fastq\|fq\)\(\.gz\)\?$,,')
-						k2 classify --use-daemon --db $k2_db --threads $cores \
+						if ! TMPDIR=$k2_tmp k2 classify --use-daemon --db $k2_db --threads $cores \
 							$([ "$conf" != "0" ] && echo "--confidence $conf") \
 							--report-minimizer-data --use-names \
 							--output $PWD/${sample_base}.${conf_label}k2_${db_basename} \
 							--report $PWD/${sample_base}.${conf_label}k2_${db_basename}_report.txt \
 							--log $PWD/${sample_base}.${conf_label}k2_${db_basename}_log.txt \
 							$seqs_location/$f \
-							1>> kraken2_log_out.txt 2>> kraken2_log_warnings_errors.txt
+							1>> kraken2_log_out.txt 2>> kraken2_log_warnings_errors.txt || [ ! -s $PWD/${sample_base}.${conf_label}k2_${db_basename}_report.txt ]; then
+							k2_fail $f
+						fi
 					done
 				elif [[ "$layout" == "PAIRED" ]]; then
 					for f in $(ls $seqs_location | egrep ".fastq$|.fq$|.fastq.gz$|.fq.gz$" | sed 's,_R\?[12]\.\(fastq\|fq\)\(\.gz\)\?$,,g' | sort | uniq); do
-						k2 classify --use-daemon --db $k2_db --threads $cores \
+						if ! TMPDIR=$k2_tmp k2 classify --use-daemon --db $k2_db --threads $cores \
 							$([ "$conf" != "0" ] && echo "--confidence $conf") \
 							--report-minimizer-data --use-names --paired \
 							--output $PWD/${f}.${conf_label}k2_${db_basename} \
 							--report $PWD/${f}.${conf_label}k2_${db_basename}_report.txt \
 							--log $PWD/${f}.${conf_label}k2_${db_basename}_log.txt \
 							${seqs_location}/${f}_*.fastq.gz \
-							1>> kraken2_log_out.txt 2>> kraken2_log_warnings_errors.txt
+							1>> kraken2_log_out.txt 2>> kraken2_log_warnings_errors.txt || [ ! -s $PWD/${f}.${conf_label}k2_${db_basename}_report.txt ]; then
+							k2_fail $f
+						fi
 					done
 				fi
 			done
 
 			# Compress output files for this DB and stop daemon
 			pigz --best -p $cores *k2_${db_basename} 2>/dev/null
-			k2 clean --stop-daemon 2>/dev/null
+			TMPDIR=$k2_tmp k2 clean --stop-daemon 2>/dev/null
 
 			# Process reports for this DB
 			for f in $(ls | egrep "k2_${db_basename}_report.txt$" 2>/dev/null); do
@@ -1475,6 +1486,7 @@ _log_step "Step_2_Decontamination" "start"
 				echo -e "#read\tTaxID\n$(awk '$6 == "G" {print $2"\t"$7}' $f)\n" >> $f.final.txt
 			done
 		done
+		rm -rf "$k2_tmp"
 
 		echo -e "Please check the files *_report.txt, kraken2_log_out.txt and kraken2_log_warnings_errors.txt"
 		echo -e "Extracting reads..."
