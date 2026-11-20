@@ -1628,9 +1628,9 @@ process_file <- function(file){
       X = .rgse_units,
       FUN = process_file_within
     )
-    for (.pnd in list.files(path2, pattern = "^plots_not_drawn\\.txt$", recursive = TRUE, full.names = TRUE)) writeLines(sort(readLines(.pnd, warn = FALSE), method = "radix"), .pnd)
+    for (.pnd in list.files(path2, pattern = "^plots_not_drawn\\.txt$", recursive = TRUE, full.names = TRUE)) writeLines(sort(readLines(.pnd, warn = FALSE, encoding = "UTF-8"), method = "radix"), .pnd, useBytes = TRUE)
     .nig <- file.path(path2, "reactome_paths_snapshots", "not_in_graphite.txt")
-    if (file.exists(.nig)) writeLines(c(if (is.na(.org_info$graphite)) paste0("Skipped: graphite has no Reactome pathways for ", organism_cp, ", so no pathway snapshots are drawn") else "Skipped: pathways absent from graphite's Reactome set for this organism, no snapshot drawn:", sort(unique(readLines(.nig, warn = FALSE)), method = "radix")), .nig)
+    if (file.exists(.nig)) writeLines(c(if (is.na(.org_info$graphite)) paste0("Skipped: graphite has no Reactome pathways for ", organism_cp, ", so no pathway snapshots are drawn") else "Skipped: pathways absent from graphite's Reactome set for this organism, no snapshot drawn:", sort(unique(readLines(.nig, warn = FALSE, encoding = "UTF-8")), method = "radix")), .nig, useBytes = TRUE)
     bundle_cp_objects(basename)
 
     print(paste0("Processing ",file,"... Tidying up..."))
