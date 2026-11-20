@@ -2270,7 +2270,10 @@ _log_step "Step_3b_miARma" "start"
 			for _f in $(find ${unit_out[index]}/$aligner_results_dir -maxdepth 1 -mindepth 1 2>/dev/null); do
 				_b=$(basename $_f)
 				[ "$_b" == "list_multi.txt" ] && continue
-				if [ -d "$_f" ]; then
+				if [ "$_b" == "multibamqc_results" ]; then
+					mkdir -p $merged_dir/$aligner_results_dir/multibamqc_by_group
+					ln -sfnr $_f $merged_dir/$aligner_results_dir/multibamqc_by_group/multibamqc_${unit_label[index]//[^A-Za-z0-9._-]/_}
+				elif [ -d "$_f" ]; then
 					# bamqc/rnaseqqc folders hold one subfolder per sample, and samples are disjoint
 					mkdir -p $merged_dir/$aligner_results_dir/$_b
 					for _s in $(find $_f -maxdepth 1 -mindepth 1 2>/dev/null); do ln -sfnr $_s $merged_dir/$aligner_results_dir/$_b/$(basename $_s); done

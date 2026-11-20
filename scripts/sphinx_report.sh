@@ -23,6 +23,7 @@ sed -i "s,html_theme =.*,html_theme = 'sphinxdoc',g" conf.py
 
 rnaseqqc_links=""
 bamqc_links=""
+multibamqc_group_links=""
 for aligner_dir in "$path/miARma_out0"/*_results; do
     if [ -d "$aligner_dir/rnaseqqc_results" ]; then
         for qrep in "$aligner_dir/rnaseqqc_results"/*/qualimapReport.html; do
@@ -44,6 +45,13 @@ for aligner_dir in "$path/miARma_out0"/*_results; do
             fi
         done
     fi
+    for qrep in "$aligner_dir"/multibamqc_by_group/multibamqc_*/multisampleBamQcReport.html; do
+        if [ -f "$qrep" ]; then
+            group_dir=$(basename $(dirname "$qrep"))
+            multibamqc_group_links="${multibamqc_group_links}   <a href=\"${group_dir}/multisampleBamQcReport.html\" target=\"_blank\">Click to open Multi-sample BAM QC by Qualimap for genome group ${group_dir#multibamqc_}</a><br>
+"
+        fi
+    done
 done
 
 echo -e "\n
@@ -59,8 +67,9 @@ html_extra_path = [
     \"aligner_qc\"
 ]
 html_extra_path.extend(glob.glob(\"../miARma_out0/*_results/multibamqc_results\"))
+html_extra_path.extend(glob.glob(\"../miARma_out0/*_results/multibamqc_by_group\"))
 html_extra_path.extend(glob.glob(\"../preliminar_rrna_qc\"))
-html_extra_path = [p for p in html_extra_path if os.path.exists(p)]
+html_extra_path = [os.path.abspath(p) for p in html_extra_path if os.path.exists(p)]
 exclude_patterns = exclude_patterns + [\"aligner_qc\"]
 
 html_static_path = [\"_static\"]
@@ -1086,7 +1095,7 @@ Please use the following links:
 .. raw:: html
    
    <a href=\"multiqc_report.html\" target=\"_blank\">Click to open report by MultiQC</a><br>
-${rnaseqqc_links}${bamqc_links}$(if [ -f "$path/miARma_out0/star_results/multibamqc_results/multisampleBamQcReport.html" ] || [ -f "$path/$final_dir_name/multisampleBamQcReport.html" ] || [ $(find "$path/miARma_out0" -name "multisampleBamQcReport.html" 2>/dev/null | wc -l) -gt 0 ]; then echo "   <a href=\"multisampleBamQcReport.html\" target=\"_blank\">Click to open Multi-sample BAM QC by Qualimap</a><br>"; fi)$(if [ -f "$path/$final_dir_name/QC_and_others/${project_name}_norm_QC_commented.pdf" ]; then echo "   <a href=\"${project_name}_norm_QC_commented.pdf\" target=\"_blank\">Click to open PDF with multiple QC figures (with AI commentary)</a><br>"; else echo "   <a href=\"${project_name}_norm_QC.pdf\" target=\"_blank\">Click to open PDF with multiple QC figures</a>$(if [ -f "$path/$final_dir_name/QC_and_others/QC_AI_commentary_slides.pdf" ]; then echo " - <a href=\"QC_AI_commentary_slides.pdf\" target=\"_blank\">AI commentary slides</a>"; fi)<br>"; fi)
+${rnaseqqc_links}${bamqc_links}${multibamqc_group_links}$(if [ -f "$path/miARma_out0/star_results/multibamqc_results/multisampleBamQcReport.html" ] || [ -f "$path/$final_dir_name/multisampleBamQcReport.html" ] || [ $(find "$path/miARma_out0" -name "multisampleBamQcReport.html" 2>/dev/null | wc -l) -gt 0 ]; then echo "   <a href=\"multisampleBamQcReport.html\" target=\"_blank\">Click to open Multi-sample BAM QC by Qualimap</a><br>"; fi)$(if [ -f "$path/$final_dir_name/QC_and_others/${project_name}_norm_QC_commented.pdf" ]; then echo "   <a href=\"${project_name}_norm_QC_commented.pdf\" target=\"_blank\">Click to open PDF with multiple QC figures (with AI commentary)</a><br>"; else echo "   <a href=\"${project_name}_norm_QC.pdf\" target=\"_blank\">Click to open PDF with multiple QC figures</a>$(if [ -f "$path/$final_dir_name/QC_and_others/QC_AI_commentary_slides.pdf" ]; then echo " - <a href=\"QC_AI_commentary_slides.pdf\" target=\"_blank\">AI commentary slides</a>"; fi)<br>"; fi)
 $(if [ -f "$path/$final_dir_name/QC_and_others/${project_name}_adjusted_QC_commented.pdf" ]; then echo "   <a href=\"${project_name}_adjusted_QC_commented.pdf\" target=\"_blank\">Click to open PDF with multiple QC figures if batch correction/adjusted counts (with AI commentary)</a><br>"; elif [ -f "$path/$final_dir_name/QC_and_others/${project_name}_adjusted_QC.pdf" ]; then echo "   <a href=\"${project_name}_adjusted_QC.pdf\" target=\"_blank\">Click to open PDF with multiple QC figures if batch correction/adjusted counts</a><br>"; fi)
 
 .. index:: QC analyses
