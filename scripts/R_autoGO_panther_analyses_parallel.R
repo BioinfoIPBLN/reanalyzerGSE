@@ -349,8 +349,8 @@ key_files <- data.frame()
 # Detect ENSEMBL IDs and build mapping once
 .ensembl_detected_ago <- FALSE
 .ensembl_map_ago <- NULL
-.dge_files_ago <- list.files(pattern = pattern_search,path=path,recursive=T, full.names=T)
-.dge_files_ago <- .dge_files_ago[!grepl("_annotation|Gene_ID", basename(.dge_files_ago))]
+.dge_files_ago <- list.files(path = path, recursive = TRUE, full.names = TRUE)
+.dge_files_ago <- .dge_files_ago[basename(.dge_files_ago) == pattern_search]
 if (exists("is_ensembl_id") && length(.dge_files_ago) > 0) {
   .test_ids_ago <- data.table::fread(.dge_files_ago[1],head=T,fill=T)$Gene_ID
   if (is_ensembl_id(.test_ids_ago)) {
