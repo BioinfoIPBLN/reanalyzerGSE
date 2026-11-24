@@ -7,7 +7,7 @@ GEO_ID_path <- unlist(lapply(strsplit(GEO_ID,","),function(x){paste(sort(x),coll
 cat(paste0("\nI'm in: ",path,"/",GEO_ID_path,"/reads_study_info\n\n"))
 dir.create(paste(path,GEO_ID_path,"reads_study_info",sep="/"), showWarnings = FALSE, recursive = TRUE); setwd(paste(path,GEO_ID_path,"reads_study_info",sep="/"))
 
-retry_delays <- c(0, 10, 30)
+retry_delays <- c(0, 30, 60, 120, 180, 240, 300)
 
 http_status <- function(url) {
   code <- suppressWarnings(system2("curl", c("-s", "-o", "/dev/null", "-w", shQuote("%{http_code}"), "--max-time", "60", shQuote(url)), stdout = TRUE, stderr = FALSE))
@@ -43,7 +43,8 @@ for (i in unlist(strsplit(GEO_ID_path,"_"))){
 		code <- http_status(series_url)
 		refused <- !is.na(code) && code %in% c(403, 404)
 		if (refused) {
-			cat(paste0("NCBI answered HTTP ", code, " for ", series_url, " (attempt ", attempt, ")\n"))
+			cat(paste0("NCBI answered HTTP ", code, " for ", series_url, " (attempt ", attempt, " of ", length(retry_delays), ")\n"))
+			if (code == 404) break
 			next
 		}
 		tryCatch({
