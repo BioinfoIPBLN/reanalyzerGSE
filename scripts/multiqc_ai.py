@@ -66,12 +66,32 @@ DEF_SYS_PROMPT = "\n".join([
 # (imported above) and are shared with llm_insight.py.
 
 # ------------------------------------------------------------- MultiQC step
+MULTIQC_AI_DEADLINE = """
+import sys, time, requests
+budget = float(sys.argv.pop(1))
+_post = requests.post
+_deadline = []
+def post(*args, **kwargs):
+    if not _deadline:
+        _deadline.append(time.monotonic() + budget)
+    left = _deadline[0] - time.monotonic()
+    if left <= 0:
+        raise requests.exceptions.Timeout("AI summary time limit of %d s reached" % budget)
+    kwargs["timeout"] = min(left, kwargs.get("timeout") or left)
+    return _post(*args, **kwargs)
+requests.post = post
+sys.argv[0] = "multiqc"
+from multiqc.__main__ import run_multiqc
+sys.exit(run_multiqc())
+"""
+
 def run_multiqc(cfg, analysis_dir, out_dir, builtin):
     tmp = os.path.join(os.getcwd(), ".multiqc_tmp")
     os.makedirs(tmp, exist_ok=True)
     env = dict(os.environ, TMPDIR=tmp)          # keep MultiQC's tempdir somewhere we own
     cmd = ["multiqc", "--outdir", out_dir, "-f", analysis_dir, "--ignore", "miARma_stat*", "--ignore", "indexes"]
     if builtin:
+        cmd = [sys.executable, "-c", MULTIQC_AI_DEADLINE, str(cfg.timeout)] + cmd[1:]
         # MultiQC needs a key present even for a custom endpoint.
         env["OPENAI_API_KEY"] = cfg.api_key
         summary_flag = "--ai-summary-full" if cfg.ai_summary == "full" else "--ai-summary"
