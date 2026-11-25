@@ -258,14 +258,11 @@ sub featureCount{
 				my $found = 0;
 				for my $dir_suffix ("hisat2_results", "star_results") {
 					for my $aligner ("hisat2", "STAR") {
-						# BAMs keep the read-file infix (e.g. GSM..._1.fastq.gz_STAR.bam),
-						# so match with a glob rather than an exact name.
-						my @hits = glob("$projectdir/${dir_suffix}/${sample}*_${aligner}.bam");
-						if (@hits) {
+						if (-f "$projectdir/${dir_suffix}/${sample}_${aligner}.bam") {
 							$found = 1;
 							my ($log_glob, $marker) = ($aligner eq "STAR")
-								? ("$projectdir/${dir_suffix}/${sample}*_STAR_Log.final.out", "Number of input reads")
-								: ("$projectdir/${dir_suffix}/${sample}*_hisat2.log", "Overall alignment rate");
+								? ("$projectdir/${dir_suffix}/${sample}_STAR_Log.final.out", "Number of input reads")
+								: ("$projectdir/${dir_suffix}/${sample}_hisat2.log", "Overall alignment rate");
 							my $complete = 0;
 							for my $log_file (glob($log_glob)) {
 								open(my $lh, "<", $log_file) or next;
@@ -309,7 +306,7 @@ sub featureCount{
    				       unset DISPLAY && export PARALLEL_SHELL=/bin/bash
    				       parallel --halt-on-error 2 --verbose --joblog ${projectdir}/featureCounts_log_parallel.txt -j $parallelnumber \\
    				       'featureCounts $htseqpardef -a $database -o ${projectdir}${output_dir}/{}_${prefix}_readcount.tab \\
-   				       \$(find -L $projectdir -type f \\( -name "{}_hisat2.bam" -o -name "{}_STAR.bam" -o -name "{}*.bam" \\) | head -n 1) >> $logfile 2>&1' \\
+   				       \$(find -L $projectdir -type f \\( -name "{}_hisat2.bam" -o -name "{}_STAR.bam" \\) | head -n 1) >> $logfile 2>&1' \\
    				       ::: \$(cat $tmp_file | sed -E 's,_(R)?[12].fastq.gz.*,,g' | sort | uniq | awk -F '/' '{print \$NF}')
 	 			    fi
 	 			    cd $projectdir && mkdir -p \$PWD/../multiqc_out && if [ \$(ls \$PWD/../multiqc_out | wc -l) -eq 0 ]; then

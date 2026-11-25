@@ -43,7 +43,7 @@ a_norm <- scRecover::normalization(as.matrix(a_2))
 final_bulk_normalized_counts <- data.frame(Gene_ID=stringr::str_to_title(rownames(a_norm))) # Getting first cap letter in Gene_ID
 for (i in names(table(colnames(a_2)))){
   final_bulk_normalized_counts <- cbind(final_bulk_normalized_counts,
-                                        data.frame(i=rowSums(a_norm[,grep(i,colnames(a_norm))])))
+                                        data.frame(i=rowSums(a_norm[,colnames(a_norm) == i, drop = FALSE])))
   # print(i)
   colnames(final_bulk_normalized_counts)[dim(final_bulk_normalized_counts)[2]] <- i
 }
