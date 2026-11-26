@@ -1003,7 +1003,19 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
                       nrow(mc), sum(!is.na(mc$ID) & mc$ID != ""), sum(!is.na(mc$Parent) & mc$Parent != "")))
           
           mcols(gr) <- mc
-          
+
+          unstranded <- as.character(strand(gr)) == "*"
+          unstranded_tx <- unique(mc$Parent[unstranded & mc$type %in% sub_like])
+          unstranded_tx <- unstranded_tx[!is.na(unstranded_tx) & unstranded_tx != ""]
+          if (length(unstranded_tx) > 0) {
+            unstranded_genes <- unique(mc$Parent[mc$type %in% tx_like & mc$ID %in% unstranded_tx])
+            drop <- (mc$type %in% sub_like & mc$Parent %in% unstranded_tx) |
+                    (mc$type %in% tx_like & mc$ID %in% unstranded_tx) |
+                    (mc$type %in% gene_like & unstranded & mc$ID %in% unstranded_genes)
+            cat(sprintf("Leaving out %d transcripts with unstranded exons (strand '.') from the gene body coverage\n", length(unstranded_tx)))
+            gr <- gr[!drop]
+          }
+
           suppressWarnings(txdb <- txdbmaker::makeTxDbFromGRanges(gr))
           
           # Decide aggregation level based on featureCounts feature type
@@ -1063,30 +1075,31 @@ suppressMessages(library("ggdendro",quiet = T,warn.conflicts = F))
             }
             if (is.null(idx_file)) return(NULL)
             
-            bf <- BamFile(bfile, index = idx_file)
+            bf <- BamFile(bfile, index = idx_file, yieldSize = 2000000L)
             bam_seqs <- seqlevels(bf)
-            
-            # Prune query ranges that sit on contigs missing from this BAM's header
-            valid_seqs <- intersect(seqlevels(sampled_exons), bam_seqs)
-            if (length(valid_seqs) == 0) return(NULL)
-            
-            valid_exons <- suppressWarnings(keepSeqlevels(sampled_exons, valid_seqs, pruning.mode="coarse"))
-            if (length(valid_exons) == 0) return(NULL)
-            
-            # which must be a GRanges, not an aptly-named GRangesList, otherwise ScanBamParam thinks list names are chromosomes!
-            param <- ScanBamParam(which = reduce(unlist(valid_exons)))
-            
-            gal <- readGAlignments(bf, param = param)
-            if (length(gal) == 0) return(NULL)
-            
-            cvg <- coverage(gal)
-            
+
+            used_seqs <- intersect(bam_seqs, unique(as.character(seqnames(unlist(sampled_exons, use.names = FALSE)))))
+            if (length(used_seqs) == 0) return(NULL)
+
+            cvg <- new.env(hash = TRUE)
+            open(bf)
+            repeat {
+              gal <- readGAlignments(bf)
+              if (length(gal) == 0L) break
+              chunk_seqs <- intersect(used_seqs, as.character(unique(seqnames(gal))))
+              if (length(chunk_seqs) == 0L) next
+              chunk_cvg <- coverage(keepSeqlevels(gal, chunk_seqs, pruning.mode = "coarse"))
+              for (s in names(chunk_cvg)) cvg[[s]] <- if (is.null(cvg[[s]])) chunk_cvg[[s]] else cvg[[s]] + chunk_cvg[[s]]
+            }
+            close(bf)
+            if (length(ls(cvg)) == 0) return(NULL)
+
             tx_cvg <- lapply(seq_along(sampled_exons), function(i) {
                exs <- sampled_exons[[i]]
                seqn <- as.character(seqnames(exs)[1])
-               if (!seqn %in% names(cvg)) return(NULL)
-               
                chrom_cvg <- cvg[[seqn]]
+               if (is.null(chrom_cvg)) return(NULL)
+
                ex_cvgs <- Views(chrom_cvg, ranges(exs))
                spliced_cvg <- as.numeric(unlist(ex_cvgs))
                
