@@ -3180,7 +3180,37 @@ sub star_index{
 		print STDERR date()." Generating the index genome from $fasta. This process could take some hours and need much RAM memory, particularly when multithreading. If segfaults in the alignment step, please do check the log and warnings, it may be required to rerun the indexing manually changing --genomeSAindexNbases and the recommended value will be there...\n";
 		#bowtie-build execution command from a fasta file. The output index will be saved
 		#in the genomeindex1 directory with the name index 
-		my $command="STAR --runThreadN ".$indexthreads." --runMode genomeGenerate --genomeDir ".$staridx_final." --genomeFastaFiles $fasta --sjdbGTFfile $gtf --sjdbOverhang $readlength --limitGenomeGenerateRAM $memorylimit";
+		my ($genome_length, $n_refs) = (0, 0);
+		if (-s "$fasta.fai") {
+			open(my $fai, "<", "$fasta.fai") or die "STAR_INDEX ERROR :: Can't open $fasta.fai: $!";
+			while (my $line = <$fai>) {
+				my @f = split(/\t/, $line);
+				$genome_length += $f[1];
+				$n_refs++;
+			}
+			close($fai);
+		}
+		elsif ($fasta !~ /\.gz$/) {
+			open(my $fa, "<", $fasta) or die "STAR_INDEX ERROR :: Can't open $fasta: $!";
+			while (my $line = <$fa>) {
+				if (substr($line, 0, 1) eq ">") {
+					$n_refs++;
+					next;
+				}
+				$line =~ s/\s+$//;
+				$genome_length += length($line);
+			}
+			close($fa);
+		}
+		my $chr_bin_nbits = 18;
+		if ($genome_length > 0 && $n_refs > 0) {
+			my $per_ref = $genome_length / $n_refs;
+			$per_ref = $readlength if $per_ref < $readlength;
+			$chr_bin_nbits = int(log($per_ref) / log(2));
+			$chr_bin_nbits = 18 if $chr_bin_nbits > 18;
+			print STDERR date()." Reference: $n_refs sequences, $genome_length bp; using --genomeChrBinNbits $chr_bin_nbits\n";
+		}
+		my $command="STAR --runThreadN ".$indexthreads." --runMode genomeGenerate --genomeDir ".$staridx_final." --genomeFastaFiles $fasta --sjdbGTFfile $gtf --sjdbOverhang $readlength --limitGenomeGenerateRAM $memorylimit --genomeChrBinNbits $chr_bin_nbits";
 		#commandef is the command that will be executed by system composed of the index
 		#directory creation, the module loading, and the bowtie-build execution. The error 
 		#data will be redirected to the run.log file
