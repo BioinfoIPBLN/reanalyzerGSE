@@ -336,6 +336,7 @@ sub ReadAligment{
 	my $bam_filter_pairs=$args{"bam_filter_pairs"} || "yes";
 	my $bam_normalization=$args{"bam_normalization"};
 	my $bigwig_binsize=$args{"bigwig_binsize"} || 10;
+	my $bigwig=$args{"bigwig"} || "yes";
 	my $totalcores=$args{"totalcores"} || 0;
 	my $save_unaligned=$args{"save_unaligned"} || "no";
 	#Declaring the variables to collect the path of the new files
@@ -835,6 +836,7 @@ sub ReadAligment{
 					bam_filter_pairs=>$bam_filter_pairs,
 					bam_normalization=>$bam_normalization,
 					bigwig_binsize=>$bigwig_binsize,
+					bigwig=>$bigwig,
 					save_unaligned=>$save_unaligned,
 					totalcores=>$totalcores
 		  		);
@@ -893,6 +895,7 @@ sub ReadAligment{
 					bam_filter_pairs=>$bam_filter_pairs,
 					bam_normalization=>$bam_normalization,
 					bigwig_binsize=>$bigwig_binsize,
+					bigwig=>$bigwig,
 					save_unaligned=>$save_unaligned,
 					totalcores=>$totalcores
 		  		);
@@ -2750,6 +2753,7 @@ sub hisat2{
 	my $bam_filter_pairs=$args{"bam_filter_pairs"} || "yes";
 	my $bam_normalization=$args{"bam_normalization"};
 	my $bigwig_binsize=$args{"bigwig_binsize"} || 10;
+	my $bigwig=$args{"bigwig"} || "yes";
 	my $totalcores=$args{"totalcores"} || 0;
 	my $qc_total_cores = ($totalcores > 0) ? $totalcores : (($threads || 1) * ($parallelnumber || 1));
 	my $save_unaligned=$args{"save_unaligned"};
@@ -2757,6 +2761,7 @@ sub hisat2{
 	if (defined $bam_normalization && lc($bam_normalization) ne "none") {
 		$norm_cmd = "--normalizeUsing " . uc($bam_normalization);
 	}
+	my $bamcoverage_cmd = lc($bigwig) eq "no" ? "" : "bamCoverage -b {}_hisat2.bam -o {}_hisat2.bam.bw -of bigwig -bs $bigwig_binsize -p $threads $norm_cmd &>> bamCoverage.log && ";
 	my $unaligned_cmd_pe = "";
 	my $unaligned_cmd_se = "";
 	if (defined $save_unaligned && lc($save_unaligned) eq "yes") {
@@ -2885,7 +2890,7 @@ sub hisat2{
 	      							  echo && echo Done...{}_hisat2.bam && \\
 	      							  export _JAVA_OPTIONS=\"-Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD\" && \\
 	      							  qualimap bamqc -bam {}_hisat2.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_hisat2.bam --java-mem-size=${memorylimit_div_mb}m >> qc1.log 2>&1 || true && \\
-	      							  bamCoverage -b {}_hisat2.bam -o {}_hisat2.bam.bw -of bigwig -bs $bigwig_binsize -p $threads $norm_cmd &>> bamCoverage.log && \\
+	      							  ${bamcoverage_cmd}\\
 	      							  samtools flagstat -@ $threads {}_hisat2.bam > {}_hisat2.bam.flagstat && \\
 	      							  samtools stats -@ $threads {}_hisat2.bam > {}_hisat2.bam.stats' \\
 	      							  ::: \$(cat $tmp_file | sed -E 's,_(R)?[12]\.fastq.*,,g' | sort | uniq | awk -F '/' '{print \$NF}')
@@ -2989,7 +2994,7 @@ sub hisat2{
 	      							  echo && echo Done...{}_hisat2.bam && \\
 	      							  export _JAVA_OPTIONS=\"-Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD\" && \\
 	      							  qualimap bamqc -bam {}_hisat2.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_hisat2.bam --java-mem-size=${memorylimit_div_mb}m >> qc1.log 2>&1 || true && \\
-	      							  bamCoverage -b {}_hisat2.bam -o {}_hisat2.bam.bw -of bigwig -bs $bigwig_binsize -p $threads $norm_cmd &>> bamCoverage.log && \\
+	      							  ${bamcoverage_cmd}\\
 	      							  samtools flagstat -@ $threads {}_hisat2.bam > {}_hisat2.bam.flagstat && \\
 	      							  samtools stats -@ $threads {}_hisat2.bam > {}_hisat2.bam.stats' \\
 	      							  ::: \$(cat $tmp_file | sed -E 's,_(R)?1\.fastq\.gz.*,,g' | sort | uniq | awk -F '/' '{print \$NF}')
@@ -3356,12 +3361,14 @@ sub star{
 	my $bam_filter_pairs=$args{"bam_filter_pairs"} || "yes";
 	my $bam_normalization=$args{"bam_normalization"};
 	my $bigwig_binsize=$args{"bigwig_binsize"} || 10;
+	my $bigwig=$args{"bigwig"} || "yes";
 	my $totalcores=$args{"totalcores"} || 0;
 	my $qc_total_cores = ($totalcores > 0) ? $totalcores : (($threads || 1) * ($parallelnumber || 1));
 	my $norm_cmd = "";
 	if (defined $bam_normalization && lc($bam_normalization) ne "none") {
 		$norm_cmd = "--normalizeUsing " . uc($bam_normalization);
 	}
+	my $bamcoverage_cmd = lc($bigwig) eq "no" ? "true" : "bamCoverage -b {}_STAR.bam -o {}_STAR.bam.bw -of bigwig -bs $bigwig_binsize -p $threads $norm_cmd";
 	my $commanddef;
 	my $output_dir="/star_results/";
 	my $starpardef;
@@ -3513,7 +3520,7 @@ sub star{
 					                          parallel --halt-on-error 2 --verbose --joblog ${projectdir}/star_log_parallel.txt -j $parallelnumber 'set -o pipefail; STAR --runMode alignReads --genomeDir $staridx_final --genomeLoad $star_load_mode --readFilesIn \$(cat $tmp_file | xargs dirname | uniq)/{}_1.fastq.gz \$(cat $tmp_file | xargs dirname | uniq)/{}_2.fastq.gz --outFileNamePrefix $projectdir${output_dir}{}_STAR_ $starpardef --outStd SAM $samtools_pipeline_pe && echo && echo Done...{}_STAR.bam${star_unmapped_gzip}' ::: \$(echo \$name_lists)
 					                          $star_unload
 					                          parallel --halt-on-error 2 --verbose --joblog ${projectdir}/starprocess_log_parallel.txt -j $parallelnumber 'export _JAVA_OPTIONS="-Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD" && qualimap bamqc -bam $projectdir${output_dir}{}_STAR.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_STAR.bam --java-mem-size="${memorylimit_div_mb}m" >> qc1.log 2>&1 || true
-					                          bamCoverage -b {}_STAR.bam -o {}_STAR.bam.bw -of bigwig -bs $bigwig_binsize -p $threads $norm_cmd' ::: \$(echo \$name_lists)
+					                          ${bamcoverage_cmd}' ::: \$(echo \$name_lists)
 					                          QC_NJOBS=\$(echo \$name_lists | wc -w); QC_J=$qc_total_cores
 					                          if [ \$QC_J -gt \$QC_NJOBS ]; then QC_J=\$QC_NJOBS; fi
 					                          if [ \$QC_J -lt 1 ]; then QC_J=1; fi
@@ -3608,7 +3615,7 @@ sub star{
 					  parallel --halt-on-error 2 --verbose --joblog ${projectdir}/star_log_parallel.txt -j $parallelnumber 'set -o pipefail; STAR --runMode alignReads --genomeDir $staridx_final --genomeLoad $star_load_mode --readFilesIn \$(cat $tmp_file | xargs dirname | uniq)/{} --outFileNamePrefix $projectdir${output_dir}{}_STAR_ $starpardef --outStd SAM $samtools_pipeline_se && echo && echo Done...{}_STAR.bam${star_unmapped_gzip}' ::: \$(echo \$name_lists)
 					  $star_unload
 					  parallel --halt-on-error 2 --verbose --joblog ${projectdir}/starprocess_log_parallel.txt -j $parallelnumber 'export _JAVA_OPTIONS="-Xmx${memorylimit_div_mb}m -Djava.io.tmpdir=\$PWD" && qualimap bamqc -bam $projectdir${output_dir}{}_STAR.bam -nt $threads -gff $gtf -c -outdir \$PWD/bamqc_results/{}_STAR.bam --java-mem-size="${memorylimit_div_mb}m" >> qc1.log 2>&1 || true
-		                          bamCoverage -b {}_STAR.bam -o {}_STAR.bam.bw -of bigwig -bs $bigwig_binsize -p $threads $norm_cmd' ::: \$(echo \$name_lists)
+		                          ${bamcoverage_cmd}' ::: \$(echo \$name_lists)
 		                          QC_NJOBS=\$(echo \$name_lists | wc -w); QC_J=$qc_total_cores
 		                          if [ \$QC_J -gt \$QC_NJOBS ]; then QC_J=\$QC_NJOBS; fi
 		                          if [ \$QC_J -lt 1 ]; then QC_J=1; fi

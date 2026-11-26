@@ -645,7 +645,7 @@ small_rna_align_and_count() {
 	for s in "${sr_samples[@]}"; do
 		echo "  $s: $(awk -F'\t' 'NR>1 && $1 ~ /^(Assigned|Unassigned_NoFeatures|Unassigned_Ambiguity)$/ {printf "%s=%s ", $1, $2}' "$rc_dir/${s}_bowtie1_readcount.tab.summary")"
 	done
-	if [ "${bam_normalization:-BPM}" != "None" ]; then
+	if [ "${bam_normalization:-BPM}" != "None" ] && [ "$bigwig" != "no" ]; then
 		echo -e "\nCoverage tracks with bamCoverage ($bam_normalization, bin $bigwig_binsize bp)...\n"
 		printf '%s\n' "${sr_samples[@]}" | parallel --joblog "$out/bamCoverage_log_parallel.txt" -j $jobs \
 			"bamCoverage -b $aln_dir/{}_bowtie1.bam -o $aln_dir/{}_bowtie1.bam.bw -of bigwig -bs $bigwig_binsize -p $thr --normalizeUsing $bam_normalization &>> $aln_dir/bamCoverage.log" || echo "WARNING: some bigwig tracks could not be built, see $aln_dir/bamCoverage.log"
@@ -2099,6 +2099,9 @@ _log_step "Step_3a_Prepare" "start"
 			fi
 			if [ "$save_unaligned" == "yes" ]; then
 				sed -i "s,save_unaligned=no,save_unaligned=yes,g" ${unit_ini[index]}
+			fi
+			if [ "$bigwig" == "no" ]; then
+				sed -i "s,^bigwig=yes$,bigwig=no,g" ${unit_ini[index]}
 			fi
 			if [ "$bam_filter_pairs" == "no" ]; then
 				sed -i "s,bam_filter_pairs=yes,bam_filter_pairs=no,g" ${unit_ini[index]}

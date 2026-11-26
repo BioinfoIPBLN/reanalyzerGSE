@@ -729,6 +729,7 @@ sub run_miARma{
 						bam_filter_pairs=>$cfg->val("Aligner","bam_filter_pairs") || "yes",
 						bam_normalization=>$cfg->val("Aligner","bam_normalization") || "BPM",
 						bigwig_binsize=>$cfg->val("Aligner","bigwig_binsize") || 10,
+						bigwig=>$cfg->val("Aligner","bigwig") || "yes",
 						save_unaligned=>$cfg->val("Aligner","save_unaligned") || "no",
 						strand=>$cfg->val("General","strand")|| "yes",
 					);

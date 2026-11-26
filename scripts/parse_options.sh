@@ -143,6 +143,7 @@ while [ $_arg_pos -lt ${#arguments[@]} ]; do
 	        -Fcust | -bam_custom_filter # Custom shell command to pipe SAM text through post-alignment (e.g. \"grep -E '^@|\\<NM:i:0\\>'\" for perfect matches). Must preserve header lines (^@).
 	        -bN | -bam_normalization # Normalization method using deeptool's bamCoverage. Choices: RPKM, CPM, BPM, RPGC, None. ('BPM' by default)
 	        -bs | -bigwig_binsize # Bin size in bp for the bigwig coverage tracks built by deeptool's bamCoverage (10 by default). Larger bins are much faster to compute and much smaller on disk: 50 is ample for genome-browser inspection, and 10 is only worth its cost when near-base resolution is needed
+	        -bw | -bigwig # Whether to build the bigwig coverage tracks with deeptool's bamCoverage ('yes', by default, or 'no'). On references split into tens of thousands of sequences or more (draft assemblies with many scaffolds) bamCoverage can take hours per sample, so 'no' skips the tracks there. The IGV app is still written, without coverage tracks
 	        -Su | -save_unaligned # Save unaligned reads from hisat2/STAR ('no' by default, or 'yes'). When enabled, reads that did not align to the reference genome are written to compressed fastq files alongside the BAM files
 	        -Ah | -hisat2_extra_args # Extra arguments appended verbatim to the hisat2 command line (e.g. '--very-sensitive --no-softclip --no-mixed --no-discordant'). Only used when '-A hisat2'. With '--very-sensitive', add '--no-softclip': otherwise hisat2 accepts alignments that keep only a short anchor and soft-clip the rest, so reads from another organism can align by chance
 	        -Sa | -spliced_alignment # Whether hisat2 and STAR may align reads across introns: 'auto' (default) switches spliced alignment off ('--no-spliced-alignment' for hisat2, '--alignIntronMax 1' for STAR) when fewer than 1% of the transcripts in the annotation have more than one exon, as in bacteria or trypanosomatids, where the spurious introns join reads or mates of neighbouring genes and paralogs; 'yes' always allows it and 'no' always switches it off
@@ -296,6 +297,7 @@ while [ $_arg_pos -lt ${#arguments[@]} ]; do
 		-Fcust | -bam_custom_filter) bam_custom_filter=${arguments[index]} ;;
 		-bN | -bam_normalization) bam_normalization=${arguments[index]} ;;
 		-bs | -bigwig_binsize) bigwig_binsize=${arguments[index]} ;;
+		-bw | -bigwig) bigwig=${arguments[index]} ;;
 		-Su | -save_unaligned) save_unaligned=${arguments[index]} ;;
 		-Ah | -hisat2_extra_args) hisat2_extra_args=${arguments[index]} ;;
 		-Sa | -spliced_alignment) spliced_alignment=${arguments[index]} ;;
@@ -902,6 +904,12 @@ if [ -z "$bigwig_binsize" ]; then
 fi
 if ! [[ "$bigwig_binsize" =~ ^[0-9]+$ ]] || [ "$bigwig_binsize" -lt 1 ]; then
 	echo "Error: -bs/-bigwig_binsize must be a positive integer number of bp. You provided: $bigwig_binsize"; exit 1
+fi
+if [ -z "$bigwig" ]; then
+	bigwig="yes"
+fi
+if [[ "$bigwig" != "yes" && "$bigwig" != "no" ]]; then
+	echo "Error: -bw/-bigwig must be 'yes' or 'no'. You provided: $bigwig"; exit 1
 fi
 if [ -z "$save_unaligned" ]; then
 	save_unaligned="no"
