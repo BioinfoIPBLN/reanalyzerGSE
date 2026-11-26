@@ -1061,8 +1061,28 @@ expr_col    <- paste0("Expr_RPKM_", PSEUDO_TAG)
         cond1 <- list_combinations[[i]][1]
         cond2 <- list_combinations[[i]][2]
         group_counts <- table(as.character(edgeR_object_norm_temp_to_process$samples$group))
-        if (group_counts[cond1] == 1 || group_counts[cond2] == 1) {
-          cat(paste0("\nSkipping standard statistical testing for ", cond1, " vs ", cond2, " because at least one condition has only 1 replicate. Computing manual logFC instead.\n"))
+        fixed_bcv <- suppressWarnings(as.numeric(Sys.getenv("RGSE_FIXED_BCV", "none")))
+        if ((group_counts[cond1] == 1 || group_counts[cond2] == 1) && !is.na(fixed_bcv)) {
+          de_method <- paste0("edgeR exactTest at a fixed BCV of ", fixed_bcv, " (dispersion ", signif(fixed_bcv^2, 4), "), as a condition has a single sample")
+          et <- exactTest(edgeR_object_norm_temp_to_process, pair = c(cond2, cond1), dispersion = fixed_bcv^2)
+          tab <- topTags(et, n = Inf, sort.by = "none")$table
+          manual_table <- data.frame(Gene_ID = tab$Gene_ID, Length = tab$Length, logFC = tab$logFC, logCPM = tab$logCPM, PValue = tab$PValue, FDR = tab$FDR)
+          rownames(manual_table) <- manual_table$Gene_ID
+          dge_results <- list(table = manual_table)
+          cat(paste0("\n", paste(sub("^__","",list_combinations[[i]]), collapse=" vs "), " (positive log2FC = higher in ", sub("^__","",cond1), "): ", de_method, "\n",
+                     "  genes tested: ", nrow(manual_table), " | FDR<=0.05: ", sum(manual_table$FDR <= 0.05, na.rm=TRUE),
+                     " (up: ", sum(manual_table$FDR <= 0.05 & manual_table$logFC > 0, na.rm=TRUE), ", down: ", sum(manual_table$FDR <= 0.05 & manual_table$logFC < 0, na.rm=TRUE), ")\n"))
+          de_methods_file <- paste0(output_dir,"/DGE/de_methods.txt")
+          if (!file.exists(de_methods_file)) writeLines("Comparison\tContrast\tMethod\tFilter\tSamples", de_methods_file)
+          write(paste(paste0("comp", i+existing), paste(sub("^__","",list_combinations[[i]]), collapse=" vs "), de_method, filter_option,
+                      paste0(group_counts[cond1], " vs ", group_counts[cond2]), sep="\t"), file=de_methods_file, append=TRUE)
+          colnames(dge_results$table)[3] <- paste0("logFC",paste(sub("__","",list_combinations[[i]]),collapse = "__VS__"))
+          if (venn_volcano!="no"){
+            myLabel1=gsub("^_","",gsub("_+","_",gsub("[^[:alnum:]_]+", "_", paste(list_combinations[[i]], collapse = '_vs_'))))
+            Volcano(dge_results,paste(output_dir,"/DGE/Volcano_plot_",myLabel1,".pdf", sep=""),myLabel1)
+          }
+        } else if (group_counts[cond1] == 1 || group_counts[cond2] == 1) {
+          cat(paste0("\nSkipping standard statistical testing for ", cond1, " vs ", cond2, " because at least one condition has only 1 replicate. Computing manual logFC instead (set -bcv/-fixed_bcv to test it at a fixed dispersion).\n"))
           norm_counts_cpm <- cpm(edgeR_object_norm_temp_to_process, log=TRUE)
           samples_cond1 <- rownames(edgeR_object_norm_temp_to_process$samples)[edgeR_object_norm_temp_to_process$samples$group == cond1]
           samples_cond2 <- rownames(edgeR_object_norm_temp_to_process$samples)[edgeR_object_norm_temp_to_process$samples$group == cond2]

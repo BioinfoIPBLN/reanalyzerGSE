@@ -108,6 +108,7 @@ while [ $_arg_pos -lt ${#arguments[@]} ]; do
 	        -eT | -edger_test # Test used by edgeR: 'ql' (default, quasi-likelihood F-test, the method edgeR recommends, also used whenever there are covariables or '-lfc' is above 0) or 'exact' (the classic exactTest, which reanalyzerGSE used without covariables up to v4.1.0; keep it to reproduce older results)
 	        -lfc | -lfc_threshold # Minimum absolute log2 fold change to test against (0 by default, i.e. any change). Above 0 the null hypothesis becomes |log2FC| <= threshold, tested with edgeR glmTreat, DESeq2 results(lfcThreshold) or limma treat, so the FDR refers to changes larger than the threshold; this is the valid way to require a minimum fold change, unlike filtering the DEGs by logFC after testing. Not applied with 'wilcoxon'
 	        -lfS | -lfc_shrink # Whether to add a shrunkLFC column with DESeq2's lfcShrink (type 'ashr' if installed, 'normal' otherwise) to the DESeq2 tables ('yes' or 'no', by default). Shrunk fold changes do not inflate for low counts, so they are the better effect size for ranking and plotting; the logFC column and the p-values are not changed. Only used with '-Des DESeq2'
+	        -bcv | -fixed_bcv # Biological coefficient of variation used to test the comparisons in which a condition has a single sample ('none' by default: those comparisons get log2 fold changes only, with empty PValue and FDR). With a value, e.g. 0.1 for genetically identical model organisms or 0.4 for human samples as edgeR's user guide suggests, they are tested with edgeR's exactTest at that fixed dispersion (BCV squared), whatever '-Des' says. Those p-values rest on the assumed variability rather than on one estimated from the data. Comparisons with replicates on both sides are not affected
 	        -Dfm | -design_formula # Custom model for the differential expression in R formula syntax, run on top of the pairwise comparisons that are always done. The factors are the designs given in '-D' (or detected from GEO), named D1, D2, ... in order, and the covariables of '-C', named Cov1, Cov2, ... e.g. '~ 0 + D1:D2' (one coefficient per genotype x treatment cell) or '~ D1 * D2'. Requires -Dcon. Not available with the Wilcoxon test
 	        -Dcon | -design_contrasts # Named contrasts to test on the model of -Dfm, in limma makeContrasts syntax on the coefficient names printed at the start of the differential expression (make.names of the model matrix columns), separated by ';', e.g. 'KO_vs_WT_in_MCAO=D1KO.D2MCAO-D1WT.D2MCAO;interaction=(D1KO.D2MCAO-D1KO.D2ctrl)-(D1WT.D2MCAO-D1WT.D2ctrl)'. Each contrast becomes one more DGE_analysis_compN table, with the same functional enrichment and report sections as the pairwise comparisons
 	        -fp | -fastp_mode # Whether to perform quality filtering on the raw reads by fastp ('yes' or 'no', by default)
@@ -222,6 +223,7 @@ while [ $_arg_pos -lt ${#arguments[@]} ]; do
 		-Des | -differential_expr_software) differential_expr_soft=${arguments[index]} ;;
 		-eT | -edger_test) edger_test=${arguments[index]} ;;
 		-lfc | -lfc_threshold) lfc_threshold=${arguments[index]} ;;
+		-bcv | -fixed_bcv) fixed_bcv=${arguments[index]} ;;
 		-lfS | -lfc_shrink) lfc_shrink=${arguments[index]} ;;
 		-dry | -dry_run) dry_run=${arguments[index]} ;;
 		-sR | -small_rna) small_rna=${arguments[index]} ;;
@@ -750,7 +752,13 @@ fi
 if [ -z "$lfc_shrink" ]; then
 	lfc_shrink="no"
 fi
-export RGSE_EDGER_TEST="$edger_test" RGSE_LFC_THRESHOLD="$lfc_threshold" RGSE_LFC_SHRINK="$lfc_shrink"
+if [ -z "$fixed_bcv" ]; then
+	fixed_bcv="none"
+fi
+if [ "$fixed_bcv" != "none" ] && { ! [[ "$fixed_bcv" =~ ^[0-9]*[.]?[0-9]+$ ]] || ! awk -v b="$fixed_bcv" 'BEGIN { exit !(b > 0) }'; }; then
+	echo "Error: -bcv/-fixed_bcv must be 'none' or a positive number, e.g. 0.1 or 0.4. You provided: $fixed_bcv"; exit 1
+fi
+export RGSE_EDGER_TEST="$edger_test" RGSE_LFC_THRESHOLD="$lfc_threshold" RGSE_LFC_SHRINK="$lfc_shrink" RGSE_FIXED_BCV="$fixed_bcv"
 if [ -z "$clusterProfiler_gsea" ]; then
 	clusterProfiler_gsea="yes"
 fi
@@ -787,7 +795,7 @@ if [ -n "$design_formula" ] || [ -n "$design_contrasts" ]; then
 	echo -e "\ndesign_formula=$design_formula\ndesign_contrasts=$design_contrasts\n"
 fi
 export RGSE_DESIGN_FORMULA="$design_formula" RGSE_DESIGN_CONTRASTS="$design_contrasts"
-echo -e "\ndifferential_expr_soft=$differential_expr_soft (edger_test=$edger_test, lfc_threshold=$lfc_threshold, lfc_shrink=$lfc_shrink)\n"
+echo -e "\ndifferential_expr_soft=$differential_expr_soft (edger_test=$edger_test, lfc_threshold=$lfc_threshold, lfc_shrink=$lfc_shrink, fixed_bcv=$fixed_bcv)\n"
 if [ -z "$differential_expr_comparisons" ]; then
 	differential_expr_comparisons="no"
 fi

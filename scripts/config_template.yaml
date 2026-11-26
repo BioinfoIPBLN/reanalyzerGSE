@@ -162,6 +162,7 @@ differential_expr_soft: "edgeR"        # DGE software: 'edgeR', 'DESeq2', 'limma
 edger_test: "ql"                       # edgeR test: 'ql' (quasi-likelihood F-test) or 'exact' (exactTest, the default up to v4.1.0)
 lfc_threshold: 0                       # Minimum |log2FC| tested against (glmTreat / DESeq2 lfcThreshold / limma treat); 0 = any change
 lfc_shrink: "no"                       # DESeq2 only: add a shrunkLFC column from lfcShrink ('yes' or 'no')
+fixed_bcv: "none"                      # BCV for comparisons where a condition has a single sample: 'none' (logFC only) or e.g. 0.1 / 0.4 to test them with edgeR exactTest at that fixed dispersion
 design_formula: ""                     # Custom model on top of the pairwise comparisons, R formula on the designs D1, D2, ... (the -D designs in order) and the covariables Cov1, Cov2, ... e.g. "~ 0 + D1:D2"; needs design_contrasts
 design_contrasts: ""                   # Named contrasts on the coefficients of design_formula (limma makeContrasts syntax, make.names of the model matrix columns), separated by ';', e.g. "KO_vs_WT_in_MCAO=D1KO.D2MCAO-D1WT.D2MCAO;interaction=(D1KO.D2MCAO-D1KO.D2ctrl)-(D1WT.D2MCAO-D1WT.D2ctrl)"
 fastp_mode: "no"                       # Quality filtering by fastp ('yes' or 'no')

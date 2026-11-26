@@ -153,6 +153,7 @@ differential_expr_soft: "edgeR"        # DGE software: 'edgeR', 'DESeq2', 'limma
 edger_test: "ql"                       # edgeR test: 'ql' (quasi-likelihood F-test) or 'exact' (exactTest, the default up to v4.1.0)
 lfc_threshold: 0                       # Minimum |log2FC| tested against (glmTreat / DESeq2 lfcThreshold / limma treat); 0 = any change
 lfc_shrink: "no"                       # DESeq2 only: add a shrunkLFC column from lfcShrink ('yes' or 'no')
+fixed_bcv: "none"                      # BCV for comparisons where a condition has a single sample: 'none' (logFC only) or e.g. 0.1 / 0.4 to test them with edgeR exactTest at that fixed dispersion
 fastp_mode: "no"                       # Quality filtering by fastp ('yes' or 'no')
 fastp_adapter: "no"                    # Adapter trimming by fastp ('yes', 'no', or path to fasta)
 fastp_trimming: "none"                 # Trimming by fastp ('none' or 'front,tail' as numbers)
